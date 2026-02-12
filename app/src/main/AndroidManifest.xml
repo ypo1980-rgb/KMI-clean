@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ===== Permissions (global) ===== -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- תזמון מחדש לאחר אתחול -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- התראות/רטט (רשות) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- הרשאות ליומן (אם אתם יוצרים/קוראים אירועים) -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
+    <!-- לאפשר תזמון מדויק (למשל לדחיית 10 דק׳) החל מ-Android 12+ -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <application
+        android:name=".KmiApp"
+        android:allowBackup="true"
+        android:label="ק.מ.י"
+        android:supportsRtl="true"
+        android:layoutDirection="rtl"
+        android:theme="@style/Theme.KMI"
+        android:enableOnBackInvokedCallback="true">
+
+    <!-- ===== FileProvider לשיתוף קבצים (PDF וכד') מתוך cache ===== -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- ===== FCM Messaging Service ===== -->
+        <service
+            android:name=".fcm.KmiFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- ===== Receiver לתזכורות אימון =====
+      חייב להיות exported=true כדי לקבל שידורי מערכת (BOOT_COMPLETED וכו'). -->
+        <receiver
+            android:name=".training.TrainingAlarmReceiver"
+            android:exported="true">
+            <intent-filter>
+                <!-- שידור פנימי של האפליקציה להפעלת התזכורת -->
+                <action android:name="il.kmi.app.TRAINING_ALARM" />
+
+                <!-- שידורי האפליקציה בהם אתה משתמש בקוד -->
+                <action android:name="il.kmi.app.training.FIRE" />
+                <action android:name="il.kmi.app.training.SNOOZE" />
+                <action android:name="il.kmi.app.training.BOOT" />
+
+                <!-- תיזמון מחדש אחרי אתחול/שינוי שעה/אזור זמן/עדכון חבילה -->
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_CHANGED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ===== Receiver לתזכורות אימונים חופשיים =====
+             לא מקבל שידורי מערכת, מופעל רק ע"י PendingIntent שלנו -->
+        <receiver
+            android:name=".free_sessions.reminders.FreeSessionReminderReceiver"
+            android:exported="false" />
+
+        <!-- ===== Main Activity ===== -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>

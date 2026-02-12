@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ערכת עיצוב ראשית לאפליקציה -->
+    <style name="Theme.KMI" parent="Theme.Material3.DayNight">
+        <!-- מכבים את ה-ActionBar כדי לעבוד עם Compose -->
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+    </style>
+</resources>

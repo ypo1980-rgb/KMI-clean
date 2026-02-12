@@ -1,0 +1,41 @@
+# ===== IDE =====
+.idea/
+.vscode/
+
+# ===== Gradle / Kotlin =====
+.gradle/
+.kotlin/
+build/
+**/build/
+
+# ===== Android =====
+local.properties
+*.apk
+*.aab
+.cxx/
+.externalNativeBuild/
+
+# ===== Signing / Secrets =====
+*.jks
+*.keystore
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Media / Temp =====
+*.mp3
+*.wav
+
+# --- Local / IDE ---
+local.properties
+
+# --- Firebase ---
+app/google-services.json
+
+# --- Signing keys ---
+*.jks
+*.keystore
+
+# --- Build outputs ---
+*.apk
