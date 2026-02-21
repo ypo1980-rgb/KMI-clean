@@ -279,8 +279,10 @@ internal fun BeltPangoLayout(
                     TopicsViewMode.BY_BELT -> {
                         TopicsCardForBelt(
                             belt = currentBelt,
+
+                            // ✅ חובה: זה פותח את כל הנושא (במסך החדש/הנכון שלך)
                             onOpenTopic = onOpenTopic,
-                            onOpenSubTopicsScreen = { b, topic -> onOpenDefenseMenu(b, topic) },
+
                             onOpenSubTopic = onOpenSubTopic,
                             onOpenDefenseMenu = onOpenDefenseMenu,
                             haptic = haptic,
@@ -290,6 +292,8 @@ internal fun BeltPangoLayout(
 
                     TopicsViewMode.BY_TOPIC -> {
                         TopicsBySubjectCard(
+                            currentBelt = currentBelt,
+
                             onSubjectClick = { belt, subject ->
                                 val best =
                                     if (itemsForSubject(belt, subject).isNotEmpty()) belt
@@ -298,14 +302,23 @@ internal fun BeltPangoLayout(
                                 vm.setSelectedBelt(best)
                                 onOpenSubject(subject)
                             },
+
                             onOpenTopic = { b, topicTitle ->
                                 vm.setSelectedBelt(b)
                                 onOpenTopic(b, topicTitle)
+                            },
+
+                            // ✅ זה החיבור שגרם ל"הגנות פנימיות/חיצוניות" לא לעשות כלום
+                            onOpenDefenseList = { belt, kind, pick ->
+                                // פה אתה ממפה למסך/route שכבר קיים אצלך:
+                                // onOpenDefenseMenu: (Belt, String) -> Unit
+                                onOpenDefenseMenu(belt, "$kind:$pick")
                             }
                         )
                     }
                 }
             }
+
 
             // ✅ הקרוסלה רק במצב "לפי חגורה"
             if (topicsViewMode == TopicsViewMode.BY_BELT) {
@@ -463,13 +476,19 @@ internal fun TopicsViewModeToggle(
 private fun TopicsCardForBelt(
     belt: Belt,
     onOpenTopic: (Belt, String) -> Unit,
-    onOpenSubTopicsScreen: (Belt, String) -> Unit,
     onOpenSubTopic: (Belt, String, String) -> Unit,
     onOpenDefenseMenu: (Belt, String) -> Unit,
     haptic: (Boolean) -> Unit,
     clickSound: () -> Unit
 ) {
-    val topicTitles: List<String> = remember(belt) { topicTitlesForCompat(belt) }
+    val topicTitles: List<String> = remember(belt) {
+        topicTitlesForCompat(belt)
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+    }
 
     val detailsByTitle: Map<String, TopicDetails> = remember(belt, topicTitles) {
         topicTitles.associateWith { title -> topicDetailsFor(belt, title) }
@@ -477,7 +496,7 @@ private fun TopicsCardForBelt(
 
     var expandedTopic by rememberSaveable(belt.id) { mutableStateOf<String?>(null) }
 
-    val rowMinHeight = 88.dp
+    val rowMinHeight = 76.dp
     val visibleRows = 4
     val listHeight = rowMinHeight * visibleRows + 8.dp
 
@@ -536,13 +555,18 @@ private fun TopicsCardForBelt(
 
                         val subTitles: List<String> =
                             details.subTitles
+                                .asSequence()
                                 .map { it.trim() }
-                                .filter { it.isNotBlank() && it != title.trim() }
+                                .filter { it.isNotBlank() }
+                                .filter { it != title.trim() }     // ✅ מסיר "תת־נושא פייק" ששווה לנושא
                                 .distinct()
+                                .toList()
 
                         val itemCount = details.itemCount
                         val subCount = subTitles.size
-                        val hasSubs = subCount > 0
+
+// ✅ יש תתי־נושאים "אמיתיים" רק אם נשאר משהו אחרי הסינון
+                        val hasSubs = subTitles.isNotEmpty()
 
                         val countsLine = if (subCount > 0) {
                             "$subCount תתי נושאים  •  $itemCount תרגילים"
@@ -551,19 +575,27 @@ private fun TopicsCardForBelt(
                         }
 
                         val isExpanded = expandedTopic == title
+                        val isDefenseTopic = title.trim().contains("הגנות")
 
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = rowMinHeight)
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .padding(horizontal = 12.dp, vertical = 3.dp) // ✅ היה 6.dp
                                 .clickable {
                                     clickSound()
                                     haptic(true)
+
+                                    // ✅ FIX: אם יש תתי־נושאים (גם בהגנות) – פותחים/סוגרים רשימה
                                     if (hasSubs) {
                                         expandedTopic = if (isExpanded) null else title
                                     } else {
-                                        onOpenTopic(belt, title)
+                                        // ✅ אין תתי־נושאים → ניווט
+                                        if (isDefenseTopic) {
+                                            onOpenDefenseMenu(belt, title)
+                                        } else {
+                                            onOpenTopic(belt, title)
+                                        }
                                     }
                                 },
                             shape = RoundedCornerShape(28.dp),
@@ -574,10 +606,9 @@ private fun TopicsCardForBelt(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    .padding(horizontal = 16.dp, vertical = 10.dp), // ✅ היה 12.dp
                                 horizontalAlignment = Alignment.End
-                            ) {
-                                Row(
+                            ) {                                Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -618,25 +649,27 @@ private fun TopicsCardForBelt(
                                 )
 
                                 if (hasSubs && isExpanded) {
-                                    Spacer(Modifier.height(10.dp))
+                                    Spacer(Modifier.height(6.dp)) // ✅ היה 10.dp
 
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(18.dp))
                                             .background(Color.White.copy(alpha = 0.18f))
-                                            .padding(10.dp),
+                                            .padding(8.dp), // ✅ היה 10.dp
                                         horizontalAlignment = Alignment.End
                                     ) {
                                         subTitles.forEach { sub ->
                                             Surface(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(vertical = 4.dp)
+                                                    .padding(vertical = 2.dp) // ✅ היה 4.dp
                                                     .clip(RoundedCornerShape(16.dp))
                                                     .clickable {
                                                         clickSound()
                                                         haptic(true)
+
+                                                        // ✅ FIX: גם בהגנות מעבירים את שם תת־הנושא שנבחר
                                                         onOpenSubTopic(belt, title, sub)
                                                     },
                                                 shape = RoundedCornerShape(16.dp),
@@ -658,24 +691,6 @@ private fun TopicsCardForBelt(
                                         Spacer(Modifier.height(8.dp))
 
                                         Text(
-                                            text = "פתח מסך תתי נושאים",
-                                            modifier = Modifier
-                                                .align(Alignment.End)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable {
-                                                    clickSound()
-                                                    haptic(true)
-                                                    onOpenSubTopicsScreen(belt, title)
-                                                }
-                                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                                            color = contentOnBelt.copy(alpha = 0.95f),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.Bold
-                                        )
-
-                                        Spacer(Modifier.height(6.dp))
-
-                                        Text(
                                             text = "פתח את כל הנושא",
                                             modifier = Modifier
                                                 .align(Alignment.End)
@@ -683,7 +698,13 @@ private fun TopicsCardForBelt(
                                                 .clickable {
                                                     clickSound()
                                                     haptic(true)
-                                                    onOpenTopic(belt, title)
+
+                                                    // ✅ FIX: גם כאן "הגנות" → MaterialsScreen
+                                                    if (isDefenseTopic) {
+                                                        onOpenDefenseMenu(belt, title)
+                                                    } else {
+                                                        onOpenTopic(belt, title)
+                                                    }
                                                 }
                                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                                             color = contentOnBelt.copy(alpha = 0.95f),

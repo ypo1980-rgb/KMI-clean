@@ -72,14 +72,72 @@ fun SubjectExercisesScreen(
     onExerciseClick: (belt: Belt, topic: String, rawItem: String) -> Unit,
     screenTitle: String = "" // ✅ NEW
 ) {
-    // (subjectId + belts …) נושא מה־app (הישן) ✅
-    val appSubject: AppSubjectTopic = remember(subjectId) {
-        TopicsBySubjectRegistry.subjectById(subjectId)
-            ?: error("Unknown subjectId=$subjectId")
+    // ✅ normalize: לפעמים מגיע subjectId בעברית (תת־נושא) ולא id אמיתי -> לא לקרוס
+    val normalizedSubjectId = remember(subjectId, screenTitle) {
+        val raw = subjectId.trim()
+        val title = screenTitle.trim()
+
+        // אם זה כבר id אמיתי שקיים ברג'יסטרי — נשאיר כמו שהוא
+        val exists = runCatching { TopicsBySubjectRegistry.subjectById(raw) != null }.getOrDefault(false)
+        if (exists) return@remember raw
+
+        // ✅ fallback ממוקד: "שחרורים" (הבעיה אצלך)
+        val combined = "$raw $title"
+        val looksLikeReleases =
+            combined.contains("שחרור") ||
+                    combined.contains("שחרורים") ||
+                    combined.contains("תפיס") ||
+                    combined.contains("חניק") ||
+                    combined.contains("חביק") ||
+                    combined.contains("חולצ") ||
+                    combined.contains("שיער")
+
+        if (looksLikeReleases) "releases" else raw
     }
 
+    // (subjectId + belts …) נושא מה־app (הישן) ✅
+    val appSubjectOrNull: AppSubjectTopic? = remember(normalizedSubjectId) {
+        TopicsBySubjectRegistry.subjectById(normalizedSubjectId)
+    }
+
+    // ✅ אם עדיין לא נמצא — לא לקרוס, אלא להציג מסך ברור + חזרה
+    if (appSubjectOrNull == null) {
+        Scaffold(
+            topBar = {
+                il.kmi.app.ui.KmiTopBar(
+                    title = "נושא לא נמצא",
+                    onHome = onOpenHome,
+                    showTopHome = false,
+                    centerTitle = true,
+                    lockSearch = true,
+                    showBottomActions = false
+                )
+            }
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "לא נמצא subject עבור:\n${screenTitle.ifBlank { subjectId }}",
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = onBack) { Text("חזרה") }
+                }
+            }
+        }
+        return
+    }
+
+    val appSubject: AppSubjectTopic = appSubjectOrNull
+
     // ✅ NEW: כותרת למסך
-     val screenTitleResolved = remember(screenTitle, appSubject.titleHeb) {
+    val screenTitleResolved = remember(screenTitle, appSubject.titleHeb) {
         val base = appSubject.titleHeb.trim()
         val picked = screenTitle.trim()
 

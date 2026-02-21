@@ -2,21 +2,17 @@ package il.kmi.app.navigation
 
 import android.content.SharedPreferences
 import android.net.Uri
+import androidx.compose.runtime.remember
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
-import il.kmi.shared.domain.Belt
 import il.kmi.app.screens.MaterialsScreen
+import il.kmi.shared.domain.Belt
 
-/**
- * גרף למסכי חומר הלימוד (Materials).
- * נשמרת החתימה עם sp/kmiPrefs כדי להתאים לקריאה הקיימת ב-MainNavHost.
- */
 @Suppress("UNUSED_PARAMETER")
 fun NavGraphBuilder.materialsNavGraph(
     nav: NavHostController,
@@ -24,82 +20,126 @@ fun NavGraphBuilder.materialsNavGraph(
     sp: SharedPreferences,
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs
 ) {
-    // ====== Materials (ללא subTopic) ======
+    // ====== ✅ Materials (ללא subTopic) ======
     composable(
         route = Route.Materials.route,
         arguments = listOf(
             navArgument("beltId") { type = NavType.StringType },
-            navArgument("topic")  { type = NavType.StringType },
-            navArgument("coach")  { type = NavType.BoolType; defaultValue = false } // ✅ ADD
+            navArgument("topic") { type = NavType.StringType },
+            navArgument("coach") { type = NavType.BoolType; defaultValue = false }
         )
     ) { backStackEntry ->
         val beltId = backStackEntry.arguments?.getString("beltId").orEmpty()
-        val belt   = Belt.fromId(beltId) ?: Belt.WHITE
+        val belt = Belt.fromId(beltId) ?: Belt.WHITE
 
         val topicEnc = backStackEntry.arguments?.getString("topic").orEmpty()
-        val topic    = Uri.decode(topicEnc)
-
-        val coach = backStackEntry.arguments?.getBoolean("coach") ?: false // ✅ ADD (אם תרצה להשתמש)
+        val topic = remember(topicEnc) {
+            runCatching { Uri.decode(topicEnc) }.getOrDefault(topicEnc).trim()
+        }
 
         MaterialsScreen(
             vm = vm,
             belt = belt,
             topic = topic,
+            subTopicFilter = null,
             onBack = { nav.popBackStack() },
-            onSummary = { b, t, sub ->
-                nav.navigate(Route.Summary.make(belt = b, topic = t, subTopic = sub))
+
+            // ⚠️ כרגע אנחנו לא “מעבירים” topic/subTopic ל-Summary כי לא בטוח שה-route תומך בזה.
+            // אם בהמשך נרצה Summary לפי נושא — נעדכן את Route.Summary.make בהתאם.
+            onSummary = { b, _topic, _sub ->
+                nav.navigate(Route.Summary.make(b)) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
             },
-            onPractice = { b, t -> nav.navigate(Route.Practice.make(b, t)) },
-            onOpenSettings = { nav.navigate(Route.Settings.route) },
-            onOpenHome = { /* כמו אצלך */ },
-            subTopicFilter = null
+
+            onPractice = { b, t ->
+                nav.navigate(Route.Practice.make(b, t)) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenSettings = {
+                nav.navigate(Route.Settings.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenHome = {
+                nav.navigate(Route.Home.route) {
+                    popUpTo(nav.graph.startDestinationId) {
+                        inclusive = false
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
     }
 
-    // ====== Materials עם subTopic ======
+    // ====== ✅ Materials עם subTopic ======
     composable(
         route = Route.MaterialsSub.route,
         arguments = listOf(
-            navArgument("beltId")   { type = NavType.StringType },
-            navArgument("topic")    { type = NavType.StringType },
+            navArgument("beltId") { type = NavType.StringType },
+            navArgument("topic") { type = NavType.StringType },
             navArgument("subTopic") { type = NavType.StringType }
         )
     ) { backStackEntry ->
-        val beltId   = backStackEntry.arguments?.getString("beltId").orEmpty()
-        val belt     = Belt.fromId(beltId) ?: Belt.WHITE
+        val beltId = backStackEntry.arguments?.getString("beltId").orEmpty()
+        val belt = Belt.fromId(beltId) ?: Belt.WHITE
 
-        val topicEnc   = backStackEntry.arguments?.getString("topic").orEmpty()
-        val subTopicEnc = backStackEntry.arguments?.getString("subTopic").orEmpty()
+        val topicEnc = backStackEntry.arguments?.getString("topic").orEmpty()
+        val subEnc = backStackEntry.arguments?.getString("subTopic").orEmpty()
 
-        val topic     = Uri.decode(topicEnc)        // ✅ FIX
-        val subTitle  = Uri.decode(subTopicEnc)     // ✅ FIX
+        val topic = remember(topicEnc) {
+            runCatching { Uri.decode(topicEnc) }.getOrDefault(topicEnc).trim()
+        }
+        val subTopic = remember(subEnc) {
+            runCatching { Uri.decode(subEnc) }.getOrDefault(subEnc).trim()
+        }
 
         MaterialsScreen(
             vm = vm,
             belt = belt,
             topic = topic,
+            subTopicFilter = subTopic,
             onBack = { nav.popBackStack() },
-            onSummary = { b, t, sub ->
-                nav.navigate(Route.Summary.make(belt = b, topic = t, subTopic = sub))
-            },
-            onPractice = { b, chosenTopic -> nav.navigate(Route.Practice.make(b, chosenTopic)) },
-            onOpenSettings = { nav.navigate(Route.Settings.route) },
-            onOpenHome = {
-                val popped = nav.popBackStack(
-                    route = Route.Home.route,
-                    inclusive = false
-                )
-                if (!popped) {
-                    nav.navigate(Route.Home.route) {
-                        popUpTo(nav.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
+
+            onSummary = { b, _topic, _sub ->
+                nav.navigate(Route.Summary.make(b)) {
+                    launchSingleTop = true
+                    restoreState = true
                 }
             },
-            subTopicFilter = subTitle
+
+            onPractice = { b, t ->
+                nav.navigate(Route.Practice.make(b, t)) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenSettings = {
+                nav.navigate(Route.Settings.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenHome = {
+                nav.navigate(Route.Home.route) {
+                    popUpTo(nav.graph.startDestinationId) {
+                        inclusive = false
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
     }
 }

@@ -8,10 +8,9 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import il.kmi.app.Route
-import il.kmi.app.screens.SettingsScreenModern
-import il.kmi.app.KmiViewModelFactory
 import il.kmi.app.DataStoreManager
-import il.kmi.app.screens.StatsVm
+import il.kmi.app.StatsVm
+import il.kmi.app.screens.SettingsScreenModern
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -22,8 +21,8 @@ fun NavGraphBuilder.settingsNavGraph(
     nav: NavHostController,
     sp: SharedPreferences,
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs,
-    themeMode: String,                     // 👈 נוסף
-    onThemeChange: (String) -> Unit        // 👈 נוסף
+    themeMode: String,
+    onThemeChange: (String) -> Unit
 ) {
     composable(Route.Settings.route) {
         val ctx = LocalContext.current
@@ -34,7 +33,7 @@ fun NavGraphBuilder.settingsNavGraph(
 
         // ✅ VM הראשי שלך (מה שאתה כבר משתמש בו בשאר האפליקציה)
         val kmiVm: il.kmi.app.KmiViewModel = viewModel(
-            factory = KmiViewModelFactory(
+            factory = il.kmi.app.KmiViewModelFactory(
                 dataStoreManager = DataStoreManager(context = ctx),
                 spTrainingSummary = spTrainingSummary
             )
@@ -81,7 +80,6 @@ fun NavGraphBuilder.settingsNavGraph(
             onOpenProgress = { nav.navigate(Route.Progress.route) },
             onOpenCoachBroadcast = { nav.navigate(Route.CoachBroadcast.route) },
 
-            // ✅ פה התיקון:
             vm = statsVm
         )
     }

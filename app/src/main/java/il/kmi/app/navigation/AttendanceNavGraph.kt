@@ -1,5 +1,6 @@
 package il.kmi.app.navigation
 
+import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -11,6 +12,9 @@ import il.kmi.app.attendance.AttendanceStatsScreen
 import il.kmi.app.attendance.ui.AttendanceScreen
 import il.kmi.app.attendance.ui.AttendanceViewModel
 import java.time.LocalDate
+import il.kmi.app.attendance.ui.AttendanceGroupStatsScreen
+import il.kmi.app.attendance.data.AttendanceRepository
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * גרף נוכחות:
@@ -58,16 +62,16 @@ fun NavGraphBuilder.attendanceNavGraph(
                 }
                 nav.navigate(route)
             },
+            onOpenGroupStats = { b, g ->
+                nav.navigate(Route.AttendanceGroupStats.make(b, g)) {
+                    launchSingleTop = true
+                }
+            },
             onHomeClick = {
-                // קודם מנסים "חזור" רגיל (כמו במסך ניהול משתמשים)
                 val popped = nav.popBackStack()
-
-                // אם זה לא הצליח (אנחנו מסך התחלתי / אין מה לפופ), ננווט מפורשות לבית
                 if (!popped) {
                     nav.navigate(Route.Home.route) {
-                        popUpTo(Route.Home.route) {
-                            inclusive = false
-                        }
+                        popUpTo(Route.Home.route) { inclusive = false }
                         launchSingleTop = true
                     }
                 }
@@ -95,6 +99,31 @@ fun NavGraphBuilder.attendanceNavGraph(
             groupKey = groupKey,
             memberId = memberId,
             memberName = memberName,
+            onBack = { nav.popBackStack() }
+        )
+    }
+
+    // ----- סטטיסטיקת קבוצה (שנה אחורה) ----- //
+    composable(
+        route = Route.AttendanceGroupStats.route,
+        arguments = listOf(
+            navArgument("branch") { type = NavType.StringType },
+            navArgument("groupKey") { type = NavType.StringType }
+        )
+    ) { e ->
+        val branch = e.arguments?.getString("branch").orEmpty().let { android.net.Uri.decode(it) }
+        val groupKey = e.arguments?.getString("groupKey").orEmpty().let { android.net.Uri.decode(it) }
+
+        val ctx = LocalContext.current
+        val app = ctx.applicationContext as android.app.Application
+
+        // ✅ לא ליצור repo בכל ריקומפוזיציה
+        val repo = remember(app) { AttendanceRepository.get(app) }
+
+        AttendanceGroupStatsScreen(
+            repo = repo,
+            branch = branch,
+            groupKey = groupKey,
             onBack = { nav.popBackStack() }
         )
     }

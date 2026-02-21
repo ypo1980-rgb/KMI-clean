@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 3,
-    "identityHash": "16da8c1d6e64f32948ad4eebf7c24bd1",
+    "identityHash": "70eb683b3b174087993f5f811a12a744",
     "entities": [
       {
         "tableName": "group_members",
@@ -321,6 +321,15 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_attendance_reports_sessionId` ON `${TABLE_NAME}` (`sessionId`)"
+          },
+          {
+            "name": "index_attendance_reports_createdAtMillis",
+            "unique": false,
+            "columnNames": [
+              "createdAtMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_attendance_reports_createdAtMillis` ON `${TABLE_NAME}` (`createdAtMillis`)"
           }
         ],
         "foreignKeys": []
@@ -329,7 +338,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '16da8c1d6e64f32948ad4eebf7c24bd1')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '70eb683b3b174087993f5f811a12a744')"
     ]
   }
 }

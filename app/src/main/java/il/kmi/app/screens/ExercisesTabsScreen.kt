@@ -42,6 +42,7 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.runtime.collectAsState
+import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.domain.ContentRepo
 
@@ -190,10 +191,16 @@ fun ExercisesTabsScreen(
 
     LaunchedEffect(belt, topic, subTopicFilter, itemList, allTopicItems) {
         itemStates.clear()
+
         itemList.forEach { raw ->
             val tp = topicForRawItem(raw)
-            val v = runCatching { vm.getItemStatusNullable(belt, tp, raw) }.getOrNull()
-                ?: runCatching { if (vm.isMastered(belt, tp, raw)) true else null }.getOrNull()
+
+            // ✅ קריטי: משתמשים באותו canonicalId שהשאר האפליקציה שומרת
+            val canonicalId = CanonicalIds.canonicalFor(belt, tp, raw)
+
+            val v = runCatching { vm.getItemStatusNullable(belt, tp, canonicalId) }.getOrNull()
+                ?: runCatching { if (vm.isMastered(belt, tp, canonicalId)) true else null }.getOrNull()
+
             itemStates[raw] = v
         }
     }
@@ -316,9 +323,23 @@ fun ExercisesTabsScreen(
                                 val editor = sp.edit()
 
                                 if (topic == "__ALL__") {
+                                    // ✅ 1) מחיקת unknown keys מה-SP (כמו שהיה)
                                     sp.all.keys
                                         .filter { it.startsWith("unknown_${belt.id}_") }
                                         .forEach { key -> editor.remove(key) }
+
+                                    // ✅ 2) איפוס אמיתי של הסימונים (DataStore) לכל נושא
+                                    allTopicItems.forEach { ti ->
+                                        val canonicalIds = ti.items
+                                            .map { raw -> CanonicalIds.canonicalFor(belt, ti.topic, raw) }
+                                            .distinct()
+
+                                        vm.clearTopicItems(
+                                            belt = belt,
+                                            topic = ti.topic,
+                                            canonicalIds = canonicalIds
+                                        )
+                                    }
                                 } else {
                                     val singleUnknownKey = "unknown_${belt.id}_$suffix"
                                     editor.remove(singleUnknownKey)
@@ -510,8 +531,10 @@ fun ExercisesTabsScreen(
                     var pressed by remember { mutableStateOf(false) }
                     val scale by animateFloatAsState(if (pressed) 1.15f else 1f, label = "scale")
 
-                    val displayName = displayByRaw[item]
-                        ?: ExerciseTitleFormatter.displayName(item).ifBlank { item.trim() }
+                    val tpForUi = topicForRawItem(item)
+
+// ✅ שם לתצוגה בלבד, נקי ועקבי (גם ב"כללי")
+                    val displayName = CanonicalIds.uiDisplayName(tpForUi, item)
 
                     // ✅ LTR רק לשורה כדי שהאייקון תמיד יהיה בשמאל
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {

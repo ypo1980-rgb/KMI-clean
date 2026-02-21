@@ -179,7 +179,11 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         return null
     }
 
-    val name = stringOrNull("fullName", "name", "displayName") ?: return null
+    val name =
+        stringOrNull("fullName", "name", "displayName", "userName", "username", "full_name")
+            ?: stringOrNull("email")
+            ?: stringOrNull("phone", "phoneNumber")
+            ?: "ללא שם (${id.take(6)})"
 
     // --- תאריך לידה: קודם מנסים שדות נפרדים, ואם אין – מפענחים birthDate ---
     var birthYear  = intOrNull("birthYear")
@@ -241,6 +245,7 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
 fun AdminUsersScreen(
     onBack: () -> Unit
 ) {
+    Log.d("KMI_ADMIN", "AdminUsersScreen composed ✅")
     val gradient = remember {
         Brush.verticalGradient(
             listOf(
@@ -282,16 +287,26 @@ fun AdminUsersScreen(
         loading = true
         errorMsg = null
         try {
-            // --- טעינת משתמשים ---
+            Log.d("KMI_ADMIN", "Loading users collection...")
+
             val snap = Firebase.firestore
                 .collection("users")
                 .get()
                 .await()
 
-            val raw = snap.documents
-                .mapNotNull { it.toAdminUserRecord() }
+            Log.d("KMI_ADMIN", "users snap size = ${snap.size()}")
 
-            // ----- דה-דופ: מאחדים לפי dedupeKey ושומרים רק את המסמך הכי חדש -----
+            val raw = snap.documents
+                .mapNotNull { doc ->
+                    val rec = doc.toAdminUserRecord()
+                    if (rec == null) {
+                        Log.w("KMI_ADMIN", "users doc skipped id=${doc.id} keys=${doc.data?.keys}")
+                    }
+                    rec
+                }
+
+            Log.d("KMI_ADMIN", "users parsed = ${raw.size}")
+
             users = raw
                 .groupBy { it.dedupeKey() }
                 .map { (_, list) ->
@@ -299,14 +314,15 @@ fun AdminUsersScreen(
                 }
                 .sortedBy { it.fullName }
 
+            Log.d("KMI_ADMIN", "users after dedupe = ${users.size}")
+
         } catch (t: Throwable) {
             val rawErr = t.message ?: "שגיאה בטעינת המשתמשים"
-            // ניסוח נעים יותר במקרה של הרשאות
             errorMsg = if (rawErr.contains("PERMISSION_DENIED")) {
                 "אין לך הרשאה לצפות ברשימת המשתמשים. בדוק את הגדרות ההרשאות או פנה למנהל המערכת."
-            } else {
-                rawErr
-            }
+            } else rawErr
+
+            Log.e("KMI_ADMIN", "loading users failed", t)
         } finally {
             loading = false
         }

@@ -32,7 +32,12 @@ class AttendanceRepo(app: Application) {
         dao.attendanceForDay(branch, groupKey, date)
 
     suspend fun mark(sessionId: Long, memberId: Long, status: AttendanceStatus) =
-        dao.updateStatus(sessionId, memberId, status)
+        dao.updateStatus(
+            sessionId = sessionId,
+            memberId = memberId,
+            status = status,
+            ts = System.currentTimeMillis()
+        )
 
     fun stats(branch: String, groupKey: String, from: LocalDate, to: LocalDate) =
         dao.presenceStats(branch, groupKey, from, to)

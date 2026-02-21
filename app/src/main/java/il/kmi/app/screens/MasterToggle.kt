@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -28,91 +29,75 @@ fun MasterToggle(
 ) {
     val shape = RoundedCornerShape(50)
 
+    @Composable
+    fun ToggleChip(
+        selected: Boolean,
+        selectedColor: Color,
+        unselectedColor: Color,
+        iconTint: Color,
+        icon: androidx.compose.ui.graphics.vector.ImageVector,
+        contentDescription: String,
+        onClickValue: Boolean?
+    ) {
+        val bg by animateColorAsState(
+            targetValue = if (selected) selectedColor else unselectedColor,
+            label = "chipBg"
+        )
+
+        val elevation by animateDpAsState(
+            targetValue = if (selected) 8.dp else 2.dp,
+            label = "chipElevation"
+        )
+
+        Surface(
+            modifier = Modifier
+                .size(38.dp)
+                .clickable(role = Role.Button) { onSelect(onClickValue) },
+            shape = shape,
+            color = bg,
+            shadowElevation = elevation,
+            border = BorderStroke(
+                1.dp,
+                if (selected) Color.Black else Color.Black.copy(alpha = 0.25f)
+            )
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(22.dp),
+                    tint = iconTint
+                )
+            }
+        }
+    }
+
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-
-        // =======================
         // ✅ ירוק
-        // =======================
-
         val greenSelected = mastered == true
-
-        val greenColor by animateColorAsState(
-            targetValue = if (greenSelected)
-                Color(0xFF2E7D32)
-            else
-                Color(0x332E7D32),
-            label = "greenColor"
+        ToggleChip(
+            selected = greenSelected,
+            selectedColor = Color(0xFF2E7D32),
+            unselectedColor = Color(0x332E7D32),
+            iconTint = Color.White,
+            icon = Icons.Filled.Check,
+            contentDescription = "סומן כנלמד",
+            onClickValue = if (greenSelected) null else true
         )
 
-        val greenElevation by animateDpAsState(
-            targetValue = if (greenSelected) 8.dp else 2.dp,
-            label = "greenElevation"
-        )
-
-        Surface(
-            modifier = Modifier
-                .size(38.dp)
-                .clickable { onSelect(if (greenSelected) null else true) },
-            shape = shape,
-            color = greenColor,
-            shadowElevation = greenElevation,
-            border = BorderStroke(
-                1.dp,
-                if (greenSelected) Color.Black else Color.Black.copy(alpha = 0.25f)
-            )
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = "סומן כנלמד",
-                    modifier = Modifier.size(22.dp),
-                    tint = Color.White
-                )
-            }
-        }
-
-        // =======================
         // ❌ אדום
-        // =======================
-
         val redSelected = mastered == false
-
-        val redColor by animateColorAsState(
-            targetValue = if (redSelected)
-                Color(0xFFC62828)
-            else
-                Color(0x33C62828),
-            label = "redColor"
+        ToggleChip(
+            selected = redSelected,
+            selectedColor = Color(0xFFC62828),
+            unselectedColor = Color(0x33C62828),
+            iconTint = Color.White,
+            icon = Icons.Filled.Close,
+            contentDescription = "סומן כלא יודע",
+            onClickValue = if (redSelected) null else false
         )
-
-        val redElevation by animateDpAsState(
-            targetValue = if (redSelected) 8.dp else 2.dp,
-            label = "redElevation"
-        )
-
-        Surface(
-            modifier = Modifier
-                .size(38.dp)
-                .clickable { onSelect(if (redSelected) null else false) },
-            shape = shape,
-            color = redColor,
-            shadowElevation = redElevation,
-            border = BorderStroke(
-                1.dp,
-                if (redSelected) Color.Black else Color.Black.copy(alpha = 0.25f)
-            )
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = "סומן כלא יודע",
-                    modifier = Modifier.size(22.dp),
-                    tint = Color.White
-                )
-            }
-        }
     }
 }

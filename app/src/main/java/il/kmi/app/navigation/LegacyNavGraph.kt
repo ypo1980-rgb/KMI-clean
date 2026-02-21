@@ -105,8 +105,6 @@ fun NavGraphBuilder.legacyNavGraph(
     coachNavGraph(       nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     subscriptionNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
 
-    // -------- יעדים משלימים (שאינם כלולים בגרפים למעלה) --------
-
     // 1) מסך נוכחות למאמן (Attendance)
     composable(route = "attendance") {
         val userBranch   = kmiPrefs.branch.orEmpty()
@@ -121,6 +119,7 @@ fun NavGraphBuilder.legacyNavGraph(
             branch = userBranch,
             date = today,
             groupKey = userGroupKey,
+
             onOpenMemberStats = { memberId: Long?, memberName: String ->
                 val route = if (memberId != null && memberId > 0L) {
                     Route.AttendanceStats.make(
@@ -137,6 +136,23 @@ fun NavGraphBuilder.legacyNavGraph(
                     )
                 }
                 nav.navigate(route)
+            },
+
+            // ✅ חובה מאז שהוספת פרמטר למסך
+            onOpenGroupStats = { b, g ->
+                nav.navigate(Route.AttendanceGroupStats.make(b, g)) {
+                    launchSingleTop = true
+                }
+            },
+
+            onHomeClick = {
+                val popped = nav.popBackStack()
+                if (!popped) {
+                    nav.navigate(Route.Home.route) {
+                        popUpTo(Route.Home.route) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                }
             }
         )
     }

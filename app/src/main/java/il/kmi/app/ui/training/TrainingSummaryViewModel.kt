@@ -11,9 +11,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldPath
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.tasks.await
 
 data class SelectedExerciseUi(
     val exerciseId: String,
@@ -58,6 +65,9 @@ class TrainingSummaryViewModel(
     initialBranchName: String = "",
     initialCoachName: String = ""
 ) : ViewModel() {
+
+    // ❌ למחוק מכאן את כל הפונקציה bootstrapMembersFromUsers(...)
+    // (היא שייכת ל-AttendanceViewModel בלבד)
 
     private val TAG = "TRAINING_SUMMARY"
 

@@ -48,16 +48,22 @@ fun NavGraphBuilder.summaryNavGraph(
                 // ✅ נוודא שה-VM מכוון לחגורה הזו, כדי שהגלגל ייפתח עליה
                 runCatching { vm.setSelectedBelt(belt) }
 
-                // ✅ תמיד חוזרים למסך הגלגל (Topics), בלי להסתמך על BackStack
-                nav.navigate(Route.Topics.route) {
-                    // מעיף כל מה שמעל Home (כולל מסכי תרגילים/סיכום) כדי שלא "יחזור" אליהם
-                    popUpTo(Route.Home.route) { inclusive = false }
-                    launchSingleTop = true
-                    restoreState = true
+                // ✅ חוזרים למסך בחירת נושאים (BeltQ) שכבר נמצא ב-BackStack
+                val popped = nav.popBackStack(
+                    Route.BeltQ.route,
+                    inclusive = false
+                )
+
+                // ✅ fallback: אם אין בסטאק (נדיר) – ננווט אליו בצורה נקייה
+                if (!popped) {
+                    nav.navigate(Route.BeltQ.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             },
 
-                    onBackHome = {
+            onBackHome = {
                 nav.navigate(Route.Home.route) {
                     popUpTo(Route.Home.route) { inclusive = true }
                     launchSingleTop = true

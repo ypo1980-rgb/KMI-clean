@@ -78,8 +78,28 @@ interface AttendanceDao {
         sessionId: Long,
         memberId: Long,
         status: AttendanceStatus,
-        ts: Long = System.currentTimeMillis()
+        ts: Long
+    ): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertRecord(record: AttendanceRecord)
+
+    @Query("SELECT * FROM attendance_records WHERE sessionId = :sessionId")
+    fun recordsForSession(sessionId: Long): Flow<List<AttendanceRecord>>
+
+    @Query(
+        """
+        SELECT ar.*
+        FROM attendance_records ar
+        INNER JOIN training_sessions s ON s.id = ar.sessionId
+        WHERE ar.sessionId = :sessionId
+          AND s.date = :date
+        """
     )
+    fun recordsForSessionOnDate(
+        sessionId: Long,
+        date: LocalDate
+    ): Flow<List<AttendanceRecord>>
 
     // --- Presence stats (range) ---
     // שים לב: סינון התאריכים ב-JOIN על training_sessions כדי לשמור LEFT JOIN
@@ -111,6 +131,50 @@ interface AttendanceDao {
 
     @Query(
         """
+        DELETE FROM attendance_reports
+        WHERE branch = :branch
+          AND groupKey = :groupKey
+          AND createdAtMillis < :cutoffMillis
+        """
+    )
+    suspend fun deleteReportsOlderThan(
+        branch: String,
+        groupKey: String,
+        cutoffMillis: Long
+    ): Int
+
+    @Query(
+        """
+    DELETE FROM attendance_reports
+    WHERE branch = :branch
+      AND groupKey = :groupKey
+      AND id IN (:reportIds)
+    """
+    )
+    suspend fun deleteReportsByIds(
+        branch: String,
+        groupKey: String,
+        reportIds: List<Long>
+    ): Int
+
+    @Query(
+        """
+        SELECT *
+        FROM attendance_reports
+        WHERE branch  = :branch
+          AND groupKey = :groupKey
+          AND createdAtMillis >= :fromMillis
+        ORDER BY createdAtMillis DESC
+        """
+    )
+    fun reportsSince(
+        branch: String,
+        groupKey: String,
+        fromMillis: Long
+    ): Flow<List<AttendanceReport>>
+
+    @Query(
+        """
         SELECT *
         FROM attendance_reports
         WHERE branch  = :branch
@@ -124,6 +188,49 @@ interface AttendanceDao {
         groupKey: String,
         limit: Int
     ): Flow<List<AttendanceReport>>
+
+    // ✅ NEW: מחיקת כל הדו"חות לקבוצה
+    @Query(
+        """
+        DELETE FROM attendance_reports
+        WHERE branch  = :branch
+          AND groupKey = :groupKey
+        """
+    )
+    suspend fun deleteReportsForGroup(
+        branch: String,
+        groupKey: String
+    ): Int
+
+    // ✅ NEW: איפוס נוכחות לקבוצה (מוחק סימונים)
+    @Query(
+        """
+        DELETE FROM attendance_records
+        WHERE sessionId IN (
+            SELECT id
+            FROM training_sessions
+            WHERE branch = :branch
+              AND groupKey = :groupKey
+        )
+        """
+    )
+    suspend fun deleteAttendanceRecordsForGroup(
+        branch: String,
+        groupKey: String
+    ): Int
+
+    // ✅ NEW: איפוס נוכחות לקבוצה (מוחק שיעורים)
+    @Query(
+        """
+        DELETE FROM training_sessions
+        WHERE branch = :branch
+          AND groupKey = :groupKey
+        """
+    )
+    suspend fun deleteSessionsForGroup(
+        branch: String,
+        groupKey: String
+    ): Int
 }
 
 // תוצאת הסטטיסטיקה

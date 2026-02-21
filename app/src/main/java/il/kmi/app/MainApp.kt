@@ -9,8 +9,11 @@ import android.content.SharedPreferences
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -247,8 +250,11 @@ fun MainApp(
                 scope.launch { drawerState.close() }
             }
 
-            Box(Modifier.fillMaxSize()) {
-                // ✅ תמיד משתמשים בניווט החדש (ה־legacy נמחק)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+            ) {
                 il.kmi.app.navigation.MainNavHost(
                     nav = nav,
                     vm = vm,
@@ -258,7 +264,6 @@ fun MainApp(
                     onThemeChange = onThemeChange,
                     startDestination = Route.Intro.route
                 )
-            }
-        }
+            }        }
     }
 }

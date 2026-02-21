@@ -13,7 +13,6 @@ import il.kmi.app.Route
 import il.kmi.app.screens.IntroScreen
 import il.kmi.app.screens.registration.RegistrationNavHost
 import androidx.compose.runtime.rememberCoroutineScope
-import il.kmi.app.screens.admin.AdminUsersScreen   // ✔️ זה יבחר את החדש אחרי מחיקה
 import android.content.Context
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
@@ -39,7 +38,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
-// ⭐ NEW – בשביל wake word + עוזר קולי
+import il.kmi.app.exercises.exercisesNavGraph
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -52,37 +51,10 @@ import il.kmi.app.free_sessions.ui.navigation.FreeSessionsRoute
 import il.kmi.app.ui.assistant.AiAssistantDialog
 import il.kmi.app.ui.WakeWordManager
 import il.kmi.app.ui.assistant.VoiceNavCommand
-
-@Composable
-fun AdminUsersScreen(
-    onBack: () -> Unit
-) {
-    Scaffold(
-        topBar = {
-            KmiTopBar(
-                title = "ניהול משתמשים",
-                showTopHome = false,
-                onBack = onBack,
-                lockSearch = true
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "כאן נציג בהמשך את כל המשתמשים מה-Firestore (קולקציה users).",
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            // TODO: בהמשך נוסיף כאן LazyColumn עם רשימת המשתמשים
-        }
-    }
-}
+import il.kmi.app.navigation.defenses.defensesNavGraph
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 
 /**
  * NavHost הראשי של האפליקציה.
@@ -164,7 +136,10 @@ fun MainNavHost(
         NavHost(
             navController = nav,
             // תמיד מתחילים במסך הפתיחה; נחליט שם אם לדלג על האימות
-            startDestination = startDestination
+            startDestination = startDestination,
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
 
             // מסך פתיחה
@@ -424,7 +399,6 @@ fun MainNavHost(
             )
 
             // --- NEW: Training graph ---
-            // --- NEW: Training graph ---
             trainingNavGraph(
                 nav = nav,
                 vm = vm,
@@ -450,9 +424,24 @@ fun MainNavHost(
                 kmiPrefs = kmiPrefs
             )
 
-            // --- NEW: SubTopics graph ---
-            subTopicsNavGraph(
-                nav = nav
+            // ✅✅✅ NEW: Defenses graph (חייב להיות רשום כדי שהמסכים לא יהיו ריקים)
+            defensesNavGraph(nav = nav)
+
+            // ✅ NEW: Exercises graph (topic_repo/{beltId}/{topicId}/{subTopicId})
+            // זה היעד האמיתי שמציג תרגילים מתוך ContentRepo
+            exercisesNavGraph(
+                nav = nav,
+                vm = vm,
+                sp = sp,
+                kmiPrefs = kmiPrefs
+            )
+
+            // --- NEW: Materials graph ---
+            materialsNavGraph(
+                nav = nav,
+                vm  = vm,
+                sp  = sp,
+                kmiPrefs = kmiPrefs
             )
 
             // ----- לוח אימונים חודשי -----
@@ -474,18 +463,10 @@ fun MainNavHost(
 
             // 🔐 אזור מנהל – ניהול משתמשים
             composable(route = Route.AdminUsers.route) {
-                AdminUsersScreen(
+                il.kmi.app.screens.admin.AdminUsersScreen(
                     onBack = { nav.popBackStack() }
                 )
             }
-
-            // --- NEW: Materials graph ---
-            materialsNavGraph(
-                nav = nav,
-                vm  = vm,
-                sp  = sp,
-                kmiPrefs = kmiPrefs
-            )
 
             // --- NEW: Attendance graph ---
             attendanceNavGraph(nav = nav)

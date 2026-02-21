@@ -46,9 +46,12 @@ import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.Image
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import il.kmi.app.R
+import il.kmi.app.domain.CanonicalIds
+import il.kmi.app.highlightItem
 
 @Composable
 private fun BeltPill(
@@ -115,64 +118,21 @@ fun MaterialsScreen(
     val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val explanationTextColor = if (isDarkSurface) Color.White else Color.Black
 
-    // ===== חיבור חיפוש =====
-    fun cleanItem(topic: String, item: String): String {
-        var s = item.trim()
+    // ✅ NEW: נושא לתצוגה/קאנוניקליזציה — כדי ש"" יתנהג בדיוק כמו "כללי"
+    val topicUi = remember(topic) { if (topic.isBlank()) "כללי" else topic }
+    // ✅ NEW: נושא ל-VM/DataStore (ה-VM ממילא יהפוך "כללי" ל-"")
+    val vmTopic = topicUi
 
-        // מסירים רק topic:: אם קיים
-        if (topic.isNotBlank() && s.startsWith("$topic::")) {
-            s = s.removePrefix("$topic::").trim()
-        }
+    // ===== canonical (✅ מקור אמת אחד לכל האפליקציה) =====
+    fun canonicalFor(displayItem: String): String =
+        CanonicalIds.canonicalFor(belt, topicUi, displayItem)
 
-        // ❌ לא לעשות substringAfterLast("::") !
-        // אם יש :: זה חלק מהייחודיות של הפריט (subTopic::item)
+    fun canonicalFor(topicTitle: String, displayItem: String): String =
+        CanonicalIds.canonicalFor(belt, topicTitle, displayItem)
 
-        s = s.replace(Regex("\\s+"), " ").trim()
-        return s
-    }
-
-    fun norm(s: String) = s
-        .replace("\u200F","").replace("\u200E","").replace("\u00A0"," ")
-        .replace(Regex("[\u0591-\u05C7]"), "")
-        .replace("[\\-–—:_]".toRegex(), " ")
-        .replace(Regex("\\s+"), " ")
-        .trim()
-        .lowercase()
-
-    fun findCanonicalItem(b: Belt, t: String, displayItem: String): String? {
-        val wanted = norm(displayItem)
-
-        // 1) פריטים ישירים של נושא
-        val direct = SharedContentRepo.getAllItemsFor(b, t, subTopicTitle = null)
-        direct.firstOrNull { raw ->
-            val disp = ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim()
-            norm(disp) == wanted || norm(raw) == wanted
-        }?.let { return it }
-
-        // 2) פריטים מתוך תתי-נושאים (מדויק)
-        val subs = SharedContentRepo.getSubTopicsFor(b, t)
-        subs.forEach { st ->
-            st.items.firstOrNull { raw ->
-                val disp = ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim()
-                norm(disp) == wanted || norm(raw) == wanted
-            }?.let { return it }
-        }
-
-        return null
-    }
-
-    // ✅ זה מה ש-MaterialsScreen צריך: canonical לפי ה-topic של המסך
-    fun canonicalFor(displayItem: String): String {
-        val cleaned = cleanItem(topic, displayItem)
-        return findCanonicalItem(belt, topic, cleaned) ?: cleaned
-    }
-
-    // ✅ אופציונלי למסכים אחרים: canonical לפי topicTitle שמועבר מבחוץ
-    fun canonicalFor(topicTitle: String, displayItem: String): String {
-        val cleaned = cleanItem(topicTitle, displayItem)
-        return findCanonicalItem(belt, topicTitle, cleaned) ?: cleaned
-    }
-    // ===== סוף חיבור חיפוש =====
+    fun cleanItem(topicTitle: String, item: String): String =
+        CanonicalIds.cleanItem(topicTitle, item)
+    // ===== סוף canonical =====
 
     val handlePickFromTopBar: (String) -> Unit = { key ->
         fun dec(s: String) = try { java.net.URLDecoder.decode(s, "UTF-8") } catch (_: Exception) { s }
@@ -189,7 +149,7 @@ fun MaterialsScreen(
             }.map(::dec)
 
             val beltFromKey = Belt.fromId(parts.getOrNull(0).orEmpty()) ?: belt
-            val topicFromKey = parts.getOrNull(1).orEmpty().ifBlank { topic }
+            val topicFromKey = parts.getOrNull(1).orEmpty().ifBlank { topicUi }
             val itemRaw = cleanItem(topicFromKey, parts.getOrNull(2).orEmpty())
             explainTriple = Triple(beltFromKey, topicFromKey, itemRaw)
         }
@@ -197,7 +157,7 @@ fun MaterialsScreen(
 
     // === שליפת התרגילים (כולל subTopicFilter) ===
     // ✅ Cache בזיכרון כדי שמעבר בין נושאים שכבר נפתחו יהיה מיידי
-    val itemsCache = remember { mutableMapOf<String, List<String>>() }
+    val itemsCache = rememberSaveable { mutableMapOf<String, List<String>>() }
     fun itemsCacheKey(): String = buildString {
         append(belt.id)
         append("||")
@@ -249,17 +209,8 @@ fun MaterialsScreen(
         itemsCache[key] = value
     }
 
-    // הדגשת תרגיל
-    val highlightState = remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(vm) {
-        runCatching {
-            val f = vm::class.java.getDeclaredField("highlightItem").apply { isAccessible = true }
-            @Suppress("UNCHECKED_CAST")
-            val flow = f.get(vm) as? kotlinx.coroutines.flow.StateFlow<String?>
-            flow?.collect { value -> highlightState.value = value }
-        }
-    }
-    val highlight = highlightState.value
+    // הדגשת תרגיל (✅ בלי Reflection: זה top-level flow)
+    val highlight by highlightItem.collectAsState(initial = null)
 
     // ✅ NEW: נרמול אחיד למפתחות SP (כדי שסיכום ותוכן יקראו את אותו מפתח)
     fun spKeyPart(s: String): String = s
@@ -268,8 +219,8 @@ fun MaterialsScreen(
         .replace("\u00A0", " ")
         .trim()
 
-    val excludedKeySuffix = remember(topic, subTopicFilter) {
-        val t = spKeyPart(topic)
+    val excludedKeySuffix = remember(topicUi, subTopicFilter) {
+        val t = spKeyPart(topicUi)
         val st = subTopicFilter?.let(::spKeyPart).orEmpty()
         if (st.isBlank()) t else "${t}__${st}"
     }
@@ -290,7 +241,7 @@ fun MaterialsScreen(
             .apply()
     }
 
-    // ⬇️ מועדפים / לא־ידוע
+    // ⬇️ מועדפים / הערות נשארים ב-SP (לא קשור לסימונים)
     val favKey = remember(belt.id, excludedKeySuffix) { "fav_${belt.id}_$excludedKeySuffix" }
     var favorites by remember(favKey) {
         mutableStateOf<MutableSet<String>>(
@@ -303,6 +254,8 @@ fun MaterialsScreen(
         favorites = s
         sp.edit().putStringSet(favKey, s).apply()
     }
+
+    // ✅ סימונים (✓/✗/—) — מקור אמת יחיד: ViewModel/DataStore
 
     val unknownKey = remember(belt.id, excludedKeySuffix) { "unknown_${belt.id}_$excludedKeySuffix" }
     var unknowns by remember(unknownKey) {
@@ -333,9 +286,9 @@ fun MaterialsScreen(
     // (SharedPreferences) הערות חופשיות לכל תרגיל – בלי excludedKeySuffix גלובלי
     fun loadNote(itemId: String): String {
         val suffix = if (subTopicFilter.isNullOrBlank()) {
-            topic
+            topicUi
         } else {
-            "${topic}__${subTopicFilter}"
+            "${topicUi}__${subTopicFilter}"
         }
         val key = "note_${belt.id}_${suffix}_$itemId"
         return sp.getString(key, "") ?: ""
@@ -343,9 +296,9 @@ fun MaterialsScreen(
 
     fun saveNote(itemId: String, value: String) {
         val suffix = if (subTopicFilter.isNullOrBlank()) {
-            topic
+            topicUi
         } else {
-            "${topic}__${subTopicFilter}"
+            "${topicUi}__${subTopicFilter}"
         }
         val key = "note_${belt.id}_${suffix}_$itemId"
         with(sp.edit()) {
@@ -358,84 +311,19 @@ fun MaterialsScreen(
         }
     }
 
-    // טעינת מצבי שליטה מה־VM (טעינה מלאה רק כשנושא/רשימה משתנים)
-    LaunchedEffect(belt, topic, subTopicFilter, itemList) {
+    // טעינת מצבי שליטה — מקור אמת יחיד: VM/DataStore
+    LaunchedEffect(belt, topicUi, subTopicFilter, itemList) {
         itemStates.clear()
 
         itemList.forEach { item ->
             val canonicalId = canonicalFor(item)
 
             val vFromVm: Boolean? =
-                runCatching { vm.getItemStatusNullable(belt, topic, canonicalId) }.getOrNull()
-                    ?: runCatching { if (vm.isMastered(belt, topic, canonicalId)) true else null }.getOrNull()
+                runCatching { vm.getItemStatusNullable(belt, vmTopic, canonicalId) }.getOrNull()
+                    ?: runCatching { if (vm.isMastered(belt, vmTopic, canonicalId)) true else null }.getOrNull()
 
-            // אם אין ערך מה-VM, נשתמש ב-unknowns רק כ-fallback מקומי
-            val finalV: Boolean? = when {
-                vFromVm != null -> vFromVm
-                unknowns.contains(canonicalId) -> false
-                else -> null
-            }
-
-            itemStates[item] = finalV
+            itemStates[item] = vFromVm
         }
-    }
-
-    // ✅ Compat bridge: לא תלוי בשם המדויק ב-KmiViewModel (מונע Unresolved reference)
-    suspend fun setItemStatusCompat(
-        belt: Belt,
-        topic: String,
-        item: String,
-        value: Boolean?
-    ) {
-        val cls = vm.javaClass
-
-        fun findExact(name: String, nullable: Boolean): java.lang.reflect.Method? {
-            return cls.methods.firstOrNull { m ->
-                if (m.name != name) return@firstOrNull false
-                if (m.parameterTypes.size != 4) return@firstOrNull false
-
-                val p = m.parameterTypes
-                val okBase =
-                    p[0].isAssignableFrom(belt::class.java) &&
-                            p[1] == String::class.java &&
-                            p[2] == String::class.java
-
-                if (!okBase) return@firstOrNull false
-
-                val want = if (nullable) java.lang.Boolean::class.java else java.lang.Boolean.TYPE
-                p[3] == want
-            }
-        }
-
-        // 1) הכי טוב: setItemStatusNullable(Belt, String, String, Boolean?)
-        findExact("setItemStatusNullable", nullable = true)?.let { m ->
-            runCatching { m.invoke(vm, belt, topic, item, value) }
-            return
-        }
-
-        // 2) fallback: setItemStatus(Belt, String, String, Boolean?) אם קיים
-        findExact("setItemStatus", nullable = true)?.let { m ->
-            runCatching { m.invoke(vm, belt, topic, item, value) }
-            return
-        }
-
-        // 3) fallback למתודה עם boolean (לא-nullable) רק אם value != null
-        if (value != null) {
-            findExact("setItemStatusNullable", nullable = false)?.let { m ->
-                runCatching { m.invoke(vm, belt, topic, item, value) }
-                return
-            }
-            findExact("setItemStatus", nullable = false)?.let { m ->
-                runCatching { m.invoke(vm, belt, topic, item, value) }
-                return
-            }
-            findExact("setMastered", nullable = false)?.let { m ->
-                runCatching { m.invoke(vm, belt, topic, item, value) }
-                return
-            }
-        }
-
-        android.util.Log.w("MaterialsScreen", "No compatible setItemStatus method found on KmiViewModel")
     }
 
     Scaffold(
@@ -470,7 +358,7 @@ fun MaterialsScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                Row(
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -479,7 +367,7 @@ fun MaterialsScreen(
                             text = "תרגול",
                             modifier = Modifier.weight(1f),
                             containerColor = Color(0xFF6F64FF),
-                            onClick = { onPractice(belt, topic) }
+                            onClick = { onPractice(belt, topicUi) }
                         )
                         AnimatedButton(
                             text = "איפוס",
@@ -487,16 +375,16 @@ fun MaterialsScreen(
                             containerColor = Color(0xFFD32F2F),
                             onClick = {
                                 scope.launch {
-                                    vm.clearTopic(belt, topic)
+                                    vm.clearTopic(belt, vmTopic)
                                     itemList.forEach { item -> itemStates[item] = null }
+
                                     excludedItems.clear()
                                     sp.edit()
                                         .remove("excluded_${belt.id}_$excludedKeySuffix")
                                         .remove("fav_${belt.id}_$excludedKeySuffix")
-                                        .remove("unknown_${belt.id}_$excludedKeySuffix")
                                         .apply()
+
                                     favorites = mutableSetOf()
-                                    unknowns  = mutableSetOf()
                                 }
                             }
                         )
@@ -511,15 +399,14 @@ fun MaterialsScreen(
                             text = "מסך סיכום",
                             modifier = Modifier.weight(1f),
                             containerColor = Color(0xFF6F64FF),
-                            // היה: onClick = { onSummary(belt) }
-                            onClick = { onSummary(belt, topic, subTopicFilter) }
+                            onClick = { onSummary(belt, topicUi, subTopicFilter) }
                         )
                     }
                 }
             }
         }
     ) { innerPadding ->
-        Surface(
+    Surface(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
@@ -575,8 +462,7 @@ fun MaterialsScreen(
                     return null
                 }
 
-                val item = cleanItem2(t, iRaw)
-                val canonical = findCanonicalItem2(b, t, item) ?: item
+                val canonical = CanonicalIds.resolveCanonicalForExplanation(b, t, iRaw)
                 val explanation = remember(b, canonical) {
                     il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
                         val alt = canonical.substringAfter(":", canonical).trim()
@@ -639,9 +525,9 @@ fun MaterialsScreen(
                 horizontalAlignment = Alignment.End
             ) {
                 val header = if (subTopicFilter.isNullOrBlank())
-                    "חומר: $topic"
+                    "חומר: $topicUi"
                 else
-                    "חומר: $topic – $subTopicFilter"
+                    "חומר: $topicUi – $subTopicFilter"
 
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     Surface(
@@ -718,20 +604,22 @@ fun MaterialsScreen(
                         horizontalAlignment = Alignment.End
                     ) {
 
+                        // ✅ חשוב: מה שמוצג למשתמש (UI) ומה שנשלח ל-VM (Persist)
+                        // אין טיפול מיוחד ל"כללי" כאן — ה-VM מטפל בזה דרך canonicalTopicKey()
+                        val topicUi = topic
+                        val vmTopic = topic
+
                         val filtered = itemList
                         filtered.forEach { item ->
                             var showInfoDialog by remember { mutableStateOf(false) }
                             var showNoteDialog by remember { mutableStateOf(false) }
 
-                            // ✅ NEW: מזהה אחיד לכל פעולה/שמירה (מנקה "def:" / "topic::" וכו')
-                            val canonicalId = remember(item, belt.id, topic) { canonicalFor(item) }
+                            // ✅ מזהה אחיד לכל פעולה/שמירה
+                            val canonicalId = remember(item, belt.id, topicUi) { canonicalFor(item) }
 
-                            // ✅ NEW: טקסט לתצוגה בלבד (בלי קוד)
-                            val displayName = remember(item, topic) {
-                                val cleaned = cleanItem(topic, item)
-                                ExerciseTitleFormatter.displayName(cleaned)
-                                    .ifBlank { cleaned }
-                                    .trim()
+                            // ✅ טקסט לתצוגה בלבד
+                            val displayName = remember(item, topicUi) {
+                                CanonicalIds.uiDisplayName(topicUi, item)
                             }
 
                             var noteText by remember(item, belt.id, excludedKeySuffix) {
@@ -740,7 +628,7 @@ fun MaterialsScreen(
 
                             val mastered = itemStates[item]
                             val isExcluded = excludedItems.contains(canonicalId)
-                            val isHighlighted = highlight != null && item == highlight
+                            val isHighlighted = highlight != null && canonicalId == highlight
 
                             val bringer = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
                             LaunchedEffect(isHighlighted) {
@@ -759,7 +647,7 @@ fun MaterialsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .scale(scale) // ✅ להפעיל את האנימציה שחישבת
+                                    .scale(scale)
                                     .then(
                                         if (isHighlighted)
                                             Modifier.background(
@@ -792,7 +680,7 @@ fun MaterialsScreen(
 
                                 Text(
                                     text = displayName, // ✅ FIX: מציגים רק שם נקי
-                                    textAlign = TextAlign.Right,
+                                     textAlign = TextAlign.Right,
                                     modifier = Modifier
                                         .weight(1f)
                                         .padding(horizontal = 8.dp),
@@ -809,27 +697,7 @@ fun MaterialsScreen(
                                     mastered = mastered,
                                     onSelect = { newVal ->
                                         itemStates[item] = newVal
-
-                                        when (newVal) {
-                                            true -> {
-                                                // ✅ וי ירוק נשמר
-                                                setMasteredLocal(canonicalId, true)
-                                                setUnknown(canonicalId, false)
-                                            }
-                                            false -> {
-                                                // ❌ אדום נשמר
-                                                setMasteredLocal(canonicalId, false)
-                                                setUnknown(canonicalId, true)
-                                            }
-                                            null -> {
-                                                // — ניקוי
-                                                setMasteredLocal(canonicalId, false)
-                                                setUnknown(canonicalId, false)
-                                            }
-                                        }
-
-                                        // נשאיר גם את הכתיבה ל-VM (אם קיימת אצלך), אבל כבר לא תלויים בה
-                                        scope.launch { setItemStatusCompat(belt, topic, canonicalId, newVal) }
+                                        vm.setItemStatusNullable(belt, vmTopic, canonicalId, newVal)
                                     }
                                 )
                             }
@@ -1038,7 +906,7 @@ private fun ItemFloatingActions(
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
         ) {
-            Icon(imageVector = Icons.Default.Info, contentDescription = "פעולות לתרגיל")
+            Icon(imageVector = Icons.Filled.Info, contentDescription = "פעולות לתרגיל")
         }
 
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {

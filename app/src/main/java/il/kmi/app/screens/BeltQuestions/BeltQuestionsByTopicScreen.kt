@@ -3,9 +3,12 @@ package il.kmi.app.screens.BeltQuestions
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material3.*
@@ -18,26 +21,39 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import il.kmi.app.domain.ContentRepo
 import il.kmi.app.domain.DefenseKind
 import il.kmi.app.domain.SubjectTopic
+import il.kmi.app.ui.FloatingBeltQuickMenu
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.SubjectTopic as SharedSubjectTopic
-import il.kmi.app.domain.ContentRepo
 import il.kmi.shared.domain.content.SubjectItemsResolver
 import il.kmi.shared.domain.content.SubjectItemsResolver.UiSection
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.zIndex
-import il.kmi.app.ui.FloatingBeltQuickMenu
-import il.kmi.shared.questions.model.util.SearchKeyParser.norm
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import il.kmi.app.navigation.defenses.defenseCount
+import il.kmi.app.navigation.defenses.defenseRootCount
 
+// ✅ FIX: פונקציית נרמול אחת בלבד, ברמת קובץ (נראית לכולם, אין forward-ref ואין אמביגיוטי)
+private fun normText(raw: String): String = raw
+    .replace("\u200F", "")
+    .replace("\u200E", "")
+    .replace("\u00A0", " ")
+    .replace("–", "-")
+    .replace("—", "-")
+    .replace(Regex("\\s+"), " ")
+    .trim()
+    .lowercase()
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BeltQuestionsByTopicScreen(
     onOpenSubject: (Belt, SubjectTopic) -> Unit,
     onOpenTopic: (Belt, String) -> Unit = { _, _ -> },
+    onOpenDefenseList: (belt: Belt, kind: String, pick: String) -> Unit = { _, _, _ -> },
     onBackHome: () -> Unit,
     onOpenWeakPoints: (Belt) -> Unit = {},
     onOpenAllLists: (Belt) -> Unit = {},
@@ -47,14 +63,10 @@ fun BeltQuestionsByTopicScreen(
 ) {
     val scope = rememberCoroutineScope()
 
-    // ✅ NEW: סטייטים שחסרו לך ולכן קיבלת Unresolved reference
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var showPracticeMenu by rememberSaveable { mutableStateOf(false) }
-
-    // ✅ NEW: חגורה אפקטיבית לתפריט הצף (אפשר בעתיד לחבר לטאבים/בחירה שלך)
     var effectiveBelt by rememberSaveable { mutableStateOf(Belt.GREEN) }
 
-    // ✅ קריטי: לאתחל Repo פעם אחת לפני שמשתמשים ב-SubjectItemsResolver/ContentRepo
     LaunchedEffect(Unit) {
         scope.launch(Dispatchers.Default) {
             try {
@@ -66,14 +78,54 @@ fun BeltQuestionsByTopicScreen(
     }
 
     Scaffold(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "נושאים",
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            )
+        }
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // ...
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 10.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TopicsBySubjectCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp),
+                    currentBelt = effectiveBelt,
+                    onSubjectClick = { belt, subject ->
+                        effectiveBelt = belt
+                        onOpenSubject(belt, subject)
+                    },
+                    onOpenTopic = { belt, topic ->
+                        effectiveBelt = belt
+                        onOpenTopic(belt, topic)
+                    },
+                    onOpenDefenseList = { belt, kind, pick ->
+                        onOpenDefenseList(belt, kind, pick)
+                    }
+                )
+
+                Spacer(Modifier.height(90.dp))
+            }
+
             if (quickMenuExpanded) {
                 Box(
                     modifier = Modifier
@@ -93,10 +145,8 @@ fun BeltQuestionsByTopicScreen(
                     .navigationBarsPadding()
                     .padding(start = 14.dp, bottom = 22.dp)
                     .zIndex(999f),
-
                 expanded = quickMenuExpanded,
                 onExpandedChange = { quickMenuExpanded = it },
-
                 onWeakPoints = { onOpenWeakPoints(effectiveBelt) },
                 onAllLists = { onOpenAllLists(effectiveBelt) },
                 onPractice = { showPracticeMenu = true },
@@ -108,29 +158,68 @@ fun BeltQuestionsByTopicScreen(
     }
 }
 
-    @Composable
+@Composable
 internal fun TopicsBySubjectCard(
-    modifier: Modifier = Modifier, // ✅ NEW
+    modifier: Modifier = Modifier,
+    currentBelt: Belt,
     onSubjectClick: (Belt, SubjectTopic) -> Unit = { _, _ -> },
-    onOpenTopic: (Belt, String) -> Unit = { _, _ -> }
+    onOpenTopic: (Belt, String) -> Unit = { _, _ -> },
+    onOpenDefenseList: (belt: Belt, kind: String, pick: String) -> Unit = { _, _, _ -> }
 ) {
     val subjects = il.kmi.app.domain.TopicsBySubjectRegistry.allSubjects()
 
-    // ----------------- Helpers לסינון/ספירה -----------------
+    fun resolveSectionsForSubject(
+        belt: Belt,
+        subject: SubjectTopic
+    ): List<UiSection> {
+        val raw = SubjectItemsResolver.resolveBySubject(
+            belt = belt,
+            subject = subject.toSharedSubject()
+        )
 
-    fun isDefenseChildOfKind(
-        s: SubjectTopic,
-        kind: il.kmi.app.domain.DefenseKind
-    ): Boolean {
-        return s.defenseKind == kind && (
-                s.titleHeb.contains("אגרופים") || s.titleHeb.contains("בעיטות")
-                )
+        val hasHardKeywordFilters =
+            subject.includeItemKeywords.isNotEmpty() ||
+                    subject.requireAllItemKeywords.isNotEmpty() ||
+                    subject.excludeItemKeywords.isNotEmpty()
+
+        if (!hasHardKeywordFilters) return raw
+
+        return raw
+            .map { sec ->
+                val filtered = sec.items.filter { item ->
+                    val rawTitle = buildString {
+                        append(item.canonicalId)
+                        append("::")
+                        append(item.displayName)
+                    }
+
+                    il.kmi.app.domain.TopicsBySubjectRegistry.run {
+                        subject.matchesItem(
+                            itemTitle = rawTitle,
+                            subTopicTitle = sec.title ?: ""
+                        )
+                    }
+                }
+                sec.copy(items = filtered)
+            }
+            .filter { it.items.isNotEmpty() }
     }
 
-    fun isHandsChildTopic(s: SubjectTopic): Boolean {
-        val t = s.titleHeb.trim()
-        if (t == "עבודת ידיים") return true
-        return t.startsWith("עבודת ידיים") && (t.contains("-") || t.contains("–"))
+    fun ensureDefenseRootTopic(subject: SubjectTopic): SubjectTopic {
+        val isDefense =
+            subject.titleHeb.contains("הגנות") ||
+                    subject.defenseKind != il.kmi.app.domain.DefenseKind.NONE
+
+        if (!isDefense) return subject
+
+        val fixed = subject.topicsByBelt.mapValues { (_, list) ->
+            val out = list.toMutableList()
+            val hasRoot = out.any { normText(it) == normText("הגנות") }
+            if (!hasRoot) out.add(0, "הגנות")
+            out
+        }
+
+        return subject.copy(topicsByBelt = fixed)
     }
 
     fun matchesDefenseCategory(titleHeb: String, pick: String): Boolean {
@@ -147,50 +236,6 @@ internal fun TopicsBySubjectCard(
             "הגנות נגד מקל" -> t.contains("מקל")
             else -> false
         }
-    }
-
-    // ✅ shared-only: SubjectTopic -> UI sections/items
-    // ✅ IMPORTANT: מסננים תמיד לפי subject.matchesItem כדי שתתי-נושאים (כמו שחרור מתפיסות ידיים) לא יזלגו
-    fun resolveSectionsForSubject(
-        belt: Belt,
-        subject: SubjectTopic
-    ): List<UiSection> {
-        val raw = SubjectItemsResolver.resolveBySubject(
-            belt = belt,
-            subject = subject.toSharedSubject()
-        )
-
-        // ✅ חשוב:
-        // SubjectItemsResolver כבר מסנן לפי subTopicHint וה-keywords.
-        // ה-double-filter נחוץ רק כשיש include/require/exclude אמיתיים (כמו בשחרורים).
-        val hasHardKeywordFilters =
-            subject.includeItemKeywords.isNotEmpty() ||
-                    subject.requireAllItemKeywords.isNotEmpty() ||
-                    subject.excludeItemKeywords.isNotEmpty()
-
-        // ✅ אם אין פילטרים "קשיחים" — מחזירים כמו שזה (מונע מסכים ריקים בהגנות פנימיות/חיצוניות)
-        if (!hasHardKeywordFilters) return raw
-
-        // ✅ רק במקרים שיש keywords אמיתיים — אוכפים matchesItem כדי למנוע זליגה בין תתי־נושאים
-        return raw
-            .map { sec ->
-                val filtered = sec.items.filter { item ->
-                    val rawTitle = buildString {
-                        append(item.canonicalId)
-                        append("::")
-                        append(item.displayName)
-                    }
-
-                    il.kmi.app.domain.TopicsBySubjectRegistry.run {
-                        subject.matchesItem(
-                            itemTitle = rawTitle,
-                            subTopicTitle = sec.title ?: "" // ✅ לא null
-                        )
-                    }
-                }
-                sec.copy(items = filtered)
-            }
-            .filter { it.items.isNotEmpty() }
     }
 
         // ✅ אם אתה עדיין צריך "רשימת שמות" בלבד (למקרים נקודתיים)
@@ -220,33 +265,57 @@ internal fun TopicsBySubjectCard(
                 .toList()
         }
 
-        // ----------------------------------------------------------------------
-        // ✅ NEW: בהגנות פנימיות/חיצוניות לפעמים כל התוכן יושב תחת topic "הגנות".
-        // לכן אנחנו מוסיפים תמיד "הגנות" לרשימת topicsByBelt כדי שה-Resolver יחזיר תרגילים.
-        // ❗️שמור פונקציה אחת בלבד (מחק כל כפילות שלה בהמשך הקובץ)
-        fun ensureDefenseRootTopic(subject: SubjectTopic): SubjectTopic {
-            val isDefense =
-                subject.titleHeb.contains("הגנות") ||
-                        subject.defenseKind != il.kmi.app.domain.DefenseKind.NONE
 
-            if (!isDefense) return subject
+        // ✅ NEW: אותו רעיון לעבודת ידיים – יש הרבה פריטים שנמצאים רק תחת root "עבודת ידיים"
+        fun ensureHandsRootTopic(subject: SubjectTopic): SubjectTopic {
+            val t = subject.titleHeb.trim()
+            val isHands =
+                t == "עבודת ידיים" ||
+                        (t.startsWith("עבודת ידיים") && (t.contains("-") || t.contains("–")))
+
+            if (!isHands) return subject
 
             val fixed = subject.topicsByBelt.mapValues { (_, list) ->
                 val out = list.toMutableList()
-                val hasRoot = out.any { norm(it) == norm("הגנות") }
-                if (!hasRoot) out.add(0, "הגנות")
+                val hasRoot = out.any { normText(it) == normText("עבודת ידיים") }
+                if (!hasRoot) out.add(0, "עבודת ידיים")
                 out
             }
 
             return subject.copy(topicsByBelt = fixed)
         }
 
+        // ✅ FIX: התאמת hint לשמות האמיתיים ב-ContentRepo
+        fun fixHandsSubTopicHint(subject: SubjectTopic): SubjectTopic {
+            val t = subject.titleHeb.trim()
+            val isHands =
+                t == "עבודת ידיים" ||
+                        (t.startsWith("עבודת ידיים") && (t.contains("-") || t.contains("–")))
+
+            if (!isHands) return subject
+
+            val hintRaw = subject.subTopicHint?.trim().orEmpty()
+            if (hintRaw.isBlank()) return subject
+
+            val fixedHint = when {
+                hintRaw.contains("מגל") && hintRaw.contains("סנוקרת") -> "מגל + סנוקרת"
+                else -> hintRaw
+            }
+
+            return if (fixedHint == hintRaw) subject else subject.copy(subTopicHint = fixedHint)
+        }
+
         fun openSubjectSmart(subject: SubjectTopic) {
 
-            // ✅ FIX: בהגנות פנימיות/חיצוניות לפעמים התרגילים נמצאים תחת topic "הגנות"
-            val fixedSubject = ensureDefenseRootTopic(subject)
-
-            // ✅ בוחרים חגורה שיש בה בפועל items — מתוך topicsByBelt.keys (מקור האמת)
+            // ✅ FIX: גם הגנות וגם עבודת ידיים – מבטיחים root topic לפני resolver
+            // ✅ FIX: גם root topic וגם hint נכון למגל+סנוקרת
+            // ✅ FIX: גם root topic וגם hint נכון למגל+סנוקרת
+            val fixedSubject =
+                fixHandsSubTopicHint(
+                    ensureHandsRootTopic(
+                        ensureDefenseRootTopic(subject)
+                    )
+                )
             val nonEmptyBelts = beltsWithItemsForSubject(fixedSubject)
 
             val chosenBelt =
@@ -254,38 +323,52 @@ internal fun TopicsBySubjectCard(
                     ?: fixedSubject.topicsByBelt.keys.firstOrNull()
                     ?: Belt.GREEN
 
-            // ✅ DEBUG (אפשר להשאיר זמנית)
-            android.util.Log.e("KMI_DBG", "openSubjectSmart '${fixedSubject.titleHeb}' chosenBelt=$chosenBelt keys=${fixedSubject.topicsByBelt.keys}")
+            android.util.Log.e(
+                "KMI_DBG",
+                "openSubjectSmart '${fixedSubject.titleHeb}' chosenBelt=$chosenBelt keys=${fixedSubject.topicsByBelt.keys}"
+            )
 
             onSubjectClick(chosenBelt, fixedSubject)
         }
 
-        fun countUiTitlesForSubject(subject: SubjectTopic): Int {
-            val all = mutableSetOf<String>() // canonical IDs
-            subject.belts.forEach { belt ->
-                resolveSectionsForSubject(belt, subject)
+    // ✅ מאחדים "תיקונים" לפני ספירה/תצוגה
+    fun normalizeSubjectForCounting(subject: SubjectTopic): SubjectTopic {
+        return fixHandsSubTopicHint(
+            ensureHandsRootTopic(
+                ensureDefenseRootTopic(subject)
+            )
+        )
+    }
+
+    fun countUiTitlesForSubject(subject: SubjectTopic): Int {
+        val fixed = normalizeSubjectForCounting(subject)
+
+        val all = mutableSetOf<String>() // canonical IDs
+        fixed.topicsByBelt.keys.forEach { belt ->
+            resolveSectionsForSubject(belt, fixed)
+                .asSequence()
+                .flatMap { it.items.asSequence() }
+                .map { it.canonicalId }
+                .forEach { all += it }
+        }
+        return all.size
+    }
+
+    fun countUiTitlesForSubjects(list: List<SubjectTopic>): Int {
+        val all = mutableSetOf<String>() // canonical IDs
+        list.forEach { subject ->
+            val fixed = normalizeSubjectForCounting(subject)
+
+            fixed.topicsByBelt.keys.forEach { belt ->
+                resolveSectionsForSubject(belt, fixed)
                     .asSequence()
                     .flatMap { it.items.asSequence() }
                     .map { it.canonicalId }
                     .forEach { all += it }
             }
-            return all.size
         }
-
-        // ✅ ספירה לקבוצת Subjects
-        fun countUiTitlesForSubjects(list: List<SubjectTopic>): Int {
-            val all = mutableSetOf<String>() // canonical IDs
-            list.forEach { subject ->
-                subject.belts.forEach { belt ->
-                    resolveSectionsForSubject(belt = belt, subject = subject)
-                        .asSequence()
-                        .flatMap { it.items.asSequence() }
-                        .map { it.canonicalId }
-                        .forEach { all += it }
-                }
-            }
-            return all.size
-        }
+        return all.size
+    }
 
         fun formatCount(n: Int): String = "$n תרגילים"
 
@@ -324,121 +407,31 @@ internal fun TopicsBySubjectCard(
             return all.size
         }
 
-        // ✅ helpers (במקום ExerciseTitleFormatter) — חייב להיות לפני ensureDefenseRootTopic
-        fun norm(raw: String): String = raw
-            .replace("\u200F", "")
-            .replace("\u200E", "")
-            .replace("\u00A0", " ")
-            .replace("–", "-")
-            .replace("—", "-")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-            .lowercase()
-
-        fun displayName(raw: String): String {
-            val t = raw.trim()
-            if (!t.contains("::")) return t
-            return t.substringAfterLast("::").trim().ifBlank { t }
-        }
-
-        // ✅ ספירה לדיאלוג "הגנות פנימיות/חיצוניות" לפי בחירה: אגרופים/בעיטות
-    fun countUiTitlesForDefenseKindPick(
-        kind: il.kmi.app.domain.DefenseKind,
-        pick: String // "אגרופים" | "בעיטות"
-    ): Int {
-        fun matchesKindAndPick(raw: String): Boolean {
-            val rawN = norm(raw)
-            val dispN = norm(displayName(raw))
-
-            val wantsInternal = kind == il.kmi.app.domain.DefenseKind.INTERNAL
-            val hasInternal = rawN.contains("def:internal") || rawN.contains(":internal") || dispN.contains("פנימ")
-            val hasExternal = rawN.contains("def:external") || rawN.contains(":external") || dispN.contains("חיצונ")
-
-            val okKind = if (wantsInternal) hasInternal else hasExternal
-            if (!okKind) return false
-
-            val tagPunch =
-                rawN.contains("def:internal:punch") ||
-                        rawN.contains("def:external:punch") ||
-                        rawN.contains(":punch:")
-
-            val tagKick =
-                rawN.contains("def:internal:kick") ||
-                        rawN.contains("def:external:kick") ||
-                        rawN.contains(":kick:")
-
-            val threatPunch =
-                tagPunch ||
-                        dispN.contains("נגד אגרוף") ||
-                        dispN.contains("נגד אגרופים") ||
-                        dispN.contains("נגד אגרופ")
-
-            val threatKick =
-                tagKick ||
-                        dispN.contains("נגד בעיטה") ||
-                        dispN.contains("נגד בעיטות") ||
-                        dispN.contains("נגד בעיט")
-
-            return when (pick) {
-                "אגרופים" -> threatPunch && !threatKick
-                "בעיטות" -> threatKick && !threatPunch
-                else -> true
-            }
-        }
-
-        val baseTopic =
-            if (kind == il.kmi.app.domain.DefenseKind.INTERNAL) "הגנות פנימיות" else "הגנות חיצוניות"
-
-        val all = mutableSetOf<String>()
-
-        Belt.order.forEach { b ->
-            val items = buildList<String> {
-                addAll(ContentRepo.listItemTitles(belt = b, topicTitle = "הגנות", subTopicTitle = null))
-                addAll(ContentRepo.listItemTitles(belt = b, topicTitle = baseTopic, subTopicTitle = null))
-            }.distinct()
-
-            items.asSequence()
-                .filter(::matchesKindAndPick)
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .forEach { all += it }
-        }
-
-        return all.size
+    fun displayName(raw: String): String {
+        val t = raw.trim()
+        if (!t.contains("::")) return t
+        return t.substringAfterLast("::").trim().ifBlank { t }
     }
 
-    // ✅ ROOT ספירה להגנות פנימיות/חיצוניות (ללא אגרופים/בעיטות)
-    fun countUiTitlesForDefenseRoot(kind: il.kmi.app.domain.DefenseKind): Int {
-        fun matchesKindOnly(raw: String): Boolean {
-            val rawN = norm(raw)
-            val dispN = norm(displayName(raw))
+    // ✅ NEW: נרמול פריטי הגנות כדי לתמוך גם בפורמט הישן עם _ וגם בחדש עם :
+    fun normalizeDefenseItem(raw: String): String {
+        val t0 = raw.trim().trim('"')
 
-            val wantsInternal = kind == il.kmi.app.domain.DefenseKind.INTERNAL
-            val hasInternal = rawN.contains("def:internal") || rawN.contains(":internal") || dispN.contains("פנימ")
-            val hasExternal = rawN.contains("def:external") || rawN.contains(":external") || dispN.contains("חיצונ")
+        // פורמטים ישנים שהיו אצלך בשביל הסינונים
+        val t1 = t0
+            .replace("def_internal_punches::", "def:internal:punch::", ignoreCase = true)
+            .replace("def_internal_kicks::", "def:internal:kick::", ignoreCase = true)
+            .replace("def_external_punches::", "def:external:punch::", ignoreCase = true)
+            .replace("def_external_kicks::", "def:external:kick::", ignoreCase = true)
 
-            return if (wantsInternal) hasInternal else hasExternal
-        }
+        // אם נשארו וריאציות “חצי חדשות”
+        val t2 = t1
+            .replace("def:internal:punch:", "def:internal:punch::", ignoreCase = true)
+            .replace("def:internal:kick:", "def:internal:kick::", ignoreCase = true)
+            .replace("def:external:punch:", "def:external:punch::", ignoreCase = true)
+            .replace("def:external:kick:", "def:external:kick::", ignoreCase = true)
 
-        val baseTopic =
-            if (kind == il.kmi.app.domain.DefenseKind.INTERNAL) "הגנות פנימיות" else "הגנות חיצוניות"
-
-        val all = mutableSetOf<String>()
-
-        Belt.order.forEach { b ->
-            val items = buildList<String> {
-                addAll(ContentRepo.listItemTitles(belt = b, topicTitle = "הגנות", subTopicTitle = null))
-                addAll(ContentRepo.listItemTitles(belt = b, topicTitle = baseTopic, subTopicTitle = null))
-            }.distinct()
-
-            items.asSequence()
-                .filter(::matchesKindOnly)
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .forEach { all += it }
-        }
-
-        return all.size
+        return t2
     }
 
 // ----------------- חישובים כבדים ברקע -----------------
@@ -622,8 +615,8 @@ internal fun TopicsBySubjectCard(
 
             val subjCounts = subjects.associate { s -> s.id to countUiTitlesForSubject(s) }
 
-            val internalRoot = countUiTitlesForDefenseRoot(DefenseKind.INTERNAL)
-            val externalRoot = countUiTitlesForDefenseRoot(DefenseKind.EXTERNAL)
+            val internalRoot = defenseRootCount(kind = "internal")
+            val externalRoot = defenseRootCount(kind = "external")
 
             val handsRoot = run {
                 val all = mutableSetOf<String>()
@@ -668,13 +661,13 @@ internal fun TopicsBySubjectCard(
                 .sumOf { subjCounts[it.id] ?: 0 }
 
             val internalKinds = mapOf(
-                "אגרופים" to countUiTitlesForDefenseKindPick(DefenseKind.INTERNAL, "אגרופים"),
-                "בעיטות"  to countUiTitlesForDefenseKindPick(DefenseKind.INTERNAL, "בעיטות"),
+                "אגרופים" to defenseCount(kind = "internal", pick = "punch"),
+                "בעיטות"  to defenseCount(kind = "internal", pick = "kick"),
             )
 
             val externalKinds = mapOf(
-                "אגרופים" to countUiTitlesForDefenseKindPick(DefenseKind.EXTERNAL, "אגרופים"),
-                "בעיטות"  to countUiTitlesForDefenseKindPick(DefenseKind.EXTERNAL, "בעיטות"),
+                "אגרופים" to defenseCount(kind = "external", pick = "punch"),
+                "בעיטות"  to defenseCount(kind = "external", pick = "kick"),
             )
 
             val handsPicks = mapOf(
@@ -742,48 +735,6 @@ internal fun TopicsBySubjectCard(
         countsReady = true
     }
 
-    // ✅ תתי-נושאים: חייב להיות בתוך ה-Composable (לפני ה-} הסופי של TopicsBySubjectCard)
-    askSubTopicsForId?.let { id: String ->
-
-        // במקום subjectById(id) (שיכול להיות מתחת/מחוץ לסקופ) — מחפשים ישירות ברשימה
-        val base = remember(subjects, id) {
-            subjects.firstOrNull { it.id == id }
-        }
-
-        val bodyHugsChild: SubjectTopic? = remember(subjects, base) {
-            if (base?.id == "releases") subjects.firstOrNull { it.id == "releases_body_hugs" } else null
-        }
-
-        val picks = remember(base, bodyHugsChild) {
-            when {
-                base == null -> emptyList()
-                bodyHugsChild != null -> base.subTopics + bodyHugsChild.titleHeb
-                else -> base.subTopics
-            }
-        }
-
-        val counts = subTopicsPickCountsBySubjectId[id].orEmpty()
-
-        SubTopicsPickModeDialogModern(
-            title = base?.titleHeb ?: "תתי נושאים",
-            picks = picks,
-            counts = counts,
-            onDismiss = { askSubTopicsForId = null },
-            onPick = { picked ->
-                askSubTopicsForId = null
-                if (base != null) {
-                    // ✅ אם בחרנו "שחרור מחביקות גוף" — פותחים את הנושא הילד עצמו
-                    if (bodyHugsChild != null && picked == bodyHugsChild.titleHeb) {
-                        openSubjectSmart(bodyHugsChild)
-                    } else {
-                        val tmp = subjectForPick(base, picked)
-                        openSubjectSmart(tmp)
-                    }
-                }
-            }
-        )
-    }
-
     fun isDefenseChild(s: SubjectTopic): Boolean {
         val t = s.titleHeb.trim()
         val isWeaponOrKicks =
@@ -800,84 +751,116 @@ internal fun TopicsBySubjectCard(
         return t.startsWith("עבודת ידיים") && (t.contains("-") || t.contains("–"))
     }
 
-    // ✅ NEW: מציאת subject מדויק להגנות פנימיות/חיצוניות לפי kind + pick
-    fun findDefenseSubject(
-        kind: il.kmi.app.domain.DefenseKind,
-        pick: String
-    ): SubjectTopic? {
-        val pickKey = when {
-            pick.contains("אגרופ") -> "אגרופים"
-            pick.contains("בעיט")  -> "בעיטות"
-            else -> pick.trim()
+        // ✅ NEW: מציאת subject מדויק להגנות פנימיות/חיצוניות לפי kind + pick (גמיש: לא תלוי defenseKind בלבד)
+        fun findDefenseSubject(
+            kind: il.kmi.app.domain.DefenseKind,
+            pick: String
+        ): SubjectTopic? {
+            fun n(s: String) = normText(s)
+
+            val wantsInternal = kind == il.kmi.app.domain.DefenseKind.INTERNAL
+            val pickKey = when {
+                pick.contains("אגרופ") -> "אגרופ"   // יתפוס אגרוף/אגרופים
+                pick.contains("בעיט")  -> "בעיט"    // יתפוס בעיטה/בעיטות
+                else -> pick.trim()
+            }
+
+            return subjects.firstOrNull { s ->
+                val t = n(s.titleHeb)
+
+                val isDefense = t.contains("הגנות") || t.contains("הגנה")
+                if (!isDefense) return@firstOrNull false
+
+                val isKindOk =
+                    if (wantsInternal) t.contains("פנימ") else t.contains("חיצונ")
+
+                val isPickOk = t.contains(n(pickKey))
+
+                // לפעמים הכותרת היא "הגנות פנימיות (אגרופים+בעיטות)" / "הגנות חיצוניות (אגרופים+בעיטות)"
+                // אז אנחנו לא דורשים "contains(אגרופים)" בדיוק – מספיק "אגרופ"/"בעיט"
+                isKindOk && isPickOk
+            }
         }
 
-        return subjects.firstOrNull { s ->
-            s.defenseKind == kind &&
-                    s.titleHeb.contains(pickKey) &&
-                    (s.titleHeb.contains("הגנות פנימיות") || s.titleHeb.contains("הגנות חיצוניות"))
-        }
-    }
+        // ✅ NEW: מציאת subject מדויק ל"הגנות" לפי קטגוריה (בעיטות/סכין/אקדח/מקל)
+        fun findDefenseCategorySubject(pick: String): SubjectTopic? {
+            fun isKnifeLike(t: String) = t.contains("סכין") || t.contains("דקיר") || t.contains("דקירה")
 
-    // ✅ NEW: מציאת subject מדויק ל"הגנות" לפי קטגוריה (בעיטות/סכין/אקדח/מקל)
-    fun findDefenseCategorySubject(pick: String): SubjectTopic? {
-        fun isKnifeLike(t: String) = t.contains("סכין") || t.contains("דקיר") || t.contains("דקירה")
+            return subjects.firstOrNull { s ->
+                val t = s.titleHeb.trim()
+                val isDefense = t.contains("הגנות") || t.contains("הגנה")
+                if (!isDefense) return@firstOrNull false
 
-        return subjects.firstOrNull { s ->
-            val t = s.titleHeb.trim()
-            val isDefense = t.contains("הגנות") || t.contains("הגנה")
-            if (!isDefense) return@firstOrNull false
+                when (pick) {
+                    // ✅ FIX: "הגנות נגד בעיטות" = קטגוריה כללית, לא פנימיות/חיצוניות
+                    "הגנות נגד בעיטות" -> {
+                        val notKnife = !isKnifeLike(t)
+                        val hasKick = t.contains("בעיט")
+                        val notInternalExternal = !t.contains("פנימ") && !t.contains("חיצונ")
+                        // מעדיפים Subject שהוא "הגנות - ..." או כללי
+                        notKnife && hasKick && notInternalExternal
+                    }
 
-            when (pick) {
-                // ✅ אצלך אין subject בשם "הגנות נגד בעיטות", אז בוחרים אוטומטית אחד מה־INTERNAL/EXTERNAL של בעיטות
-                "הגנות נגד בעיטות" -> {
-                    val notKnife = !isKnifeLike(t)
-                    val hasKick = t.contains("בעיט")
-                    val hasInternalExternal = (s.defenseKind == il.kmi.app.domain.DefenseKind.INTERNAL ||
-                            s.defenseKind == il.kmi.app.domain.DefenseKind.EXTERNAL)
-                    notKnife && hasKick && hasInternalExternal
+                    "הגנות מסכין" -> isKnifeLike(t)
+                    "הגנות מאיום אקדח" -> t.contains("אקדח")
+                    "הגנות נגד מקל" -> t.contains("מקל")
+                    else -> false
                 }
-
-                // ✅ כאן יש לך Subjects אמיתיים: "הגנות סכין" / "הגנות מאיום אקדח" / "הגנות נגד מקל"
-                "הגנות מסכין" -> isKnifeLike(t)
-                "הגנות מאיום אקדח" -> t.contains("אקדח")
-                "הגנות נגד מקל" -> t.contains("מקל")
-                else -> false
+            } ?: run {
+                // ✅ fallback אחרון (רק אם אין שום Subject קטגוריה):
+                // נשאיר אותך עם משהו שמציג תרגילים במקום מסך ריק
+                if (pick == "הגנות נגד בעיטות") {
+                    subjects.firstOrNull { s ->
+                        val t = s.titleHeb.trim()
+                        !isKnifeLike(t) && t.contains("בעיט") && (s.defenseKind == DefenseKind.INTERNAL || s.defenseKind == DefenseKind.EXTERNAL)
+                    }
+                } else null
             }
         }
-    }
 
-    // ✅ NEW: מציאת subject מדויק ל"עבודת ידיים" לפי תת־בחירה
-    fun findHandsSubject(pick: String): SubjectTopic? {
-        fun isHands(t: String) =
-            t == "עבודת ידיים" || (t.startsWith("עבודת ידיים") && (t.contains("-") || t.contains("–")))
+        // ✅ NEW: מציאת subject מדויק ל"עבודת ידיים" לפי תת־בחירה
+        fun findHandsSubject(pick: String): SubjectTopic? {
 
-        return subjects.firstOrNull { s ->
-            val t = s.titleHeb.trim()
-            if (!isHands(t)) return@firstOrNull false
+            fun norm(s: String): String = s
+                .replace("–", "-")
+                .replace("—", "-")
+                .replace("־", "-")
+                .replace("+", " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
 
-            when (pick) {
-                "מרפק" -> t.contains("מרפק")
-                "פיסת יד" -> t.contains("פיסת") || t.contains("פיסת יד") || t.contains("כף יד")
-                "אגרופים ישרים" -> t.contains("ישרים") || t.contains("אגרופים ישרים")
-                "מגל וסנוקרת" -> t.contains("מגל") || t.contains("סנוקרת")
-                else -> false
+            fun isHands(t: String) =
+                t == "עבודת ידיים" || (t.startsWith("עבודת ידיים") && (t.contains("-") || t.contains("–")))
+
+            val pickN = norm(pick)
+
+            return subjects.firstOrNull { s ->
+                val t = norm(s.titleHeb)
+                if (!isHands(t)) return@firstOrNull false
+
+                when (pickN) {
+                    "מרפק" -> t.contains("מרפק")
+                    "פיסת יד" -> t.contains("פיסת") || t.contains("פיסת יד") || t.contains("כף יד")
+                    "אגרופים ישרים" -> t.contains("ישרים") || t.contains("אגרופים ישרים")
+                    "מגל וסנוקרת" -> t.contains("מגל") || t.contains("סנוקרת")
+                    else -> false
+                }
             }
         }
-    }
 
-    val visibleSubjects = remember(subjects) {
-        subjects.filter { !isDefenseChild(it) && !isHandsChild(it) }
-    }
+        val visibleSubjects = remember(subjects) {
+            subjects.filter { !isDefenseChild(it) && !isHandsChild(it) }
+        }
 
-    // ✅ NEW: שחרורים יופיע מתחת לעבודת ידיים (ולא יופיע שוב ברשימה)
-    val releasesSubject = remember(visibleSubjects) {
-        visibleSubjects.firstOrNull { it.id == "releases" }
-    }
-    val visibleSubjectsExceptReleases = remember(visibleSubjects) {
-        visibleSubjects.filterNot { it.id == "releases" }
-    }
+// ✅ NEW: שחרורים יופיע מתחת לעבודת ידיים (ולא יופיע שוב ברשימה)
+        val releasesSubject = remember(visibleSubjects) {
+            visibleSubjects.firstOrNull { it.id == "releases" }
+        }
+        val visibleSubjectsExceptReleases = remember(visibleSubjects) {
+            visibleSubjects.filterNot { it.id == "releases" }
+        }
 
-    // ----------------- UI -----------------
+        // ----------------- UI -----------------
     // (⚠️ החלק הזה חייב להישאר! אם מחקת אותו/סגרת } לפניו — המסך נהיה ריק)
     Surface(
         tonalElevation = 2.dp,
@@ -948,7 +931,7 @@ internal fun TopicsBySubjectCard(
             // ✅ "שחרורים" מיד אחרי "עבודת ידיים"
             releasesSubject?.let { subject ->
                 val exercisesCount = subjectCounts[subject.id] ?: 0
-                val subTopicsCount = subject.subTopics.size
+                val subTopicsCount = uiSectionCounts[subject.id] ?: subject.subTopics.size
 
                 val countTextUi = if (subTopicsCount > 0) {
                     "${subTopicsCount} תתי נושאים\n${exercisesCount} תרגילים"
@@ -972,7 +955,7 @@ internal fun TopicsBySubjectCard(
             // ✅ שאר הנושאים
             visibleSubjectsExceptReleases.forEach { subject ->
                 val exercisesCount = subjectCounts[subject.id] ?: 0
-                val subTopicsCount = subject.subTopics.size
+                val subTopicsCount = uiSectionCounts[subject.id] ?: subject.subTopics.size
 
                 val countTextUi = if (subTopicsCount > 0) {
                     "${subTopicsCount} תתי נושאים\n${exercisesCount} תרגילים"
@@ -1000,10 +983,17 @@ internal fun TopicsBySubjectCard(
     // ----------------- דיאלוגים -----------------
 
     if (askDefense) {
+        val kicksAll = remember(countsReady) {
+            defenseCount(kind = "all", pick = "kick")
+        }
+
         DefenseCategoryPickDialogModern(
-            counts = remember(subjects, countsReady) {
+            counts = remember(subjects, countsReady, kicksAll) {
                 mapOf(
-                    "הגנות נגד בעיטות" to countUiTitlesForDefensePick("הגנות נגד בעיטות"),
+                    // ✅ בעיטות = מהגרף החדש (פנימיות+חיצוניות יחד)
+                    "הגנות נגד בעיטות" to kicksAll,
+
+                    // ✅ השאר נשאר אצלך כמו שהיה (Subjects)
                     "הגנות מסכין" to countUiTitlesForDefensePick("הגנות מסכין"),
                     "הגנות מאיום אקדח" to countUiTitlesForDefensePick("הגנות מאיום אקדח"),
                     "הגנות נגד מקל" to countUiTitlesForDefensePick("הגנות נגד מקל")
@@ -1013,19 +1003,23 @@ internal fun TopicsBySubjectCard(
             onPick = { picked ->
                 askDefense = false
 
-                // ✅ אין דיאלוג ביניים — נכנסים ישר לתרגילים
+                // ✅ “הגנות נגד בעיטות” נכנס למסך הרשימות החדש
+                if (picked == "הגנות נגד בעיטות") {
+                    onOpenDefenseList(currentBelt, "all", "kick")
+                    return@DefenseCategoryPickDialogModern
+                }
+
+                // ✅ שאר הקטגוריות נשאר Subject-based
                 val subject = findDefenseCategorySubject(picked)
                 if (subject != null) {
                     openSubjectSmart(subject)
-                } else {
-                    // אם לא מצאנו — נופלים חזרה ל-no-op (אפשר log אם תרצה)
-                    // android.util.Log.e("KMI_DBG", "No subject match for defense pick='$picked'")
                 }
             }
         )
     }
 
     askKind?.let { kind ->
+
         val countsForDialog = remember(kind, internalKindCounts, externalKindCounts) {
             when (kind) {
                 il.kmi.app.domain.DefenseKind.INTERNAL -> internalKindCounts
@@ -1041,17 +1035,17 @@ internal fun TopicsBySubjectCard(
             onPick = { picked ->
                 askKind = null
 
-                // ✅ אין דיאלוג ביניים — נכנסים ישר לתרגילים
-                val subject = findDefenseSubject(kind, picked)
-                if (subject != null) {
-                    openSubjectSmart(subject)
-                } else {
-                    // android.util.Log.e("KMI_DBG", "No subject match for kind=$kind pick='$picked'")
-                }
+                val kindStr = if (kind == il.kmi.app.domain.DefenseKind.INTERNAL) "internal" else "external"
+                val pickStr = if (picked.contains("אגרופ")) "punch" else "kick"
+
+                android.util.Log.e("KMI_DBG", "DEFENSE NAV -> belt=$currentBelt kind=$kindStr pick=$pickStr")
+
+                onOpenDefenseList(currentBelt, kindStr, pickStr)
             }
         )
     }
 
+    // ✅ עבודת ידיים – חייב להיות *בתוך* TopicsBySubjectCard
     if (askHands) {
         HandsPickModeDialogModern(
             counts = handsPickCounts,
@@ -1064,11 +1058,10 @@ internal fun TopicsBySubjectCard(
         )
     }
 
-    // ✅ תתי-נושאים: חייב להיות בתוך ה-Composable (לפני ה-} הסופי של TopicsBySubjectCard)
+    // ✅ תתי-נושאים – להשאיר רק פעם אחת (אם יש לך עוד אחד למטה – למחוק אותו)
     askSubTopicsForId?.let { id: String ->
 
-        // ✅ מחפשים ישירות ברשימה (בלי subjectById כדי שלא יהיה Unresolved reference)
-        val base: SubjectTopic? = remember(subjects, id) {
+        val base = remember(subjects, id) {
             subjects.firstOrNull { it.id == id }
         }
 
@@ -1076,7 +1069,7 @@ internal fun TopicsBySubjectCard(
             if (base?.id == "releases") subjects.firstOrNull { it.id == "releases_body_hugs" } else null
         }
 
-        val picks: List<String> = remember(base, bodyHugsChild) {
+        val picks = remember(base, bodyHugsChild) {
             when {
                 base == null -> emptyList()
                 bodyHugsChild != null -> base.subTopics + bodyHugsChild.titleHeb
@@ -1084,7 +1077,7 @@ internal fun TopicsBySubjectCard(
             }
         }
 
-        val counts: Map<String, Int> = subTopicsPickCountsBySubjectId[id].orEmpty()
+        val counts = subTopicsPickCountsBySubjectId[id].orEmpty()
 
         SubTopicsPickModeDialogModern(
             title = base?.titleHeb ?: "תתי נושאים",
@@ -1104,8 +1097,7 @@ internal fun TopicsBySubjectCard(
             }
         )
     }
-
-}
+} // ✅ זה ה-} היחיד שסוגר את TopicsBySubjectCard
 
 /* ----------------------------- helpers לשליפת תרגילים מתוך AppContentRepo ----------------------------- */
 // ----------------------------- Adapter: app SubjectTopic -> shared SubjectTopic -----------------------------

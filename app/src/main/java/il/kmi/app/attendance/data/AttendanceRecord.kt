@@ -29,7 +29,8 @@ data class AttendanceRecord(
         Index(value = ["branch"]),
         Index(value = ["groupKey"]),
         Index(value = ["date"]),
-        Index(value = ["sessionId"])
+        Index(value = ["sessionId"]),
+        Index(value = ["createdAtMillis"]) // ✅ ADD (בערך שורה 30)
     ]
 )
 data class AttendanceReport(

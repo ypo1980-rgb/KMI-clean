@@ -1,5 +1,6 @@
 package il.kmi.app
 
+import android.net.Uri
 import il.kmi.shared.domain.Belt
 import java.net.URLEncoder
 
@@ -13,6 +14,14 @@ sealed class Route(val route: String) {
 
     object Intro : Route("intro")
     object Home : Route("home")
+
+    object TopicRepoExercises : Route("topic_repo/{beltId}/{topicId}/{subTopicId}") {
+        fun make(belt: Belt, topicId: String, subTopicId: String): String =
+            "topic_repo/${belt.id}/${enc(topicId)}/${enc(subTopicId)}"
+
+        fun makeId(beltId: String, topicId: String, subTopicId: String): String =
+            "topic_repo/$beltId/${enc(topicId)}/${enc(subTopicId)}"
+    }
 
     // ▼▼▼ חדש: מסך נחיתה של הרישום (התמונה עם "משתמש חדש / משתמש קיים")
     data object RegistrationLanding : Route("registration_landing")
@@ -64,21 +73,62 @@ sealed class Route(val route: String) {
             "materials/$beltId/${enc(topic)}?coach=$coach"
     }
 
-    // ▼▼▼ חדש: מסך תתי-נושאים כללי (לכל נושא שיש לו תתי-נושאים, למשל "עבודת ידיים" / "הגנות")
-    object SubTopics : Route("subtopics/{beltId}/{topic}?coach={coach}") {
-        fun make(belt: Belt, topic: String, coach: Boolean = false) =
-            "subtopics/${belt.id}/${enc(topic)}?coach=$coach"
+    object Defenses {
+        const val route = "defenses/{beltId}/{kind}/{pick}"
 
-        fun makeId(beltId: String, topic: String, coach: Boolean = false) =
-            "subtopics/$beltId/${enc(topic)}?coach=$coach"
+        fun make(belt: Belt, kind: String, pick: String): String {
+            return "defenses/${Uri.encode(belt.id)}/${Uri.encode(kind)}/${Uri.encode(pick)}"
+        }
     }
 
     // גרסת Materials עם תת-נושא (תאימות לאחור נשמרת)
     object MaterialsSub : Route("materials/{beltId}/{topic}/{subTopic}") {
-        fun make(belt: Belt, topic: String, subTopic: String?) =
-            "materials/${belt.id}/${enc(topic)}/${enc(subTopic)}"
-        fun makeId(beltId: String, topic: String, subTopic: String?) =
-            "materials/$beltId/${enc(topic)}/${enc(subTopic)}"
+
+        fun make(belt: Belt, topic: String, subTopic: String?): String {
+            val st = subTopic?.takeIf { it.isNotBlank() }
+                ?: return Materials.make(belt, topic) // fallback בטוח
+            return "materials/${belt.id}/${enc(topic)}/${enc(st)}"
+        }
+
+        fun makeId(beltId: String, topic: String, subTopic: String?): String {
+            val st = subTopic?.takeIf { it.isNotBlank() }
+                ?: return Materials.makeId(beltId, topic)
+            return "materials/$beltId/${enc(topic)}/${enc(st)}"
+        }
+    }
+
+    object AttendanceGroupStats : Route("attendance_group_stats/{branch}/{groupKey}") {
+
+        fun make(branch: String, groupKey: String): String =
+            "attendance_group_stats/${enc(branch)}/${enc(groupKey)}"
+    }
+
+    // ✅ NEW: מסך תרגילים לפי נושא מתוך CatalogData/CatalogRepo
+    object CatalogTopicExercises : Route("catalog_topic/{beltId}/{topic}?sub={sub}") {
+
+        fun make(belt: Belt, topic: String, sub: String? = null): String {
+            val base = "catalog_topic/${belt.id}/${enc(topic)}"
+            return if (sub.isNullOrBlank()) base else "$base?sub=${enc(sub)}"
+        }
+
+        fun makeId(beltId: String, topic: String, sub: String? = null): String {
+            val base = "catalog_topic/$beltId/${enc(topic)}"
+            return if (sub.isNullOrBlank()) base else "$base?sub=${enc(sub)}"
+        }
+    }
+
+    // ✅ NEW: מסך תרגילים לפי חגורה+נושא, ותת־נושא אופציונלי ב-query
+    object TopicExercises : Route("topic_ex/{beltId}/{topic}?sub={sub}") {
+
+        fun make(belt: Belt, topic: String, sub: String? = null): String {
+            val base = "topic_ex/${belt.id}/${enc(topic)}"
+            return if (sub.isNullOrBlank()) base else "$base?sub=${enc(sub)}"
+        }
+
+        fun makeId(beltId: String, topic: String, sub: String? = null): String {
+            val base = "topic_ex/$beltId/${enc(topic)}"
+            return if (sub.isNullOrBlank()) base else "$base?sub=${enc(sub)}"
+        }
     }
 
     object Summary : Route("summary/{beltId}?topic={topic}&subTopic={subTopic}") {

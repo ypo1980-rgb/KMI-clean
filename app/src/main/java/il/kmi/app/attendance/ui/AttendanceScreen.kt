@@ -45,9 +45,6 @@ import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.runtime.saveable.rememberSaveable
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.Explanations
-import com.google.firebase.firestore.ktx.firestore
-import kotlinx.coroutines.tasks.await
-import com.google.firebase.ktx.Firebase
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -57,9 +54,9 @@ fun AttendanceScreen(
     date: LocalDate,
     branch: String,
     groupKey: String,
-    // חייב להיות תואם ל־NavGraph: מזהה יכול להיות גם null
     onOpenMemberStats: (memberId: Long?, name: String) -> Unit,
-    onHomeClick: () -> Unit = {}          // 👈 חדש
+    onOpenGroupStats: (branch: String, groupKey: String) -> Unit,   // ✅ חדש
+    onHomeClick: () -> Unit = {}
 ) {
     // הקשר למסך
     LaunchedEffect(branch, groupKey, date) {
@@ -70,158 +67,65 @@ fun AttendanceScreen(
     val state by vm.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current   // לשיתוף דו"ח
-// ✅ סניף נבחר למסך (לא רשימת סניפים)
-// אם מגיע CSV – ניקח את הראשון (עד שתוסיף UI בחירה מסודר)
-    val selectedBranch = remember(state.branch) {
-        state.branch
-            .split(",")
-            .map { it.trim() }
-            .firstOrNull { it.isNotBlank() }
-            ?: state.branch.trim()
+
+    LaunchedEffect(vm) {
+        vm.events.collect { ev ->
+            when (ev) {
+                is UiEvent.ReportSaved -> onOpenGroupStats(ev.branch, ev.groupKey)
+                is UiEvent.ReportSaveFailed -> Log.e("ATT_SAVE", "save failed: ${ev.message}")
+            }
+        }
     }
 
-    // ===== טעינה אוטומטית של מתאמנים מה־users לפי branches + groups =====
-    var bootstrapKey by rememberSaveable { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(state.branch, state.groupKey, state.members.size) {
-        fun String.norm(): String = this
-            .trim()
-            // ❗ לא מחליפים כאן – ל־- כדי לא לשבור התאמה למסמכים
-            .replace('־', '-')   // maqaf
-            .replace(Regex("\\s+"), " ")
 
-        val branchRaw = selectedBranch.norm()
-        val groupName = state.groupKey.norm()
+// ✅ סניף נבחר למסך (לא רשימת סניפים)
+// אם מגיע CSV – ניקח את הראשון (עד שתוסיף UI בחירה מסודר)
+    // ✅ סניף נבחר למסך (לא רשימת סניפים)
+    // אם ה-state עדיין ריק (בהתחלה), נשתמש בפרמטרים שהגיעו למסך
+    val effectiveBranchRaw = remember(state.branch, branch) {
+        (state.branch.takeIf { it.isNotBlank() } ?: branch).trim()
+    }
+    val effectiveGroupRaw = remember(state.groupKey, groupKey) {
+        (state.groupKey.takeIf { it.isNotBlank() } ?: groupKey).trim()
+    }
 
-        // אם מגיעים כמה סניפים באותה מחרוזת (מופרדים בפסיק) – נבחר את הראשון
-        val branchBase = branchRaw
+    val selectedBranch = remember(effectiveBranchRaw) {
+        effectiveBranchRaw
             .split(",")
             .map { it.trim() }
             .firstOrNull { it.isNotBlank() }
-            ?: branchRaw
+            ?: effectiveBranchRaw.trim()
+    }
 
-        // ננסה גם עם '-' וגם עם '–' כי במסמכים שלך branches[] שמור עם '–'
-        val branchCandidates = listOf(
-            branchBase,
-            branchBase.replace("-", "–"),
-            branchBase.replace("–", "-"),
-        ).map { it.trim() }.distinct()
+    // ===== טעינה אוטומטית של מתאמנים מה־users לפי סניף + קבוצה =====
+    var bootstrapKey by rememberSaveable { mutableStateOf<String?>(null) }
 
-        val branchName = branchBase
+    LaunchedEffect(effectiveBranchRaw, effectiveGroupRaw) {
 
-        android.util.Log.w(
-            "ATT_BOOT",
-            "ENTER LaunchedEffect: branchRaw='${state.branch}' -> branch='$branchName' group='${state.groupKey}' members=${state.members.size}"
-        )
+        fun String.norm(): String = trim()
+            .replace('־', '-')
+            .replace('–', '-')
+            .replace('—', '-')
+            .replace(Regex("\\s+"), " ")
 
-        if (branchName.isBlank() || groupName.isBlank()) {
-            android.util.Log.e("ATT_BOOT", "ABORT: blank branch/group after trim. branch='$branchName' group='$groupName'")
-            return@LaunchedEffect
-        }
+        val branchBase = selectedBranch.norm()
+        val groupBase  = effectiveGroupRaw.norm()
 
-        val key = "$branchName|$groupName"
-        if (bootstrapKey == key) {
-            android.util.Log.i("ATT_BOOT", "SKIP: bootstrapKey already '$key'")
-            return@LaunchedEffect
-        }
-        if (state.members.isNotEmpty()) {
-            android.util.Log.i("ATT_BOOT", "SKIP: members already present (${state.members.size})")
+        if (branchBase.isBlank()) return@LaunchedEffect
+
+        val key = "$branchBase|$groupBase"
+        if (bootstrapKey == key) return@LaunchedEffect
+
+        val hasOnlyPlaceholder =
+            state.members.size == 1 && state.members.first().displayName.trim().startsWith("מתאמן")
+
+        if (state.members.isNotEmpty() && !hasOnlyPlaceholder) {
             bootstrapKey = key
             return@LaunchedEffect
         }
 
-        android.util.Log.i("ATT_BOOT", "bootstrap start: branch='$branchName' group='$groupName'")
-
-        runCatching {
-            // 1) ניסיון ראשי: branches[] + groups[] + role (מנסה גם '-' וגם '–')
-            var snap1 = Firebase.firestore.collection("users")
-                .whereArrayContains("branches", branchCandidates.first())
-                .whereArrayContains("groups", groupName)
-                .whereEqualTo("role", "trainee")
-                .get()
-                .await()
-
-            android.util.Log.i("ATT_BOOT", "snap1 size=${snap1.size()} using branch='${branchCandidates.first()}'")
-
-            // אם יצא 0 – ננסה עוד וריאציות של הסניף (dash/en-dash)
-            if (snap1.isEmpty) {
-                for (cand in branchCandidates.drop(1)) {
-                    val tmp = Firebase.firestore.collection("users")
-                        .whereArrayContains("branches", cand)
-                        .whereArrayContains("groups", groupName)
-                        .whereEqualTo("role", "trainee")
-                        .get()
-                        .await()
-
-                    android.util.Log.i("ATT_BOOT", "snap1 retry size=${tmp.size()} using branch='$cand'")
-                    if (!tmp.isEmpty) {
-                        snap1 = tmp
-                        break
-                    }
-                }
-            }
-
-            val names1 = snap1.documents
-                .mapNotNull { d ->
-                    d.getString("fullName")
-                        ?: d.getString("name")
-                        ?: d.getString("displayName")
-                }
-                .map { it.norm() }
-                .filter { it.isNotBlank() }
-
-            // 2) Fallback נכון למסמכים שלך: branchesCsv (string) + groups[] + role
-            val names = if (names1.isNotEmpty()) {
-                names1
-            } else {
-                android.util.Log.w("ATT_BOOT", "snap1 returned 0 -> trying fallback branchesCsv")
-
-                var snap2 = Firebase.firestore.collection("users")
-                    .whereEqualTo("branchesCsv", branchCandidates.first())
-                    .whereArrayContains("groups", groupName)
-                    .whereEqualTo("role", "trainee")
-                    .get()
-                    .await()
-
-                android.util.Log.i("ATT_BOOT", "snap2 size=${snap2.size()} using branchesCsv='${branchCandidates.first()}'")
-
-                if (snap2.isEmpty) {
-                    for (cand in branchCandidates.drop(1)) {
-                        val tmp = Firebase.firestore.collection("users")
-                            .whereEqualTo("branchesCsv", cand)
-                            .whereArrayContains("groups", groupName)
-                            .whereEqualTo("role", "trainee")
-                            .get()
-                            .await()
-
-                        android.util.Log.i("ATT_BOOT", "snap2 retry size=${tmp.size()} using branchesCsv='$cand'")
-                        if (!tmp.isEmpty) {
-                            snap2 = tmp
-                            break
-                        }
-                    }
-                }
-
-                snap2.documents
-                    .mapNotNull { d ->
-                        d.getString("fullName")
-                            ?: d.getString("name")
-                            ?: d.getString("displayName")
-                    }
-                    .map { it.norm() }
-                    .filter { it.isNotBlank() }
-            }
-
-            android.util.Log.i("ATT_BOOT", "bootstrap names=${names.size} -> $names")
-
-            names
-                .distinctBy { it.lowercase() }
-                .forEach { n -> vm.addMember(n) }
-
-        }.onFailure { t ->
-            android.util.Log.e("ATT_BOOT", "bootstrap failed", t)
-            return@LaunchedEffect
-        }
+        vm.bootstrapMembersFromUsers(branchBase = branchBase, groupBase = groupBase)
 
         bootstrapKey = key
     }
@@ -230,109 +134,24 @@ fun AttendanceScreen(
     var name by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<Pair<Long, String>?>(null) } // (memberId, displayName)
 
-    // --- Helper: שליפת סטטוס לפי memberId (תומך במפתחות Long או String) ---
-    fun memberStatusOf(s: AttendanceUiState, memberId: Any): AttendanceStatus? {
-        fun lookup(map: Map<*, *>, key: Any): AttendanceStatus? {
-            (map[key] as? AttendanceStatus)?.let { return it }
-            if (key is Long) (map[key.toString()] as? AttendanceStatus)?.let { return it }
-            if (key is String) key.toLongOrNull()
-                ?.let { (map[it] as? AttendanceStatus)?.let { st -> return st } }
-            return null
-        }
-        val candidates = listOf("marks", "statuses", "statusById", "attendance", "recordsMap")
-        for (name in candidates) {
-            runCatching {
-                val f = s::class.java.getDeclaredField(name).apply { isAccessible = true }
-                val map = f.get(s) as? Map<*, *>
-                if (map != null) lookup(map, memberId)?.let { return it }
-            }
-        }
-        return null
-    }
 
-    LaunchedEffect(branch, groupKey) {
-        fun String.norm(): String = trim()
-            .replace('–', '-')
-            .replace('־', '-')
-            .replace(Regex("\\s+"), " ")
-
-        val bRaw = branch.norm()
-        val g    = groupKey.norm()
-
-        // אם branch מגיע כרשימת סניפים במחרוזת אחת – נבחר את הראשון
-        val b = bRaw
-            .split(",")
-            .map { it.trim() }
-            .firstOrNull { it.isNotBlank() }
-            ?: bRaw
-
-        runCatching {
-            val sample = Firebase.firestore.collection("users").limit(1).get().await()
-            Log.d("USERS_TEST", "users collection readable, size sample=${sample.size()}")
-        }.onFailure {
-            Log.e("USERS_TEST", "users collection FAILED", it)
-            return@LaunchedEffect
-        }
-
-        Log.d("USERS_TEST", "query users: branchRaw='$bRaw' -> branch='$b' groupKey='$g' role=trainee")
-
-        // הערה: במסמכים אצלך branch נשמר בתוך branches[] ולעיתים עם en-dash (–)
-        val bAlt = b.replace("-", "–")
-
-        runCatching {
-            // ניסיון A: עם b (dash רגיל)
-            val snapA = Firebase.firestore.collection("users")
-                .whereArrayContains("branches", b)
-                .whereArrayContains("groups", g)
-                .whereEqualTo("role", "trainee")
-                .get()
-                .await()
-
-            // ניסיון B: עם bAlt (en-dash) אם A יצא ריק
-            val snap = if (snapA.isEmpty && bAlt != b) {
-                Firebase.firestore.collection("users")
-                    .whereArrayContains("branches", bAlt)
-                    .whereArrayContains("groups", g)
-                    .whereEqualTo("role", "trainee")
-                    .get()
-                    .await()
-            } else snapA
-
-            Log.d("USERS_TEST", "users query( branches[]+groups[] ) OK, size=${snap.size()}")
-            snap.documents.take(10).forEach { d ->
-                Log.d(
-                    "USERS_TEST",
-                    "uid=${d.id} fullName=${d.getString("fullName")} " +
-                            "branches=${d.get("branches")} groups=${d.get("groups")} primaryGroup=${d.getString("primaryGroup")} role=${d.getString("role")}"
-                )
-            }
-        }.onFailure { e ->
-            // כאן יופיע גם מצב של "index required" במקום קריסה
-            Log.e("USERS_TEST", "users query( branches[]+groups[] ) FAILED", e)
-        }
-    }
-
-    // מפה מקומית ל־UI אופטימיסטי
-    val localStatuses = remember { mutableStateMapOf<Any, AttendanceStatus>() }
-    LaunchedEffect(state.members, state.hashCode()) {
-        state.members.forEach { m ->
-            memberStatusOf(state, m.id)?.let { st -> localStatuses[m.id] = st }
-        }
-    }
+    // ✅ מקור אמת: הסטטוסים מגיעים מה-ViewModel (Live from Firestore)
+    // נדרש שב-UiState יהיה Map<Long, AttendanceStatus> בשם statusByMemberId (או דומה)
+    val statusById = state.statusByMemberId
 
 
     // דו"ח טקסט / CSV
     fun buildReportText(s: AttendanceUiState): String {
         val total   = s.members.size
-        val present = s.members.count { localStatuses[it.id] == AttendanceStatus.PRESENT }
-        val absent  = s.members.count { localStatuses[it.id] == AttendanceStatus.ABSENT }
-        val excused = s.members.count { localStatuses[it.id] == AttendanceStatus.EXCUSED }
+        val present = s.members.count { s.statusByMemberId[it.id] == AttendanceStatus.PRESENT }
+        val absent  = s.members.count { s.statusByMemberId[it.id] == AttendanceStatus.ABSENT }
+        val excused = s.members.count { s.statusByMemberId[it.id] == AttendanceStatus.EXCUSED }
         val pct     = if (total > 0) (present * 100.0 / total) else 0.0
 
         val header = "דו\"ח נוכחות – ${s.branch} / ${s.groupKey} – $date\n"
         val stats  = "סה\"כ: $total | הגיעו: $present | לא הגיעו: $absent | מוצדקים: $excused | נוכחות: ${"%.1f".format(pct)}%\n"
         val lines  = s.members.joinToString("\n") { m ->
-            val st = when (localStatuses[m.id]) {
+            val st = when (s.statusByMemberId[m.id]) {
                 AttendanceStatus.PRESENT -> "הגיע"
                 AttendanceStatus.ABSENT  -> "לא הגיע"
                 AttendanceStatus.EXCUSED -> "מוצדק"
@@ -371,10 +190,24 @@ fun AttendanceScreen(
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
 
     // ===== סטטיסטיקת נוכחות לשיעור הנוכחי =====
-    val totalMembers = state.members.size
-    val presentCount = state.members.count { localStatuses[it.id] == AttendanceStatus.PRESENT }
-    val absentCount  = state.members.count { localStatuses[it.id] == AttendanceStatus.ABSENT }
-    val excusedCount = state.members.count { localStatuses[it.id] == AttendanceStatus.EXCUSED }
+
+    fun String.nameKey(): String = this
+        .trim()
+        .replace('־', '-')   // maqaf
+        .replace('–', '-')   // en-dash
+        .replace('—', '-')   // em-dash
+        .replace(Regex("\\s+"), " ")
+        .replace(Regex("""[."'\u05F3\u05F4,;:()\\[\\]{}]"""), "") // גרש/גרשיים/פיסוק נפוץ
+        .lowercase()
+
+    val displayMembers = remember(state.members) {
+        state.members.distinctBy { it.displayName.nameKey() }
+    }
+
+    val totalMembers = displayMembers.size
+    val presentCount = displayMembers.count { statusById[it.id] == AttendanceStatus.PRESENT }
+    val absentCount  = displayMembers.count { statusById[it.id] == AttendanceStatus.ABSENT }
+    val excusedCount = displayMembers.count { statusById[it.id] == AttendanceStatus.EXCUSED }
     val attendancePct: Double =
         if (totalMembers > 0) presentCount * 100.0 / totalMembers else 0.0
 
@@ -464,7 +297,7 @@ fun AttendanceScreen(
                     )
                 }
 
-                items(state.members, key = { it.id }) { m ->
+                items(displayMembers, key = { it.id }) { m ->
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                         Column(Modifier.fillMaxWidth()) {
                             Text(
@@ -477,7 +310,7 @@ fun AttendanceScreen(
 
                             Spacer(Modifier.height(6.dp))
 
-                            val curr = localStatuses[m.id]
+                            val curr = statusById[m.id]
 
                             @Composable
                             fun StatusPill(
@@ -539,9 +372,8 @@ fun AttendanceScreen(
                                         selected = curr == AttendanceStatus.PRESENT,
                                         selectedColor = Color(0xFF22C55E),
                                         onClick = {
-                                            localStatuses[m.id] = AttendanceStatus.PRESENT
-                                            val mid = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull()
-                                            if (mid != null) scope.launch { vm.mark(mid, AttendanceStatus.PRESENT) }
+                                            val mid = m.id
+                                            scope.launch { vm.mark(mid, AttendanceStatus.PRESENT) }
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     )
@@ -551,9 +383,8 @@ fun AttendanceScreen(
                                         selected = curr == AttendanceStatus.ABSENT,
                                         selectedColor = Color(0xFFEF4444),
                                         onClick = {
-                                            localStatuses[m.id] = AttendanceStatus.ABSENT
-                                            val mid = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull()
-                                            if (mid != null) scope.launch { vm.mark(mid, AttendanceStatus.ABSENT) }
+                                            val mid = m.id
+                                            scope.launch { vm.mark(mid, AttendanceStatus.ABSENT) }
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     )
@@ -598,28 +429,90 @@ fun AttendanceScreen(
                 }
 
                 item {
-                    Button(
-                        onClick = { shareReport(state) },
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF0EA5E9),
-                            contentColor = Color.White
-                        )
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "שמור דו\"ח נוכחות של האימון היום",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
+
+                        val compactPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+
+                        @Composable
+                        fun BtnText(text: String) {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                                Text(
+                                    text = text,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Clip, // ✅ לא להפוך ל-...
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = LocalContentColor.current
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { vm.saveTodayReport() },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = compactPadding,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF16A34A),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                                Icon(
+                                    Icons.Filled.Save,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = LocalContentColor.current
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                BtnText("שמור")
+                            }
+                        }
+
+                        Button(
+                            onClick = { shareReport(state) },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = compactPadding,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF0EA5E9),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                                Icon(
+                                    Icons.Filled.Assessment,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = LocalContentColor.current
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                BtnText("שתף")
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = { onOpenGroupStats(state.branch, state.groupKey) },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = compactPadding,
+                            border = BorderStroke(1.dp, Color(0xFF93C5FD)),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color.White
+                            )
+                        ) {
+                            // ✅ טקסט קצר יותר אם עדיין צפוף: "נתונים"
+                            BtnText("סטטיסטיקה")
+                        }
                     }
                 }
-
-                item { Spacer(Modifier.height(8.dp)) }
             }
         }
 
@@ -630,6 +523,7 @@ fun AttendanceScreen(
             val displayName = ExerciseTitleFormatter
                 .displayName(item)
                 .ifBlank { item }
+
 
             val explanation = remember(belt, item) {
                 findExplanationForHit(
@@ -937,7 +831,6 @@ private fun AttendanceSummaryCard(
             ) {
                 AttendanceStatBox(label = "סה\"כ", value = totalMembers.toString())
                 AttendanceStatBox(label = "הגיעו", value = presentCount.toString())
-                AttendanceStatBox(label = "מוצדקים", value = excusedCount.toString())
                 AttendanceStatBox(
                     label = "נוכחות %",
                     value = String.format(Locale("he", "IL"), "%.1f", attendancePct)

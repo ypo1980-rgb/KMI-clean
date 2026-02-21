@@ -12,6 +12,7 @@ import il.kmi.shared.domain.Belt
 import il.kmi.app.screens.BeltQuestions.BeltQuestionsByTopicScreen as BeltQuestionsByTopicScreen
 import il.kmi.app.training.TrainingCatalog
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
@@ -32,7 +33,6 @@ import il.kmi.app.screens.coach.InternalExamEntryScreen
 import il.kmi.app.ui.BirthdayGate
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.runtime.getValue
-import il.kmi.app.screens.BeltQuestions.BeltQuestionsByBeltScreen
 import il.kmi.app.screens.ExercisesTabsScreen
 import il.kmi.app.screens.FavoritesScreen
 import il.kmi.app.screens.HomeScreen
@@ -77,6 +77,7 @@ fun NavGraphBuilder.homeNavGraph(
     sp: SharedPreferences,
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs
 ) {
+
     // ---- מסך הבית ----
     composable(Route.Home.route) {
         val userRegion = kmiPrefs.region.orEmpty()
@@ -91,10 +92,8 @@ fun NavGraphBuilder.homeNavGraph(
                 } else emptyList()
             }
 
-        // ▼ מצב להצגת פופ־אפ הסבר (belt, topic, item)
         val explainTriple = remember { mutableStateOf<Triple<Belt, String, String>?>(null) }
 
-        // 🎂 שער יום הולדת + מסך הבית + דיאלוגי הסבר
         BirthdayGate(sp = sp) {
             HomeScreen(
                 onContinue = {
@@ -110,7 +109,6 @@ fun NavGraphBuilder.homeNavGraph(
                 onSettings = { nav.navigate(Route.Settings.route) },
                 trainings = trainingsForUser,
 
-                // ✅ NEW: ניווט למסך אימונים חופשיים עם פרמטרים מלאים
                 onOpenFreeSessions = { branch, groupKey, uid, name ->
                     nav.navigate(
                         FreeSessionsRoute.build(
@@ -126,7 +124,6 @@ fun NavGraphBuilder.homeNavGraph(
                 },
 
                 onOpenExercise = { key: String ->
-                    // שומר התוצאה להצגת דיאלוג (כמו בקוד המקורי)
                     fun dec(s: String) =
                         try {
                             java.net.URLDecoder.decode(s, "UTF-8")
@@ -135,15 +132,15 @@ fun NavGraphBuilder.homeNavGraph(
                         }
 
                     val parts = when {
-                        '|' in key  -> key.split('|', limit = 3)
+                        '|' in key -> key.split('|', limit = 3)
                         "::" in key -> key.split("::", limit = 3)
-                        '/' in key  -> key.split('/', limit = 3)
-                        else        -> listOf("", "", "")
+                        '/' in key -> key.split('/', limit = 3)
+                        else -> listOf("", "", "")
                     }.map(::dec)
 
-                    val belt  = Belt.fromId(parts.getOrNull(0).orEmpty()) ?: Belt.WHITE
+                    val belt = Belt.fromId(parts.getOrNull(0).orEmpty()) ?: Belt.WHITE
                     val topic = parts.getOrNull(1).orEmpty().trim()
-                    var item  = parts.getOrNull(2).orEmpty().trim()
+                    var item = parts.getOrNull(2).orEmpty().trim()
                     if (item.startsWith("$topic::")) item = item.removePrefix("$topic::")
 
                     val display = ExerciseTitleFormatter.displayName(item).ifBlank { item }.trim()
@@ -153,7 +150,6 @@ fun NavGraphBuilder.homeNavGraph(
                     explainTriple.value = Triple(belt, topic, item)
                 },
 
-                // ✅ NEW: הוספת שני הפרמטרים החסרים
                 onOpenMonthlyCalendar = {
                     nav.navigate(Route.MonthlyCalendar.route) {
                         launchSingleTop = true
@@ -168,7 +164,6 @@ fun NavGraphBuilder.homeNavGraph(
                 }
             )
 
-            // דיאלוג ההסבר – ממוחזר 1:1 מהקוד שהיה ב-MainApp
             explainTriple.value?.let { (b, t, iRaw) ->
                 val canonical = resolveCanonicalItemTitle(
                     belt = b,
@@ -189,8 +184,8 @@ fun NavGraphBuilder.homeNavGraph(
                     onDismiss = { explainTriple.value = null }
                 )
             }
-        } // ✅ סוגר BirthdayGate
-    }     // ✅ סוגר composable(Route.Home.route)
+        }
+    }
 
     // ---- יעד "תרגיל" (exercise/{id}) ----
     composable(
@@ -205,7 +200,6 @@ fun NavGraphBuilder.homeNavGraph(
                 .trim()
         }
 
-        // GREEN — כרגע נשתמש בחגורה שנבחרה במערכת, ואם אין — GREEN
         val belt = remember {
             runCatching { vm.selectedBelt.value }.getOrNull() ?: Belt.GREEN
         }
@@ -217,7 +211,6 @@ fun NavGraphBuilder.homeNavGraph(
             }.ifBlank { "לא נמצא הסבר עבור \"$itemTitle\"." }
         }
 
-        // מציג דיאלוג הסבר + מועדפים, וסוגר בחזרה אחורה
         ExplanationDialogWithFavorite(
             belt = belt,
             topic = "",
@@ -234,136 +227,68 @@ fun NavGraphBuilder.homeNavGraph(
         )
     }
 
-    // ---- בחירת חגורה (BeltQ) ----
-    composable(Route.BeltQ.route) {
-        val explainTriple = remember { mutableStateOf<Triple<Belt, String, String>?>(null) }
-
-        val isCoach = remember {
-            val role = (sp.getString("user_role", "") ?: "").lowercase()
-            role == "coach" || role.contains("coach") || role.contains("מאמן") || role.contains("מדריך")
-        }
-
-        BeltQuestionsByBeltScreen(
-            vm = vm,
-            kmiPrefs = kmiPrefs,
-            isCoach = isCoach,
-            onNext = { nav.navigate(Route.Topics.route) },
-            onBackHome = { nav.navigate(Route.Home.route) { popUpTo(0) } },
-            onOpenExercise = { key ->
-                fun dec(s: String) =
-                    try { java.net.URLDecoder.decode(s, "UTF-8") } catch (_: Exception) { s }
-
-                val resolved =
-                    runCatching { il.kmi.app.domain.ContentRepo.resolveItemKey(key) }.getOrNull()
-
-                if (resolved != null) {
-                    explainTriple.value = Triple(resolved.belt, resolved.topicTitle, resolved.itemTitle)
-                } else {
-                    val parts = when {
-                        '|' in key -> key.split('|', limit = 3)
-                        "::" in key -> key.split("::", limit = 3)
-                        '/' in key -> key.split('/', limit = 3)
-                        else -> listOf("", "", "")
-                    }.map(::dec)
-
-                    val beltFromKey = Belt.fromId(parts.getOrNull(0).orEmpty())
-                    val topic = parts.getOrNull(1).orEmpty().trim()
-                    var item = parts.getOrNull(2).orEmpty().trim()
-                    if (item.startsWith("$topic::")) item = item.removePrefix("$topic::")
-
-                    item = ExerciseTitleFormatter.displayName(item).ifBlank { item }.trim()
-                    item = item.replace(Regex(":+"), ":").replace(Regex("\\s+"), " ").trim()
-
-                    val beltResolved = beltFromKey
-                        ?: il.kmi.app.search.KmiSearchBridge.resolveBeltByTopicItem(
-                            topicTitle = topic,
-                            itemTitle = item,
-                            hint = null
-                        )
-
-                    explainTriple.value = Triple(beltResolved, topic, item)
-                }
-            },
-
-            onOpenTopic = { belt, topic ->
-                val topicEnc = Uri.encode(topic)
-                val subs: List<String> = il.kmi.app.domain.AppSubTopicRegistry.getSubTopicsFor(belt, topic)
-
-                val hasRealSubs = subs.any { st ->
-                    val t = st.trim()
-                    t.isNotEmpty() && !t.equals(topic.trim(), ignoreCase = true)
-                }
-
-                val route =
-                    if (hasRealSubs) Route.SubTopics.make(belt, topicEnc)
-                    else Route.Materials.make(belt, topicEnc)
-
-                runCatching { nav.navigate(route) }
-            },
-
-            onOpenDefenseMenu = { belt, topic ->
-                val topicEnc = Uri.encode(topic)
-                nav.navigate(Route.SubTopics.make(belt, topicEnc))
-            },
-
-            onOpenSubject = { subject ->
-                val route = Route.SubjectExercises.make(
-                    subjectId = subject.id,   // ✅ לא מקודדים כאן כדי לא לעשות encoding כפול
-                    beltId = "",
-                    title = subject.titleHeb
-                )
-                nav.navigate(route)
-            },
-
-            onOpenVoiceAssistant = { _ ->
-                nav.navigate(Route.VoiceAssistant.route) {
-                    launchSingleTop = true
-                }
-            },
-
-            onOpenPdfMaterials = { belt ->
-                // אם יש לך כבר פעולה קיימת למסמכי PDF — שים אותה כאן.
-                // כרגע משאיר ניווט למסך חומרים (אם זה מה שאתה רוצה), או שנה לפי הצורך.
-                nav.navigate(Route.Materials.make(belt, topic = "")) {
-                    launchSingleTop = true
-                }
-            }
-        )
-
-        explainTriple.value?.let { (b, t, iRaw) ->
-            val canonical = resolveCanonicalItemTitle(
-                belt = b,
-                topicTitle = t,
-                itemRaw = iRaw
-            )
-
-            val explanation = il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
-                val alt = canonical.substringAfter(":", canonical).trim()
-                il.kmi.app.domain.Explanations.get(b, alt)
-            }.ifBlank { "לא נמצא הסבר עבור \"$canonical\"." }
-
-            ExplanationDialogWithFavorite(
-                belt = b,
-                topic = t,
-                itemTitle = canonical,
-                explanation = explanation,
-                onDismiss = { explainTriple.value = null }
-            )
-        }
-    } // ✅ סוף BeltQ
-
     // ---- תרגילים לפי נושא (BeltQByTopic) ----
     composable(Route.BeltQByTopic.route) {
+
         BeltQuestionsByTopicScreen(
-            onOpenSubject = { belt, subject ->
+
+            onOpenSubject = { belt: Belt, subject: il.kmi.app.domain.SubjectTopic ->
                 vm.setSelectedBelt(belt)
 
-                val safeId = Uri.encode(subject.id)
-                val title = Uri.encode(subject.titleHeb)
-                nav.navigate("subject_exercises/$safeId?beltId=${belt.id}&title=$title")
+                nav.navigate(
+                    Route.SubjectExercises.make(
+                        subjectId = subject.id,
+                        beltId = belt.id,
+                        title = subject.titleHeb
+                    )
+                )
             },
+
+            onOpenTopic = { belt: Belt, topicTitle: String ->
+                vm.setSelectedBelt(belt)
+
+                // ✅ FIX: לפתוח את Materials (ולא topic_repo)
+                nav.navigate(
+                    Route.Materials.make(
+                        belt = belt,
+                        topic = topicTitle
+                    )
+                ) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            // ✅ FIX (שינוי 1): הגנות -> לא Route.Defenses (לא קיים בגרף), אלא SubjectExercises (כן קיים)
+            onOpenDefenseList = { belt, kind, pick ->
+                vm.setSelectedBelt(belt)
+
+                val subjectId = "def_${kind}_${pick}" // למשל: def_internal_punch
+                val title = when (kind) {
+                    "internal" -> if (pick == "punch") "הגנות פנימיות - אגרופים" else "הגנות פנימיות - בעיטות"
+                    "external" -> if (pick == "punch") "הגנות חיצוניות - אגרופים" else "הגנות חיצוניות - בעיטות"
+                    else -> "הגנות"
+                }
+
+                Log.e("KMI_TOPICS", "onOpenDefenseList belt=${belt.id} kind=$kind pick=$pick subjectId=$subjectId")
+
+                nav.navigate(
+                    Route.SubjectExercises.make(
+                        subjectId = Uri.encode(subjectId),
+                        beltId = belt.id,
+                        title = title
+                    )
+                ) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
             onBackHome = {
-                nav.navigate(Route.Home.route) { popUpTo(id = 0) }
+                nav.navigate(Route.Home.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
             }
         )
     }
@@ -374,35 +299,36 @@ fun NavGraphBuilder.homeNavGraph(
 
         TopicsScreen(
             vm = vm,
-            onOpenTopic = { belt, topic ->
-                // לבדוק תתי־נושאים מה־shared דרך העטיפה של האפליקציה
-                val subs: List<String> =
-                    il.kmi.app.domain.AppSubTopicRegistry.getSubTopicsFor(belt, topic)
-                val hasRealSubs = subs.isNotEmpty()
 
-                if (hasRealSubs) {
-                    nav.navigate(Route.SubTopics.make(belt, topic)) {
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                } else {
-                    nav.navigate(Route.Materials.make(belt, topic)) {
-                        launchSingleTop = true
-                        restoreState = true
-                    }
+            // ✅ FIX: גם כאן TopicExercises (לא topic_repo, לא Materials)
+            onOpenTopic = { belt, topic ->
+                nav.navigate(Route.Materials.make(belt = belt, topic = topic)) {
+                    launchSingleTop = true
+                    restoreState = true
                 }
             },
-            onOpenDefenseMenu = { belt, topic ->
-                nav.navigate(Route.SubTopics.make(belt, topic))
+
+            // ✅ FIX: תפריט הגנות -> פותח Materials על "הגנות" בלי לבחור תת־נושא ראשון
+            onOpenDefenseMenu = onOpenDefenseMenu@{ belt, topic ->
+                val catalogTopic = "הגנות"
+
+                val topicEnc = Uri.encode(catalogTopic)
+
+                nav.navigate(
+                    Route.Materials.make(
+                        belt = belt,
+                        topic = topicEnc
+                    )
+                ) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
             },
+
             onSummary = { belt -> nav.navigate(Route.Summary.make(belt)) },
             onRandomPractice = { belt -> nav.navigate(Route.Practice.make(belt)) },
-
-            // ✅ NEW: תרגול לפי נושא/נושאים (כולל כמה חגורות)
             onPracticeByTopics = { selection ->
                 val token = buildTopicsPickToken(selection)
-
-                // בוחרים חגורה “בסיסית” לצבע/כותרת: הראשונה שנבחרה, אחרת GREEN
                 val baseBelt = selection.belts
                     .sortedBy { Belt.order.indexOf(it).let { idx -> if (idx >= 0) idx else 999 } }
                     .firstOrNull() ?: Belt.GREEN
@@ -417,13 +343,10 @@ fun NavGraphBuilder.homeNavGraph(
             onOpenSettings = { nav.navigate(Route.Settings.route) },
             onExam = { belt -> nav.navigate(Route.Exam.make(belt)) },
 
-            // ✅ FIX: החתימה היא () -> Unit (ללא פרמטרים)
             onOpenWeakPoints = {
                 // TODO: חבר למסך WeakPoints כשיש Route מוכן
-                // כרגע no-op כדי לא להפיל קומפילציה.
             },
 
-            // ⬅️ כאן התיקון: ניקוי עד יעד ההתחלה של הגרף ואז ניווט לבית
             onOpenHome = {
                 nav.navigate(Route.Home.route) {
                     popUpTo(nav.graph.startDestinationId) {
@@ -436,6 +359,7 @@ fun NavGraphBuilder.homeNavGraph(
             },
 
             onOpenLists = { belt -> nav.navigate("ex_tabs_all/${belt.id}") },
+
             onOpenExercise = { key ->
                 fun dec(s: String) =
                     try {
@@ -511,7 +435,6 @@ fun NavGraphBuilder.homeNavGraph(
             onPractice = { b, t -> nav.navigate(Route.Practice.make(b, t)) },
             subTopicFilter = null,
             onHome = {
-                // ✅ לחיצה אחת תמיד מחזירה למסך הבית
                 val popped = nav.popBackStack(
                     Route.Home.route,
                     inclusive = false
@@ -550,13 +473,11 @@ private fun resolveCanonicalItemTitle(
     var cleaned = itemRaw.trim()
     if (cleaned.startsWith("$topicTitle::")) cleaned = cleaned.removePrefix("$topicTitle::")
 
-    // תמיד מיישרים לשם תצוגה אחיד (גם אם מגיע def:* או topic::item)
     cleaned = ExerciseTitleFormatter.displayName(cleaned).ifBlank { cleaned }.trim()
     cleaned = cleaned.replace(Regex(":+"), ":").replace(Regex("\\s+"), " ").trim()
 
     val wanted = norm(cleaned)
 
-    // 1) פריטים ישירים של נושא
     val direct = runCatching {
         il.kmi.app.domain.ContentRepo.listItemTitles(
             belt = belt,
@@ -572,7 +493,6 @@ private fun resolveCanonicalItemTitle(
         return ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim()
     }
 
-    // 2) פריטים בתוך תתי-נושאים
     val subTitles = runCatching {
         il.kmi.app.domain.ContentRepo.listSubTopicTitles(belt, topicTitle)
     }.getOrDefault(emptyList())
@@ -608,7 +528,6 @@ private fun ExplanationDialogWithFavorite(
     explanation: String,
     onDismiss: () -> Unit
 ) {
-    // ✅ מועדפים גלובליים – source of truth אחד
     val favorites: Set<String> by FavoritesStore.favoritesFlow.collectAsState(initial = emptySet())
 
     fun normalizeFavId(raw: String): String =
@@ -620,8 +539,6 @@ private fun ExplanationDialogWithFavorite(
     val isFav: Boolean = favorites.contains(favId)
 
     fun toggleFavorite() {
-        // ✅ כרגע FavoritesStore הוא גלובלי (סט אחד לכל האפליקציה) ולכן אין כאן topicFilter.
-        // אם תרצה מועדפים "לפי נושא" צריך להרחיב את FavoritesStore (scope/topic) ואז לקרוא לזה כאן.
         FavoritesStore.toggle(favId)
     }
 

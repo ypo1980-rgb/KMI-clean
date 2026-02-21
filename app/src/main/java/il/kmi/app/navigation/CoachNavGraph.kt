@@ -149,6 +149,7 @@ fun NavGraphBuilder.coachNavGraph(
             date = today,
             branch = userBranch,
             groupKey = userGroupKey,
+
             onOpenMemberStats = { memberId: Long?, memberName: String ->
                 val route = if (memberId != null && memberId > 0L) {
                     Route.AttendanceStats.make(
@@ -165,6 +166,23 @@ fun NavGraphBuilder.coachNavGraph(
                     )
                 }
                 nav.navigate(route)
+            },
+
+            // ✅ חדש: סטטיסטיקת קבוצה (שנה אחורה)
+            onOpenGroupStats = { b, g ->
+                nav.navigate(Route.AttendanceGroupStats.make(b, g)) {
+                    launchSingleTop = true
+                }
+            },
+
+            onHomeClick = {
+                val popped = nav.popBackStack()
+                if (!popped) {
+                    nav.navigate(Route.Home.route) {
+                        popUpTo(Route.Home.route) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                }
             }
         )
     }

@@ -16,7 +16,6 @@ import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
@@ -34,10 +33,11 @@ import il.kmi.app.ui.color
 import il.kmi.app.ui.lightColor
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
-import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /* ------------------------------ MarkState (3 states) ------------------------------ */
 
@@ -118,6 +118,11 @@ private fun beltContentFor(belt: Belt): SharedContentRepo.BeltContent? {
  * ✅ טקסט לתצוגה בלבד (כמו MaterialsScreen):
  * מנקה prefixים ומחזיר displayName מה-formatter.
  */
+
+private fun canonicalFromRepo(topicTitle: String, rawItemFromRepo: String): String {
+    return cleanItem(topicTitle, rawItemFromRepo).trim()
+}
+
 private fun uiDisplayName(topicTitle: String, rawItem: String): String {
     val cleaned = cleanItem(topicTitle, rawItem)
     return ExerciseTitleFormatter.displayName(cleaned)
@@ -139,7 +144,9 @@ fun ProgressMeter(
     var done by remember(belt, topic) { mutableStateOf(0) }
     var total by remember(belt, topic) { mutableStateOf(0) }
 
-    LaunchedEffect(belt, topic) {
+    val marksVer by vm.marksVersion.collectAsState()
+
+    LaunchedEffect(belt, topic, marksVer) {
         val beltContent = beltContentFor(belt)
 
         val titles: List<String> =
@@ -155,10 +162,13 @@ fun ProgressMeter(
             else (tpObj.items + tpObj.subTopics.flatMap { it.items }).distinct()
 
             t += items.size
+
+            // ✅ Snapshot מהיר ומדויק לנושא (ה-VM עושה canonicalTopicKey בפנים)
+            val topicSnap = vm.getTopicStatusSnapshot(belt, tp)
+
             items.forEach { raw ->
-                val canonicalId = canonicalFor(belt, tp, raw)
-                val ok = runCatching { vm.isMastered(belt, topic = tp, item = canonicalId) }.getOrDefault(false)
-                if (ok) d++
+                val canonicalId = canonicalFromRepo(tp, raw)
+                if (topicSnap[canonicalId] == true) d++
             }
         }
 
@@ -233,20 +243,19 @@ fun SummaryScreen(
     onOpenSettings: () -> Unit
 ) {
     val ctx = LocalContext.current
-    val sp = remember(ctx) {
-        ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE)
-    }
-
-    val excludedKeySuffix = remember(topic, subTopicFilter) {
-        if (subTopicFilter.isNullOrBlank()) topic else "${topic}__${subTopicFilter}"
-    }
 
     val scroll = rememberScrollState()
-    val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
     var showProgress by rememberSaveable { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
+
+    // ✅ במקום scope.launch מתוך onClick (שמייצר את השגיאה), עושים את זה כאן
+    LaunchedEffect(showProgress) {
+        if (showProgress) {
+            scroll.animateScrollTo(0)
+        }
+    }
 
     // === רשימת פריטים לפי נושא (ישירות מה-shared ContentRepo) ===
     var itemsByTopic by remember(belt, topic, subTopicFilter) {
@@ -274,158 +283,56 @@ fun SummaryScreen(
     }
 
     /**
-     * ✅ masteredMap נשמר לפי (topicTitle, itemKey) כאשר itemKey = uiItemKey(...)
-     * זה מה שמיישר 1:1 למסך התרגילים.
+     * ✅ masteredMap נשמר לפי (topicTitle, itemKey) כאשר itemKey = canonicalFromRepo(...)
+     * זה מיישר 1:1 למסך התרגילים, וחוסך סריקות כבדות של findCanonicalItem לכל פריט.
      */
     var masteredMap by remember(belt, itemsByTopic) {
         mutableStateOf<Map<Pair<String, String>, MarkState>>(emptyMap())
     }
 
-    fun spKeyPart(s: String): String = s
-        .replace("\u200F", "")
-        .replace("\u200E", "")
-        .replace("\u00A0", " ")
-        .trim()
-
-    fun suffixFor(topicTitle: String): String {
-        val t = spKeyPart(topicTitle)
-        val st = subTopicFilter?.let(::spKeyPart).orEmpty()
-        return if (st.isBlank()) t else "${t}__${st}"
-    }
-
-    fun unknownsFor(topicTitle: String): Set<String> {
-        val suffix = suffixFor(topicTitle)
-        return sp.getStringSet("unknown_${belt.id}_$suffix", emptySet()) ?: emptySet()
-    }
-
-    fun masteredFor(topicTitle: String): Set<String> {
-        val suffix = suffixFor(topicTitle)
-        return sp.getStringSet("mastered_${belt.id}_$suffix", emptySet()) ?: emptySet()
-    }
-
-    // 🔽 הוסף helper לנסות topic בכמה וריאציות (בתוך SummaryScreen)
-    fun topicKeysToTry(topicTitle: String): List<String> {
-        val a = topicTitle
-        val b = topicKey(topicTitle)
-        val list = mutableListOf(a, b)
-
-        // אם זה אותו נושא כמו הפרמטר topic שנכנס למסך – נוסיף גם אותו
-        if (norm(topicTitle) == norm(topic)) {
-            list += topic
-            list += topicKey(topic)
-        }
-
-        return list.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-    }
-
-    fun buildLookupKeys(topicTitle: String, itemRaw: String): List<String> {
-        val cleaned = cleanItem(topicTitle, itemRaw).trim()
-
-        val withTopicPrefix = if (topicTitle.isNotBlank() && !cleaned.startsWith("$topicTitle::")) {
-            "$topicTitle::$cleaned"
-        } else cleaned
-
-        val noTopicPrefix = if (topicTitle.isNotBlank() && cleaned.startsWith("$topicTitle::")) {
-            cleaned.removePrefix("$topicTitle::").trim()
-        } else cleaned
-
-        return listOf(
-            canonicalFor(belt, topicTitle, itemRaw).trim(),
-            itemRaw.trim(),
-            cleaned,
-            withTopicPrefix,
-            noTopicPrefix
-        )
-            .filter { it.isNotBlank() }
-            .distinct()
-    }
-
-    LaunchedEffect(belt, itemsByTopic, subTopicFilter) {
+    LaunchedEffect(belt, itemsByTopic, subTopicFilter, topic) {
         loadError = null
-
         try {
-            val map = mutableMapOf<Pair<String, String>, MarkState>()
+            // ✅ מחשבים ברקע כדי למנוע תקיעה של ה-UI
+            val computed: Map<Pair<String, String>, MarkState> = withContext(Dispatchers.Default) {
+                val map = mutableMapOf<Pair<String, String>, MarkState>()
 
-            suspend fun readNullable(topicTitle: String, key: String): Boolean? {
-                return try {
-                    vm.getItemStatusNullable(belt, topicTitle, key)
-                } catch (_: Exception) {
-                    null
+                itemsByTopic.forEach { (topicTitle, items) ->
+
+                    // ✅ Snapshot מהיר לנושא (ללא IO)
+                    val topicSnap = vm.getTopicStatusSnapshot(belt, topicTitle)
+
+                    items.forEach { itemRaw ->
+                        val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
+
+                        val v: Boolean? = topicSnap[canonicalId]
+
+                        val state = when (v) {
+                            true  -> MarkState.YES
+                            false -> MarkState.NO
+                            null  -> MarkState.NONE
+                        }
+
+                        map[topicTitle to canonicalId] = state
+                    }
                 }
+
+                map
             }
 
-            itemsByTopic.forEach { (topicTitle, items) ->
-                val unknownSet = unknownsFor(topicTitle)
-                val masteredSet = masteredFor(topicTitle)
-
-                items.forEach { itemRaw ->
-                    val canonicalId = canonicalFor(belt, topicTitle, itemRaw).trim()
-                    val keysToTry = buildLookupKeys(topicTitle, itemRaw)
-
-                    var v: Boolean? = null
-
-                    val topicTry = topicKeysToTry(topicTitle)
-
-// 1) קודם סטטוס מפורש YES/NO מה-VM – עם כמה topic אפשריים
-                    run breaking@{
-                        for (tp in topicTry) {
-                            for (k in keysToTry) {
-                                v = runCatching { vm.getItemStatusNullable(belt, tp, k) }.getOrNull()
-                                if (v != null) return@breaking
-                            }
-                        }
-                    }
-
-// 2) fallback ל-mastered (✅) – עם כמה topic אפשריים
-                    if (v == null) {
-                        var mastered = false
-                        run breaking2@{
-                            for (tp in topicTry) {
-                                for (k in keysToTry) {
-                                    if (runCatching { vm.isMastered(belt, tp, k) }.getOrDefault(false)) {
-                                        mastered = true
-                                        return@breaking2
-                                    }
-                                }
-                            }
-                        }
-                        v = if (mastered) true else null
-                    }
-
-                    // ✅ אם אין תשובה מה-VM אבל הפריט מסומן mastered => זה ✅
-                    if (v == null && masteredSet.contains(canonicalId)) {
-                        v = true
-                    }
-
-// ❌ אם אין תשובה מה-VM אבל הפריט מסומן unknown => זה ❌
-                    if (v == null && unknownSet.contains(canonicalId)) {
-                        v = false
-                    }
-
-                    val state = when (v) {
-                        true  -> MarkState.YES
-                        false -> MarkState.NO
-                        null  -> MarkState.NONE
-                    }
-
-                    // חשוב: שומרים רק תחת canonicalId אחד (כדי שלא יהיו דריסות)
-                    map[topicTitle to canonicalId] = state
-                }
-            }
-
-            masteredMap = map
+            masteredMap = computed
         } catch (e: Exception) {
             loadError = e.message ?: "שגיאה בקריאת הנתונים"
             masteredMap = emptyMap()
         }
     }
 
-    // ✅ סטטיסטיקות לפי נושא (מבוסס uiItemKey)
-    val topicStats: Map<String, Pair<Int, Int>> = remember(masteredMap, itemsByTopic, belt) {
+    // ✅ סטטיסטיקות לפי נושא (מבוסס canonicalFromRepo)
+    val topicStats: Map<String, Pair<Int, Int>> = remember(masteredMap, itemsByTopic) {
         itemsByTopic.mapValues { (topicTitle, items) ->
             val total = items.size
             val done = items.count { itemRaw ->
-                val canonicalId = canonicalFor(belt, topicTitle, itemRaw)
+                val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
                 masteredMap[topicTitle to canonicalId] == MarkState.YES
             }
             done to total
@@ -461,6 +368,7 @@ fun SummaryScreen(
             explainFromSearch = Triple(beltFromKey, topicTitle, itemTitle)
         }
     }
+
 
     // ✳️ שיתוף PDF
     val sharePdf: (String?) -> Unit = { targetPackage ->
@@ -667,7 +575,6 @@ fun SummaryScreen(
                     FilledTonalButton(
                         onClick = {
                             showProgress = !showProgress
-                            scope.launch { scroll.animateScrollTo(0) }
                         },
                         shape = RoundedCornerShape(20.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
@@ -792,13 +699,13 @@ fun SummaryScreen(
                                         )
                                     } else {
                                         items.forEach { itemRaw ->
-                                            val canonicalId = canonicalFor(belt, topicTitle, itemRaw)
+                                            val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
                                             val state = masteredMap[topicTitle to canonicalId] ?: MarkState.NONE
 
                                             val (bg, fg, mark) = when (state) {
                                                 MarkState.YES  -> Triple(Color(0xFF4CAF50), Color.White, "✓")
                                                 MarkState.NO   -> Triple(Color(0xFFE53935), Color.White, "✗")
-                                                MarkState.NONE -> Triple(Color(0xFFE0E0E0), Color(0xFF616161), "—")
+                                                MarkState.NONE -> Triple(Color(0xFFE0E0E0), Color(0xFF616161), "○")
                                             }
 
                                             Row(
@@ -883,9 +790,10 @@ private fun createSummaryPdf(
 
         paint.textSize = 13.5f
         items.forEach { itemRaw ->
-            val canonicalId = canonicalFor(belt, topicTitle, itemRaw)
+            // ✅ מהיר: itemRaw מגיע מה-Repo -> אין צורך ב-canonicalFor (שסורק)
+            val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
 
-            // ✅ אותו מפתח בדיוק כמו ב-SummaryScreen (בלי candidates)
+            // ✅ אותו מפתח בדיוק כמו ב-SummaryScreen
             val state = masteredMap[topicTitle to canonicalId] ?: MarkState.NONE
 
             val circleX = 60f
@@ -900,7 +808,7 @@ private fun createSummaryPdf(
             val markText = when (state) {
                 MarkState.YES  -> "✓"
                 MarkState.NO   -> "✘"
-                MarkState.NONE -> "—"
+                MarkState.NONE -> "○"
             }
 
             val markTextColor = when (state) {

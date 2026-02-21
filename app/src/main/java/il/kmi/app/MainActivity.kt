@@ -7,6 +7,9 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.*
 import il.kmi.app.data.training.TrainingSummaryLocalRepo
 
@@ -311,31 +314,37 @@ private fun AndroidAppRoot(
     // מסלול פתיחה חד-פעמי ל־MainApp (כמו שהיה)
     var startRoute by remember { mutableStateOf<String?>(null) }
 
-    when (currentScreen) {
-        "intro" -> {
-            IntroScreen(
-                onContinue = {
-                    currentScreen = if (isRegistered) "main" else "register"
-                }
-            )
-        }
+    androidx.compose.foundation.layout.Box(
+        modifier = androidx.compose.ui.Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)
+    ) {
+        when (currentScreen) {
+            "intro" -> {
+                IntroScreen(
+                    onContinue = {
+                        currentScreen = if (isRegistered) "main" else "register"
+                    }
+                )
+            }
 
-        "register" -> {
-            MainApp(
-                sp = sp,
-                vm = vm,
-                startRoute = "registration",
-                kmiPrefs = kmiPrefs
-            )
-        }
+            "register" -> {
+                MainApp(
+                    sp = sp,
+                    vm = vm,
+                    startRoute = "registration",
+                    kmiPrefs = kmiPrefs
+                )
+            }
 
-        "main" -> {
-            MainApp(
-                sp = sp,
-                vm = vm,
-                startRoute = startRoute,
-                kmiPrefs = kmiPrefs
-            )
+            "main" -> {
+                MainApp(
+                    sp = sp,
+                    vm = vm,
+                    startRoute = startRoute,
+                    kmiPrefs = kmiPrefs
+                )
+            }
         }
     }
 }

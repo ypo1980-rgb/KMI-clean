@@ -3,11 +3,16 @@ package il.kmi.app.screens.coach
 import android.content.Context
 import android.content.Intent
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,8 +33,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -72,16 +75,22 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
+import android.graphics.RectF
+import android.graphics.Color as AColor
 
 // ======================
 // מודלים ולוגיקה
 // ======================
 
-enum class ExamMark(val display: String, val score: Double) {
-    PASS("✓", 1.0),      // יודע = 1 נק'
-    PARTIAL("✓̶", 0.5),  // יודע חלקית = 0.5 נק'
-    FAIL("✗", 0.0);      // לא יודע = 0 נק'
-}
+// ✅ ציון לתרגיל: 0..10
+private fun clampScore10(v: Int): Int = v.coerceIn(0, 10)
 
 data class ExamExerciseItem(
     val id: String,
@@ -95,12 +104,18 @@ data class InternalExamSession(
     val belt: Belt,
     val date: LocalDate,
     val exercises: List<ExamExerciseItem>,
-    val marks: List<ExamMark?>,
+    val marks: List<Int?>,
 ) {
-    val maxScore: Double get() = exercises.size * ExamMark.PASS.score
 
-    val totalScore: Double get() =
-        marks.sumOf { it?.score ?: 0.0 }
+    // רק תרגילים שסומנו
+    private val answeredMarks: List<Int> =
+        marks.filterNotNull()
+
+    val totalScore: Double
+        get() = answeredMarks.sum().toDouble()
+
+    val maxScore: Double
+        get() = answeredMarks.size * 10.0
 
     val percent: Int
         get() = if (maxScore == 0.0) 0
@@ -108,10 +123,10 @@ data class InternalExamSession(
 
     val summaryText: String
         get() = when {
-            percent >= 85 -> "עבר בהצלחה רבה"
-            percent >= 70 -> "עבר בהצלחה"
-            percent >= 50 -> "בינוני – נדרש שיפור"
-            else          -> "לא עבר את המבחן"
+            percent >= 85 -> "עבר בהצטיינות"
+            percent >= 70 -> "עבר"
+            percent >= 50 -> "נדרש שיפור"
+            else -> "לא עבר"
         }
 }
 
@@ -122,6 +137,10 @@ private data class BeltScore(
 ) {
     val percent: Int
         get() = if (max == 0.0) 0 else ((total / max) * 100.0).toInt()
+
+    // ✅ ציון מנורמל 0–10
+    val score10: Double
+        get() = if (max == 0.0) 0.0 else (total / max) * 10.0
 }
 
 // הדפסה יפה של ניקוד
@@ -159,97 +178,372 @@ object InternalExamPdf {
         return try {
             val document = PdfDocument()
 
+            // A4 (pt)
+            val pageW = 595
+            val pageH = 842
+
+            val leftMargin = 40f
+            val rightMargin = (pageW - 40).toFloat()
+
+            val headerH = 86f
+            val footerH = 44f
+
+            val contentTop = 40f + headerH
+            val contentBottom = (pageH - 40).toFloat() - footerH
+
+            fun percentColor(p: Int): Int {
+                // אדום -> צהוב -> ירוק
+                return when {
+                    p >= 85 -> AColor.parseColor("#16A34A") // green
+                    p >= 70 -> AColor.parseColor("#84CC16") // lime
+                    p >= 50 -> AColor.parseColor("#F59E0B") // amber
+                    else    -> AColor.parseColor("#EF4444") // red
+                }
+            }
+
+            val headerBg = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#0B1220")
+            }
+
+            val headerTitle = Paint().apply {
+                isAntiAlias = true
+                color = AColor.WHITE
+                textSize = 20f
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            }
+
+            val headerSub = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#C7D2FE")
+                textSize = 12f
+                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            }
+
+            val cardBg = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#F8FAFC")
+            }
+            val cardStroke = Paint().apply {
+                isAntiAlias = true
+                style = Paint.Style.STROKE
+                strokeWidth = 1.5f
+                color = AColor.parseColor("#E2E8F0")
+            }
+
+            val kpiLabel = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#64748B")
+                textSize = 11f
+                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            }
+            val kpiValue = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#0F172A")
+                textSize = 14f
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            }
+
+            val sectionTitle = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#0F172A")
+                textSize = 15f
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            }
+
+            val topicTitle = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#1E293B")
+                textSize = 13.5f
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            }
+
+            val lineText = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#0F172A")
+                textSize = 12.5f
+                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            }
+
+            val scoreBoxBg = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#EEF2FF")
+            }
+            val scoreBoxStroke = Paint().apply {
+                isAntiAlias = true
+                style = Paint.Style.STROKE
+                strokeWidth = 1.2f
+                color = AColor.parseColor("#C7D2FE")
+            }
+            val scoreBoxText = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#0F172A")
+                textSize = 12f
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            }
+
+            val divider = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#E2E8F0")
+                strokeWidth = 1.2f
+            }
+
+            val footerPaint = Paint().apply {
+                isAntiAlias = true
+                color = AColor.parseColor("#64748B")
+                textSize = 10.5f
+                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            }
+
+            fun drawRight(canvas: android.graphics.Canvas, text: String, y: Float, paint: Paint) {
+                val w = paint.measureText(text)
+                canvas.drawText(text, rightMargin - w, y, paint)
+            }
+
+            fun drawHeader(canvas: android.graphics.Canvas, pageNumber: Int) {
+                // header bg
+                canvas.drawRect(0f, 0f, pageW.toFloat(), headerH, headerBg)
+
+                // “logo” קטן (KMI)
+                val logoR = RectF(leftMargin, 22f, leftMargin + 44f, 22f + 44f)
+                val logoPaint = Paint().apply { isAntiAlias = true; color = AColor.parseColor("#2563EB") }
+                canvas.drawRoundRect(logoR, 12f, 12f, logoPaint)
+
+                val logoText = Paint().apply {
+                    isAntiAlias = true
+                    color = AColor.WHITE
+                    textSize = 14f
+                    typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                }
+                canvas.drawText("KMI", leftMargin + 10f, 22f + 28f, logoText)
+
+                // title + subtitle (ימין)
+                val title = "דו\"ח מבחן פנימי"
+                val sub = "חגורה: ${session.belt.heb}"
+
+                drawRight(canvas, title, 44f, headerTitle)
+                drawRight(canvas, sub, 66f, headerSub)
+
+                // page number קטן בצד שמאל למעלה
+                val pn = "עמוד $pageNumber"
+                canvas.drawText(pn, leftMargin + 56f, 66f, headerSub)
+            }
+
+            fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int) {
+                val y = (pageH - 18).toFloat()
+                val left = "נוצר ע\"י KMI"
+                val right = "עמוד $pageNumber"
+                canvas.drawText(left, leftMargin, y, footerPaint)
+                drawRight(canvas, right, y, footerPaint)
+            }
+
+            fun drawKpiCards(canvas: android.graphics.Canvas, startY: Float): Float {
+                var y = startY
+
+                val cardH = 64f
+                val gap = 10f
+                val totalW = rightMargin - leftMargin
+                val cardW = (totalW - gap * 2) / 3f
+
+                val dateStr = session.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+
+                fun card(x: Float, label: String, value: String) {
+                    val r = RectF(x, y, x + cardW, y + cardH)
+                    canvas.drawRoundRect(r, 14f, 14f, cardBg)
+                    canvas.drawRoundRect(r, 14f, 14f, cardStroke)
+
+                    // label
+                    canvas.drawText(label, x + 14f, y + 24f, kpiLabel)
+                    // value (ימין בתוך הכרטיס)
+                    val vw = kpiValue.measureText(value)
+                    canvas.drawText(value, x + cardW - 14f - vw, y + 46f, kpiValue)
+                }
+
+                val x1 = leftMargin
+                val x2 = leftMargin + cardW + gap
+                val x3 = leftMargin + (cardW + gap) * 2
+
+                card(x1, "שם מתאמן", session.traineeName.ifBlank { "—" })
+                card(x2, "חגורה במבחן", session.belt.heb)
+                card(x3, "תאריך", dateStr)
+
+                y += cardH + 16f
+                return y
+            }
+
+            fun drawScoreBadge(canvas: android.graphics.Canvas, startY: Float): Float {
+                var y = startY
+
+                val p = session.percent
+                val c = percentColor(p)
+
+                val badgeR = RectF(leftMargin, y, rightMargin, y + 78f)
+                val badgeBg = Paint().apply { isAntiAlias = true; color = AColor.parseColor("#FFFFFF") }
+                val badgeStroke = Paint().apply { isAntiAlias = true; style = Paint.Style.STROKE; strokeWidth = 1.6f; color = AColor.parseColor("#E2E8F0") }
+                canvas.drawRoundRect(badgeR, 18f, 18f, badgeBg)
+                canvas.drawRoundRect(badgeR, 18f, 18f, badgeStroke)
+
+                val pillR = RectF(rightMargin - 150f, y + 18f, rightMargin - 18f, y + 60f)
+                val pillPaint = Paint().apply { isAntiAlias = true; color = c }
+                canvas.drawRoundRect(pillR, 20f, 20f, pillPaint)
+
+                val pillText = Paint().apply {
+                    isAntiAlias = true
+                    color = AColor.WHITE
+                    textSize = 14f
+                    typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                }
+
+                val scoreLine = "ציון: ${session.totalScore.toInt()} / ${session.maxScore.toInt()}  (${p}%)"
+                val statusLine = "סטטוס: ${session.summaryText}"
+
+                val scorePaint = Paint().apply {
+                    isAntiAlias = true
+                    color = AColor.parseColor("#0F172A")
+                    textSize = 16f
+                    typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                }
+                val statusPaint = Paint().apply {
+                    isAntiAlias = true
+                    color = AColor.parseColor("#334155")
+                    textSize = 12.5f
+                    typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+                }
+
+                // ימין (השורות)
+                drawRight(canvas, scoreLine, y + 40f, scorePaint)
+                drawRight(canvas, statusLine, y + 62f, statusPaint)
+
+                // טקסט בתוך ה-pill
+                val pillLabel = when {
+                    p >= 85 -> "מצוין"
+                    p >= 70 -> "טוב"
+                    p >= 50 -> "בינוני"
+                    else -> "חלש"
+                }
+                val tw = pillText.measureText(pillLabel)
+                canvas.drawText(
+                    pillLabel,
+                    pillR.centerX() - tw / 2f,
+                    pillR.centerY() + 5f,
+                    pillText
+                )
+
+                y += 78f + 16f
+                return y
+            }
+
+            fun drawScoreBox(canvas: android.graphics.Canvas, xRight: Float, yTop: Float, score: Int) {
+                val w = 40f
+                val h = 20f
+                val r = RectF(xRight - w, yTop - 14f, xRight, yTop + (h - 14f))
+                canvas.drawRoundRect(r, 7f, 7f, scoreBoxBg)
+                canvas.drawRoundRect(r, 7f, 7f, scoreBoxStroke)
+
+                val s = score.toString()
+                val tw = scoreBoxText.measureText(s)
+                canvas.drawText(s, r.centerX() - tw / 2f, r.centerY() + 5f, scoreBoxText)
+            }
+
+            fun drawRightWithin(canvas: android.graphics.Canvas, text: String, xRight: Float, y: Float, paint: Paint) {
+                val w = paint.measureText(text)
+                canvas.drawText(text, xRight - w, y, paint)
+            }
+
+            // ====== רינדור עם ריבוי עמודים ======
             var pageNumber = 1
-            var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create() // A4
+            var pageInfo = PdfDocument.PageInfo.Builder(pageW, pageH, pageNumber).create()
             var page = document.startPage(pageInfo)
             var canvas = page.canvas
 
-            val paintTitle = Paint().apply {
-                isAntiAlias = true
-                textSize = 18f
-                typeface = android.graphics.Typeface.create(
-                    "sans-serif-medium",
-                    android.graphics.Typeface.BOLD
-                )
-            }
-            val paintText = Paint().apply {
-                isAntiAlias = true
-                textSize = 12f
-                typeface = android.graphics.Typeface.create(
-                    "sans-serif",
-                    android.graphics.Typeface.NORMAL
-                )
-            }
-            val paintHeader = Paint().apply {
-                isAntiAlias = true
-                textSize = 14f
-                typeface = android.graphics.Typeface.create(
-                    "sans-serif-medium",
-                    android.graphics.Typeface.BOLD
-                )
-            }
+            drawHeader(canvas, pageNumber)
 
-            var y = 40f
+            var y = contentTop
+            y = drawKpiCards(canvas, y)
+            y = drawScoreBadge(canvas, y)
 
-            // כותרת
-            canvas.drawText("דו\"ח מבחן פנימי – ${session.belt.heb}", 40f, y, paintTitle)
-            y += 30f
+            // Section Title
+            drawRight(canvas, "פירוט תרגילים", y, sectionTitle)
+            y += 16f
+            canvas.drawLine(leftMargin, y, rightMargin, y, divider)
+            y += 16f
 
-            val dateStr = session.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
-            canvas.drawText("שם מתאמן: ${session.traineeName}", 40f, y, paintText)
-            y += 18f
-            canvas.drawText(
-                "ציון: ${session.totalScore.toScoreString()} / " +
-                        "${session.maxScore.toScoreString()}  (${session.percent}%)",
-                40f,
-                y,
-                paintText
+            // ✅ הופכים את התרגילים שסומנו לרשימה “שטוחה” לרינדור
+            data class PdfRow(
+                val topic: String,
+                val name: String,
+                val score: Int
             )
-            y += 18f
-            canvas.drawText("תאריך מבחן: $dateStr", 40f, y, paintText)
-            y += 18f
-            canvas.drawText("סיכום: ${session.summaryText}", 40f, y, paintText)
-            y += 30f
 
-            canvas.drawText("תרגילים:", 40f, y, paintHeader)
-            y += 22f
+            val rows: List<PdfRow> =
+                session.exercises.mapIndexedNotNull { index, ex ->
+                    val score = session.marks.getOrNull(index) ?: return@mapIndexedNotNull null
+                    PdfRow(
+                        topic = ex.topic,
+                        name = ex.name,
+                        score = clampScore10(score)
+                    )
+                }
 
             var currentTopic: String? = null
 
-            // ✅ מציירים רק תרגילים שסומנו (mark != null)
-            session.exercises.forEachIndexed { index, ex ->
-                val markObj = session.marks.getOrNull(index)
-                if (markObj == null) return@forEachIndexed   // דילוג על תרגילים בלי סימון
+            fun newPage() {
+                document.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(pageW, pageH, pageNumber).create()
+                page = document.startPage(pageInfo)
+                canvas = page.canvas
 
-                // מעבר דף
-                if (y > 780f) {
-                    document.finishPage(page)
-                    pageNumber++
-                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNumber).create()
-                    page = document.startPage(pageInfo)
-                    canvas = page.canvas
-                    y = 40f
+                drawHeader(canvas, pageNumber)
+                y = contentTop
+
+                drawRight(canvas, "פירוט תרגילים (המשך)", y, sectionTitle)
+                y += 16f
+                canvas.drawLine(leftMargin, y, rightMargin, y, divider)
+                y += 16f
+                currentTopic = null
+            }
+
+            // ✅ רצועה קבועה לימין עבור תיבת ציון
+            val scoreBoxW = 40f
+            val scoreBoxGap = 10f
+            val nameRight = rightMargin - scoreBoxW - scoreBoxGap
+
+            rows.forEach { r ->
+                if (y > contentBottom - 24f) {
+                    drawFooter(canvas, pageNumber)
+                    newPage()
                 }
 
-                if (currentTopic != ex.topic) {
-                    currentTopic = ex.topic
-                    canvas.drawText("נושא: ${ex.topic}", 40f, y, paintHeader)
-                    y += 20f
+                if (currentTopic != r.topic) {
+                    currentTopic = r.topic
+
+                    if (y > contentBottom - 40f) {
+                        drawFooter(canvas, pageNumber)
+                        newPage()
+                    }
+
+                    drawRight(canvas, "נושא: ${currentTopic}", y, topicTitle)
+                    y += 18f
                 }
 
-                val line = "- ${markObj.display}  ${ex.name}"
-                canvas.drawText(line, 60f, y, paintText)
+                // ✅ שם התרגיל עד nameRight (לא נכנס לתיבת הציון)
+                drawRightWithin(canvas, r.name, nameRight, y, lineText)
+
+                // ✅ תיבת ציון תמיד בקצה ימין
+                drawScoreBox(canvas, xRight = rightMargin, yTop = y, score = r.score)
+
                 y += 16f
             }
+
+            drawFooter(canvas, pageNumber)
 
             document.finishPage(page)
 
             val dir = File(context.cacheDir, "internal_exam")
             if (!dir.exists()) dir.mkdirs()
             val file = File(dir, "exam_${System.currentTimeMillis()}.pdf")
-            FileOutputStream(file).use { out ->
-                document.writeTo(out)
-            }
+            FileOutputStream(file).use { out -> document.writeTo(out) }
             document.close()
 
             FileProvider.getUriForFile(
@@ -259,7 +553,7 @@ object InternalExamPdf {
             )
         } catch (e: Exception) {
             e.printStackTrace()
-            return null
+            null
         }
     }
 
@@ -324,13 +618,13 @@ fun InternalExamScreen(
     var hasUnsavedChanges by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
     var showResumeDialog by remember { mutableStateOf(false) }
-    var pendingLoadedDraft by remember { mutableStateOf<Map<String, ExamMark>>(emptyMap()) }
+    var pendingLoadedDraft by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
 
     // ✅ כדי שלא נפתח דיאלוג על כל אות בזמן שמקלידים שם
     var resumeCheckedKey by remember { mutableStateOf<String?>(null) }
 
-    // 🟢 מפה גלובלית – נשמרת גם כשעוברים חגורות
-    val marksMap = remember { mutableStateMapOf<String, ExamMark>() }
+    // ✅ ציון לכל תרגיל: 0..10
+    val marksMap = remember { mutableStateMapOf<String, Int>() }
 
     // ✅ דיאלוג יציאה / חזרה
     BackHandler {
@@ -579,18 +873,18 @@ fun InternalExamScreen(
 
                         if (expandedTopic == topic) {
                             items(topicExercises) { ex ->
-                                val markForThis = marksMap[ex.id]
+                                val scoreForThis = marksMap[ex.id]
 
                                 ExerciseRow(
                                     name = ex.name,
-                                    mark = markForThis,
-                                    onMarkChange = { newMark ->
+                                    score = scoreForThis,
+                                    onScoreChange = { newScore ->
                                         hasUnsavedChanges = true
 
-                                        if (newMark == null) {
+                                        if (newScore == null) {
                                             marksMap.remove(ex.id)
                                         } else {
-                                            marksMap[ex.id] = newMark
+                                            marksMap[ex.id] = clampScore10(newScore)
                                         }
                                     }
                                 )
@@ -897,7 +1191,7 @@ private fun BeltSelector(
 @Composable
 private fun SummaryCard(
     currentBelt: Belt,
-    marksMap: Map<String, ExamMark>
+    marksMap: Map<String, Int>
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
 
@@ -909,10 +1203,10 @@ private fun SummaryCard(
         var total = 0.0
         var max = 0.0
         exercisesForBelt.forEach { ex ->
-            val mark = marksMap[ex.id]
-            if (mark != null) {
-                max += ExamMark.PASS.score
-                total += mark.score
+            val score = marksMap[ex.id]
+            if (score != null) {
+                max += 10.0
+                total += clampScore10(score).toDouble()
             }
         }
         BeltScore(total = total, max = max)
@@ -920,6 +1214,9 @@ private fun SummaryCard(
 
     val totalScore = beltScores.values.sumOf { it.total }
     val maxScore = beltScores.values.sumOf { it.max }
+
+    // ✅ מצטבר מנורמל ל-0..10
+    val totalScore10: Double = if (maxScore == 0.0) 0.0 else (totalScore / maxScore) * 10.0
     val percent = if (maxScore == 0.0) 0 else ((totalScore / maxScore) * 100.0).toInt()
 
     val summaryText = when {
@@ -961,7 +1258,8 @@ private fun SummaryCard(
 
             // ✅ תמיד מוצג (קומפקטי)
             Text(
-                text = "מצטבר: ${totalScore.toScoreString()} / ${maxScore.toScoreString()}  (${percent}%)",
+                // ✅ מצטבר 0–10
+                text = "מצטבר: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)",
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
             )
             Text(
@@ -977,7 +1275,8 @@ private fun SummaryCard(
 
                 beltScores.forEach { (belt, score) ->
                     Text(
-                        text = "${belt.heb}: ${score.total.toScoreString()} / ${score.max.toScoreString()} (${score.percent}%)",
+                        // ✅ לכל חגורה: 0–10
+                        text = "${belt.heb}: ${score.score10.coerceIn(0.0, 10.0).toScoreString()} / 10 (${score.percent}%)",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -990,8 +1289,8 @@ private fun SummaryCard(
 @Composable
 private fun ExerciseRow(
     name: String,
-    mark: ExamMark?,
-    onMarkChange: (ExamMark?) -> Unit
+    score: Int?,                 // ✅ 0..10
+    onScoreChange: (Int?) -> Unit // null = לא סומן
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1015,72 +1314,131 @@ private fun ExerciseRow(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Row(
+            // ✅ ציון 0..10
+            androidx.compose.foundation.layout.FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // ✔ יודע (ימין)
-                MarkChip(
-                    label = "יודע",
-                    selected = mark == ExamMark.PASS,
-                    color = Color(0xFF81C784),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    onMarkChange(if (mark == ExamMark.PASS) null else ExamMark.PASS)
-                }
+                val scroll = rememberScrollState()
 
-                // יודע חלקי (אמצע)
-                MarkChip(
-                    label = "יודע חלקי",
-                    selected = mark == ExamMark.PARTIAL,
-                    color = Color(0xFFFFB74D),
-                    modifier = Modifier.weight(1f)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(scroll),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    onMarkChange(if (mark == ExamMark.PARTIAL) null else ExamMark.PARTIAL)
-                }
-
-                // ❌ לא יודע (שמאל)
-                MarkChip(
-                    label = "לא יודע",
-                    selected = mark == ExamMark.FAIL,
-                    color = Color(0xFFE57373),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    onMarkChange(if (mark == ExamMark.FAIL) null else ExamMark.FAIL)
+                    for (v in 0..10) {
+                        ScoreChip(
+                            value = v,
+                            selected = score == v
+                        ) {
+                            onScoreChange(if (score == v) null else v)
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * צבע מדורג לפי score עם עקומה "חזקה":
+ * נמוכים אדום חזק, אמצע צהוב ברור, גבוהים ירוק חזק.
+ */
+private fun scoreColor(value: Int): Color {
+    val v = value.coerceIn(0, 10)
+
+    // t 0..1
+    val tLinear = v / 10f
+
+    // ✅ curve: מדגיש קצוות (יותר אדום בתחלה, יותר ירוק בסוף)
+    // אפשר לשחק עם האקספוננט: 1.0 ליניארי, 1.2 יותר "קפיצה" לירוק בסוף
+    val t = tLinear * tLinear  // (t^2)
+
+    // Hue: 0 (אדום) → 120 (ירוק)
+    val hue = 120f * t
+
+    // רוויה וערך: נמוכים טיפה כהים יותר כדי להרגיש "אזהרה"
+    val sat = 0.90f
+    val valBase = 0.92f
+    val valueV = (valBase - (0.08f * (1f - tLinear))).coerceIn(0.78f, 0.95f)
+
+    return Color.hsv(
+        hue = hue,
+        saturation = sat,
+        value = valueV
+    )
+}
+
 @Composable
-private fun MarkChip(
-    label: String,
+private fun OutlinedNumberText(
+    text: String,
+    fontSizeSp: Int = 13,
+    strokeWidthPx: Float = 5f
+) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // outline
+        Text(
+            text = text,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+            fontWeight = FontWeight.Bold,
+            fontSize = fontSizeSp.sp,
+            color = Color.White,
+            style = TextStyle(drawStyle = Stroke(width = strokeWidthPx))
+        )
+        // fill + tiny shadow
+        Text(
+            text = text,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+            fontWeight = FontWeight.Bold,
+            fontSize = fontSizeSp.sp,
+            color = Color.Black,
+            style = TextStyle(
+                shadow = Shadow(
+                    color = Color.Black.copy(alpha = 0.35f),
+                    blurRadius = 3f
+                )
+            )
+        )
+    }
+}
+
+@Composable
+private fun ScoreChip(
+    value: Int,
     selected: Boolean,
-    color: Color,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(40.dp),
-        label = {
-            Text(
-                text = label,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = color.copy(alpha = 0.25f),
-            selectedLabelColor = Color.Black,
-            containerColor = Color(0xFFF5F5F5)
+    val base = scoreColor(value)
+    val bg = if (selected) base.copy(alpha = 0.95f) else base.copy(alpha = 0.40f)
+
+    Surface(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onClick() },
+        color = bg,
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.5.dp,
+            color = if (selected) base else base.copy(alpha = 0.85f)
+        ),
+        shadowElevation = 0.dp
+    ) {
+        OutlinedNumberText(
+            text = value.toString(),
+            fontSizeSp = 13,
+            strokeWidthPx = 5f
         )
-    )
+    }
 }
 
 @Composable
@@ -1102,8 +1460,10 @@ private fun BottomActionBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            val score10 = if (session.maxScore == 0.0) 0.0 else (session.totalScore / session.maxScore) * 10.0
+
             Text(
-                text = "ציון: ${session.totalScore.toScoreString()} / ${session.maxScore.toScoreString()} (${session.percent}%)",
+                text = "ציון: ${score10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${session.percent}%)",
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
@@ -1233,13 +1593,13 @@ private fun saveExamDraft(
     context: Context,
     traineeName: String,
     belt: Belt,
-    marksMap: Map<String, ExamMark>
+    marksMap: Map<String, Int>
 ) {
     val sp = context.getSharedPreferences("kmi_internal_exam_drafts", Context.MODE_PRIVATE)
 
     val obj = JSONObject()
-    marksMap.forEach { (id, mark) ->
-        obj.put(id, mark.name) // PASS / PARTIAL / FAIL
+    marksMap.forEach { (id, score) ->
+        obj.put(id, clampScore10(score))
     }
 
     sp.edit()
@@ -1251,18 +1611,18 @@ private fun loadExamDraft(
     context: Context,
     traineeName: String,
     belt: Belt
-): Map<String, ExamMark> {
+): Map<String, Int> {
     val sp = context.getSharedPreferences("kmi_internal_exam_drafts", Context.MODE_PRIVATE)
     val raw = sp.getString(draftKey(traineeName, belt), null) ?: return emptyMap()
 
     return runCatching {
         val obj = JSONObject(raw)
-        val out = mutableMapOf<String, ExamMark>()
+        val out = mutableMapOf<String, Int>()
         val it = obj.keys()
         while (it.hasNext()) {
             val id = it.next()
-            val markName = obj.getString(id)
-            out[id] = ExamMark.valueOf(markName)
+            val v = obj.optInt(id, -1)
+            if (v >= 0) out[id] = clampScore10(v)
         }
         out
     }.getOrDefault(emptyMap())

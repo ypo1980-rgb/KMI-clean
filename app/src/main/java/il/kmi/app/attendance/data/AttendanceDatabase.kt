@@ -9,12 +9,12 @@ import androidx.room.TypeConverters
         GroupMember::class,
         TrainingSession::class,
         AttendanceRecord::class,
-        AttendanceReport::class   // 👈 הטבלה החדשה לדו"חות
+        AttendanceReport::class
     ],
-    version = 3,                 // 👈 העלינו מ-2 ל-3
-    exportSchema = true
+    version = 2, // <-- היה 1 (או מספר אחר). תעלה ב-1 בכל שינוי סכמה
+    exportSchema = false
 )
-@TypeConverters(Converters::class)
+@TypeConverters(AttendanceConverters::class)
 abstract class AttendanceDatabase : RoomDatabase() {
     abstract fun dao(): AttendanceDao
 }

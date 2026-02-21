@@ -9,7 +9,6 @@ import java.time.LocalDate
 class AttendanceRepository private constructor(
     private val db: AttendanceDatabase
 ) {
-
     private val dao: AttendanceDao = db.dao()
 
     /**
@@ -22,28 +21,25 @@ class AttendanceRepository private constructor(
     suspend fun addMember(branch: String, groupKey: String, displayName: String): Long =
         dao.upsertMember(
             GroupMember(
-                id = 0,               // auto-id
+                id = 0,
                 branch = branch,
                 groupKey = groupKey,
-                displayName = displayName
+                displayName = displayName.trim()
             )
         )
 
     /**
      * מחיקת מתאמן לפי מזהה.
-     * ה-ViewModel יקרא לפונקציה הזו ישירות (suspend) בתוך viewModelScope.launch.
      */
     suspend fun removeMember(branch: String, groupKey: String, memberId: Long) {
-        // נשלוף את רשימת המתאמנים בקבוצה ונמצא את המתאמן לפי id
         val membersInGroup = dao.members(branch, groupKey).first()
         val member = membersInGroup.firstOrNull { it.id == memberId } ?: return
-        // מחיקה אמיתית מה-DB
         dao.deleteMember(member)
     }
 
+
     /**
      * מבטיח שתהיה ישיבת אימון ל־(תאריך+סניף+קבוצה) ומחזיר את ה-id שלה.
-     * אם קיימת – מחזיר את הקיימת; אם לא – יוצר חדשה.
      */
     suspend fun ensureSession(
         date: LocalDate,
@@ -60,7 +56,7 @@ class AttendanceRepository private constructor(
                 groupKey = groupKey
             )
         )
-        // אם בגלל ON CONFLICT IGNORE לא הוחדר (id=0) – נשלוף שוב את הקיימת
+
         return if (insertedId > 0L) insertedId
         else requireNotNull(dao.findSession(date, branch, groupKey)).id
     }
@@ -75,20 +71,32 @@ class AttendanceRepository private constructor(
 
     /**
      * סימון נוכחות/היעדרות לחבר מסוים במפגש נתון.
-     * משתמש בעדכון ישיר (קיים ב-DAO) כדי לא להיתקל בשדות שאינם במודל.
+     * אם אין עדיין רשומה (sessionId+memberId) – ניצור אחת.
      */
     suspend fun mark(
         sessionId: Long,
         memberId: Long,
-        status: AttendanceStatus,
-        note: String? = null   // שמור לעתיד, כרגע לא נשמר ב-DB
+        status: AttendanceStatus
     ) {
-        dao.updateStatus(
+        val ts = System.currentTimeMillis()
+
+        val updated = dao.updateStatus(
             sessionId = sessionId,
             memberId = memberId,
             status = status,
-            ts = System.currentTimeMillis()
+            ts = ts
         )
+
+        if (updated == 0) {
+            dao.upsertRecord(
+                AttendanceRecord(
+                    sessionId = sessionId,
+                    memberId = memberId,
+                    status = status,
+                    markedAtMillis = ts
+                )
+            )
+        }
     }
 
     /** סטטיסטיקות נוכחות לפי טווח תאריכים */
@@ -100,27 +108,19 @@ class AttendanceRepository private constructor(
     ): Flow<List<MemberPresenceStat>> =
         dao.presenceStats(branch, groupKey, from, to)
 
-    // ---------- דו"חות נוכחות (ארכיון) ----------
-
     /**
      * מחשב דו"ח נוכחות ליום מסוים ושומר אותו בטבלת attendance_reports.
-     * נועד לשימוש כשמאמן לוחץ "שמור דו"ח" / "אישור נוכחות".
      */
     suspend fun saveReportForDate(
         branch: String,
         groupKey: String,
         date: LocalDate
     ) {
-        // לוודא שיש session ליום הזה
         val sessionId = ensureSession(date, branch, groupKey)
 
-        // חברי הקבוצה
         val members = members(branch, groupKey).first()
-
-        // רשומות נוכחות ליום הזה
         val records = attendanceForDay(branch, groupKey, date).first()
 
-        // מפה memberId -> record
         val byMember = records.associateBy { it.memberId }
 
         var present = 0
@@ -153,10 +153,29 @@ class AttendanceRepository private constructor(
         )
 
         dao.upsertReport(report)
+
+        // ✅ שומרים לפחות שנה: מוחקים מה שיותר משנה
+        val oneYearAgo = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
+        dao.deleteReportsOlderThan(branch, groupKey, oneYearAgo)
+    }
+
+    // ✅ מחיקה לפי IDs (מהמסך החדש עם צ'קבוקסים)
+    suspend fun deleteReportsByIds(
+        branch: String,
+        groupKey: String,
+        reportIds: List<Long>
+    ): Int {
+        if (reportIds.isEmpty()) return 0
+        return dao.deleteReportsByIds(branch, groupKey, reportIds)
+    }
+
+    fun reportsLastYear(branch: String, groupKey: String): Flow<List<AttendanceReport>> {
+        val oneYearAgo = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
+        return dao.reportsSince(branch, groupKey, oneYearAgo)
     }
 
     /**
-     * החזרה של N הדו"חות האחרונים לקבוצה (למסך "ארכיון נוכחות").
+     * החזרה של N הדו"חות האחרונים לקבוצה.
      */
     fun lastReports(
         branch: String,
@@ -165,7 +184,17 @@ class AttendanceRepository private constructor(
     ): Flow<List<AttendanceReport>> =
         dao.lastReportsForGroup(branch, groupKey, limit)
 
-    // ---------- Singleton ----------
+    // ✅ NEW: מחיקת כל הדו"חות לקבוצה (לא נוגע בסימונים)
+    suspend fun clearReports(branch: String, groupKey: String): Int {
+        return dao.deleteReportsForGroup(branch, groupKey)
+    }
+
+    // ✅ NEW: איפוס נוכחות לקבוצה (מוחק סימונים+שיעורים+דו"חות, משאיר מתאמנים)
+    suspend fun resetAttendanceForGroup(branch: String, groupKey: String) {
+        dao.deleteAttendanceRecordsForGroup(branch, groupKey)
+        dao.deleteSessionsForGroup(branch, groupKey)
+        dao.deleteReportsForGroup(branch, groupKey)
+    }
 
     companion object {
         @Volatile

@@ -47,6 +47,10 @@ class KmiViewModel(
     private val _selectedBelt = MutableStateFlow<Belt?>(null)
     val selectedBelt: StateFlow<Belt?> = _selectedBelt.asStateFlow()
 
+    // ✅ NEW: כל שינוי סימון מגדיל גרסה כדי לרענן ProgressMeter בלי IO
+    private val _marksVersion = MutableStateFlow(0L)
+    val marksVersion: StateFlow<Long> = _marksVersion.asStateFlow()
+
     fun setSelectedBelt(belt: Belt) {
         viewModelScope.launch {
             ds.saveSelectedBelt(belt)
@@ -71,6 +75,63 @@ class KmiViewModel(
     private val masteredItems =
         mutableStateMapOf<String, MutableMap<String, MutableMap<String, Boolean?>>>()
 
+    // ✅ NEW: עוזר פנימי — כתיבה עקבית ל-cache
+    private fun putCache(belt: Belt, topicKey: String, item: String, value: Boolean?) {
+        val beltMap = masteredItems.getOrPut(belt.id) { mutableMapOf() }
+        val topicMap = beltMap.getOrPut(topicKey) { mutableMapOf() }
+        if (value == null) topicMap.remove(item) else topicMap[item] = value
+    }
+
+    /**
+     * ✅ NEW: Warmup ל-cache אחרי ריסטארט.
+     * המסך שולח רשימת פריטים (ה-canonicalId שהוא משתמש בו),
+     * ואנחנו טוענים מה-DataStore לתוך masteredItems כדי שה-UI יראה סימונים.
+     */
+    fun warmUpTopicStatuses(
+        belt: Belt,
+        topic: String,
+        items: Collection<String>
+    ) {
+        val t = canonicalTopicKey(topic)
+        if (items.isEmpty()) return
+
+        viewModelScope.launch {
+            var changed = false
+
+            for (item in items) {
+                // אם כבר ב-cache — דילוג
+                val cached = masteredItems[belt.id]?.get(t)?.get(item)
+                if (cached != null || (masteredItems[belt.id]?.get(t)?.containsKey(item) == true)) {
+                    continue
+                }
+
+                val v = ds.readItemStatus(belt, t, item) // ✅ מקור אמת
+                if (v != null) {
+                    putCache(belt, t, item, v)
+                    changed = true
+                }
+                // אם v == null אנחנו פשוט משאירים לא מסומן — אין מה לשמור ב-cache
+            }
+
+            if (changed) {
+                recalcProgress()
+                _marksVersion.value = _marksVersion.value + 1L
+            }
+        }
+    }
+
+    /** ✅ NEW: Snapshot מהיר מה-cache עבור נושא מסוים (ללא IO) */
+    fun getTopicStatusSnapshot(belt: Belt, topic: String): Map<String, Boolean?> {
+        val t = canonicalTopicKey(topic)
+        val topicMap = masteredItems[belt.id]?.get(t) ?: return emptyMap()
+        return topicMap.toMap()
+    }
+
+    /** ✅ NEW: Snapshot מהיר של כל החגורה (ללא IO) */
+    fun getBeltStatusSnapshot(belt: Belt): Map<String, Map<String, Boolean?>> {
+        val beltMap = masteredItems[belt.id] ?: return emptyMap()
+        return beltMap.mapValues { (_, topicMap) -> topicMap.toMap() }
+    }
 
     /** קבלת מצב של פריט (Nullable: true/false/null) */
     suspend fun getItemStatusNullable(belt: Belt, topic: String, item: String): Boolean? {
@@ -84,9 +145,7 @@ class KmiViewModel(
 
         // שמירה ב-cache רק אם יש ערך אמיתי (true/false)
         if (value != null) {
-            val beltMap = masteredItems.getOrPut(belt.id) { mutableMapOf() }
-            val topicMap = beltMap.getOrPut(t) { mutableMapOf() }
-            topicMap[item] = value
+            putCache(belt, t, item, value)
         }
 
         return value
@@ -98,20 +157,61 @@ class KmiViewModel(
         return ds.isItemMastered(belt, t, item)
     }
 
+    /** ✅ NEW: קביעה/איפוס מצב פריט (true/false/null) — מקור אמת יחיד: DataStore */
+    fun setItemStatusNullable(belt: Belt, topic: String, item: String, value: Boolean?) {
+        val t = canonicalTopicKey(topic)
+
+        // עדכון cache מיידי כדי ששני המסכים יראו אותו דבר בלי "הבהובים"
+        putCache(belt, t, item, value)
+
+        viewModelScope.launch {
+            when (value) {
+                null -> ds.clearItemStatus(belt, t, item)
+                else -> ds.setItemMastered(belt, t, item, value)
+            }
+            recalcProgress()
+            _marksVersion.value = _marksVersion.value + 1L
+        }
+    }
+
+    /** ✅ NEW: איפוס פריטים ספציפיים לנושא (מנקה DataStore + cache) */
+    fun clearTopicItems(
+        belt: Belt,
+        topic: String,
+        canonicalIds: Collection<String>
+    ) {
+        val t = canonicalTopicKey(topic)
+        if (canonicalIds.isEmpty()) return
+
+        // ✅ ננקה cache מיידי
+        masteredItems[belt.id]?.get(t)?.let { topicMap ->
+            canonicalIds.forEach { id -> topicMap.remove(id) }
+        }
+
+        // ✅ ננקה datastore
+        viewModelScope.launch {
+            canonicalIds.forEach { id ->
+                ds.clearItemStatus(belt, t, id)
+            }
+            recalcProgress()
+            _marksVersion.value = _marksVersion.value + 1L
+        }
+    }
+
     /** איפוס נושא שלם */
     fun clearTopic(belt: Belt, topic: String) {
         val t = canonicalTopicKey(topic)
 
         val items = masteredItems[belt.id]?.get(t)?.keys?.toList().orEmpty()
 
-        // ננקה cache
-        masteredItems[belt.id]?.get(t)?.keys?.forEach { key ->
-            masteredItems[belt.id]?.get(t)?.set(key, null)
-        }
+        // ✅ ננקה cache נכון (remove במקום לשים null)
+        masteredItems[belt.id]?.get(t)?.clear()
 
         // ננקה datastore
         viewModelScope.launch {
             items.forEach { ds.clearItemStatus(belt, t, it) }
+            recalcProgress()
+            _marksVersion.value = _marksVersion.value + 1L
         }
     }
 
@@ -126,14 +226,15 @@ class KmiViewModel(
     // ✅ מקור אמת ל-topicKey (כולל טיפול ב"כללי")
     private fun canonicalTopicKey(topic: String): String {
         val t = normalizeTopicKey(topic)
-        return if (t == "כללי") "" else t
+
+        // ✅ כללי = "" (וגם topic ריק מתנהג אותו דבר)
+        if (t.isBlank()) return ""
+        return if (t.equals("כללי", ignoreCase = true)) "" else t
     }
 
     // === אחוזי התקדמות לכל חגורה ===
     private val _progress = mutableStateOf<Map<Belt, Int>>(emptyMap())
     val progress: State<Map<Belt, Int>> = _progress
-
-    /** קבלת מצב של פריט (Nullable: true/false/null) */
 
     private fun normalizeCatalogItem(raw: String): String {
         // אם יש tag כמו "def:...::שם תרגיל" או "שם::def:..."
@@ -209,83 +310,24 @@ class KmiViewModel(
         _progress.value = newProgress
     }
 
-    fun getExternalDefensesForBelt(belt: Belt): List<String> {
-        val entries = getCatalogEntriesForBelt(belt)
-        return entries
-            .asSequence()
-            .filter { it.topicTitle.contains("הגנות") }
-            .filter { e ->
-                val raw = e.rawItem.lowercase()
-                raw.contains("def:external") || raw.contains("def_external") || e.displayItem.contains("חיצונ")
-            }
-            .map { it.displayItem }
-            .distinct()
-            .toList()
-    }
-
-    fun getExerciseExplanationText(exerciseName: String): String? {
-        val query = exerciseName.trim()
-        if (query.isEmpty()) return null
-
-        var foundBelt: Belt? = null
-        var foundTopicTitle: String? = null
-        var foundItemName: String? = null
-
-        for (belt in Belt.order) {
-            val entries = getCatalogEntriesForBelt(belt)
-            val hit = entries.firstOrNull { it.displayItem.contains(query, ignoreCase = true) }
-            if (hit != null) {
-                foundBelt = belt
-                foundTopicTitle = hit.topicTitle
-                foundItemName = hit.displayItem
-                break
-            }
-        }
-
-        val belt = foundBelt ?: return null
-        val topicTitle = foundTopicTitle ?: return null
-        val itemName = foundItemName ?: query
-
-        val beltHe = when (belt) {
-            Belt.WHITE  -> "לבנה"
-            Belt.YELLOW -> "צהובה"
-            Belt.ORANGE -> "כתומה"
-            Belt.GREEN  -> "ירוקה"
-            Belt.BLUE   -> "כחולה"
-            Belt.BROWN  -> "חומה"
-            Belt.BLACK  -> "שחורה"
-        }
-
-        return buildString {
-            appendLine("התרגיל \"$itemName\" מופיע בחגורה $beltHe בנושא \"$topicTitle\".")
-            appendLine()
-            appendLine("הנה הסבר כללי לביצוע נכון של התרגיל:")
-            appendLine("1. התחל מעמידת מוצא יציבה, ברכיים מעט כפופות ומבט קדימה.")
-            appendLine("2. בצע את התנועה לאט מספר פעמים כדי להבין את המסלול ואת הכיוון.")
-            appendLine("3. שמור שהיד השנייה נשארת בהגנה בזמן הביצוע.")
-            appendLine("4. נשימה רגועה וקצב אחיד — בלי לעצור נשימה באמצע.")
-            appendLine("5. אחרי שהטכניקה נקייה, העלה בהדרגה מהירות ועוצמה.")
-            appendLine("6. חזור תמיד לעמידת מוצא מוכנה.")
-        }
-    }
-
     init {
         recalcProgress()
     }
-} // ✅ חשוב! לסיים את ה־class לפני ה־Factory
+} // ✅ סוגרים את KmiViewModel פה (ה־Factory חייב להיות מחוץ ל-class)
+
 
 // ─────────────────────────────────────────────
 // Factory עבור KmiViewModel (להישאר באותו קובץ)
 // ─────────────────────────────────────────────
 class KmiViewModelFactory(
     private val dataStoreManager: DataStoreManager,
-    private val spTrainingSummary: SharedPreferences, // ✅ NEW
+    private val spTrainingSummary: SharedPreferences,
 ) : androidx.lifecycle.ViewModelProvider.Factory {
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(KmiViewModel::class.java)) {
-            val localRepo = TrainingSummaryLocalRepo(spTrainingSummary) // ✅ NEW
+            val localRepo = TrainingSummaryLocalRepo(spTrainingSummary)
             return KmiViewModel(
                 ds = dataStoreManager,
                 trainingSummaryLocalRepo = localRepo

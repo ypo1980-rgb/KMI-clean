@@ -56,11 +56,7 @@ object ContentRepo {
     ): String? {
         val wanted = itemTitle.normHeb()
 
-        // ✅ FIX: מתעלמים מ"תת־נושא מזויף" שהוא בעצם אותו שם כמו topic
-        val topicTrim = topicTitle.trim()
         val subs = getSubTopicsFor(belt, topicTitle)
-            .filter { st -> st.title.trim().isNotBlank() && st.title.trim() != topicTrim }
-
         if (subs.isEmpty()) return null
 
         return subs.firstOrNull { st ->
@@ -117,124 +113,33 @@ object ContentRepo {
     private fun String.normHeb(): String =
         il.kmi.shared.domain.content.Canonical.run { this@normHeb.normHeb() }
 
-    private fun splitDefenseTagAndName(raw: String): Pair<String?, String> {
-        val s = raw.trim()
-        if (!s.contains("::")) return null to s
-
-        val left = s.substringBeforeLast("::").trim()
-        val right = s.substringAfterLast("::").trim()
-
-        fun isTag(x: String): Boolean =
-            x.startsWith("def:", ignoreCase = true) || x.startsWith("def_", ignoreCase = true)
-
-        return when {
-            isTag(left) -> left to right
-            isTag(right) -> right to left
-            else -> null to s.substringAfterLast("::").ifBlank { s }
-        }
-    }
-
-    private fun normalizeDefenseTag(tagRaw: String?): String {
-        val t = tagRaw?.trim().orEmpty().lowercase()
-        if (t.isBlank()) return ""
-        if (t.startsWith("def:")) return t
-
-        return when (t) {
-            "def_external_punches" -> "def:external:punch"
-            "def_internal_punches" -> "def:internal:punch"
-            "def_external_kicks" -> "def:external:kick"
-            "def_internal_kicks" -> "def:internal:kick"
-            else -> t
-        }
-    }
-
-    // אם אין tag – נסיק אותו מתוך שם התרגיל (בעיקר לירוקה שבה חלק מהשורות בלי def_*).
-    private fun inferDefenseTagFromDisplay(displayName: String): String {
-        val d = displayName.normHeb()
-
-        val isExternal = d.contains("חיצונ")
-        val isInternal = d.contains("פנימ")
-        val isKick = d.contains("בעיט")
-        val isPunch = d.contains("אגרו") || d.contains("אגרוף") || d.contains("מכות אגרוף")
-
-        return when {
-            isExternal && isKick -> "def:external:kick"
-            isInternal && isKick -> "def:internal:kick"
-            isExternal && isPunch -> "def:external:punch"
-            isInternal && isPunch -> "def:internal:punch"
-            else -> ""
-        }
-    }
-
     // ---------------------------------------------------------
-    // שליפה בטוחה של Topic לפי חגורה וכותרת (קודם התאמה מדויקת)
+    // שליפה בטוחה של Topic לפי חגורה וכותרת (קשיח: התאמה מדויקת בלבד)
     // ---------------------------------------------------------
     private fun findTopicSafe(belt: Belt, topicTitle: String): Topic? {
         val topics = data[belt]?.topics ?: return null
         val wn = topicTitle.normHeb()
 
-        // 1) ניסיון התאמה מדויקת אחרי נרמול
-        topics.firstOrNull { it.title.normHeb() == wn }?.let { return it }
-
-        // 2) fallback: התאמה רופפת רק אם יש בדיוק פגיעה יחידה
-        val candidates = topics.filter { t ->
-            val tn = t.title.normHeb()
-            tn.startsWith(wn) || wn.startsWith(tn)
-        }
-        return candidates.singleOrNull()
-    }
-
-    // ====== ירוקה: תתי־נושאים ל"הגנות" מהמאגר, עם עטיפה אם יש רק items ======
-    private val greenDefenseSubTopicsInternal: List<SubTopic> by lazy {
-        val t = findTopicSafe(Belt.GREEN, "הגנות")
-        when {
-            t?.subTopics?.isNotEmpty() == true -> t.subTopics
-            t?.items?.isNotEmpty() == true -> listOf(SubTopic(title = t.title, items = t.items))
-            else -> emptyList()
-        }
+        // ✅ קשיח: התאמה מדויקת בלבד אחרי נרמול
+        return topics.firstOrNull { it.title.normHeb() == wn }
     }
 
     // ---------------------------------------------------------
-// תתי־נושאים לפי חגורה ונושא
-// כלל הזהב: אם יש subTopics – מחזירים אותם. אם יש items – עוטפים ל-SubTopic יחיד.
-// ---------------------------------------------------------
+    // תתי־נושאים לפי חגורה ונושא
+    // כלל הזהב:
+    // אם יש subTopics – מחזירים אותם (אחרי ניקוי "תת־נושא מזויף").
+    // אם יש items – עוטפים ל-SubTopic יחיד.
+    // ---------------------------------------------------------
     fun getSubTopicsFor(belt: Belt, topicTitle: String): List<SubTopic> {
+
         val topic = findTopicSafe(belt, topicTitle) ?: return emptyList()
+        val reqTitleTrim = topicTitle.trim()
 
-        val reqN = topicTitle.normHeb()
-        val realIsDefense = topic.title.normHeb() == "הגנות".normHeb()
+        // ✅ FIX: מתעלמים מ"תת־נושא מזויף" שהוא בעצם אותו שם כמו topic
+        val cleanedSubs = topic.subTopics
+            .filter { st -> st.title.trim().isNotBlank() && st.title.trim() != reqTitleTrim }
 
-        // ✅ NEW: תומך בנושאים "מדומים" שה-UI שולח: "הגנות פנימיות" / "הגנות חיצוניות"
-        // בפועל התוכן נמצא תחת Topic "הגנות" ומסונן לפי tag/מילות מפתח.
-        if (realIsDefense && (reqN.contains("פנימ") || reqN.contains("חיצונ"))) {
-            val hint = when {
-                reqN.contains("פנימ") -> "הגנות פנימיות"
-                else -> "הגנות חיצוניות"
-            }
-            val items = getDefenseItemsFiltered(
-                belt = belt,
-                topicTitle = "הגנות",
-                subTopicHint = hint
-            )
-            return listOf(SubTopic(title = hint, items = items))
-        }
-
-        val isDefense = realIsDefense && reqN.startsWith("הגנות".normHeb())
-
-        // ✅ ירוקה – טיפול מיוחד כמו שהיה לך
-        if (isDefense && belt == Belt.GREEN) return greenDefenseSubTopicsInternal
-
-        // ✅ שחורה – קח בדיוק מה-data (אם אין subTopics אבל יש items, נעטוף כדי לא להחזיר ריק)
-        if (isDefense && belt == Belt.BLACK) {
-            val t = findTopicSafe(Belt.BLACK, "הגנות")
-            return when {
-                t?.subTopics?.isNotEmpty() == true -> t.subTopics
-                t?.items?.isNotEmpty() == true -> listOf(SubTopic(title = t.title, items = t.items))
-                else -> emptyList()
-            }
-        }
-
-        if (topic.subTopics.isNotEmpty()) return topic.subTopics
+        if (cleanedSubs.isNotEmpty()) return cleanedSubs
         if (topic.items.isNotEmpty()) return listOf(SubTopic(title = topic.title, items = topic.items))
         return emptyList()
     }
@@ -254,202 +159,14 @@ object ContentRepo {
         val subs = getSubTopicsFor(belt, topicTitle)
         if (subs.isEmpty()) return emptyList()
 
-        val isReleasesTopic = topicTitle.normHeb() == "שחרורים".normHeb()
-
-        fun normalizeReleasesPick(wn: String): String {
-            // מחזיר "שורש" שמסווג את הבחירה, כדי לעבוד בין חגורות עם כותרות שונות
-            return when {
-                wn.contains("תפיס") -> "תפיס"
-                wn.contains("חניק") -> "חניק"
-                wn.contains("חביק") || wn.contains("צוואר") || wn.contains("גוף") -> "חביק"
-                wn.contains("חולצ") -> "חולצ"
-                wn.contains("שיער") -> "שיער"
-                else -> wn
-            }
-        }
-
-        fun chooseSubTopicForReleases(wanted: String): SubTopic? {
-            val wn = wanted.normHeb()
-            val key = normalizeReleasesPick(wn)
-
-            // 1) התאמה מדויקת
-            subs.firstOrNull { it.title.normHeb() == wn }?.let { return it }
-
-            // 2) התאמה "מכילה" (שחרור/שחרורים, יחיד/רבים וכו')
-            subs.firstOrNull { st ->
-                val tn = st.title.normHeb()
-                tn.contains(wn) || wn.contains(tn)
-            }?.let { return it }
-
-            // 3) התאמה לפי שורש סיווג (תפיס/חניק/חביק/חולצ/שיער)
-            return subs.firstOrNull { st ->
-                st.title.normHeb().contains(key)
-            }
-        }
-
-        // ✅ NEW: פילטר קשוח לשחרורים כדי למנוע "זליגה" של פריטים לא קשורים בתוך אותו SubTopic
-        fun filterReleasesItems(wantedSubTitle: String, items: List<String>): List<String> {
-            val w = wantedSubTitle.normHeb()
-
-            fun hasAny(s: String, vararg keys: String): Boolean =
-                keys.any { k -> k.isNotBlank() && s.contains(k) }
-
-            fun hasNone(s: String, vararg keys: String): Boolean =
-                keys.all { k -> k.isBlank() || !s.contains(k) }
-
-            return items.filter { raw ->
-                val t = raw.normHeb()
-
-                when {
-                    // ✅ שחרורים מתפיסות ידיים — רק תפיסות יד (ומוציא חניקות/חביקות/חולצה/שיער)
-                    w.contains("תפיס") && w.contains("יד") -> {
-                        val okGrab = hasAny(t, "תפיס", "אחיז", "אגודל", "פרק") && hasAny(t, "יד", "ידיים", "כף")
-                        val notOther = hasNone(t, "חניק", "חניקה", "חביק", "חביקה", "צוואר", "שיער", "חולצ", "חולצה")
-                        okGrab && notOther
-                    }
-
-                    // ✅ שחרורים מחניקות
-                    w.contains("חניק") -> {
-                        hasAny(t, "חניק", "חניקה") && hasNone(t, "חביק", "חביקה", "חולצ", "חולצה", "שיער", "תפיס")
-                    }
-
-                    // ✅ שחרורים מחביקות (כולל צוואר/גוף)
-                    w.contains("חביק") || w.contains("צוואר") || w.contains("גוף") -> {
-                        hasAny(t, "חביק", "חביקה", "צוואר", "גוף") && hasNone(t, "חניק", "חניקה", "חולצ", "חולצה", "שיער", "תפיס")
-                    }
-
-                    // ✅ שחרורים מחולצה / שיער
-                    w.contains("חולצ") || w.contains("שיער") -> {
-                        hasAny(t, "חולצ", "חולצה", "שיער") && hasNone(t, "חניק", "חניקה", "חביק", "חביקה", "תפיס")
-                    }
-
-                    else -> true
-                }
-            }
-        }
-
-        fun normalizeAndSort(items: List<String>): List<String> {
-            // ב"שחרורים" אנחנו גם מנקים כפילויות וגם ממיינים עקבי
-            // (הכפילויות אצלך קיימות בפועל במאגר, למשל בצהובה)
-            val distinct = items.distinctBy { it.normHeb() }
-            return if (isReleasesTopic) {
-                distinct.sortedBy { it.normHeb() }
-            } else {
-                distinct
-            }
-        }
-
+        // אם ביקשו תת־נושא – התאמה מדויקת בלבד (אחרת ריק)
         subTopicTitle?.let { wanted ->
-            val pickedRaw = if (isReleasesTopic) {
-                chooseSubTopicForReleases(wanted)?.items ?: emptyList()
-            } else {
-                val wn = wanted.normHeb()
-                subs.firstOrNull { it.title.normHeb() == wn }?.items ?: emptyList()
-            }
-
-            // ✅ NEW: רק לשחרורים — מסננים חזק לפי תת־הנושא שנבחר
-            val picked = if (isReleasesTopic) filterReleasesItems(wanted, pickedRaw) else pickedRaw
-
-            return normalizeAndSort(picked)
+            val wn = wanted.normHeb()
+            return subs.firstOrNull { it.title.normHeb() == wn }?.items.orEmpty()
         }
 
-        // ללא subTopicTitle → כל התרגילים בנושא
-        val all = subs.flatMap { it.items }
-        return normalizeAndSort(all)
-    }
-
-    // ---------------------------------------------------------
-    // שליפה לתת־נושא ספציפי (התאמה מדויקת אחרי נרמול) – ציבורי
-    // ---------------------------------------------------------
-    fun getItemsForExactSubTopic(
-        belt: Belt,
-        topicTitle: String,
-        subTopicTitle: String
-    ): List<String> = getAllItemsFor(belt, topicTitle, subTopicTitle)
-
-    // ---------------------------------------------------------
-    // שליפה לנושא “הגנות” עם סינון לפי תתי־נושאים + מילות מפתח
-    // ---------------------------------------------------------
-    fun getDefenseItemsFiltered(
-        belt: Belt,
-        topicTitle: String = "הגנות",
-        subTopicHint: String? = null,
-        includeItemKeywords: List<String> = emptyList(),      // OR
-        requireAllItemKeywords: List<String> = emptyList(),   // AND
-        excludeItemKeywords: List<String> = emptyList()
-    ): List<String> {
-
-        fun normKw(x: String): String {
-            val n = x.normHeb()
-            if (n.isBlank()) return ""
-            return normalizeDefenseTag(n).normHeb()
-        }
-
-        val inc = includeItemKeywords.map { normKw(it) }.filter { it.isNotBlank() }
-        val req = requireAllItemKeywords.map { normKw(it) }.filter { it.isNotBlank() }
-        val exc = excludeItemKeywords.map { normKw(it) }.filter { it.isNotBlank() }
-
-        // ✅ אם המשתמש בחר תת־נושא אמיתי (כפתור UI) – ננעל אליו
-        val subs = getSubTopicsFor(belt, topicTitle)
-        val exactSubItems: List<String>? = subTopicHint
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?.let { hint ->
-                val hn = hint.normHeb()
-                subs.firstOrNull { st -> st.title.normHeb() == hn }?.items
-            }
-
-        val allItems: List<String> = exactSubItems ?: getAllItemsFor(
-            belt = belt,
-            topicTitle = topicTitle,
-            subTopicTitle = null
-        )
-
-        fun matchesHint(hint: String, display: String, tag: String): Boolean {
-            val isExternalHint = hint.contains("חיצונ")
-            val isInternalHint = hint.contains("פנימ")
-
-            return when {
-                isExternalHint -> tag.contains("external")
-                isInternalHint -> tag.contains("internal")
-                else -> display.contains(hint) || tag.contains(hint)
-            }
-        }
-
-        val hinted = if (exactSubItems != null) {
-            allItems
-        } else if (!subTopicHint.isNullOrBlank()) {
-            val hint = subTopicHint.normHeb()
-            val filtered = allItems.filter { raw ->
-                val (tagRaw, displayName) = splitDefenseTagAndName(raw)
-                val display = displayName.trim().normHeb()
-
-                val normalized = normalizeDefenseTag(tagRaw).normHeb()
-                val inferred = inferDefenseTagFromDisplay(display).normHeb()
-                val tag = (if (normalized.isNotBlank()) normalized else inferred).normHeb()
-
-                matchesHint(hint, display, tag)
-            }
-
-            if (filtered.isEmpty() && (hint.contains("חיצונ") || hint.contains("פנימ"))) allItems else filtered
-        } else {
-            allItems
-        }
-
-        return hinted.mapNotNull { raw ->
-            val (tagRaw, displayName) = splitDefenseTagAndName(raw)
-            val t = displayName.trim().normHeb()
-
-            val normalized = normalizeDefenseTag(tagRaw).normHeb()
-            val inferred = inferDefenseTagFromDisplay(t).normHeb()
-            val tag = if (normalized.isNotBlank()) normalized else inferred
-
-            val passInc = inc.isEmpty() || inc.any { kw -> t.contains(kw) || tag.contains(kw) }
-            val passReq = req.isEmpty() || req.all { kw -> t.contains(kw) || tag.contains(kw) }
-            val passExc = exc.isEmpty() || exc.none { kw -> t.contains(kw) || tag.contains(kw) }
-
-            if (passInc && passReq && passExc) displayName.trim() else null
-        }
+        // בלי תת־נושא – כל הפריטים 1:1 כפי שהם בדאטה
+        return subs.flatMap { it.items }
     }
 
     // ---------------------------------------------------------
@@ -650,11 +367,11 @@ object ContentRepo {
         Topic(
             "הגנות",
             listOf(
-                "def:external:punch::הגנות חיצוניות - רפלקסיבית 360 מעלות",
-                "def:internal:punch::הגנות פנימיות - הגנה פנימית רפלקסיבית",
-                "def:internal:punch::הגנות פנימיות - הגנה פנימית נגד ימין בכף יד שמאל",
-                "def:internal:punch::הגנות פנימיות - הגנה פנימית נגד שמאל בכף יד ימין",
-                "def:internal:kick::הגנות פנימיות - הגנה פנימית נגד בעיטה רגילה למפסעה"
+                "הגנות חיצוניות רפלקסיביות 360 מעלות",
+                "הגנה פנימית רפלקסיבית",
+                "הגנה פנימית נגד ימין בכף יד שמאל",
+                "הגנה פנימית נגד שמאל בכף יד ימין",
+                "הגנה פנימית נגד בעיטה רגילה למפסעה"
             )
         )
     )
@@ -761,22 +478,22 @@ object ContentRepo {
                     "הגנות נגד מכות ישרות",
                     listOf(
                         "הגנות נגד מכות עם הטיות גוף",
-                        "def:internal:punch::הגנות פנימיות - הגנה פנימית נגד שמאל עם מרפק",
-                        "def:internal:punch::הגנות פנימיות - הגנה פנימית נגד מכות ישרות למטה",
+                        "הגנה פנימית נגד שמאל עם מרפק",
+                        "הגנה פנימית נגד מכות ישרות למטה",
                         "הגנה נגד שמאל-ימין - אגרוף מהופך",
                         "הגנה נגד שמאל-ימין - הטייה לאחור",
                         "הגנה נגד שמאל-ימין (כמו חיצוניות)"
                     )
                 ),
                 SubTopic(
-                    "הגנות חיצוניות נגד מכות",
+                    "6 הגנות חיצוניות נגד מכות",
                     listOf(
-                        "def:external:punch::הגנות חיצוניות - הגנה חיצונית מס' 1",
-                        "def:external:punch::הגנות חיצוניות - הגנה חיצונית מס' 2",
-                        "def:external:punch::הגנות חיצוניות - הגנה חיצונית מס' 3",
-                        "def:external:punch::הגנות חיצוניות - הגנה חיצונית מס' 4",
-                        "def:external:punch::הגנות חיצוניות - הגנה חיצונית מס' 5",
-                        "def:external:punch::הגנות חיצוניות - הגנה חיצונית מס' 6"
+                        "הגנות חיצוניות - הגנה חיצונית מס' 1",
+                        "הגנות חיצוניות - הגנה חיצונית מס' 2",
+                        "הגנות חיצוניות - הגנה חיצונית מס' 3",
+                        "הגנות חיצוניות - הגנה חיצונית מס' 4",
+                        "הגנות חיצוניות - הגנה חיצונית מס' 5",
+                        "הגנות חיצוניות - הגנה חיצונית מס' 6"
                     )
                 ),
                 SubTopic(
@@ -786,25 +503,25 @@ object ContentRepo {
                 SubTopic(
                     title = "הגנות חיצוניות נגד מכות מהצד",
                     items = listOf(
-                        "def:external:punch::הגנה חיצונית נגד מכה גבוהה מהצד - התוקף בצד שמאל",
-                        "def:external:punch::הגנה חיצונית נגד מכה גבוהה מהצד לעורף - התוקף בצד שמאל",
-                        "def:external:punch::הגנה חיצונית נגד מכה מהצד לגב - התוקף בצד שמאל",
-                        "def:external:punch::הגנה חיצונית נגד מכה גבוהה מהצד - התוקף בצד ימין",
-                        "def:external:punch::הגנה חיצונית נגד מכה מהצד לגרון - התוקף בצד ימין",
-                        "def:external:punch::הגנה חיצונית נגד מכה מהצד לבטן - התוקף בצד ימין"
+                        "הגנה חיצונית נגד מכה גבוהה מהצד - התוקף בצד שמאל",
+                        "הגנה חיצונית נגד מכה גבוהה מהצד לעורף - התוקף בצד שמאל",
+                        "הגנה חיצונית נגד מכה מהצד לגב - התוקף בצד שמאל",
+                        "הגנה חיצונית נגד מכה גבוהה מהצד - התוקף בצד ימין",
+                        "הגנה חיצונית נגד מכה מהצד לגרון - התוקף בצד ימין",
+                        "הגנה חיצונית נגד מכה מהצד לבטן - התוקף בצד ימין"
                     )
                 ),
                 SubTopic(
                     "הגנות נגד בעיטות",
                     listOf(
-                        "def:external:kick::הגנה חיצונית נגד בעיטה רגילה",
+                        "הגנה חיצונית נגד בעיטה רגילה",
                         "הגנה נגד בעיטת ברך",
                         "הגנה נגד בעיטה רגילה - עצירה ברגל הקדמית",
                         "הגנה נגד בעיטה רגילה - עצירה ברגל האחורית",
-                        "def:external:kick::הגנות חיצוניות - הגנה חיצונית נגד בעיטת מגל לפנים - בעיטה בימין",
-                        "def:external:kick::הגנות חיצוניות - הגנה חיצונית נגד בעיטת מגל לפנים - בעיטה בשמאל",
+                        "הגנה חיצונית נגד בעיטת מגל לפנים - בעיטה בימין",
+                        "הגנה חיצונית נגד בעיטת מגל לפנים - בעיטה בשמאל",
                         "הגנה נגד בעיטת מגל לפנים באמות הידיים",
-                        "הגנות חיצוניות - הגנה חיצונית נגד בעיטת מגל לפנים - אגרוף בימין::def:external:kick",
+                        "הגנה חיצונית נגד בעיטת מגל לפנים - אגרוף בימין",
                         "בעיטת עצירה נגד בעיטת מגל - עצירה ברגל האחורית",
                         "בעיטת עצירה נגד בעיטת מגל - עצירה ברגל הקדמית",
                         "בעיטת עצירה נגד בעיטה לצד"
@@ -903,11 +620,11 @@ object ContentRepo {
                 SubTopic(
                     "הגנות נגד מכות אגרוף",
                     listOf(
-                        "הגנות חיצוניות - הגנה חיצונית נגד ימין באגרוף מהופך",
-                        "def_external_punches::הגנות חיצוניות - הגנה חיצונית נגד שמאל",
-                        "def_external_punches::הגנות חיצוניות - הגנה חיצונית נגד שמאל בהתקדמות",
-                        "הגנות פנימיות - הגנה פנימית נגד ימין באמת שמאל::def_internal_punches",
-                        "def_internal_punches::הגנות פנימיות - הגנה פנימית נגד שמאל באמת שמאל"
+                        "הגנה חיצונית נגד ימין באגרוף מהופך",
+                        "הגנה חיצונית נגד שמאל",
+                        "הגנה חיצונית נגד שמאל בהתקדמות",
+                        "הגנה פנימית נגד ימין באמת שמאל",
+                        "הגנה פנימית נגד שמאל באמת שמאל"
                     )
                 ),
                 SubTopic(
@@ -915,15 +632,15 @@ object ContentRepo {
                     listOf(
                         "הגנה נגד בעיטה רגילה - בעיטה לצד",
                         "הגנה נגד בעיטה רגילה – טיימינג לצד חי",
-                        "הגנות חיצוניות - הגנה חיצונית באמת שמאל נגד בעיטה רגילה::def_external_kicks",
+                        "הגנה חיצונית באמת שמאל נגד בעיטה רגילה",
                         "הגנה נגד בעיטת מגל לפנים – בעיטה לצד",
                         "הגנה נגד בעיטת מגל נמוכה",
                         "הגנה נגד בעיטת מגל לאחור - בעיטה בימין",
                         "הגנה נגד בעיטת מגל לאחור - בעיטה שמאל",
                         "הגנה נגד בעיטת מגל לאחור - אגרוף שמאל",
                         "הגנה נגד בעיטת מגל לאחור בסיבוב – בעיטה",
-                        "def_external_kicks::הגנות חיצוניות - הגנה חיצונית באמת ימין נגד בעיטה לצד",
-                        "הגנות חיצוניות - הגנה חיצונית באמת שמאל נגד בעיטה לצד::def_external_kicks",
+                        "הגנה חיצונית באמת ימין נגד בעיטה לצד",
+                        "הגנה חיצונית באמת שמאל נגד בעיטה לצד",
                         "הגנה נגד בעיטת לצד בעיטת סטירה חיצונית"
                     )
                 ),
@@ -999,7 +716,7 @@ object ContentRepo {
                         "הגנה נגד בעיטת מגל לצלעות",
                         "הגנה נגד בעיטת מגל לפנים - בעיטה לצד",
                         "הגנה נגד בעיטת מגל לפנים - בעיטה לאחור",
-                        "def:internal:kick::הגנה פנימית באמת ימין נגד בעיטה לצד"
+                        "הגנה פנימית באמת ימין נגד בעיטה לצד"
                     )
                 ),
                 SubTopic(
@@ -1074,14 +791,14 @@ object ContentRepo {
                 SubTopic(
                     title = "הגנה – בעיטה",
                     items = listOf(
-                        "def:internal:kick::הגנה פנימית נגד בעיטה לסנטר",
-                        "def:external:kick::הגנה חיצונית נגד בעיטה רגילה – פריצה",
-                        "def:external:kick::הגנה חיצונית נגד בעיטה רגילה – גזיזה",
-                        "def:external:kick::הגנה חיצונית נגד בעיטה רגילה – טאטוא",
-                        "def:internal:kick::הגנה פנימית נגד בעיטה רגילה – טאטוא",
+                        "הגנה פנימית נגד בעיטה לסנטר",
+                        "הגנה חיצונית נגד בעיטה רגילה – פריצה",
+                        "הגנה חיצונית נגד בעיטה רגילה – גזיזה",
+                        "הגנה חיצונית נגד בעיטה רגילה – טאטוא",
+                        "הגנה פנימית נגד בעיטה רגילה – טאטוא",
                         "הגנה נגד בעיטת מגל – פריצה",
-                        "def:external:kick::הגנה חיצונית נגד מגל לפנים – גזיזה",
-                        "def:external:kick::הגנה חיצונית נגד מגל לפנים – טאטוא",
+                        "הגנה חיצונית נגד מגל לפנים – גזיזה",
+                        "הגנה חיצונית נגד מגל לפנים – טאטוא",
                         "הגנה נגד בעיטת מגל לאחור – פריצה"
                     )
                 ),
@@ -1220,13 +937,13 @@ object ContentRepo {
                 SubTopic(
                     "הגנות נגד מכות בשילוב בעיטות",
                     listOf(
-                        "def:internal:punch::הגנה פנימית נגד אגרוף שמאל – בעיטת הגנה",
-                        "def:internal:punch::הגנה פנימית נגד אגרוף שמאל – בעיטה לצד",
-                        "def:internal:punch::הגנה פנימית נגד אגרוף שמאל – בעיטה רגילה לאחור",
-                        "def:internal:punch::הגנה פנימית נגד אגרוף שמאל – בעיטת מגל לאחור",
-                        "def:internal:punch::הגנה פנימית נגד אגרוף שמאל – בעיטת סטירה חיצונית",
-                        "def:internal:punch::הגנה פנימית נגד אגרוף שמאל – בעיטת מגל לפנים",
-                        "def:internal:punch::הגנה פנימית נגד אגרוף שמאל – גזיזה קדמית",
+                        "הגנה פנימית נגד אגרוף שמאל – בעיטת הגנה",
+                        "הגנה פנימית נגד אגרוף שמאל – בעיטה לצד",
+                        "הגנה פנימית נגד אגרוף שמאל – בעיטה רגילה לאחור",
+                        "הגנה פנימית נגד אגרוף שמאל – בעיטת מגל לאחור",
+                        "הגנה פנימית נגד אגרוף שמאל – בעיטת סטירה חיצונית",
+                        "הגנה פנימית נגד אגרוף שמאל – בעיטת מגל לפנים",
+                        "הגנה פנימית נגד אגרוף שמאל – גזיזה קדמית",
                         "הגנה נגד בעיטה רגילה – התחמקות בסיבוב",
                         "הגנה נגד בעיטת מגל לפנים לראש – הדיפה באמת שמאל",
                         "הגנה נגד בעיטת מגל לפנים לראש – רגל עברה מעל הראש",

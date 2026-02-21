@@ -103,7 +103,8 @@ fun SubTopicsScreen(
     Scaffold(
         topBar = {
             il.kmi.app.ui.KmiTopBar(
-                title = "תתי־נושאים – $topicDecoded",
+                title = "XXX_OLD_SUBTOPICS_XXX – $topicDecoded",
+
                 onHome = onHome,
                 showTopHome = false,
                 showTopSearch = false,
