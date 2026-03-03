@@ -37,6 +37,7 @@ import il.kmi.app.screens.ExercisesTabsScreen
 import il.kmi.app.screens.FavoritesScreen
 import il.kmi.app.screens.HomeScreen
 import il.kmi.app.screens.TopicsScreen
+import il.kmi.app.navigation.defenses.defensesNavGraph
 
 // ✅ היה private -> חייב להיות ציבורי כדי ש-TopicsNavGraph יוכל להשתמש
 const val TOPICS_PICK_TOKEN = "__TOPICS_PICK__"
@@ -78,13 +79,16 @@ fun NavGraphBuilder.homeNavGraph(
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs
 ) {
 
+    // ✅ חשוב: מחבר את ראוט ההגנות לגרף הראשי
+    // בלי זה, ניווט ל-Route.Defenses.make(...) לא יוביל לשום מסך
+    defensesNavGraph(nav)
+
     // ---- מסך הבית ----
     composable(Route.Home.route) {
         val userRegion = kmiPrefs.region.orEmpty()
         val userBranch = kmiPrefs.branch.orEmpty()
         val userGroupRaw = kmiPrefs.ageGroup.orEmpty()
         val userGroup = TrainingCatalog.normalizeGroupName(userGroupRaw)
-
         val trainingsForUser: List<il.kmi.app.training.TrainingData> =
             remember(userRegion, userBranch, userGroup) {
                 if (userRegion.isNotBlank() && userBranch.isNotBlank() && userGroup.isNotBlank()) {
@@ -259,26 +263,19 @@ fun NavGraphBuilder.homeNavGraph(
                 }
             },
 
-            // ✅ FIX (שינוי 1): הגנות -> לא Route.Defenses (לא קיים בגרף), אלא SubjectExercises (כן קיים)
+            // ✅ FIX: הגנות -> Route.Defenses (עכשיו קיים בגרף כי הוספנו defensesNavGraph(nav))
             onOpenDefenseList = { belt, kind, pick ->
                 vm.setSelectedBelt(belt)
 
-                val subjectId = "def_${kind}_${pick}" // למשל: def_internal_punch
-                val title = when (kind) {
-                    "internal" -> if (pick == "punch") "הגנות פנימיות - אגרופים" else "הגנות פנימיות - בעיטות"
-                    "external" -> if (pick == "punch") "הגנות חיצוניות - אגרופים" else "הגנות חיצוניות - בעיטות"
-                    else -> "הגנות"
-                }
+                val route = Route.Defenses.make(
+                    belt = belt,
+                    kind = kind,
+                    pick = pick
+                )
 
-                Log.e("KMI_TOPICS", "onOpenDefenseList belt=${belt.id} kind=$kind pick=$pick subjectId=$subjectId")
+                Log.e("KMI_TOPICS", "onOpenDefenseList belt=${belt.id} kind=$kind pick=$pick route='$route'")
 
-                nav.navigate(
-                    Route.SubjectExercises.make(
-                        subjectId = Uri.encode(subjectId),
-                        beltId = belt.id,
-                        title = title
-                    )
-                ) {
+                nav.navigate(route) {
                     launchSingleTop = true
                     restoreState = true
                 }

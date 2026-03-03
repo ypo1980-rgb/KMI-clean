@@ -2,22 +2,99 @@ package il.kmi.app.domain
 
 import il.kmi.shared.domain.Belt
 
-object Explanations {
-    fun get(belt: Belt, item: String): String =
-        when (belt) {
-            Belt.YELLOW -> getYellow(item)
-            Belt.ORANGE -> getOrange(item)
-            Belt.GREEN  -> getGreen(item)
-            Belt.BLUE   -> getBlue(item)
-            Belt.BROWN  -> getBrown(item)
-            Belt.BLACK  -> getBlack(item)
-            else        -> "הסבר מפורט על: $item"
+object LegacyExplanations {
+
+    private const val FALLBACK_PREFIX = "הסבר מפורט על:"
+    private fun normKey(s: String): String =
+        s.trim()
+            .trim('"')
+            .replace("\u200F", "") // RLM
+            .replace("\u200E", "") // LRM
+            .replace("\u00A0", " ") // NBSP
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace("-", "-")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    private fun stripDefTagIfAny(s: String): String {
+        val t = normKey(s)
+
+        // def:xxx::Name  -> Name
+        if (t.startsWith("def:", ignoreCase = true) && t.contains("::")) {
+            return t.substringAfter("::").trim()
         }
+
+        // Name::def:xxx  -> Name
+        if (t.contains("::def:", ignoreCase = true)) {
+            return t.substringBefore("::def:").trim()
+        }
+
+        // def_internal_* בתוך הטקסט
+        return t
+            .replace("def_internal_punches", "")
+            .replace("def_external_punches", "")
+            .replace("def_internal_kicks", "")
+            .replace("def_external_kicks", "")
+            .trim()
+    }
+
+    private fun stripCommonPrefixes(s: String): String {
+        var t = normKey(s)
+
+        // "נושא - תרגיל" -> "תרגיל"
+        if (t.contains(" - ")) t = t.substringAfter(" - ").trim()
+        if (t.contains(": ")) t = t.substringAfter(": ").trim()
+
+        // "שחרורים - X" / "שחרורים: X"
+        if (t.startsWith("שחרורים")) {
+            t = t.removePrefix("שחרורים").trim()
+            t = t.trimStart('-', ':').trim()
+        }
+
+        return t
+    }
+
+    private fun keysToTry(raw: String): List<String> {
+        val raw0 = normKey(raw)
+        val noTag = stripDefTagIfAny(raw0)
+        val noPrefix = stripCommonPrefixes(noTag)
+
+        // לפעמים מגיע עם שני מקפים/רווחים שונים — אחרי normKey זה כבר מתיישר
+        return linkedSetOf(
+            raw0,
+            noTag,
+            noPrefix
+        ).filter { it.isNotBlank() }.toList()
+    }
+
+    fun get(belt: Belt, item: String): String {
+        val tries = keysToTry(item)
+
+        for (k in tries) {
+            val r = when (belt) {
+                Belt.YELLOW -> getYellow(k)
+                Belt.ORANGE -> getOrange(k)
+                Belt.GREEN  -> getGreen(k)
+                Belt.BLUE   -> getBlue(k)
+                Belt.BROWN  -> getBrown(k)
+                Belt.BLACK  -> getBlack(k)
+                else        -> "$FALLBACK_PREFIX $k"
+            }
+
+            // אם לא נפלנו ל-default — מצאנו התאמה אמיתית
+            if (!r.startsWith(FALLBACK_PREFIX)) return r
+        }
+
+        // fallback סופי (עם הטקסט המקורי)
+        return "$FALLBACK_PREFIX $item"
+    }
 }
 
+// ✅ שים לב: הסוגר המסולסל המיותר שהיה פה הוסר כדי לא לשבור קומפילציה.
 
-    private fun getYellow(item: String): String {
-        return when (item) {
+private fun getYellow(item: String): String {
+    return when (item) {
                                     // ───── חגורה צהובה ─────
             // ───── כללי ─────
             "בלימת רכה לפנים" -> "פיסוק קל. נפילה לפנים על כפות הידיים ובלימת הגוף במרפקים כפופים. דגשים: ראש לצד, גוף ישר, ברכיים נעולות, עקבים מתוחים לאחור. אין לזרוק רגליים לאחור"

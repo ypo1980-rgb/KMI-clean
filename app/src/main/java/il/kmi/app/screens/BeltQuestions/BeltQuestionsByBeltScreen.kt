@@ -51,7 +51,13 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import il.kmi.app.ui.FloatingBeltQuickMenu
-
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 /* ------------------------------ API ציבורי למסך ------------------------------ */
 
 @Composable
@@ -134,23 +140,27 @@ internal fun BeltPangoLayout(
     val belts = remember { Belt.order.filter { it != Belt.WHITE } }
     var topicsViewMode by rememberSaveable { mutableStateOf(TopicsViewMode.BY_BELT) }
 
-    val startBelt: Belt = remember {
-        val fromVm = try { vm.selectedBelt.value } catch (_: Exception) { null }
-        if (fromVm != null) {
-            fromVm
-        } else {
-            val regId = kmiPrefs.getStringCompat("current_belt")
+    val startBelt: Belt = remember(belts, kmiPrefs) {
+
+        // ✅ קודם כל: חגורה "רשומה" מה-Preferences (זה ה-source of truth למסך)
+        val regId =
+            kmiPrefs.getStringCompat("current_belt")
                 ?: kmiPrefs.getStringCompat("belt_current")
-            val regBelt = regId?.let { Belt.fromId(it) }
 
-            val base = when {
-                regBelt == null || regBelt == Belt.WHITE -> belts.firstOrNull() ?: Belt.YELLOW
-                else -> regBelt
-            }
+        val regBelt = regId?.let { Belt.fromId(it) }
 
-            val idx = belts.indexOf(base).coerceAtLeast(0)
-            if (idx < belts.lastIndex) belts[idx + 1] else belts[idx]
+        // ✅ fallback: אם אין prefs, נשתמש ב-VM
+        val fromVm = try { vm.selectedBelt.value } catch (_: Exception) { null }
+
+        val base = when {
+            regBelt != null && regBelt != Belt.WHITE -> regBelt
+            fromVm != null && fromVm != Belt.WHITE -> fromVm
+            else -> belts.firstOrNull() ?: Belt.YELLOW
         }
+
+        // ✅ תמיד מתחילים מהחגורה "הבאה בתור" (wrap לראש הרשימה)
+        val idx = belts.indexOf(base).let { if (it < 0) 0 else it }
+        if (idx < belts.lastIndex) belts[idx + 1] else belts.first()
     }
 
     var currentIndex by remember(startBelt, belts) {
@@ -249,18 +259,14 @@ internal fun BeltPangoLayout(
                 .background(backgroundBrush)
                 .statusBarsPaddingCompat()
         ) {
-            val topColumnModifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .let { base ->
-                    if (topicsViewMode == TopicsViewMode.BY_TOPIC) {
-                        base.verticalScroll(rememberScrollState())
-                    } else base
-                }
+            // ✅ NEW: הגלילה רק לתוכן שמתחת לטאבים (בעיקר במצב BY_TOPIC)
+            val contentScroll = rememberScrollState()
 
             Column(
-                modifier = topColumnModifier,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 TopicsViewModeToggle(
@@ -275,50 +281,57 @@ internal fun BeltPangoLayout(
 
                 Spacer(Modifier.height(8.dp))
 
-                when (topicsViewMode) {
-                    TopicsViewMode.BY_BELT -> {
-                        TopicsCardForBelt(
-                            belt = currentBelt,
+                // ✅ רק התוכן מתחת לטאבים יגלול (ולא הטאבים)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .let { base ->
+                            if (topicsViewMode == TopicsViewMode.BY_TOPIC) {
+                                base.verticalScroll(contentScroll)
+                            } else base
+                        }
+                ) {
+                    when (topicsViewMode) {
+                        TopicsViewMode.BY_BELT -> {
+                            TopicsCardForBelt(
+                                belt = currentBelt,
 
-                            // ✅ חובה: זה פותח את כל הנושא (במסך החדש/הנכון שלך)
-                            onOpenTopic = onOpenTopic,
+                                // ✅ חובה: זה פותח את כל הנושא (במסך החדש/הנכון שלך)
+                                onOpenTopic = onOpenTopic,
 
-                            onOpenSubTopic = onOpenSubTopic,
-                            onOpenDefenseMenu = onOpenDefenseMenu,
-                            haptic = haptic,
-                            clickSound = clickSound
-                        )
-                    }
+                                onOpenSubTopic = onOpenSubTopic,
+                                onOpenDefenseMenu = onOpenDefenseMenu,
+                                haptic = haptic,
+                                clickSound = clickSound
+                            )
+                        }
 
-                    TopicsViewMode.BY_TOPIC -> {
-                        TopicsBySubjectCard(
-                            currentBelt = currentBelt,
+                        TopicsViewMode.BY_TOPIC -> {
+                            TopicsBySubjectCard(
+                                currentBelt = currentBelt,
 
-                            onSubjectClick = { belt, subject ->
-                                val best =
-                                    if (itemsForSubject(belt, subject).isNotEmpty()) belt
-                                    else bestBeltForSubject(subject)
+                                onSubjectClick = { belt, subject ->
+                                    val best =
+                                        if (itemsForSubject(belt, subject).isNotEmpty()) belt
+                                        else bestBeltForSubject(subject)
 
-                                vm.setSelectedBelt(best)
-                                onOpenSubject(subject)
-                            },
+                                    vm.setSelectedBelt(best)
+                                    onOpenSubject(subject)
+                                },
 
-                            onOpenTopic = { b, topicTitle ->
-                                vm.setSelectedBelt(b)
-                                onOpenTopic(b, topicTitle)
-                            },
+                                onOpenTopic = { b, topicTitle ->
+                                    vm.setSelectedBelt(b)
+                                    onOpenTopic(b, topicTitle)
+                                },
 
-                            // ✅ זה החיבור שגרם ל"הגנות פנימיות/חיצוניות" לא לעשות כלום
-                            onOpenDefenseList = { belt, kind, pick ->
-                                // פה אתה ממפה למסך/route שכבר קיים אצלך:
-                                // onOpenDefenseMenu: (Belt, String) -> Unit
-                                onOpenDefenseMenu(belt, "$kind:$pick")
-                            }
-                        )
+                                onOpenDefenseList = { belt, kind, pick ->
+                                    onOpenDefenseMenu(belt, "$kind:$pick")
+                                }
+                            )
+                        }
                     }
                 }
             }
-
 
             // ✅ הקרוסלה רק במצב "לפי חגורה"
             if (topicsViewMode == TopicsViewMode.BY_BELT) {
@@ -356,7 +369,6 @@ internal fun BeltPangoLayout(
             }
 
             // ✅ מרימים את הכפתור הצף כדי שלא יישב על העיגולים בתחתית
-// במצב "לפי חגורה" צריך יותר מרווח בגלל הקרוסלה למטה
             val quickMenuBottomPad =
                 if (topicsViewMode == TopicsViewMode.BY_BELT) 72.dp else 46.dp
 
@@ -867,29 +879,121 @@ private fun BeltArcPicker(
 
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                        .border(BorderStroke(3.dp, outlineColor), CircleShape)
-                        .background(circleColor),
+                        .fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
+                    // ✅ רק לעיגול המרכזי: טבעת צבעונית מסתובבת מסביב
                     if (isCenter) {
-                        val clean = remember(belt.heb) {
-                            val s = belt.heb.trim()
-                            if (s.startsWith("חגורה")) s.removePrefix("חגורה").trim() else s
-                        }
-                        Text(
-                            text = "חגורה\n$clean",
-                            color = if (belt.color.luminance() < 0.5f) Color.White else Color.Black,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = MaterialTheme.typography.bodyMedium.lineHeight,
-                            modifier = Modifier.padding(8.dp)
+                        RotatingOrbitRing(
+                            modifier = Modifier.fillMaxSize(),
+                            base = circleColor
                         )
+                    }
+
+                    // בתוך BeltArcPicker(...) באזור של ה-Box שמצייר את העיגול
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // ✅ רק לעיגול המרכזי: טבעת צבעונית מסתובבת מסביב
+                        if (isCenter) {
+                            RotatingOrbitRing(
+                                modifier = Modifier.fillMaxSize(),
+                                base = circleColor
+                            )
+                        }
+
+                        // ✅ כדי שהטבעת לא “תכוסה” ע״י העיגול, מכניסים את העיגול פנימה קצת רק במרכז
+                        val ringPad = if (isCenter) 8.dp else 0.dp
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(ringPad)
+                                .clip(CircleShape)
+                                .border(BorderStroke(3.dp, outlineColor), CircleShape)
+                                .background(circleColor),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isCenter) {
+                                val clean = remember(belt.heb) {
+                                    val s = belt.heb.trim()
+                                    if (s.startsWith("חגורה")) s.removePrefix("חגורה").trim() else s
+                                }
+                                Text(
+                                    text = "חגורה\n$clean",
+                                    color = if (belt.color.luminance() < 0.5f) Color.White else Color.Black,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Center,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = MaterialTheme.typography.bodyMedium.lineHeight,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RotatingOrbitRing(
+    modifier: Modifier = Modifier,
+    base: Color
+) {
+    val ringStroke = 7.dp
+    val gapStroke = 7.dp
+
+    val inf = rememberInfiniteTransition(label = "ring")
+    val angle by inf.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1600, easing = LinearEasing)
+        ),
+        label = "ring-angle"
+    )
+
+    val sweep = Brush.sweepGradient(
+        colors = listOf(
+            Color(0xFF22D3EE), // cyan
+            Color(0xFFA78BFA), // purple
+            Color(0xFFF472B6), // pink
+            Color(0xFFFBBF24), // amber
+            Color(0xFF22D3EE)
+        )
+    )
+
+    Canvas(modifier = modifier) {
+        val strokePx = ringStroke.toPx()
+        val inset = strokePx / 2f
+
+        // שכבת "צל" דקה כדי להיראות יותר מודרני
+        drawArc(
+            color = base.copy(alpha = 0.16f),
+            startAngle = 0f,
+            sweepAngle = 360f,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+            size = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2),
+            style = Stroke(width = gapStroke.toPx())
+        )
+
+        // הטבעת המסתובבת (צבעונית)
+        rotate(degrees = angle) {
+            drawArc(
+                brush = sweep,
+                startAngle = 0f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+                size = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2),
+                style = Stroke(width = strokePx, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            )
         }
     }
 }

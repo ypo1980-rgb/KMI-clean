@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,6 +37,9 @@ import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.SubjectTopic as SharedSubjectTopic
 import il.kmi.shared.domain.content.SubjectItemsResolver
+import androidx.compose.ui.unit.LayoutDirection
+import il.kmi.shared.domain.content.HardSectionsCatalog
+import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
 
 private fun toSharedBeltOrNull(rawId: String?): Belt? {
     val s = rawId?.trim().orEmpty()
@@ -163,6 +167,15 @@ fun SubjectExercisesScreen(
         }
     }
 
+    // ✅ NEW: תת־בחירה ל"עבודת ידיים" (2 קבוצות בלבד)
+    fun detectHandsPickFromTitle(title: String): String? {
+        return when {
+            title.contains("מרפק") -> "מכות מרפק"
+            title.contains("מכות יד") || title.contains("ידיים") -> "מכות יד"
+            else -> null
+        }
+    }
+
     data class ReleasesPickFilter(
         val includeAny: List<String>,
         val requireAll: List<String>,
@@ -203,20 +216,62 @@ fun SubjectExercisesScreen(
         }
     }
 
-    // ✅ NEW: נושא אפקטיבי לתצוגה – עבור releases בלבד
+    // ✅ פילטר ל"עבודת ידיים" לפי הבחירה (מכות יד / מכות מרפק)
+    fun handsFilterForPick(pick: String): ReleasesPickFilter {
+        return when (pick) {
+            "מכות מרפק" -> ReleasesPickFilter(
+                includeAny = listOf("מרפק"),
+                requireAll = emptyList(),
+                excludeAny = emptyList()
+            )
+
+            "מכות יד" -> ReleasesPickFilter(
+                // ✅ תופס גם אגרופים/פיסת יד/מגל/סנוקרת/פטיש/גב יד וכו'
+                includeAny = listOf("אגרוף", "פיסת", "מגל", "סנוקרת", "פטיש", "גב יד", "מכת"),
+                requireAll = emptyList(),
+                // ✅ שלא יתערבבו מרפקים
+                excludeAny = listOf("מרפק")
+            )
+
+            else -> ReleasesPickFilter(
+                includeAny = listOf(pick),
+                requireAll = emptyList(),
+                excludeAny = emptyList()
+            )
+        }
+    }
+
+    // ✅ NEW: נושא אפקטיבי לתצוגה – עבור releases + hands_all
     val effectiveAppSubject: AppSubjectTopic = remember(appSubject, screenTitleResolved) {
-        if (appSubject.id != "releases") return@remember appSubject
 
-        val pick = detectReleasesPickFromTitle(screenTitleResolved) ?: return@remember appSubject
-        val f = releasesFilterForPick(pick)
+        // ----- releases -----
+        if (appSubject.id == "releases") {
+            val pick = detectReleasesPickFromTitle(screenTitleResolved) ?: return@remember appSubject
+            val f = releasesFilterForPick(pick)
 
-        appSubject.copy(
-            // אפשר להשאיר subTopicHint ריק – אנחנו מסננים ב-include/require/exclude
-            subTopicHint = null, // ✅ חשוב: אחרת זה מפיל הכל כי "שחרור מחניקות" לא מופיע בשם התרגיל
-            includeItemKeywords = f.includeAny,
-            requireAllItemKeywords = f.requireAll,
-            excludeItemKeywords = f.excludeAny
-        )
+            return@remember appSubject.copy(
+                // אפשר להשאיר subTopicHint ריק – אנחנו מסננים ב-include/require/exclude
+                subTopicHint = null, // ✅ חשוב: אחרת זה מפיל הכל כי "שחרור מחניקות" לא מופיע בשם התרגיל
+                includeItemKeywords = f.includeAny,
+                requireAllItemKeywords = f.requireAll,
+                excludeItemKeywords = f.excludeAny
+            )
+        }
+
+        // ----- hands_all -----
+        if (appSubject.id == "hands_all") {
+            val pick = detectHandsPickFromTitle(screenTitleResolved) ?: return@remember appSubject
+            val f = handsFilterForPick(pick)
+
+            return@remember appSubject.copy(
+                subTopicHint = null, // ✅ לא לסמוך על subTopicHint כי זה שובר כתומה/ירוקה
+                includeItemKeywords = f.includeAny,
+                requireAllItemKeywords = f.requireAll,
+                excludeItemKeywords = f.excludeAny
+            )
+        }
+
+        appSubject
     }
 
     // (belts) המרה מרשימת החגורות ב־app לרשימת חגורות ב־shared ✅
@@ -291,8 +346,10 @@ fun SubjectExercisesScreen(
         }
     }
 
-    // נתוני שורה: belt + topic + rawItem (לניווט) + displayName + canonicalId
-    data class RowData(
+
+
+            // נתוני שורה: belt + topic + rawItem (לניווט) + displayName + canonicalId
+            data class RowData(
         val belt: Belt,
         val topic: String,
         val rawItem: String,
@@ -301,45 +358,102 @@ fun SubjectExercisesScreen(
     )
 
     // shared resolver: מקור אמת ✅
-    val rows: List<RowData> = remember(subjectId, beltsForUi, sharedSubject, effectiveAppSubject) {
-        beltsForUi.flatMap { belt ->
-            val sections = SubjectItemsResolver.resolveBySubject(
-                belt = belt,
-                subject = sharedSubject
-            )
+    val rows: List<RowData> = remember(subjectId, beltsForUi, sharedSubject, effectiveAppSubject, screenTitleResolved) {
 
-            sections.flatMap { section ->
-                val sectionTitle = section.title // יכול להיות null
+        // ✅ SPECIAL-CASE: releases מגיע *רק* מ-HardSectionsCatalog (לא מ-ContentRepo)
+        if (effectiveAppSubject.id == "releases") {
 
-                // ✅ NEW: אכיפה של include/require/exclude/subTopicHint על כל פריט
-                val filteredItems = section.items.filter { ui ->
-                    val rawTitle = buildString {
-                        // נותן למנוע גם את ה-canonicalId (לעיתים מכיל def:...) וגם את ה-rawItem וגם את השם לתצוגה
-                        append(ui.canonicalId)
-                        append("::")
-                        append(ui.rawItem)
-                        append("::")
-                        append(ui.displayName)
-                    }
+            // בוחרים איזה Section להציג לפי הכותרת (כמו במסך הבחירה)
+            val wantedSectionTitle: String? = run {
+                val t = screenTitleResolved
 
-                    TopicsBySubjectRegistry.run {
-                        effectiveAppSubject.matchesItem(
-                            itemTitle = rawTitle,
-                            subTopicTitle = sectionTitle
-                        )
-                    }
+                when {
+                    t.contains("חניק") -> "שחרור מחניקות"
+                    t.contains("חביק") || t.contains("חיבוק") -> "שחרור מחביקות גוף"
+
+                    // ✅ זה הסקשן הראשון, והוא כולל גם ידיים וגם שיער/חולצה
+                    t.contains("תפיס") || t.contains("אחיז") || t.contains("שיער") || t.contains("חולצ") ->
+                        "שחרור מתפיסות ידיים / שיער / חולצה"
+
+                    else -> null
                 }
+            }
 
-                filteredItems.map { ui ->
+            val sectionsToUse = HardSectionsCatalog.releases
+                .filter { sec -> wantedSectionTitle == null || sec.title.trim() == wantedSectionTitle }
+
+            val order = HardSectionsCatalog.beltOrder
+
+            order.flatMap { belt ->
+                val itemsForBelt = sectionsToUse
+                    .flatMap { sec -> sec.itemsFor(belt) }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+
+                itemsForBelt.map { raw ->
                     RowData(
                         belt = belt,
-                        topic = ui.topicTitle,
-                        rawItem = ui.rawItem,
-                        displayItem = ui.displayName,
-                        canonicalId = ui.canonicalId
+                        topic = "שחרורים",
+                        rawItem = raw,
+                        displayItem = stripSubjectPrefix(
+                            subjectTitle = effectiveAppSubject.titleHeb,
+                            itemTitle = raw
+                        ),
+                        canonicalId = "releases::${belt.id}::${wantedSectionTitle ?: "ALL"}::${raw.trim()}"
                     )
                 }
             }
+        } else {
+
+            // ✅ כל שאר הנושאים נשארים דרך resolver (ContentRepo)
+            beltsForUi
+                .flatMap { belt ->
+                    val sections = SubjectItemsResolver.resolveBySubject(
+                        belt = belt,
+                        subject = sharedSubject
+                    )
+
+                    sections.flatMap { section ->
+                        val sectionTitle = section.title // יכול להיות null
+
+                        // ✅ הסרה מוחלטת של section "כללי"
+                        if (sectionTitle?.trim() == "כללי") return@flatMap emptyList()
+
+                        // ✅ NEW: אכיפה של include/require/exclude/subTopicHint על כל פריט
+                        val filteredItems = section.items.filter { ui ->
+                            val rawTitle = buildString {
+                                append(ui.canonicalId)
+                                append("::")
+                                append(ui.rawItem)
+                                append("::")
+                                append(ui.displayName)
+                            }
+
+                            TopicsBySubjectRegistry.run {
+                                effectiveAppSubject.matchesItem(
+                                    itemTitle = rawTitle,
+                                    subTopicTitle = sectionTitle
+                                )
+                            }
+                        }
+
+                        filteredItems.map { ui ->
+                            val cleanedDisplay = stripSubjectPrefix(
+                                subjectTitle = effectiveAppSubject.titleHeb,
+                                itemTitle = ui.displayName
+                            )
+
+                            RowData(
+                                belt = belt,
+                                topic = ui.topicTitle,
+                                rawItem = ui.rawItem,
+                                displayItem = cleanedDisplay,
+                                canonicalId = ui.canonicalId
+                            )
+                        }
+                    }
+                }
+                .filterNot { it.topic.trim() == "כללי" }
         }
     }
 
@@ -490,7 +604,7 @@ fun SubjectExercisesScreen(
                                     topic = row.topic,
                                     item = row.displayItem,
                                     isFavorite = row.canonicalId in favIds,
-                                    showMeta = true,
+                                    showMeta = (effectiveAppSubject.id != "releases"),
                                     onToggleFavorite = {
                                         val next = favIds.toMutableSet()
                                         if (row.canonicalId in next) next.remove(row.canonicalId) else next.add(row.canonicalId)
@@ -531,7 +645,7 @@ fun SubjectExercisesScreen(
                                                 topic = row.topic,
                                                 item = row.displayItem,
                                                 isFavorite = row.canonicalId in favIds,
-                                                showMeta = true,
+                                                showMeta = (effectiveAppSubject.id != "releases"),
                                                 onToggleFavorite = {
                                                     val next = favIds.toMutableSet()
                                                     if (row.canonicalId in next) next.remove(row.canonicalId) else next.add(row.canonicalId)
@@ -556,11 +670,11 @@ fun SubjectExercisesScreen(
                                         }
                                     }
                                 }
-                            }
+                            }                            }
                         }
                     }
                 }
-            }
+
 
             // ✅ דיאלוג נשאר אותו דבר (הוא מתחת ל-Column, אין שינוי)
             selectedRow?.let { row ->
@@ -703,6 +817,28 @@ private fun TopFiltersBarModern(
             )
         }
     }
+}
+
+private fun stripSubjectPrefix(subjectTitle: String, itemTitle: String): String {
+    val subj = subjectTitle.trim()
+    var s = itemTitle.trim()
+
+    // 1) אם באמת מתחיל בשם הנושא (למשל "בעיטות - ...")
+    if (subj.isNotBlank() && s.startsWith(subj)) {
+        s = s.removePrefix(subj).trim()
+        s = s.trimStart('-', '–', '—', ':').trim()
+        return s
+    }
+
+    // ✅ לשחרורים: אם מופיע "שחרורים" (רבים) בתחילת טקסט – ננקה רק אותו.
+    // ⚠️ לא מנקים "שחרור" (יחיד) כי זה חלק מהשם של התרגיל.
+    if (s.startsWith("שחרורים")) {
+        s = s.removePrefix("שחרורים").trim()
+        s = s.trimStart('-', '–', '—', ':').trim()
+        return s
+    }
+
+    return s
 }
 
 /** ✅ זה מה שחסר לך ולכן יש Unresolved reference */
@@ -849,7 +985,7 @@ private fun BeltSectionCardModern(
 /* ───────── שורת תרגיל ───────── */
 
 @Composable
-private fun ExerciseRowCardModern( // ✅ RENAME (was ExerciseRowCard)
+private fun ExerciseRowCardModern(
     belt: Belt,
     topic: String,
     item: String,
@@ -866,59 +1002,73 @@ private fun ExerciseRowCardModern( // ✅ RENAME (was ExerciseRowCard)
         tonalElevation = 1.dp,
         border = BorderStroke(1.dp, belt.color.copy(alpha = 0.35f))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onClick() }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
+        // ✅ כופה LTR על השורה עצמה כדי שהפריט הראשון באמת יהיה בשמאל
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+
+            Row(
                 modifier = Modifier
-                    .width(4.dp)
-                    .heightIn(min = 40.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(belt.color.copy(alpha = 0.9f))
-            )
-
-            Spacer(Modifier.width(10.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.End
+                    .fillMaxWidth()
+                    .clickable { onClick() }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = item,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
-                )
 
-                if (showMeta) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        text = topic,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
+                // ✅ כוכבית בצד שמאל (ראשון בשורה)
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                        contentDescription = if (isFavorite) "הסר ממועדפים" else "הוסף למועדפים",
+                        tint = if (isFavorite) Color(0xFFFFC107)
+                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                     )
                 }
-            }
 
-            Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(8.dp))
 
-            IconButton(onClick = onToggleFavorite) {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                    contentDescription = if (isFavorite) "הסר ממועדפים" else "הוסף למועדפים",
-                    tint = if (isFavorite) Color(0xFFFFC107)
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                // ✅ תוכן בעברית: רק הטקסט עצמו יהיה RTL ומיושר לימין
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                        Text(
+                            text = item,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (showMeta) {
+                            Spacer(Modifier.height(3.dp))
+
+                            val meta = topic.trim()
+                            if (meta.isNotBlank() && meta != "כללי" && meta != "שחרורים") {
+                                Text(
+                                    text = meta,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                // ✅ הקו הצבעוני בצד ימין (אחרון בשורה)
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .heightIn(min = 40.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(belt.color.copy(alpha = 0.9f))
                 )
             }
         }

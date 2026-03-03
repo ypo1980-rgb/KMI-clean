@@ -14,7 +14,6 @@ import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.exercises.TopicRepoExercisesScreen
-import il.kmi.app.screens.BeltQuestions.BeltQuestionsByBeltScreen
 import il.kmi.app.screens.BeltQuestions.BeltQuestionsByTopicScreen
 import il.kmi.shared.domain.Belt
 
@@ -71,26 +70,17 @@ fun NavGraphBuilder.topicsNavGraph(
             onOpenDefenseList = { belt, kind, pick ->
                 vm.setSelectedBelt(belt)
 
-                val title = when (kind) {
-                    "internal" -> if (pick == "punch") "הגנות פנימיות - אגרופים" else "הגנות פנימיות - בעיטות"
-                    "external" -> if (pick == "punch") "הגנות חיצוניות - אגרופים" else "הגנות חיצוניות - בעיטות"
-                    else -> "הגנות"
-                }
-
-                // subjectIdים לבחירה שלך – העיקר שיהיו תואמים למה שהמסך יודע לפתוח
-                val subjectId = when (kind) {
-                    "internal" -> if (pick == "punch") "def_internal_punch" else "def_internal_kick"
-                    "external" -> if (pick == "punch") "def_external_punch" else "def_external_kick"
-                    else -> "defense"
-                }
-
-                val route = Route.SubjectExercises.make(
-                    subjectId = Uri.encode(subjectId),
-                    beltId = belt.id,
-                    title = title
+                // ✅ ניווט למסך ההגנות הייעודי (המסך שיודע לפלח/להציג נכון)
+                val route = Route.Defenses.make(
+                    belt = belt,
+                    kind = kind,   // "internal" / "external" / "all" / וכו' (כמו שאתה שולח)
+                    pick = pick    // "punch" / "kick" / "kick:straight_groin" / וכו'
                 )
 
-                Log.e("KMI_TOPICS", "onOpenDefenseList belt=${belt.id} kind=$kind pick=$pick route='$route'")
+                Log.e(
+                    "KMI_TOPICS",
+                    "onOpenDefenseList belt=${belt.id} kind=$kind pick=$pick route='$route'"
+                )
 
                 nav.navigate(route) {
                     launchSingleTop = true

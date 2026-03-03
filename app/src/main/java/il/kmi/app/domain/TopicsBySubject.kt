@@ -1,7 +1,11 @@
 package il.kmi.app.domain
 
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.content.HardSectionsCatalog
+import il.kmi.shared.domain.defense.DefenseKind as SharedDefenseKind
 
+// ✅ Bridge זמני – כל הקוד באנדרואיד ימשיך לעבוד
+typealias DefenseKind = SharedDefenseKind
 /**
  * נושא חוצה־חגורות (למשל "הגנות פנימיות", "בעיטות", "הגנות סכין" וכו').
  *
@@ -11,7 +15,7 @@ import il.kmi.shared.domain.Belt
  * @param belts       באילו חגורות הנושא הזה קיים
  * @param topicsByBelt מיפוי חגורה -> רשימת נושאים (strings) כפי שהם מופיעים כבר ב־ContentRepo / SubTopicRegistry
  */
-enum class DefenseKind { INTERNAL, EXTERNAL, NONE }
+
 
 data class SubjectTopic(
     val id: String,
@@ -44,76 +48,54 @@ data class SubjectTopic(
  */
 object TopicsBySubjectRegistry {
 
+    // ✅ מקור אמת לשחרורים: רק מהתרגילים הקשיחים (HardSectionsCatalog.releases)
+    //    ככה לא צריך לתחזק belts ידנית בעוד קובץ.
+    private val releasesBelts: List<Belt> = run {
+        val ordered = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK)
+        val used = linkedSetOf<Belt>()
+        HardSectionsCatalog.releases.forEach { section ->
+            section.beltGroups.forEach { bg ->
+                if (bg.items.isNotEmpty()) used += bg.belt
+            }
+        }
+        ordered.filter { it in used }
+    }
+
+    // ✅ map אוטומטי: חגורה -> "שחרורים" רק לחגורות שבאמת קיימות בקובץ הקשיח
+    private val releasesTopicsByBelt: Map<Belt, List<String>> =
+        releasesBelts.associateWith { listOf("שחרורים") }
+
     // 🔹 כאן שמים את כל הנושאים החוצי־חגורות
     val all: List<SubjectTopic> = listOf(
+
         // ================== עבודת ידיים – (כללי) ==================
         SubjectTopic(
             id = "hands_all",
             titleHeb = "עבודת ידיים",
-            description = "עבודת אגרופים ומכות יד – ישרים, מגל, פיסת יד ועוד.",
+            description = "מכות יד + מכות מרפק",
             belts = listOf(
                 Belt.YELLOW,
-                Belt.ORANGE
+                Belt.ORANGE,
+                Belt.GREEN
             ),
             topicsByBelt = mapOf(
-                Belt.YELLOW to listOf("עבודת ידיים"),
-                Belt.ORANGE to listOf("עבודת ידיים")
+                // ✅ בפועל בצהוב/כתום זה "עבודת ידיים" (כמו שהלוג שלך הראה ב-subjectId='punches')
+                Belt.YELLOW to listOf("עבודת ידיים", "מכות ידיים", "מכות יד"),
+                Belt.ORANGE to listOf("עבודת ידיים", "מכות יד", "מכות ידיים"),
+
+                // ✅ בירוק זה "מכות מרפק"
+                Belt.GREEN to listOf("מכות מרפק")
+            ),
+            subTopics = listOf(
+                "מכות יד",
+                "מכות מרפק"
             )
-        ),
-
-        // ================== עבודת ידיים – מרפק ==================
-        SubjectTopic(
-            id = "hands_elbow",
-            titleHeb = "עבודת ידיים - מרפק",
-            description = "תרגילי מרפק לפי תת־נושא.",
-            belts = listOf(Belt.YELLOW),
-            topicsByBelt = mapOf(
-                Belt.YELLOW to listOf("עבודת ידיים")
-            ),
-            subTopicHint = "מרפק"
-        ),
-
-        // ================== עבודת ידיים – פיסת יד ==================
-        SubjectTopic(
-            id = "hands_palm",
-            titleHeb = "עבודת ידיים - פיסת יד",
-            description = "תרגילי פיסת יד לפי תת־נושא.",
-            belts = listOf(Belt.YELLOW),
-            topicsByBelt = mapOf(
-                Belt.YELLOW to listOf("עבודת ידיים")
-            ),
-            subTopicHint = "פיסת יד"
-        ),
-
-        // ================== עבודת ידיים – אגרופים ישרים ==================
-        SubjectTopic(
-            id = "hands_straight_punches",
-            titleHeb = "עבודת ידיים - אגרופים ישרים",
-            description = "אגרופים ישרים לפי תת־נושא.",
-            belts = listOf(Belt.YELLOW),
-            topicsByBelt = mapOf(
-                Belt.YELLOW to listOf("עבודת ידיים")
-            ),
-            subTopicHint = "אגרופים ישרים"
-        ),
-
-        // ================== עבודת ידיים – מגל + סנוקרת ==================
-        SubjectTopic(
-            id = "hands_hook_uppercut",
-            titleHeb = "עבודת ידיים - מגל וסנוקרת",
-            description = "מגל וסנוקרת לפי תת־נושא.",
-            belts = listOf(Belt.YELLOW),
-            topicsByBelt = mapOf(
-                Belt.YELLOW to listOf("עבודת ידיים")
-            ),
-            subTopicHint = "מגל + סנוקרת" // ✅ בדיוק כמו ב־ContentRepo
         ),
 
         // ================== בלימות וגלגולים ==================
         SubjectTopic(
             id = "rolls_breakfalls",
             titleHeb = "בלימות וגלגולים",
-            description = "בסיסיים ומתקדמים",
             belts = listOf(
                 Belt.YELLOW,
                 Belt.ORANGE,
@@ -121,15 +103,11 @@ object TopicsBySubjectRegistry {
                 Belt.BLUE
             ),
             topicsByBelt = mapOf(
-                // ✅ בצהובה/כתומה זה יושב תחת "כללי"
                 Belt.YELLOW to listOf("כללי"),
                 Belt.ORANGE to listOf("כללי"),
-
-                // ✅ בירוקה/כחולה זה באמת topic נפרד
-                Belt.GREEN  to listOf("בלימות וגלגולים"),
-                Belt.BLUE   to listOf("בלימות וגלגולים")
+                Belt.GREEN to listOf("בלימות וגלגולים"),
+                Belt.BLUE to listOf("בלימות וגלגולים")
             ),
-            // ✅ מסנן רק בלימות/גלגולים מתוך "כללי"
             includeItemKeywords = listOf("בלימ", "גלגול")
         ),
 
@@ -142,10 +120,10 @@ object TopicsBySubjectRegistry {
             topicsByBelt = mapOf(
                 Belt.YELLOW to listOf("הגנות"),
                 Belt.ORANGE to listOf("הגנות"),
-                Belt.GREEN  to listOf("הגנות"),
-                Belt.BLUE   to listOf("הגנות"),
-                Belt.BROWN  to listOf("הגנות"),
-                Belt.BLACK  to listOf("הגנות")
+                Belt.GREEN to listOf("הגנות"),
+                Belt.BLUE to listOf("הגנות"),
+                Belt.BROWN to listOf("הגנות"),
+                Belt.BLACK to listOf("הגנות")
             ),
             // ✅ AND: חובה לתפוס את התגית (עובד גם עם def_internal_punches וגם def:internal:punch)
             requireAllItemKeywords = listOf("def:internal:punch")
@@ -160,10 +138,10 @@ object TopicsBySubjectRegistry {
             topicsByBelt = mapOf(
                 Belt.YELLOW to listOf("הגנות"),
                 Belt.ORANGE to listOf("הגנות"),
-                Belt.GREEN  to listOf("הגנות"),
-                Belt.BLUE   to listOf("הגנות"),
-                Belt.BROWN  to listOf("הגנות"),
-                Belt.BLACK  to listOf("הגנות")
+                Belt.GREEN to listOf("הגנות"),
+                Belt.BLUE to listOf("הגנות"),
+                Belt.BROWN to listOf("הגנות"),
+                Belt.BLACK to listOf("הגנות")
             ),
             requireAllItemKeywords = listOf("def:internal:kick")
         ),
@@ -177,10 +155,10 @@ object TopicsBySubjectRegistry {
             topicsByBelt = mapOf(
                 Belt.YELLOW to listOf("הגנות"),
                 Belt.ORANGE to listOf("הגנות"),
-                Belt.GREEN  to listOf("הגנות"),
-                Belt.BLUE   to listOf("הגנות"),
-                Belt.BROWN  to listOf("הגנות"),
-                Belt.BLACK  to listOf("הגנות")
+                Belt.GREEN to listOf("הגנות"),
+                Belt.BLUE to listOf("הגנות"),
+                Belt.BROWN to listOf("הגנות"),
+                Belt.BLACK to listOf("הגנות")
             ),
             requireAllItemKeywords = listOf("def:external:punch")
         ),
@@ -194,10 +172,10 @@ object TopicsBySubjectRegistry {
             topicsByBelt = mapOf(
                 Belt.YELLOW to listOf("הגנות"),
                 Belt.ORANGE to listOf("הגנות"),
-                Belt.GREEN  to listOf("הגנות"),
-                Belt.BLUE   to listOf("הגנות"),
-                Belt.BROWN  to listOf("הגנות"),
-                Belt.BLACK  to listOf("הגנות")
+                Belt.GREEN to listOf("הגנות"),
+                Belt.BLUE to listOf("הגנות"),
+                Belt.BROWN to listOf("הגנות"),
+                Belt.BLACK to listOf("הגנות")
             ),
             requireAllItemKeywords = listOf("def:external:kick")
         ),
@@ -216,54 +194,22 @@ object TopicsBySubjectRegistry {
                 Belt.BLACK
             ),
             topicsByBelt = mapOf(
-                Belt.YELLOW to listOf(
-                    "בעיטות"
-                ),
-                Belt.ORANGE to listOf(
-                    "בעיטות"
-                ),
-                Belt.GREEN to listOf(
-                    "בעיטות"
-                ),
-                Belt.BLUE to listOf(
-                    "בעיטות"
-                ),
-                Belt.BROWN to listOf(
-                    "בעיטות"
-                ),
-                Belt.BLACK to listOf(
-                    "בעיטות"
-                )
+                Belt.YELLOW to listOf("בעיטות"),
+                Belt.ORANGE to listOf("בעיטות"),
+                Belt.GREEN to listOf("בעיטות"),
+                Belt.BLUE to listOf("בעיטות"),
+                Belt.BROWN to listOf("בעיטות"),
+                Belt.BLACK to listOf("בעיטות")
             )
         ),
-
-        // ================== חביקות גוף ==================
-                // ❌ הוסר: "חביקות גוף" כקטגוריה ראשית
-                // ✅ עבר לתת־נושא תחת "שחרורים" (ראה בהמשך)
 
         // ================== שחרורים ==================
         SubjectTopic(
             id = "releases",
             titleHeb = "שחרורים",
             description = "מתפיסות ידיים, מחניקות ומחביקות",
-            belts = listOf(
-                Belt.YELLOW,
-                Belt.ORANGE,
-                Belt.GREEN,
-                Belt.BLUE,
-                Belt.BROWN,
-                Belt.BLACK
-            ),
-            topicsByBelt = mapOf(
-                Belt.YELLOW to listOf("שחרורים"),
-                Belt.ORANGE to listOf("שחרורים"),
-                Belt.GREEN  to listOf("שחרורים"),
-                Belt.BLUE   to listOf("שחרורים"),
-                Belt.BROWN  to listOf("שחרורים"),
-                Belt.BLACK  to listOf("שחרורים")
-            ),
-
-            // ✅ נשארים כל תתי־הנושאים הקיימים (בלי "שחרור מחביקות גוף" כי זה נושא ילד)
+            belts = releasesBelts,
+            topicsByBelt = releasesTopicsByBelt,
             subTopics = listOf(
                 "שחרור מתפיסות ידיים",
                 "שחרור מחניקות",
@@ -272,29 +218,53 @@ object TopicsBySubjectRegistry {
             )
         ),
 
-// ✅ NEW: תת־נושא "חביקות גוף" כילד של "שחרורים"
+        // ✅ ילד: שחרור מתפיסות ידיים
+        SubjectTopic(
+            id = "releases_hand_grabs",
+            parentId = "releases",
+            titleHeb = "שחרור מתפיסות ידיים",
+            description = "אחיזות יד/שורש כף יד/שתי ידיים",
+            belts = releasesBelts,
+            topicsByBelt = releasesTopicsByBelt,
+            includeItemKeywords = listOf("תפיס", "אחיז", "אוחז"),
+            requireAllItemKeywords = listOf("יד"),
+            excludeItemKeywords = listOf("חניק", "חביק", "חולצ", "שיער", "אקדח", "סכין", "מקל")
+        ),
+
+        // ✅ ילד: שחרור מחניקות
+        SubjectTopic(
+            id = "releases_chokes",
+            parentId = "releases",
+            titleHeb = "שחרור מחניקות",
+            description = "חניקות צוואר מלפנים/מאחור",
+            belts = releasesBelts,
+            topicsByBelt = releasesTopicsByBelt,
+            includeItemKeywords = listOf("חניק", "חניקה", "חניקות", "צוואר"),
+            excludeItemKeywords = listOf("תפיס", "אחיז", "חביק", "חולצ", "שיער")
+        ),
+
+        // ✅ ילד: שחרור מחביקות גוף
         SubjectTopic(
             id = "releases_body_hugs",
             parentId = "releases",
             titleHeb = "שחרור מחביקות גוף",
             description = "מלפנים/מאחור, ידיים חופשיות/נעולות",
-            belts = listOf(
-                Belt.YELLOW,
-                Belt.ORANGE,
-                Belt.GREEN,
-                Belt.BLUE,
-                Belt.BROWN,
-                Belt.BLACK
-            ),
-            topicsByBelt = mapOf(
-                Belt.YELLOW to listOf("שחרורים"),
-                Belt.ORANGE to listOf("שחרורים"),
-                Belt.GREEN  to listOf("שחרורים"),
-                Belt.BLUE   to listOf("שחרורים"),
-                Belt.BROWN  to listOf("שחרורים"),
-                Belt.BLACK  to listOf("שחרורים")
-            ),
-            includeItemKeywords = listOf("חביק", "חיבוק", "חיבוקים", "חביקות")
+            belts = releasesBelts,
+            topicsByBelt = releasesTopicsByBelt,
+            includeItemKeywords = listOf("חביק", "חיבוק", "חיבוקים", "חביקות"),
+            excludeItemKeywords = listOf("חניק", "תפיס", "אחיז", "חולצ", "שיער")
+        ),
+
+        // ✅ ילד: שחרור חולצה / שיער
+        SubjectTopic(
+            id = "releases_shirt_hair",
+            parentId = "releases",
+            titleHeb = "שחרור חולצה / שיער",
+            description = "אחיזת חולצה / תפיסת שיער",
+            belts = releasesBelts,
+            topicsByBelt = releasesTopicsByBelt,
+            includeItemKeywords = listOf("חולצ", "חולצה", "שיער"),
+            excludeItemKeywords = listOf("חניק", "חביק", "תפיס", "אחיז")
         ),
 
         // ================== אגרופים ==================
@@ -302,13 +272,11 @@ object TopicsBySubjectRegistry {
             id = "punches",
             titleHeb = "עבודת ידיים",
             description = "עבודת אגרופים ומכות יד – ישרים, מגל, פיסת יד ועוד.",
-            // כרגע יש לנו \"עבודת ידיים\" בחגורות לבן/צהוב וכתום – שם יושבים כל האגרופים
             belts = listOf(
                 Belt.YELLOW,
                 Belt.ORANGE
             ),
             topicsByBelt = mapOf(
-                // חייב להיות 1:1 כמו הכותרת ב-ContentRepo
                 Belt.YELLOW to listOf("עבודת ידיים"),
                 Belt.ORANGE to listOf("עבודת ידיים")
             )
@@ -342,7 +310,6 @@ object TopicsBySubjectRegistry {
         SubjectTopic(
             id = "gun_threat_defense",
             titleHeb = "הגנות מאיום אקדח",
-            description = "הגנות ואילוצים כנגד איומי אקדח במצבי עמידה שונים.",
             belts = listOf(
                 Belt.BROWN,
                 Belt.BLACK
@@ -362,7 +329,6 @@ object TopicsBySubjectRegistry {
         SubjectTopic(
             id = "stick_defense",
             titleHeb = "הגנות נגד מקל",
-            description = "עבודה מול תקיפות במקל – בלימות, כניסות וניטרול.",
             belts = listOf(
                 Belt.GREEN,
                 Belt.BROWN,
@@ -399,20 +365,6 @@ object TopicsBySubjectRegistry {
 
     // ------------------------------------------------------------------
     // ✅ NEW: לוגיקה אחידה לסינון/ספירה של תרגילים השייכים ל-SubjectTopic
-    // ------------------------------------------------------------------
-
-    /**
-     * האם פריט (תרגיל) שייך לנושא SubjectTopic לפי כללי הסינון:
-     * - subTopicHint (אם קיים)
-     * - includeItemKeywords (OR)
-     * - requireAllItemKeywords (AND)
-     * - excludeItemKeywords
-     *
-     * @param itemTitle הכותרת/שם התרגיל (מומלץ "raw" אם יש def:...::)
-     * @param subTopicTitle תת-נושא של הפריט (אם יש אצלך), אחרת null
-     */
-    // ------------------------------------------------------------------
-    // ✅ FIX: התאמת פריטים ל-SubjectTopic בצורה שמבינה def tags בכל הפורמטים
     // ------------------------------------------------------------------
 
     private fun String.normHebLocal(): String = this
@@ -473,16 +425,6 @@ object TopicsBySubjectRegistry {
         return normalizeDefenseTag(n).normHebLocal()
     }
 
-    /**
-     * האם פריט (תרגיל) שייך ל-SubjectTopic לפי כללי הסינון:
-     * - subTopicHint (אם קיים)
-     * - includeItemKeywords (OR)
-     * - requireAllItemKeywords (AND)
-     * - excludeItemKeywords
-     *
-     * @param itemTitle הכותרת/שם התרגיל (רצוי raw – כולל def:...::)
-     * @param subTopicTitle תת-נושא של הפריט (אם יש), אחרת null
-     */
     fun SubjectTopic.matchesItem(
         itemTitle: String,
         subTopicTitle: String? = null
@@ -528,10 +470,6 @@ object TopicsBySubjectRegistry {
         return true
     }
 
-    /**
-     * סופר מתוך רשימה מוכנה של פריטים.
-     * Pair(itemTitleRaw, subTopicTitle?)
-     */
     fun SubjectTopic.countMatchingItems(
         items: List<Pair<String, String?>>
     ): Int {

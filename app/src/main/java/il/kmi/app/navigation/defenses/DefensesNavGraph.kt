@@ -7,6 +7,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.content.HardSectionsCatalog  // ✅ NEW
 
 /**
  * גרף ייעודי להגנות:
@@ -60,7 +61,140 @@ internal fun itemsFor(kind: String, pick: String): List<Pair<Belt, List<String>>
         return map.entries.map { it.key to it.value.toList() }
     }
 
-    val hardcoded: Map<Belt, List<String>> = when (kind to pick) {
+    fun norm(s: String): String = s
+        .trim()
+        .lowercase()
+        .replace("%3a", ":")
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+
+    val kindN0 = norm(kind)
+    val pickN0 = norm(pick)
+
+    val kindN = when {
+        kindN0 == "internal" || kindN0.contains("פנימ") -> "internal"
+        kindN0 == "external" || kindN0.contains("חיצונ") -> "external"
+        kindN0 == "all" -> "all"
+
+        kindN0.startsWith("def_internal") -> "internal"
+        kindN0.startsWith("def_external") -> "external"
+        kindN0.startsWith("def_all") -> "all"
+
+        // ✅ hard sections
+        kindN0 == "kicks_hard" -> "kicks_hard"
+        kindN0 == "releases_hard" -> "releases_hard"
+        kindN0 == "knife_hard" -> "knife_hard"
+        kindN0 == "gun_hard" -> "gun_hard"
+        kindN0 == "stick_hard" -> "stick_hard"
+
+        else -> kindN0
+    }
+
+    val pickN = when (pickN0) {
+        "punches" -> "punch"
+        "kicks" -> "kick"
+        else -> pickN0
+    }
+
+    // ✅ kicks_hard מגיע *רק* מ-HardSectionsCatalog
+    if (kindN == "kicks_hard") {
+
+        val sectionTitle = when (pickN) {
+            "straight_groin" -> "הגנות נגד בעיטות ישרות / למפשעה"
+            "hook_back"      -> "הגנות נגד מגל / מגל לאחור"
+            "knee"           -> "הגנות נגד ברך"
+            else             -> ""
+        }
+
+        val section = HardSectionsCatalog.defensesKicks
+            .firstOrNull { it.title.trim() == sectionTitle.trim() }
+
+        if (section == null) return emptyList()
+
+        val orderedBelts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK)
+
+        val byBelt: Map<Belt, List<String>> =
+            section.beltGroups.associate { bg ->
+                bg.belt to bg.items
+                    .asSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .toList()
+            }
+
+        return orderedBelts.mapNotNull { belt ->
+            val items = byBelt[belt].orEmpty()
+            if (items.isNotEmpty()) belt to items else null
+        }
+    }
+
+    // ✅ releases_hard מגיע *רק* מ-HardSectionsCatalog
+    if (kindN == "releases_hard") {
+
+        val sectionTitle = when (pickN) {
+            "hands_hair_shirt" -> "שחרור מתפיסות ידיים / שיער / חולצה"
+            "chokes"           -> "שחרור מחניקות"
+            "hugs"             -> "שחרור מחביקות גוף"
+            else               -> ""
+        }
+
+        val section = HardSectionsCatalog.releases
+            .firstOrNull { it.title.trim() == sectionTitle.trim() }
+
+        if (section == null) return emptyList()
+
+        val orderedBelts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK)
+
+        val byBelt: Map<Belt, List<String>> =
+            section.beltGroups.associate { bg ->
+                bg.belt to bg.items
+                    .asSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .toList()
+            }
+
+        return orderedBelts.mapNotNull { belt ->
+            val items = byBelt[belt].orEmpty()
+            if (items.isNotEmpty()) belt to items else null
+        }
+    }
+
+    // ✅ NEW: knife/gun/stick – מגיע *רק* מ-HardSectionsCatalog
+    if (kindN == "knife_hard" || kindN == "gun_hard" || kindN == "stick_hard") {
+
+        val section = when (kindN) {
+            "knife_hard" -> HardSectionsCatalog.defensesKnife.firstOrNull()
+            "gun_hard"   -> HardSectionsCatalog.defensesGunThreat.firstOrNull()
+            "stick_hard" -> HardSectionsCatalog.defensesStick.firstOrNull()
+            else -> null
+        }
+
+        if (section == null) return emptyList()
+
+        val orderedBelts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK)
+
+        val byBelt: Map<Belt, List<String>> =
+            section.beltGroups.associate { bg ->
+                bg.belt to bg.items
+                    .asSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .toList()
+            }
+
+        return orderedBelts.mapNotNull { belt ->
+            val items = byBelt[belt].orEmpty()
+            if (items.isNotEmpty()) belt to items else null
+        }
+    }
+
+    val hardcoded: Map<Belt, List<String>> = when (kindN to pickN) {
+
 
         //****************************************************
         // ---------------- הגנות נגד בעיטות (ALL) ----------------
@@ -96,8 +230,8 @@ internal fun itemsFor(kind: String, pick: String): List<Pair<Belt, List<String>>
             Belt.BLUE to listOf(
                 "הגנה נגד בעיטת ברך מלפנים",
                 "הגנה נגד בעיטת ברך מהצד",
-                "הגנה נגד בעיטה רגילה - סייד סטפ לצד המת",
-                "הגנה נגד בעיטה רגילה - סייד סטפ לצד החי",
+                "הגנה נגד בעיטה רגילה – סייד-סטפ לצד המת",
+                "הגנה נגד בעיטה רגילה – סייד-סטפ לצד החי",
                 "הגנה נגד בעיטת מגל לפנים עם השוק",
                 "הגנה נגד בעיטת מגל לצלעות",
                 "הגנה נגד בעיטת מגל לפנים - בעיטה לצד",
@@ -112,7 +246,6 @@ internal fun itemsFor(kind: String, pick: String): List<Pair<Belt, List<String>>
                 "הגנה חיצונית נגד מגל לפנים – טאטוא",
                 "הגנה נגד בעיטת מגל לאחור – פריצה",
 
-                // אם אתה רוצה לכלול גם פנימיות בתוך "הגנות נגד בעיטות" (ALL) — תשאיר פה:
                 "הגנה פנימית נגד בעיטה לסנטר",
                 "הגנה פנימית נגד בעיטה רגילה – טאטוא",
                 "הגנה פנימית באמת ימין נגד בעיטה לצד"
@@ -177,12 +310,14 @@ internal fun itemsFor(kind: String, pick: String): List<Pair<Belt, List<String>>
                 "הגנה חיצונית מס' 4",
                 "הגנה חיצונית מס' 5",
                 "הגנה חיצונית מס' 6",
-                "הגנה חיצונית נגד מכה גבוהה מהצד - התוקף בצד שמאל",
-                "הגנה חיצונית נגד מכה גבוהה מהצד לעורף - התוקף בצד שמאל",
-                "הגנה חיצונית נגד מכה מהצד לגב - התוקף בצד שמאל",
-                "הגנה חיצונית נגד מכה גבוהה מהצד - התוקף בצד ימין",
-                "הגנה חיצונית נגד מכה מהצד לגרון - התוקף בצד ימין",
-                "הגנה חיצונית נגד מכה מהצד לבטן - התוקף בצד ימין",
+
+                // ✅ חייב להיות זהה ל-Explanations.getOrange()
+                "הגנה נגד מכה גבוהה מהצד - התוקף בצד שמאל",
+                "הגנה נגד מכה מהצד לעורף - התוקף בצד שמאל",
+                "הגנה נגד מכה מהצד לגב - התוקף בצד שמאל",
+                "הגנה נגד מכה גבוהה מהצד - התוקף בצד ימין",
+                "הגנה נגד מכה מהצד לגרון - התוקף בצד ימין",
+                "הגנה נגד מכה מהצד לבטן - התוקף בצד ימין",
             ),
             Belt.GREEN to listOf(
                 "הגנה חיצונית נגד ימין באגרוף מהופך",
@@ -194,7 +329,6 @@ internal fun itemsFor(kind: String, pick: String): List<Pair<Belt, List<String>>
         //****************************************************
         // ---------------- חיצוניות - בעיטות ----------------
         //****************************************************
-        // ✅ השאר פה רק חיצוניות "טהור", בלי פנימיות
         "external" to "kick" -> mapOf(
             Belt.ORANGE to listOf(
                 "הגנה חיצונית נגד בעיטה רגילה",
@@ -220,7 +354,7 @@ internal fun itemsFor(kind: String, pick: String): List<Pair<Belt, List<String>>
     }
 
     // ✅ אם ביקשו all ויש לנו סעיף קשיח — משתמשים בו
-    if (kind == "all" && hardcoded.isNotEmpty()) {
+    if (kindN == "all" && hardcoded.isNotEmpty()) {
         val orderedBelts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK)
         return orderedBelts.mapNotNull { belt ->
             val items = hardcoded[belt].orEmpty().distinct()
@@ -229,9 +363,9 @@ internal fun itemsFor(kind: String, pick: String): List<Pair<Belt, List<String>>
     }
 
     // ✅ fallback: all = merge פנימיות+חיצוניות
-    if (kind == "all") {
-        val internal = itemsFor(kind = "internal", pick = pick)
-        val external = itemsFor(kind = "external", pick = pick)
+    if (kindN == "all") {
+        val internal = itemsFor(kind = "internal", pick = pickN)
+        val external = itemsFor(kind = "external", pick = pickN)
         return merge(internal, external)
     }
 
@@ -249,13 +383,122 @@ internal fun defenseCount(kind: String, pick: String): Int =
     itemsFor(kind = kind, pick = pick)
         .asSequence()
         .flatMap { it.second.asSequence() }
-        .map { it.trim() }
+        .map { normItemKey(it) }      // ✅ במקום trim()
         .filter { it.isNotBlank() }
         .distinct()
         .count()
+internal fun defenseRootCount(kind: String): Int {
+    fun norm(s: String): String = s
+        .trim()
+        .lowercase()
+        .replace("%3a", ":")
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
 
-internal fun defenseRootCount(kind: String): Int =
-    defenseCount(kind = kind, pick = "punch") + defenseCount(kind = kind, pick = "kick")
+    val k = norm(kind)
+
+    // ✅ FIX: פנימיות/חיצוניות = *בעיטות בלבד* (בכל החגורות יחד)
+    if (k == "internal" || k.contains("פנימ") || k.startsWith("def_internal")) {
+        return defenseCount(kind = "internal", pick = "kick")
+    }
+    if (k == "external" || k.contains("חיצונ") || k.startsWith("def_external")) {
+        return defenseCount(kind = "external", pick = "kick")
+    }
+
+    // ✅ all נשאר פנימיות+חיצוניות (אגרופים+בעיטות)
+    return defenseCount(kind = kind, pick = "punch") + defenseCount(kind = kind, pick = "kick")
+}
+
+// ---------- ✅ DEFENSE COUNTS SOURCE OF TRUTH (single place) ----------
+
+private fun normItemKey(s: String): String =
+    s.trim()
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+/** כל הפריטים של kind/pick כסט ייחודי (מאוחד מכל החגורות) */
+internal fun defenseItemSet(kind: String, pick: String): Set<String> =
+    itemsFor(kind = kind, pick = pick)
+        .asSequence()
+        .flatMap { it.second.asSequence() }
+        .map { normItemKey(it) }
+        .filter { it.isNotBlank() }
+        .toSet()
+
+/** ספירת תתי־נושאים של "הגנות נגד בעיטות" מתוך HardSectionsCatalog */
+internal fun kicksHardSubCounts(): Map<String, Int> = linkedMapOf(
+    "הגנות נגד בעיטות ישרות / למפשעה" to defenseCount("kicks_hard", "straight_groin"),
+    "הגנות נגד מגל / מגל לאחור"      to defenseCount("kicks_hard", "hook_back"),
+    "הגנות נגד ברך"                  to defenseCount("kicks_hard", "knee"),
+)
+
+/** ספירות לדיאלוג הראשי "הגנות" (6 כפתורים) */
+internal fun defenseDialogCounts(): Map<String, Int> {
+    // ✅ FIX: פנימיות/חיצוניות = אגרופים + בעיטות (כל החגורות יחד)
+    val internalRoot = defenseCount("internal", "punch") + defenseCount("internal", "kick")
+    val externalRoot = defenseCount("external", "punch") + defenseCount("external", "kick")
+
+    val kicksTotal = defenseItemSet("kicks_hard", "straight_groin")
+        .plus(defenseItemSet("kicks_hard", "hook_back"))
+        .plus(defenseItemSet("kicks_hard", "knee"))
+        .size
+
+    val knifeTotal = defenseCount("knife_hard", "all")
+    val gunTotal   = defenseCount("gun_hard", "all")
+    val stickTotal = defenseCount("stick_hard", "all")
+
+    return linkedMapOf(
+        "הגנות פנימיות"     to internalRoot,
+        "הגנות חיצוניות"    to externalRoot,
+        "הגנות נגד בעיטות"  to kicksTotal,
+        "הגנות מסכין"       to knifeTotal,
+        "הגנות מאיום אקדח"  to gunTotal,
+        "הגנות נגד מקל"     to stickTotal,
+    )
+}
+
+/** ספירות לדיאלוג "אגרופים/בעיטות" אחרי שבוחרים פנימי/חיצוני */
+internal fun defensePickCounts(): Map<String, Int> = linkedMapOf(
+    "INTERNAL:אגרופים" to defenseCount("internal", "punch"),
+    "INTERNAL:בעיטות"  to defenseCount("internal", "kick"),
+    "EXTERNAL:אגרופים" to defenseCount("external", "punch"),
+    "EXTERNAL:בעיטות"  to defenseCount("external", "kick"),
+)
+
+/**
+ * ספירה כוללת ל-"הגנות" (לשורה הראשית במסך נושאים):
+ * מאחד:
+ * - פנימי/חיצוני אגרופים+בעיטות (hardcoded)
+ * - kicks_hard (3 תתי־נושאים)
+ * - סכין/אקדח/מקל (HardSectionsCatalog)
+ */
+internal fun totalDefenseCount(): Int {
+    val all = linkedSetOf<String>()
+
+    // פנימי/חיצוני: אגרופים+בעיטות
+    all += defenseItemSet("internal", "punch")
+    all += defenseItemSet("internal", "kick")
+    all += defenseItemSet("external", "punch")
+    all += defenseItemSet("external", "kick")
+
+    // kicks_hard: 3 תתי־נושאים
+    all += defenseItemSet("kicks_hard", "straight_groin")
+    all += defenseItemSet("kicks_hard", "hook_back")
+    all += defenseItemSet("kicks_hard", "knee")
+
+    // נשקים: HardSectionsCatalog
+    all += defenseItemSet("knife_hard", "all")
+    all += defenseItemSet("gun_hard", "all")
+    all += defenseItemSet("stick_hard", "all")
+
+    return all.size
+}
 
 // ---------- nav graph ----------
 
@@ -271,10 +514,14 @@ fun NavGraphBuilder.defensesNavGraph(
         )
     ) { entry ->
         val beltIdEnc = entry.arguments?.getString("beltId").orEmpty()
-        val kindRaw = entry.arguments?.getString("kind").orEmpty()
-        val pickRaw = entry.arguments?.getString("pick").orEmpty()
+        val kindEnc = entry.arguments?.getString("kind").orEmpty()
+        val pickEnc = entry.arguments?.getString("pick").orEmpty()
 
         val belt = Belt.fromId(Uri.decode(beltIdEnc)) ?: Belt.GREEN
+
+        // ✅ FIX: חובה decode גם ל-kind/pick כי Route.Defenses.make עושה Uri.encode לסגמנטים
+        val kindRaw = Uri.decode(kindEnc)
+        val pickRaw = Uri.decode(pickEnc)
 
         fun norm(s: String): String = s
             .replace("\u200F", "")
@@ -292,15 +539,24 @@ fun NavGraphBuilder.defensesNavGraph(
                 t == "all" -> "all"
                 t == "internal" || t.contains("פנימ") -> "internal"
                 t == "external" || t.contains("חיצונ") -> "external"
+                t == "kicks_hard" -> "kicks_hard"
+                t == "releases_hard" -> "releases_hard"
                 else -> t
             }
         }
 
         fun canonPick(raw: String): String {
             val t = norm(raw)
+
+            // kicks_hard
+            if (t in setOf("straight_groin", "hook_back", "knee")) return t
+
+            // ✅ releases_hard
+            if (t in setOf("hands_hair_shirt", "chokes", "hugs")) return t
+
             return when {
-                t == "punch" || t.contains("אגרופ") -> "punch"
-                t == "kick" || t.contains("בעיט") -> "kick"
+                t == "punch" || t == "punches" || t.contains("אגרופ") -> "punch"
+                t == "kick" || t == "kicks" || t.contains("בעיט") -> "kick"
                 else -> t
             }
         }
@@ -308,20 +564,59 @@ fun NavGraphBuilder.defensesNavGraph(
         val kind = canonKind(kindRaw)
         val pick = canonPick(pickRaw)
 
+        androidx.compose.runtime.LaunchedEffect(kindRaw, pickRaw, kind, pick) {
+            android.util.Log.e(
+                "KMI_DEF",
+                "DEF NAV kindRaw='$kindRaw' pickRaw='$pickRaw' -> kind='$kind' pick='$pick'"
+            )
+        }
+
         val grouped = itemsFor(kind = kind, pick = pick)
 
+        // ✅ כותרת מסך (כולל שחרורים)
+        val screenTitle = when (kind to pick) {
+            "internal" to "punch" -> "הגנות פנימיות - אגרופים"
+            "internal" to "kick"  -> "הגנות פנימיות - בעיטות"
+            "external" to "punch" -> "הגנות חיצוניות - אגרופים"
+            "external" to "kick"  -> "הגנות חיצוניות - בעיטות"
+            "all" to "kick"       -> "הגנות נגד בעיטות"
+            "all" to "punch"      -> "הגנות נגד אגרופים"
+
+            // ✅ releases_hard
+            "releases_hard" to "hands_hair_shirt" -> "שחרור מתפיסות ידיים / שיער / חולצה"
+            "releases_hard" to "chokes"           -> "שחרור מחניקות"
+            "releases_hard" to "hugs"             -> "שחרור מחביקות גוף"
+
+            else -> "הגנות"
+        }
+
+        fun stripPrefixForReleases(full: String): String {
+            val t = full.trim()
+            if (kind != "releases_hard") return t
+
+            // מוריד prefix שמתחיל בשם תת־הנושא (אם הוא הוכנס לפריט עצמו)
+            val prefixes = listOf(
+                "שחרור מתפיסות ידיים / שיער / חולצה - ",
+                "שחרור מתפיסות ידיים / שיער / חולצה – ",
+                "שחרור מתפיסות ידיים / שיער / חולצה: ",
+                "שחרור מחניקות - ",
+                "שחרור מחניקות – ",
+                "שחרור מחניקות: ",
+                "שחרור מחביקות גוף - ",
+                "שחרור מחביקות גוף – ",
+                "שחרור מחביקות גוף: "
+            )
+
+            val hit = prefixes.firstOrNull { t.startsWith(it) }
+            return if (hit != null) t.removePrefix(hit).trim() else t
+        }
+
         DefensesListScreen(
-            title = when (kind to pick) {
-                "internal" to "punch" -> "הגנות פנימיות - אגרופים"
-                "internal" to "kick"  -> "הגנות פנימיות - בעיטות"
-                "external" to "punch" -> "הגנות חיצוניות - אגרופים"
-                "external" to "kick"  -> "הגנות חיצוניות - בעיטות"
-                "all" to "kick"       -> "הגנות נגד בעיטות"
-                "all" to "punch"      -> "הגנות נגד אגרופים"
-                else -> "הגנות"
-            },
+            title = screenTitle,
             groupedItems = grouped,
-            itemTitle = { displayName(it) },
+            itemTitle = { raw ->
+                stripPrefixForReleases(displayName(raw))
+            },
             onBack = { nav.popBackStack() }
         )
     }
