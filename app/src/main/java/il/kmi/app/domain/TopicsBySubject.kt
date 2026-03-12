@@ -211,25 +211,24 @@ object TopicsBySubjectRegistry {
             belts = releasesBelts,
             topicsByBelt = releasesTopicsByBelt,
             subTopics = listOf(
-                "שחרור מתפיסות ידיים",
+                "שחרור מתפיסות ידיים / שיער / חולצה",
                 "שחרור מחניקות",
-                "שחרור מחביקות גוף",
-                "שחרור חולצה / שיער"
+                "שחרור מחביקות"
             )
         ),
 
-        // ✅ ילד: שחרור מתפיסות ידיים
+        // ✅ ילד: שחרור מתפיסות ידיים / שיער / חולצה
         SubjectTopic(
-            id = "releases_hand_grabs",
+            id = "releases_hands_hair_shirt",
             parentId = "releases",
-            titleHeb = "שחרור מתפיסות ידיים",
-            description = "אחיזות יד/שורש כף יד/שתי ידיים",
+            titleHeb = "שחרור מתפיסות ידיים / שיער / חולצה",
+            description = "תפיסות ידיים, תפיסות שיער ואחיזות חולצה",
             belts = releasesBelts,
             topicsByBelt = releasesTopicsByBelt,
-            includeItemKeywords = listOf("תפיס", "אחיז", "אוחז"),
-            requireAllItemKeywords = listOf("יד"),
-            excludeItemKeywords = listOf("חניק", "חביק", "חולצ", "שיער", "אקדח", "סכין", "מקל")
+            includeItemKeywords = listOf("תפיס", "אחיז", "אוחז", "חולצ", "חולצה", "שיער"),
+            excludeItemKeywords = listOf("חניק", "חביק", "אקדח", "סכין", "מקל")
         ),
+
 
         // ✅ ילד: שחרור מחניקות
         SubjectTopic(
@@ -243,28 +242,21 @@ object TopicsBySubjectRegistry {
             excludeItemKeywords = listOf("תפיס", "אחיז", "חביק", "חולצ", "שיער")
         ),
 
-        // ✅ ילד: שחרור מחביקות גוף
+        // ✅ ילד: שחרור מחביקות
         SubjectTopic(
-            id = "releases_body_hugs",
+            id = "releases_hugs",
             parentId = "releases",
-            titleHeb = "שחרור מחביקות גוף",
-            description = "מלפנים/מאחור, ידיים חופשיות/נעולות",
+            titleHeb = "שחרור מחביקות",
+            description = "חביקות גוף / צוואר / זרוע",
             belts = releasesBelts,
             topicsByBelt = releasesTopicsByBelt,
+            subTopics = listOf(
+                "חביקות גוף",
+                "חביקות צוואר",
+                "חביקות זרוע"
+            ),
             includeItemKeywords = listOf("חביק", "חיבוק", "חיבוקים", "חביקות"),
             excludeItemKeywords = listOf("חניק", "תפיס", "אחיז", "חולצ", "שיער")
-        ),
-
-        // ✅ ילד: שחרור חולצה / שיער
-        SubjectTopic(
-            id = "releases_shirt_hair",
-            parentId = "releases",
-            titleHeb = "שחרור חולצה / שיער",
-            description = "אחיזת חולצה / תפיסת שיער",
-            belts = releasesBelts,
-            topicsByBelt = releasesTopicsByBelt,
-            includeItemKeywords = listOf("חולצ", "חולצה", "שיער"),
-            excludeItemKeywords = listOf("חניק", "חביק", "תפיס", "אחיז")
         ),
 
         // ================== אגרופים ==================

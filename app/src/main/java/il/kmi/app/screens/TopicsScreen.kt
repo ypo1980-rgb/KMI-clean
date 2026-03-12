@@ -168,22 +168,6 @@ private fun buildExplanationWithStanceHighlight(
 }
 
 /* ========= עזר: למצוא הסבר אמיתי מתוך Explanations ========= */
-private fun parseSearchKey(key: String): Triple<Belt, String, String> {
-    fun dec(s: String): String =
-        runCatching { java.net.URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
-
-    val parts0 = when {
-        '|' in key  -> key.split('|', limit = 3)
-        "::" in key -> key.split("::", limit = 3)
-        '/' in key  -> key.split('/', limit = 3)
-        else        -> listOf("", "", "")
-    }
-    val parts = (parts0 + listOf("", "", "")).take(3)
-    val belt  = Belt.fromId(parts[0]) ?: Belt.WHITE
-    val topic = dec(parts[1])
-    val item  = dec(parts[2])
-    return Triple(belt, topic, item)
-}
 
 private fun findExplanationForHit(
     belt: Belt,

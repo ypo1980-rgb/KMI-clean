@@ -1,4 +1,4 @@
-package il.kmi.app.navigation.defenses
+package il.kmi.app.screens.common
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,49 +36,54 @@ import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.HardSectionsCatalog
 
 @Composable
-fun DefensesListScreen(
+fun LegacyGroupedExercisesScreen(
     title: String,
     groupedItems: List<Pair<Belt, List<String>>>,
     itemTitle: (String) -> String,
     onBack: () -> Unit,
-    onItemClick: ((Belt, String) -> Unit)? = null
+    onItemClick: ((Belt, String) -> Unit)? = null,
+    explanationText: ((Belt, String) -> String)? = null,
+    itemCountText: ((String) -> Int)? = null,
+    treatAsMenuCards: Boolean = false
 ) {
     val scroll = rememberScrollState()
 
     // ✅ הסבר רק אחרי לחיצה (ולא כסאב-טייטל ברשימה)
     val explainFor = remember { mutableStateOf<Pair<Belt, String>?>(null) }
 
-    explainFor.value?.let { (belt, clickedTitle) ->
-        val key = explanationKeyForDefenses(clickedTitle)
-        val full = il.kmi.app.domain.Explanations.get(belt, key)
+    if (!treatAsMenuCards) {
+        explainFor.value?.let { (belt, clickedTitle) ->
+            val full = explanationText?.invoke(belt, clickedTitle)
+                ?: il.kmi.app.domain.Explanations.get(belt, explanationKeyForDefenses(clickedTitle))
 
-        AlertDialog(
-            onDismissRequest = { explainFor.value = null },
-            title = {
-                Text(
-                    text = clickedTitle,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Right
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                ) {
+            AlertDialog(
+                onDismissRequest = { explainFor.value = null },
+                title = {
                     Text(
-                        text = full,
+                        text = clickedTitle,
+                        fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Right
                     )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(
+                            text = full,
+                            textAlign = TextAlign.Right
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { explainFor.value = null }) {
+                        Text("סגור")
+                    }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { explainFor.value = null }) {
-                    Text("סגור")
-                }
-            }
-        )
+            )
+        }
     }
 
     Column(
@@ -196,14 +201,15 @@ fun DefensesListScreen(
         }
         ordered.forEach { (belt, items) ->
             BeltSection(
-                screenTitle = title,
                 belt = belt,
                 items = items,
                 itemTitle = itemTitle,
                 onItemClick = { raw -> onItemClick?.invoke(belt, raw) },
                 onExplainClick = { clickedTitle ->
                     explainFor.value = belt to clickedTitle
-                }
+                },
+                treatAsMenuCards = treatAsMenuCards,
+                itemCountText = itemCountText
             )
             Spacer(Modifier.height(12.dp))
         }
@@ -376,12 +382,13 @@ fun ReleasesMenuCard(
 
 @Composable
 private fun BeltSection(
-    screenTitle: String,
     belt: Belt,
     items: List<String>,
     itemTitle: (String) -> String,
     onItemClick: (String) -> Unit,
-    onExplainClick: (String) -> Unit
+    onExplainClick: (String) -> Unit,
+    treatAsMenuCards: Boolean,
+    itemCountText: ((String) -> Int)? = null
 ) {
     val sectionShape = RoundedCornerShape(20.dp)
     val headerShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
@@ -429,17 +436,14 @@ private fun BeltSection(
                 items.forEach { raw ->
                     val rawTitle = itemTitle(raw)
 
-                    val isReleasesScreen =
-                        screenTitle.contains("שחרור") || screenTitle.contains("שחרורים")
-
                     val title =
-                        if (isReleasesScreen) stripReleasesPrefix(rawTitle) else rawTitle
+                        if (treatAsMenuCards) stripReleasesPrefix(rawTitle) else rawTitle
 
                     // ✅ לא מציגים הסבר ברשימה (רק בדיאלוג אחרי קליק)
                     val subtitle = ""
 
-                    if (isReleasesScreen) {
-                        val count = releasesCountFromHard(title)
+                    if (treatAsMenuCards) {
+                        val count = itemCountText?.invoke(title) ?: 0
 
                         ReleasesMenuCard(
                             title = title,
@@ -479,21 +483,6 @@ private fun stripReleasesPrefix(title: String): String {
 
     val cut = prefixes.firstOrNull { p -> t.startsWith(p) } ?: return t
     return t.removePrefix(cut).trim().trimStart('-', ':').trim()
-}
-
-private fun releasesCountFromHard(title: String): Int {
-    val wanted = title.trim()
-
-    val sec = HardSectionsCatalog.releases.firstOrNull { s ->
-        s.title.trim() == wanted
-    } ?: return 0
-
-    val order = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK)
-
-    return order.sumOf { belt ->
-        HardSectionsCatalog.run { sec.itemsFor(belt) }
-            .count { it.isNotBlank() }
-    }
 }
 
 private fun explanationKeyForDefenses(uiTitle: String): String {

@@ -17,6 +17,9 @@ import il.kmi.app.domain.ContentRepo
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.Canonical.parseDefenseTagAndName
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+import il.kmi.shared.domain.content.HardSectionsCatalog
+import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
+import il.kmi.shared.domain.content.HardSectionsCatalog.totalItemsCount
 
 private fun isPunchSubTopic(sub: String?): Boolean {
     val s = sub?.trim().orEmpty()
@@ -64,7 +67,8 @@ fun TopicRepoExercisesScreen(
     topicId: String,
     subTopicId: String,
     onBack: () -> Unit,
-    onOpenExercise: (String) -> Unit = {}
+    onOpenExercise: (String) -> Unit = {},
+    onOpenSubTopic: (topicId: String, subTopicId: String) -> Unit = { _, _ -> } // ✅ NEW
 ) {
     Log.e("DEF_DEBUG", "ENTER SCREEN belt=${belt.id} topicId='$topicId' subTopicId='$subTopicId'")
 
@@ -78,18 +82,17 @@ fun TopicRepoExercisesScreen(
         return d.replace("+", " ").trim()
     }
 
-// בתוך TopicRepoExercisesScreen(...)
+    val topic = remember(topicId) { decArg(topicId) }
 
-    val topic = remember(topicId) { Uri.decode(topicId).trim() }
-
-    val subTopicOrNull = remember(subTopicId) {
-        val decoded = Uri.decode(subTopicId).trim()
-        decoded.takeIf { it.isNotBlank() && it != "__all__" }
-    }
 
     val isDefenseFamily = remember(topic) { topic.contains("הגנות") }
 
-// ✅ FIX: לבחור topic אמיתי ל-Repo לפי מה שנכנס מה-UI
+    val subTopicOrNull = remember(subTopicId) {
+        val decoded = decArg(subTopicId)
+        decoded.takeIf { it.isNotBlank() && it != "__all__" }
+    }
+
+    // ✅ FIX: לבחור topic אמיתי ל-Repo לפי מה שנכנס מה-UI (כדי שלא יהיו unresolved)
     val repoTopicTitle = remember(topic, isDefenseFamily) {
         if (!isDefenseFamily) return@remember topic
 
@@ -100,12 +103,110 @@ fun TopicRepoExercisesScreen(
         }
     }
 
-// ✅ FIX: בהגנות – כן להעביר subTopic אם קיים (אגרופים/בעיטות וכו')
+    // ✅ FIX: בהגנות – כן להעביר subTopic אם קיים (אגרופים/בעיטות וכו')
     val repoSubTopicOrNull = remember(isDefenseFamily, subTopicOrNull) {
         if (!isDefenseFamily) subTopicOrNull else subTopicOrNull
     }
 
+    // ✅ NEW: שחרורים מגיעים מהקטלוג הקשיח (HardSectionsCatalog.releases)
+    fun normHebLocal(s: String): String = s
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+    // ✅ NEW: מנקה prefixים של UI כמו "שחרורים - ..."
+    fun baseHardTitle(ui: String): String {
+        val n = normHebLocal(ui)
+        return n
+            .removePrefix("שחרורים -").trim()
+            .removePrefix("שחרורים-").trim()
+            .removePrefix("שחרורים :").trim()
+            .removePrefix("שחרורים:").trim()
+            .trim()
+    }
+
+    // ✅ NEW: aliases שמגיעים מה-Registry (למשל "שחרור מחביקות גוף") אל titles אמיתיים ב-HardCatalog
+    fun normalizeReleasesSubAlias(ui: String): String {
+        val n = baseHardTitle(ui)
+
+        // דוגמאות: "שחרור מחביקות גוף" / "שחרור מחביקות - גוף"
+        if (n.contains("שחרור מחביקות")) {
+            return when {
+                n.contains("גוף") -> "חביקות גוף"
+                n.contains("צוואר") || n.contains("צואר") -> "חביקות צוואר"
+                n.contains("זרוע") -> "חביקות זרוע"
+                else -> "שחרור מחביקות"
+            }
+        }
+
+        return n
+    }
+
+    fun isReleasesHardTopic(uiTopic: String): Boolean {
+        val t = normalizeReleasesSubAlias(uiTopic)
+        if (t == "שחרורים") return true
+
+        return HardSectionsCatalog.releases.any { sec ->
+            normHebLocal(sec.title) == t ||
+                    sec.subSections.any { sub -> normHebLocal(sub.title) == t }
+        }
+    }
+
+    fun loadHardReleasesItems(
+        belt: Belt,
+        uiTopic: String,
+        uiSub: String?
+    ): List<String> {
+        val t = normalizeReleasesSubAlias(uiTopic)
+        val subWanted = uiSub?.let(::normalizeReleasesSubAlias)
+
+        // 1) אם נכנסו עם topic = "שחרורים" + sub = "...": נחפש subsection לפי sub
+        if (t == "שחרורים" && !subWanted.isNullOrBlank()) {
+            HardSectionsCatalog.releases.forEach { sec ->
+                // קודם: subSections
+                sec.subSections.firstOrNull { sub -> normHebLocal(sub.title) == subWanted }
+                    ?.let { return it.itemsFor(belt) }
+
+                // ואם אין subSections וזו כותרת ישירה
+                if (sec.subSections.isEmpty() && normHebLocal(sec.title) == subWanted) {
+                    return sec.itemsFor(belt)
+                }
+            }
+        }
+
+        // 2) אם topic עצמו הוא "שחרור מחביקות" (הורה) והגיע sub = "חביקות גוף/צוואר/זרוע"
+        HardSectionsCatalog.releases.firstOrNull { sec ->
+            normHebLocal(sec.title) == t
+        }?.let { parent ->
+            if (!subWanted.isNullOrBlank()) {
+                parent.subSections.firstOrNull { sub -> normHebLocal(sub.title) == subWanted }
+                    ?.let { return it.itemsFor(belt) }
+            }
+            // אם אין subWanted – מחזירים את כל הפריטים תחת parent (שיטוח)
+            return parent.itemsFor(belt)
+        }
+
+        // 3) אם topic עצמו הוא "חביקות גוף/צוואר/זרוע" – נחפש אותו בתוך subSections
+        HardSectionsCatalog.releases.forEach { sec ->
+            sec.subSections.firstOrNull { sub -> normHebLocal(sub.title) == t }
+                ?.let { return it.itemsFor(belt) }
+        }
+
+        // 4) אם topic הוא Section רגיל בלי תתי סעיפים
+        HardSectionsCatalog.releases.firstOrNull { sec ->
+            sec.subSections.isEmpty() && normHebLocal(sec.title) == t
+        }?.let { return it.itemsFor(belt) }
+
+        return emptyList()
+    }
+
     var items by remember { mutableStateOf<List<String>>(emptyList()) }
+    // ✅ NEW: מחזיק רשימת תתי־נושאים קשיחים להצגה במקום רשימת תרגילים
+    var hardSubSections by remember { mutableStateOf<List<HardSectionsCatalog.Section>>(emptyList()) }
 
     LaunchedEffect(belt, topic, subTopicOrNull) {
         runCatching { ContentRepo.initIfNeeded() }
@@ -118,6 +219,80 @@ fun TopicRepoExercisesScreen(
             "DEF_DEBUG",
             "PARAMS belt=${belt.id} uiTopic='$uiTopic' uiSub='$uiSub' repoTopic='$repoTopicTitle' repoSub='$repoSubTopicOrNull'"
         )
+
+        // ✅ FIX: אם נכנסו עם topic="שחרורים" ו-sub="שחרור מחביקות" (או כל Section הורה עם subSections)
+        // צריך להציג את תתי־הנושאים (חביקות גוף/צוואר/זרוע) במקום לנסות לטעון תרגילים ישר
+        val tTopic = normalizeReleasesSubAlias(uiTopic)
+        val tSub = uiSub?.let(::normalizeReleasesSubAlias).orEmpty()
+
+        if (tTopic == "שחרורים" && tSub.isNotBlank()) {
+            val parent = HardSectionsCatalog.releases.firstOrNull { sec ->
+                normHebLocal(sec.title) == tSub && sec.subSections.isNotEmpty()
+            }
+
+            if (parent != null) {
+                hardSubSections = parent.subSections
+                items = emptyList()
+
+                Log.e(
+                    "DEF_DEBUG",
+                    "HARD_RELEASES_SUBSECTIONS via topic='שחרורים' parent='${parent.title}' subSections=${parent.subSections.map { it.title }}"
+                )
+
+                return@LaunchedEffect
+            }
+        }
+
+        // ✅ NEW: אם זה סקשן קשיח עם subSections (למשל "שחרורים - שחרור מחביקות") ועדיין לא בחרו תת־נושא
+        if (isReleasesHardTopic(uiTopic) && uiSub.isNullOrBlank()) {
+            val t = normalizeReleasesSubAlias(uiTopic)
+
+            val parent = HardSectionsCatalog.releases.firstOrNull { sec ->
+                normHebLocal(sec.title) == t && sec.subSections.isNotEmpty()
+            }
+
+            if (parent != null) {
+                hardSubSections = parent.subSections
+                items = emptyList()
+
+                Log.e(
+                    "DEF_DEBUG",
+                    "HARD_RELEASES_SUBSECTIONS parent='${parent.title}' subSections=${parent.subSections.map { it.title }}"
+                )
+
+                return@LaunchedEffect
+            } else {
+                hardSubSections = emptyList()
+            }
+        } else {
+            hardSubSections = emptyList()
+        }
+
+        // ✅ NEW: שחרורים (HardSectionsCatalog) לא נטענים מ-ContentRepo בכלל
+        if (isReleasesHardTopic(uiTopic) || (uiSub != null && isReleasesHardTopic(uiSub))) {
+            val hard = loadHardReleasesItems(
+                belt = belt,
+                uiTopic = uiTopic,
+                uiSub = uiSub
+            )
+                .asSequence()
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .toList()
+
+            Log.e("DEF_DEBUG", "HARD_RELEASES count=${hard.size} topic='$uiTopic' sub='${uiSub ?: "null"}'")
+            hard.take(20).forEachIndexed { i, it -> Log.e("DEF_DEBUG", "HARD[$i] = '$it'") }
+
+            items = hard
+                .asSequence()
+                .map { raw -> ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .toList()
+
+            return@LaunchedEffect
+        }
 
         suspend fun load(topicTitle: String, subTitle: String?): List<String> {
             var last: List<String> = emptyList()
@@ -235,14 +410,51 @@ fun TopicRepoExercisesScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            if (items.isEmpty()) {
+
+            // ✅ אם יש תתי־נושאים קשיחים (למשל "שחרור מחביקות") – מציגים אותם במקום items
+            if (hardSubSections.isNotEmpty()) {
+
+                Text(
+                    text = "בחר תת־נושא",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                hardSubSections.forEach { sec ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onOpenSubTopic(
+                                    topic,
+                                    sec.title
+                                )
+                            },
+                        shape = MaterialTheme.shapes.large,
+                        tonalElevation = 1.dp
+                    ) {
+                        Text(
+                            text = sec.title,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                            textAlign = TextAlign.Right,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+            } else if (items.isEmpty()) {
+
                 Text(
                     text = "לא נמצאו תרגילים עבור \"$topic\"",
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
+
             } else {
+
                 items.forEach { item ->
                     Surface(
                         modifier = Modifier

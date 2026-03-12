@@ -1,6 +1,5 @@
 package il.kmi.app
 
-import android.net.Uri
 import il.kmi.shared.domain.Belt
 import java.net.URLEncoder
 
@@ -14,14 +13,6 @@ sealed class Route(val route: String) {
 
     object Intro : Route("intro")
     object Home : Route("home")
-
-    object TopicRepoExercises : Route("topic_repo/{beltId}/{topicId}/{subTopicId}") {
-        fun make(belt: Belt, topicId: String, subTopicId: String): String =
-            "topic_repo/${belt.id}/${enc(topicId)}/${enc(subTopicId)}"
-
-        fun makeId(beltId: String, topicId: String, subTopicId: String): String =
-            "topic_repo/$beltId/${enc(topicId)}/${enc(subTopicId)}"
-    }
 
     // ▼▼▼ חדש: מסך נחיתה של הרישום (התמונה עם "משתמש חדש / משתמש קיים")
     data object RegistrationLanding : Route("registration_landing")
@@ -71,14 +62,6 @@ sealed class Route(val route: String) {
             "materials/${belt.id}/${enc(topic)}?coach=$coach"
         fun makeId(beltId: String, topic: String, coach: Boolean = false) =
             "materials/$beltId/${enc(topic)}?coach=$coach"
-    }
-
-    object Defenses {
-        const val route = "defenses/{beltId}/{kind}/{pick}"
-
-        fun make(belt: Belt, kind: String, pick: String): String {
-            return "defenses/${Uri.encode(belt.id)}/${Uri.encode(kind)}/${Uri.encode(pick)}"
-        }
     }
 
     // גרסת Materials עם תת-נושא (תאימות לאחור נשמרת)
@@ -176,33 +159,6 @@ sealed class Route(val route: String) {
     // 🧪 Debug: בדיקת KMP Catalog + HTML (לעזור ל-iOS)
     object DebugCatalog : Route("debug_catalog")
 
-    // 👇 מסך "כל התרגילים של נושא"
-    object SubjectExercises : Route("subject_exercises/{subjectId}?beltId={beltId}&title={title}") {
-
-        // ✅ API יחיד – מקור אמת (מונע Platform declaration clash)
-        fun make(
-            subjectId: String,
-            beltId: String = "",
-            title: String = ""
-        ): String =
-            "subject_exercises/${enc(subjectId)}?beltId=${enc(beltId)}&title=${enc(title)}"
-
-        // ✅ נוחות: מעבר עם כותרת בלבד
-        fun makeWithTitle(
-            subjectId: String,
-            title: String
-        ): String =
-            make(subjectId = subjectId, beltId = "", title = title)
-
-        // ✅ תאימות לאחור: מעבר עם חגורה בלבד
-        fun makeWithBelt(
-            subjectId: String,
-            beltId: String
-        ): String =
-            make(subjectId = subjectId, beltId = beltId, title = "")
-    }
-
-    // נשמר לצורך תאימות לאחור; מומלץ להעביר קריאות ל-RegistrationLanding
     object Registration : Route("registration")
     object Favorites : Route("favorites")
     // ▼▼▼ מבחן פנימי – מסך המאמן

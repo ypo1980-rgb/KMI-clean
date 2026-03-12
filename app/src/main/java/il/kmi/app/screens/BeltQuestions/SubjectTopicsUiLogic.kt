@@ -1,0 +1,1319 @@
+package il.kmi.app.screens.BeltQuestions
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import il.kmi.app.domain.SubjectTopic
+import il.kmi.shared.domain.Belt
+
+// -------------------------------------------------------------
+// UI MODELS (הועברו מ-BeltQuestionsUiModels.kt)
+// -------------------------------------------------------------
+
+internal enum class TopicsViewMode {
+    BY_BELT,
+    BY_TOPIC
+}
+
+internal data class TopicDetails(
+    val itemCount: Int,
+    val subTitles: List<String>
+) {
+    val hasSubs: Boolean get() = subTitles.isNotEmpty()
+}
+
+internal data class CountsPayload(
+    val subjectCounts: Map<String, Int>,
+    val internalDefenseRootCount: Int,
+    val externalDefenseRootCount: Int,
+    val handsRootCount: Int,
+    val totalDefenseCount: Int
+)
+
+internal data class UiExercise(
+    val raw: String,
+    val title: String
+)
+
+internal typealias ItemsByBelt =
+        Map<il.kmi.shared.domain.Belt, List<UiExercise>>
+
+@Composable
+internal fun DefenseCategoryPickDialogModern(
+    counts: Map<String, Int> = emptyMap(),
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit
+) {
+    val accent = Color(0xFF1565C0)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        containerColor = Color(0xFFF7F4FB),
+        shape = RoundedCornerShape(30.dp),
+        tonalElevation = 8.dp,
+        title = {
+            Text(
+                text = "הגנות",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Right,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                ModernPickCard(
+                    title = "הגנות פנימיות",
+                    accent = Color(0xFF2E7D32),
+                    icon = "🛡️",
+                    countText = "${counts["הגנות פנימיות"] ?: 0} תרגילים",
+                    onClick = { onPick("internal") }
+                )
+
+                ModernPickCard(
+                    title = "הגנות חיצוניות",
+                    accent = Color(0xFF1565C0),
+                    icon = "🛡️",
+                    countText = "${counts["הגנות חיצוניות"] ?: 0} תרגילים",
+                    onClick = { onPick("external") }
+                )
+
+                ModernPickCard(
+                    title = "הגנות נגד בעיטות",
+                    accent = accent,
+                    icon = "🦵",
+                    countText = "${counts["הגנות נגד בעיטות"] ?: 0} תרגילים",
+                    onClick = { onPick("kicks") }
+                )
+
+                ModernPickCard(
+                    title = "הגנות מסכין",
+                    accent = accent,
+                    icon = "🔪",
+                    countText = "${counts["הגנות מסכין"] ?: 0} תרגילים",
+                    onClick = { onPick("knife") }
+                )
+
+                ModernPickCard(
+                    title = "הגנות מאיום אקדח",
+                    accent = accent,
+                    icon = "🔫",
+                    countText = "${counts["הגנות מאיום אקדח"] ?: 0} תרגילים",
+                    onClick = { onPick("gun") }
+                )
+
+                ModernPickCard(
+                    title = "הגנות נגד מקל",
+                    accent = accent,
+                    icon = "🪵",
+                    countText = "${counts["הגנות נגד מקל"] ?: 0} תרגילים",
+                    onClick = { onPick("stick") }
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("ביטול")
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+internal fun DefensePickModeDialogModern(
+    kind: il.kmi.app.domain.DefenseKind,
+    counts: Map<String, Int> = emptyMap(),
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit
+) {
+    val title =
+        if (kind == il.kmi.app.domain.DefenseKind.INTERNAL) "הגנות פנימיות"
+        else "הגנות חיצוניות"
+
+    val accent =
+        if (kind == il.kmi.app.domain.DefenseKind.INTERNAL) Color(0xFF4CAF50)
+        else Color(0xFF2196F3)
+
+    val keyPunch = "${kind.name}:אגרופים"
+    val keyKick = "${kind.name}:בעיטות"
+
+    val punchCount = counts[keyPunch] ?: 0
+    val kickCount = counts[keyKick] ?: 0
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        containerColor = Color(0xFFF7F4FB),
+        shape = RoundedCornerShape(30.dp),
+        tonalElevation = 8.dp,
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Right,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "מה לבחור?",
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                ModernPickCard(
+                    title = "אגרופים",
+                    accent = accent,
+                    icon = "👊",
+                    countText = "$punchCount תרגילים",
+                    onClick = { onPick("אגרופים") }
+                )
+
+                ModernPickCard(
+                    title = "בעיטות",
+                    accent = accent,
+                    icon = "🦵",
+                    countText = "$kickCount תרגילים",
+                    onClick = { onPick("בעיטות") }
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("ביטול")
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+internal fun HandsPickModeDialogModern(
+    picks: List<String>,
+    counts: Map<String, Int> = emptyMap(),
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit
+) {
+    val accent = Color(0xFF8E24AA)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        containerColor = Color(0xFFF7F4FB),
+        shape = RoundedCornerShape(30.dp),
+        tonalElevation = 8.dp,
+        title = {
+            Text(
+                text = "עבודת ידיים",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Right,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "בחר תת־נושא:",
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                ModernPickCard(
+                    title = "מכות מרפק",
+                    accent = accent,
+                    icon = "💪",
+                    countText = "${counts["מכות מרפק"] ?: 0} תרגילים",
+                    onClick = { onPick("מכות מרפק") }
+                )
+
+                ModernPickCard(
+                    title = "מכות יד",
+                    accent = accent,
+                    icon = "👊",
+                    countText = "${counts["מכות יד"] ?: 0} תרגילים",
+                    onClick = { onPick("מכות יד") }
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("ביטול")
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+internal fun SubTopicsPickModeDialogModern(
+    title: String,
+    picks: List<String>,
+    counts: Map<String, Int>,
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit
+) {
+    val accent = Color(0xFF6F6A86)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        containerColor = Color(0xFFF7F4FB),
+        shape = RoundedCornerShape(30.dp),
+        tonalElevation = 8.dp,
+        title = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    text = "בחר תת־נושא:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF6D6881),
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        text = {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (picks.isEmpty()) {
+                    Text(
+                        text = "לא הוגדרו תתי־נושאים.",
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    picks.forEach { pick ->
+                        val c = counts[pick] ?: 0
+                        ModernPickCard(
+                            title = pick,
+                            accent = accent,
+                            icon = null,
+                            countText = "$c תרגילים",
+                            onClick = { onPick(pick) }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(2.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(
+                            text = "ביטול",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun ModernPickCard(
+    title: String,
+    accent: Color,
+    icon: String? = null,
+    countText: String? = null,
+    onClick: () -> Unit
+) {
+    val dir = if (icon != null) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    CompositionLocalProvider(LocalLayoutDirection provides dir) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            tonalElevation = 1.dp,
+            shadowElevation = 3.dp,
+            border = BorderStroke(1.dp, Color(0xFFD8D2E6)),
+            color = Color.White.copy(alpha = 0.94f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .clickable { onClick() }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    shape = CircleShape,
+                    color = accent.copy(alpha = 0.10f)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (icon != null) {
+                            Text(
+                                text = icon,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Outlined.Info,
+                                contentDescription = null,
+                                tint = accent.copy(alpha = 0.9f),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    countText?.let {
+                        Spacer(Modifier.height(6.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFF1F4F8)
+                        ) {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = accent,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                Icon(
+                    imageVector = Icons.Filled.ChevronLeft,
+                    contentDescription = null,
+                    tint = accent.copy(alpha = 0.8f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun BaseTopicCard(
+    title: String,
+    subtitle: String,
+    accent: Color,
+    countText: String? = null,
+    onClick: () -> Unit
+) {
+    val parts = countText
+        ?.split("\n")
+        ?.map { it.trim() }
+        .orEmpty()
+
+    val badgeTop = when {
+        parts.size >= 2 -> parts[0]
+        parts.size == 1 -> "תרגילים"
+        else -> null
+    }
+
+    val badgeBottom = when {
+        parts.size >= 2 -> parts[1].replace("תרגילים", "").trim()
+        parts.size == 1 -> parts[0].replace("תרגילים", "").trim()
+        else -> null
+    }
+
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        tonalElevation = 1.dp,
+        shadowElevation = 6.dp,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, Color(0x14000000)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .clickable { onClick() }
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(6.dp)
+                        .heightIn(min = 52.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(accent.copy(alpha = 0.9f))
+                )
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Right,
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Right,
+                        maxLines = 2,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (!badgeTop.isNullOrBlank() && !badgeBottom.isNullOrBlank()) {
+                        CountBadge(
+                            textTop = badgeTop,
+                            textBottom = badgeBottom,
+                            accent = accent
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    Icon(
+                        imageVector = Icons.Filled.ChevronLeft,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CountBadge(
+    textTop: String,
+    textBottom: String,
+    accent: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = accent.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.25f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = textTop,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = accent,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+
+            Text(
+                text = textBottom,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = accent,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+internal fun CountTextBadge(
+    text: String,
+    color: Color
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = color,
+        textAlign = TextAlign.Center,
+        maxLines = 2,
+        lineHeight = 16.sp
+    )
+}
+
+@Composable
+internal fun SubjectRootCard(
+    title: String,
+    subtitle: String,
+    countText: String? = null,
+    showLeftBadge: Boolean = true,
+    onClick: () -> Unit
+) {
+    val accent = MaterialTheme.colorScheme.primary
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, Color(0x12000000))
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (showLeftBadge) {
+                    Box(
+                        modifier = Modifier
+                            .width(5.dp)
+                            .heightIn(min = 44.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(accent.copy(alpha = 0.55f))
+                    )
+                    Spacer(Modifier.width(12.dp))
+                } else {
+                    Spacer(Modifier.width(4.dp))
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 1
+                    )
+
+                    Text(
+                        text = subtitle.replace(Regex("^\\d+\\s+תרגילים\\s*•?\\s*"), ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .widthIn(min = 68.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (!countText.isNullOrBlank()) {
+                        CountTextBadge(text = countText, color = accent)
+                        Spacer(Modifier.height(6.dp))
+                    }
+
+                    Icon(
+                        imageVector = Icons.Filled.ChevronLeft,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SubjectLeafCard(
+    title: String,
+    countText: String,
+    onClick: () -> Unit
+) {
+    val accent = MaterialTheme.colorScheme.primary
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 0.dp,
+        shadowElevation = 1.dp,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+        border = BorderStroke(1.dp, Color(0x0F000000)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .heightIn(min = 34.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(accent.copy(alpha = 0.35f))
+            )
+
+            Spacer(Modifier.width(10.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Right,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = countText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Right,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            Icon(
+                imageVector = Icons.Filled.ChevronLeft,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+internal object SubjectTopicsUiLogic {
+
+    data class TopicsUiCountsPayload(
+        val subjectCounts: Map<String, Int>,
+        val handsRootCount: Int,
+        val handsPickCounts: Map<String, Int>,
+        val uiSectionCounts: Map<String, Int>,
+        val subTopicsPickCountsBySubjectId: Map<String, Map<String, Int>>
+    )
+
+    private fun normReleaseTitle(raw: String): String =
+        raw.trim()
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace(Regex("\\s+"), " ")
+            .lowercase()
+
+    private fun releasesSectionIdForTitle(raw: String): String? {
+        return when (normReleaseTitle(raw)) {
+            "שחרור מתפיסות ידיים / שיער / חולצה" -> "releases_hands_hair_shirt"
+            "שחרור מחניקות" -> "releases_chokes"
+            "שחרור מחביקות" -> "releases_hugs"
+            "חביקות גוף" -> "releases_hugs_body"
+            "חביקות צוואר" -> "releases_hugs_neck"
+            "חביקות זרוע" -> "releases_hugs_arm"
+            else -> null
+        }
+    }
+
+    private fun hardSectionTotalItems(sectionId: String): Int {
+        val section = il.kmi.shared.domain.content.HardSectionsCatalog.findSectionById(
+            subjectId = "releases",
+            sectionId = sectionId
+        ) ?: return 0
+
+        fun countDeep(
+            s: il.kmi.shared.domain.content.HardSectionsCatalog.Section
+        ): Int {
+            return if (s.subSections.isNotEmpty()) {
+                s.subSections.sumOf { child -> countDeep(child) }
+            } else {
+                s.beltGroups.sumOf { group -> group.items.size }
+            }
+        }
+
+        return countDeep(section)
+    }
+
+    private fun releasesCountForPick(raw: String): Int {
+        val sectionId = releasesSectionIdForTitle(raw) ?: return 0
+        return hardSectionTotalItems(sectionId)
+    }
+
+    fun buildTopicsUiCountsPayload(
+        subjects: List<SubjectTopic>,
+        handsBase: SubjectTopic?
+    ): TopicsUiCountsPayload {
+        val subjectCounts = subjects.associate { subject ->
+            subject.id to SubjectTopicsEngine.countUiTitlesForSubject(subject)
+        }
+
+        val handsPicksOrder: List<String> =
+            handsPicks(handsBase)
+
+        val handsPickCounts: Map<String, Int> =
+            handsPicksOrder.associateWith { pick ->
+                val base = handsBase
+                if (base == null) {
+                    0
+                } else {
+                    val tmp = SubjectTopicsEngine.handsSubjectForPick(base, pick)
+                    SubjectTopicsEngine.countUiTitlesForSubject(tmp)
+                }
+            }
+
+        val handsRootCount: Int = run {
+            val base = handsBase ?: return@run 0
+            val all = linkedSetOf<String>()
+
+            handsPicksOrder.forEach { pick ->
+                val tmp = SubjectTopicsEngine.handsSubjectForPick(base, pick)
+
+                tmp.topicsByBelt.keys.forEach { belt ->
+                    SubjectTopicsEngine.resolveSectionsForSubject(belt, tmp)
+                        .asSequence()
+                        .flatMap { it.items.asSequence() }
+                        .map { it.canonicalId }
+                        .forEach { all += it }
+                }
+            }
+
+            all.size
+        }
+
+        val uiSectionCounts: Map<String, Int> =
+            subjects.associate { subject ->
+                subject.id to subject.subTopics.size
+            }
+
+        val subTopicsPickCountsBySubjectId: Map<String, Map<String, Int>> =
+            subjects
+                .asSequence()
+                .filter { it.subTopics.isNotEmpty() }
+                .associate { base ->
+                    val countsForBase =
+                        base.subTopics.associateWith { pick ->
+                            when (base.id) {
+                                "hands_all" -> {
+                                    val tmp = SubjectTopicsEngine.handsSubjectForPick(base, pick)
+                                    SubjectTopicsEngine.countUiTitlesForSubject(tmp)
+                                }
+
+                                "releases",
+                                "releases_hugs" -> {
+                                    releasesCountForPick(pick)
+                                }
+
+                                else -> {
+                                    val tmp = SubjectTopicsEngine.subjectForPick(base, pick)
+                                    SubjectTopicsEngine.countUiTitlesForSubject(tmp)
+                                }
+                            }
+                        }
+
+                    base.id to countsForBase
+                }
+
+        return TopicsUiCountsPayload(
+            subjectCounts = subjectCounts,
+            handsRootCount = handsRootCount,
+            handsPickCounts = handsPickCounts,
+            uiSectionCounts = uiSectionCounts,
+            subTopicsPickCountsBySubjectId = subTopicsPickCountsBySubjectId
+        )
+    }
+
+    data class OpenSubjectDecision(
+        val chosenBelt: Belt,
+        val nonEmptyBelts: List<Belt>,
+        val resolverSections: Int,
+        val resolverItems: Int,
+        val sample: List<String>
+    )
+
+    data class SubTopicsDialogData(
+        val base: SubjectTopic?,
+        val bodyHugsChild: SubjectTopic?,
+        val picks: List<String>
+    )
+
+    sealed interface SubTopicPickDecision {
+        data class OpenTopicWithSub(
+            val topic: String,
+            val subTopic: String
+        ) : SubTopicPickDecision
+
+        data class OpenSubject(
+            val subject: SubjectTopic
+        ) : SubTopicPickDecision
+
+        data object None : SubTopicPickDecision
+    }
+
+    fun isDefenseChild(subject: SubjectTopic): Boolean {
+        val t = subject.titleHeb.trim()
+
+        val isWeaponOrKicks =
+            t.contains("בעיטות") || t.contains("סכין") || t.contains("אקדח") || t.contains("מקל")
+
+        val isOldInternalExternal =
+            (t.contains("הגנות פנימיות") || t.contains("הגנות חיצוניות")) &&
+                    (t.contains("אגרופים") || t.contains("בעיטות"))
+
+        return t.contains("הגנות") && (isWeaponOrKicks || isOldInternalExternal)
+    }
+
+    fun isHandsChild(subject: SubjectTopic): Boolean {
+        val t = subject.titleHeb.trim()
+        if (t == "עבודת ידיים") return true
+        return t.startsWith("עבודת ידיים") && (t.contains("-") || t.contains("–"))
+    }
+
+    fun visibleSubjects(subjects: List<SubjectTopic>): List<SubjectTopic> {
+        return subjects.filter { !isDefenseChild(it) && !isHandsChild(it) }
+    }
+
+    data class VisibleSubjectsSplit(
+        val withSubTopics: List<SubjectTopic>,
+        val withoutSubTopics: List<SubjectTopic>
+    )
+
+    data class SubjectCardModel(
+        val id: String,
+        val title: String,
+        val subtitle: String,
+        val countText: String,
+        val hasSubTopics: Boolean
+    )
+
+    data class RootCardModel(
+        val title: String,
+        val subtitle: String,
+        val countText: String
+    )
+
+    fun splitVisibleSubjects(
+        subjects: List<SubjectTopic>,
+        sectionCounts: Map<String, Int>
+    ): VisibleSubjectsSplit {
+
+        val visible = visibleSubjects(subjects)
+
+        val (withSubTopics, withoutSubTopics) = visible.partition { subject ->
+            val subCount = sectionCounts[subject.id] ?: subject.subTopics.size
+            subCount > 0
+        }
+
+        return VisibleSubjectsSplit(
+            withSubTopics = withSubTopics,
+            withoutSubTopics = withoutSubTopics
+        )
+    }
+
+    fun buildSubjectCardModels(
+        subjects: List<SubjectTopic>,
+        sectionCounts: Map<String, Int>,
+        subjectCounts: Map<String, Int>,
+        formatCount: (Int) -> String
+    ): List<SubjectCardModel> {
+        return subjects.map { subject ->
+            val subCount = sectionCounts[subject.id] ?: subject.subTopics.size
+            val exCount = subjectCounts[subject.id] ?: 0
+            val hasSubTopics = subCount > 0
+
+            SubjectCardModel(
+                id = subject.id,
+                title = subject.titleHeb,
+                subtitle = if (hasSubTopics) "בחר תת־נושא" else "כניסה לתרגילים",
+                countText = if (hasSubTopics) {
+                    "$subCount תתי נושאים\n${formatCount(exCount)}"
+                } else {
+                    formatCount(exCount)
+                },
+                hasSubTopics = hasSubTopics
+            )
+        }
+    }
+
+    fun buildDefenseRootCard(
+        totalDefense: Int,
+        formatCount: (Int) -> String
+    ): RootCardModel {
+        return RootCardModel(
+            title = "הגנות",
+            subtitle = "בעיטות / סכין / אקדח / מקל",
+            countText = "6 תתי נושאים\n${formatCount(totalDefense)}"
+        )
+    }
+
+    fun buildHandsRootCard(
+        handsRootCount: Int,
+        formatCount: (Int) -> String
+    ): RootCardModel {
+        return RootCardModel(
+            title = "עבודת ידיים",
+            subtitle = "מכות יד / מכות מרפק",
+            countText = "2 תתי נושאים\n${formatCount(handsRootCount)}"
+        )
+    }
+
+    fun choosePreferredBelt(
+        subject: SubjectTopic,
+        currentBelt: Belt,
+        nonEmptyBelts: List<Belt>
+    ): Belt {
+
+        val preferredOrder: List<Belt> = when {
+            subject.id == "hands_all" && subject.subTopicHint == "מכות יד" ->
+                listOf(Belt.YELLOW, Belt.ORANGE, currentBelt, Belt.GREEN)
+
+            subject.id == "hands_all" && subject.subTopicHint == "מכות מרפק" ->
+                listOf(Belt.GREEN, currentBelt, Belt.YELLOW, Belt.ORANGE)
+
+            else -> emptyList()
+        }
+
+        return preferredOrder.firstOrNull { it in nonEmptyBelts }
+            ?: nonEmptyBelts.firstOrNull()
+            ?: preferredOrder.firstOrNull { it in subject.topicsByBelt.keys }
+            ?: subject.topicsByBelt.keys.firstOrNull()
+            ?: currentBelt
+    }
+
+    fun buildOpenSubjectDecision(
+        subject: SubjectTopic,
+        currentBelt: Belt
+    ): OpenSubjectDecision {
+        val nonEmptyBelts = SubjectTopicsEngine.beltsWithItemsForSubject(subject)
+
+        val chosenBelt = choosePreferredBelt(
+            subject = subject,
+            currentBelt = currentBelt,
+            nonEmptyBelts = nonEmptyBelts
+        )
+
+        val secs = SubjectTopicsEngine.resolveSectionsForSubject(chosenBelt, subject)
+        val itemsCount = secs.sumOf { it.items.size }
+        val sample = secs
+            .asSequence()
+            .flatMap { it.items.asSequence() }
+            .take(8)
+            .map { it.canonicalId }
+            .toList()
+
+        return OpenSubjectDecision(
+            chosenBelt = chosenBelt,
+            nonEmptyBelts = nonEmptyBelts,
+            resolverSections = secs.size,
+            resolverItems = itemsCount,
+            sample = sample
+        )
+    }
+
+    fun buildOpenSubjectLog(
+        subject: SubjectTopic,
+        decision: OpenSubjectDecision
+    ): String {
+        return "openSubjectSmart: " +
+                "title='${subject.titleHeb}' " +
+                "id='${subject.id}' " +
+                "hint='${subject.subTopicHint}' " +
+                "chosenBelt=${decision.chosenBelt} " +
+                "nonEmptyBelts=${decision.nonEmptyBelts} " +
+                "topicsByBelt=${subject.topicsByBelt} " +
+                "resolverSections=${decision.resolverSections} " +
+                "resolverItems=${decision.resolverItems} " +
+                "sample=${decision.sample}"
+    }
+
+    data class OpenSubjectUiAction(
+        val chosenBelt: Belt,
+        val logMessage: String
+    )
+
+    fun buildOpenSubjectUiAction(
+        subject: SubjectTopic,
+        currentBelt: Belt
+    ): OpenSubjectUiAction {
+        val decision = buildOpenSubjectDecision(
+            subject = subject,
+            currentBelt = currentBelt
+        )
+
+        return OpenSubjectUiAction(
+            chosenBelt = decision.chosenBelt,
+            logMessage = buildOpenSubjectLog(
+                subject = subject,
+                decision = decision
+            )
+        )
+    }
+
+    fun buildSubTopicsDialogData(
+        subjects: List<SubjectTopic>,
+        id: String
+    ): SubTopicsDialogData {
+        val base = subjects.firstOrNull { it.id == id }
+
+        val bodyHugsChild =
+            if (base?.id == "releases") {
+                subjects.firstOrNull { it.id == "releases_hugs" }
+            } else {
+                null
+            }
+
+        val picks = when {
+            base == null -> emptyList()
+            else -> base.subTopics
+        }
+
+        return SubTopicsDialogData(
+            base = base,
+            bodyHugsChild = bodyHugsChild,
+            picks = picks
+        )
+    }
+
+    fun handsPicks(base: SubjectTopic?): List<String> {
+        return base?.subTopics?.takeIf { it.isNotEmpty() }
+            ?: listOf("מכות יד", "מכות מרפק")
+    }
+
+    fun resolveHandsPick(
+        base: SubjectTopic?,
+        picked: String
+    ): SubjectTopic? {
+        if (base == null) return null
+        return SubjectTopicsEngine.handsSubjectForPick(base, picked)
+    }
+
+    fun unifiedSubjectIdOrNull(
+        subject: SubjectTopic
+    ): String? {
+        return when (subject.id) {
+            "hands_all" -> "hands_all"
+            else -> null
+        }
+    }
+
+    sealed interface DefenseDialogDecision {
+        data class AskKind(
+            val kind: il.kmi.app.domain.DefenseKind
+        ) : DefenseDialogDecision
+
+        data class OpenHardSubject(
+            val subjectId: String
+        ) : DefenseDialogDecision
+
+        data object None : DefenseDialogDecision
+    }
+
+    fun resolveDefenseDialogPick(
+        picked: String
+    ): DefenseDialogDecision {
+        return when (picked.trim()) {
+            "internal" -> {
+                DefenseDialogDecision.AskKind(il.kmi.app.domain.DefenseKind.INTERNAL)
+            }
+
+            "external" -> {
+                DefenseDialogDecision.AskKind(il.kmi.app.domain.DefenseKind.EXTERNAL)
+            }
+
+            "kicks" -> {
+                DefenseDialogDecision.OpenHardSubject("kicks_hard")
+            }
+
+            "knife" -> {
+                DefenseDialogDecision.OpenHardSubject("knife_defense")
+            }
+
+            "gun" -> {
+                DefenseDialogDecision.OpenHardSubject("gun_threat_defense")
+            }
+
+            "stick" -> {
+                DefenseDialogDecision.OpenHardSubject("stick_defense")
+            }
+
+            else -> DefenseDialogDecision.None
+        }
+    }
+
+    sealed interface DefenseKindPickDecision {
+        data class OpenLegacyDefenses(
+            val kind: String,
+            val pick: String
+        ) : DefenseKindPickDecision
+
+        data class OpenHardSubject(
+            val subjectId: String
+        ) : DefenseKindPickDecision
+
+        data object None : DefenseKindPickDecision
+    }
+
+    fun resolveDefenseKindPick(
+        kind: il.kmi.app.domain.DefenseKind,
+        picked: String
+    ): DefenseKindPickDecision {
+
+        val kindKey = when (kind) {
+            il.kmi.app.domain.DefenseKind.INTERNAL -> "internal"
+            il.kmi.app.domain.DefenseKind.EXTERNAL -> "external"
+            else -> "all"
+        }
+
+        val pickKey = when {
+            picked.contains("אגרופ") -> "punch"
+            picked.contains("בעיט") -> "kick"
+            else -> "punch"
+        }
+
+        return when {
+            kindKey == "all" && pickKey == "kick" -> {
+                DefenseKindPickDecision.OpenHardSubject(
+                    subjectId = "kicks_hard"
+                )
+            }
+
+            else -> {
+                DefenseKindPickDecision.OpenLegacyDefenses(
+                    kind = kindKey,
+                    pick = pickKey
+                )
+            }
+        }
+    }
+
+    fun resolveSubTopicPick(
+        base: SubjectTopic?,
+        bodyHugsChild: SubjectTopic?,
+        picked: String,
+        norm: (String) -> String
+    ): SubTopicPickDecision {
+        if (base == null) return SubTopicPickDecision.None
+
+        val pickedNorm = norm(picked)
+
+        if (bodyHugsChild != null && pickedNorm == norm(bodyHugsChild.titleHeb)) {
+            return SubTopicPickDecision.OpenSubject(bodyHugsChild)
+        }
+
+        return SubTopicPickDecision.OpenSubject(
+            SubjectTopicsEngine.subjectForPick(base, picked)
+        )
+    }
+}
