@@ -5,6 +5,7 @@ import il.kmi.shared.domain.ContentRepo
 import il.kmi.shared.domain.SubjectTopic
 import il.kmi.shared.domain.content.Canonical.canonicalItemId
 import il.kmi.shared.domain.content.Canonical.normHeb
+import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
 
 object SubjectItemsResolver {
 
@@ -83,6 +84,82 @@ object SubjectItemsResolver {
         subject: SubjectTopic
     ): List<UiSection> {
 
+        // ✅ NEW: אם יש קטלוג קשיח לנושא הזה – זה מקור האמת
+        HardSectionsCatalog.sectionsForSubject(subject.id)?.let { hardSections ->
+
+            fun hardCanonicalId(sectionPath: String, rawItem: String): String {
+                // ✅ יציב למועדפים/אחרונים, ולא תלוי ב-ContentRepo
+                return buildString {
+                    append("hard::")
+                    append(subject.id.trim())
+                    append("::")
+                    append(belt.id.trim())
+                    append("::")
+                    append(sectionPath.trim())
+                    append("::")
+                    append(rawItem.trim())
+                }
+            }
+
+            fun buildHardSection(
+                sectionTitle: String,
+                sectionPath: String,
+                rawItems: List<String>
+            ): UiSection? {
+                val cleaned = rawItems
+                    .asSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .toList()
+
+                if (cleaned.isEmpty()) return null
+
+                return UiSection(
+                    title = sectionTitle.trim(),
+                    items = cleaned.map { raw ->
+                        val cid = hardCanonicalId(sectionPath, raw)
+                        UiItem(
+                            displayName = raw,
+                            canonicalId = cid,
+                            itemKey = cid,                    // ✅ לא להשתמש ב-makeItemKey (אין ContentRepo כאן)
+                            rawItem = raw,
+                            topicTitle = sectionTitle.trim(), // ✅ meta שימושי לכותרת
+                            subTopicTitle = sectionTitle.trim()
+                        )
+                    }
+                )
+            }
+
+            // ✅ NEW: תומך ב-subSections (למשל "שחרור מחביקות" -> "חביקות גוף/צוואר/זרוע")
+            val out = mutableListOf<UiSection>()
+
+            hardSections.forEach { sec ->
+                if (sec.subSections.isNotEmpty()) {
+                    sec.subSections.forEach { sub ->
+                        val rawItems = sub.itemsFor(belt)
+                        val title = sub.title.trim()
+                        val path = "${sec.title.trim()}::${sub.title.trim()}" // ייחודי ומאפשר IDs יציבים
+                        buildHardSection(
+                            sectionTitle = title,
+                            sectionPath = path,
+                            rawItems = rawItems
+                        )?.let(out::add)
+                    }
+                } else {
+                    val rawItems = sec.itemsFor(belt)
+                    val title = sec.title.trim()
+                    val path = sec.title.trim()
+                    buildHardSection(
+                        sectionTitle = title,
+                        sectionPath = path,
+                        rawItems = rawItems
+                    )?.let(out::add)
+                }
+            }
+
+            return out
+        }
+
         val topicTitles = subject.topicsByBelt[belt].orEmpty()
         if (topicTitles.isEmpty()) return emptyList()
 
@@ -103,7 +180,6 @@ object SubjectItemsResolver {
 
         fun resolveTopicItems(topicTitle: String): List<UiItem> {
 
-            // אם יש hint והוא תת־נושא אמיתי באותו topic — ננעל אליו (exact match)
             val subs = ContentRepo.getSubTopicsFor(belt, topicTitle)
             val exactSubTitle = subject.subTopicHint
                 ?.trim()
@@ -124,7 +200,6 @@ object SubjectItemsResolver {
                 .map { raw -> buildUiItem(topicTitle, raw) }
         }
 
-        // Build one section per topic (simple and predictable for UI)
         return topicTitles.mapNotNull { topicTitle ->
             val items = resolveTopicItems(topicTitle)
             if (items.isEmpty()) null

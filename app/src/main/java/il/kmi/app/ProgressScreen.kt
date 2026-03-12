@@ -1,4 +1,3 @@
-// File: app/src/main/java/il/kmi/app/screens/ProgressScreen.kt
 package il.kmi.app.screens
 
 import android.content.Context

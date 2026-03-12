@@ -14,31 +14,21 @@ import il.kmi.app.screens.IntroScreen
 import il.kmi.app.screens.registration.RegistrationNavHost
 import androidx.compose.runtime.rememberCoroutineScope
 import android.content.Context
-import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.screens.MyProfileScreen
 import il.kmi.app.screens.PhoneAuthGateScreen
 import il.kmi.app.screens.RateUsScreen
 import il.kmi.app.ui.DrawerBridge
 import android.widget.Toast
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import il.kmi.app.security.PinLockGate   // ⭐ חדש – שער נעילה בסיסמה
-import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.security.PinLockGate
 import il.kmi.shared.prefs.KmiPrefs
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
-import il.kmi.app.exercises.exercisesNavGraph
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -51,7 +41,6 @@ import il.kmi.app.free_sessions.ui.navigation.FreeSessionsRoute
 import il.kmi.app.ui.assistant.AiAssistantDialog
 import il.kmi.app.ui.WakeWordManager
 import il.kmi.app.ui.assistant.VoiceNavCommand
-import il.kmi.app.navigation.defenses.defensesNavGraph
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -176,64 +165,6 @@ fun MainNavHost(
                     onOpenHome = { nav.navigate(Route.Home.route) },
                     onOpenSettings = { DrawerBridge.openSettings() },
                     onOpenSearch = null
-                )
-            }
-
-            // ✅✅✅ Subject Exercises (תרגילים לפי נושא) — חייב להיות מוגדר פעם אחת בלבד בכל האפליקציה
-            composable(
-                route = Route.SubjectExercises.route,
-                arguments = listOf(
-                    navArgument("subjectId") { type = NavType.StringType },
-                    navArgument("beltId") { type = NavType.StringType; defaultValue = "" },
-                    navArgument("title") { type = NavType.StringType; defaultValue = "" }
-                )
-            ) { backStackEntry ->
-                val subjectIdEnc = backStackEntry.arguments?.getString("subjectId").orEmpty()
-                val subjectId = remember(subjectIdEnc) {
-                    runCatching { Uri.decode(subjectIdEnc) }
-                        .getOrDefault(subjectIdEnc)
-                        .trim()
-                }
-
-                val titleEnc = backStackEntry.arguments?.getString("title").orEmpty()
-                val titleFromNav = remember(titleEnc) {
-                    runCatching { Uri.decode(titleEnc) }
-                        .getOrDefault(titleEnc)
-                        .trim()
-                }
-
-                fun extractItemId(canonical: String): String {
-                    val raw = canonical.trim()
-                    if (raw.isBlank()) return raw
-                    return when {
-                        '|' in raw  -> raw.split('|', limit = 3).getOrNull(2).orEmpty()
-                        "::" in raw -> raw.split("::", limit = 4).lastOrNull().orEmpty()
-                        '/' in raw  -> raw.split('/', limit = 4).lastOrNull().orEmpty()
-                        else        -> raw
-                    }.trim()
-                }
-
-                il.kmi.app.screens.SubjectExercisesScreen(
-                    subjectId = subjectId,
-                    isCoach = isCoach,
-                    screenTitle = titleFromNav, // ✅ זה מה שמציג את תת־הנושא בכותרת
-                    onBack = { nav.popBackStack() },
-                    onOpenHome = {
-                        nav.navigate(Route.Home.route) {
-                            launchSingleTop = true
-                            restoreState = true
-                            popUpTo(nav.graph.startDestinationId) { inclusive = false }
-                        }
-                    },
-                    onExerciseClick = { belt, topic, itemCanonical ->
-                        val itemId = extractItemId(itemCanonical)
-                        if (itemId.isNotBlank()) {
-                            nav.navigate(Route.Exercise.make(id = Uri.encode(itemId))) {
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
-                    }
                 )
             }
 
@@ -424,16 +355,9 @@ fun MainNavHost(
                 kmiPrefs = kmiPrefs
             )
 
-            // ✅✅✅ NEW: Defenses graph (חייב להיות רשום כדי שהמסכים לא יהיו ריקים)
-            defensesNavGraph(nav = nav)
-
-            // ✅ NEW: Exercises graph (topic_repo/{beltId}/{topicId}/{subTopicId})
-            // זה היעד האמיתי שמציג תרגילים מתוך ContentRepo
-            exercisesNavGraph(
-                nav = nav,
-                vm = vm,
-                sp = sp,
-                kmiPrefs = kmiPrefs
+            // --- NEW: SubTopics graph ---
+            subTopicsNavGraph(
+                nav = nav
             )
 
             // --- NEW: Materials graph ---

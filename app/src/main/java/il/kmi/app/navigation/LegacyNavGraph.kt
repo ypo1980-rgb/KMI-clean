@@ -4,12 +4,17 @@ package il.kmi.app.navigation
 
 import android.content.SharedPreferences
 import android.net.Uri
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -19,18 +24,17 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.attendance.ui.AttendanceScreen
 import il.kmi.app.attendance.ui.AttendanceViewModel
-import il.kmi.shared.domain.Belt
-import il.kmi.app.screens.*
+import il.kmi.app.screens.ExercisesTabsScreen
+import il.kmi.app.screens.IntroScreen
+import il.kmi.app.screens.MaterialsScreen
+import il.kmi.app.screens.MonthlyCalendarScreen
+import il.kmi.app.screens.MyProfileScreen
 import il.kmi.app.screens.registration.RegistrationNavHost
 import il.kmi.app.ui.DrawerBridge
+import il.kmi.shared.domain.Belt
 import il.kmi.shared.prefs.KmiPrefs
 import java.net.URLDecoder
 import java.time.LocalDate
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.compose.ui.Modifier
-import androidx.compose.runtime.rememberCoroutineScope
 
 /**
  * גרף Legacy מרוכז: משתמש בכל הגרפים החדשים (home/topics/materials/…),
@@ -78,39 +82,40 @@ fun NavGraphBuilder.legacyNavGraph(
         )
     }
 
-    // -------- גרפים מודולריים (שכבר בנית) --------
-    // מנוע אימונים (BeltQ וכו')
+    // -------- גרפים מודולריים --------
     trainingNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+    homeNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+    topicsNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
 
-    // בית / נושאים / חומר לימוד / סיכום / אימון / מבחן / התקדמות / הגדרות / חוקי / אודות / רישום / מאמן / מנוי
-    homeNavGraph(        nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
-    topicsNavGraph(      nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
-    materialsNavGraph(   nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
-    summaryNavGraph(     nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
-    practiceNavGraph(    nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
-    examNavGraph(        nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
-    progressNavGraph(    nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+    // ✅ מקור האמת החדש של תתי־נושאים
+    subTopicsNavGraph(nav = nav)
+
+    materialsNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+    summaryNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+    practiceNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+    examNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+    progressNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+
     settingsNavGraph(
         nav = nav,
         sp = sp,
         kmiPrefs = kmiPrefs,
-        // ערך התחלתי מתוך KmiPrefs (או "system" אם ריק),
-        // ו־onThemeChange ריק כי ב־legacy הניווט לא משתמש במצב החדש של MainNavHost.
         themeMode = kmiPrefs.themeMode.ifBlank { "system" },
-        onThemeChange = { /* legacy path – שינוי נושא מטופל ברמה אחרת */ }
+        onThemeChange = { /* legacy path */ }
     )
-    legalNavGraph(       nav = nav)
-    aboutNavGraph(       nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+
+    legalNavGraph(nav = nav)
+    aboutNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     registrationNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
-    coachNavGraph(       nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+    coachNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     subscriptionNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
 
-    // 1) מסך נוכחות למאמן (Attendance)
+    // 1) מסך נוכחות למאמן
     composable(route = "attendance") {
-        val userBranch   = kmiPrefs.branch.orEmpty()
+        val userBranch = kmiPrefs.branch.orEmpty()
         val userGroupKey = il.kmi.app.training.TrainingCatalog
             .normalizeGroupName(name = kmiPrefs.ageGroup.orEmpty())
-        val today        = LocalDate.now()
+        val today = LocalDate.now()
 
         val attendVm: AttendanceViewModel = viewModel()
 
@@ -138,7 +143,6 @@ fun NavGraphBuilder.legacyNavGraph(
                 nav.navigate(route)
             },
 
-            // ✅ חובה מאז שהוספת פרמטר למסך
             onOpenGroupStats = { b, g ->
                 nav.navigate(Route.AttendanceGroupStats.make(b, g)) {
                     launchSingleTop = true
@@ -158,25 +162,29 @@ fun NavGraphBuilder.legacyNavGraph(
     }
 
     // 2) DeepLink: פתיחת Materials לפי מזהה תרגיל שנבחר בחיפוש
-    //    נתיב: Exercise/{id}  כאשר id = "beltId|topic|item" (או "::" / "/")
     composable(
         route = "${Route.Exercise.route}/{id}",
         arguments = listOf(navArgument("id") { type = NavType.StringType })
     ) { backStackEntry ->
-        fun dec(s: String?) = try { URLDecoder.decode(s ?: "", "UTF-8") } catch (_: Exception) { s.orEmpty() }
+        fun dec(s: String?) =
+            try {
+                URLDecoder.decode(s ?: "", "UTF-8")
+            } catch (_: Exception) {
+                s.orEmpty()
+            }
+
         val raw = backStackEntry.arguments?.getString("id").orEmpty()
         val parts = when {
-            raw.contains('|')  -> raw.split('|',  limit = 3)
+            raw.contains('|') -> raw.split('|', limit = 3)
             raw.contains("::") -> raw.split("::", limit = 3)
-            else               -> raw.split('/',  limit = 3)
+            else -> raw.split('/', limit = 3)
         }.map(::dec)
 
         val beltId = parts.getOrNull(0).orEmpty()
-        val topic  = parts.getOrNull(1).orEmpty()
-        val item   = parts.getOrNull(2).orEmpty()
-        val belt   = Belt.fromId(beltId) ?: Belt.WHITE
+        val topic = parts.getOrNull(1).orEmpty()
+        val item = parts.getOrNull(2).orEmpty()
+        val belt = Belt.fromId(beltId) ?: Belt.WHITE
 
-        // הדגשת פריט ב-Materials דרך ה-ViewModel (כמו בקוד הישן)
         LaunchedEffect(item) {
             runCatching {
                 val f = vm::class.java.getDeclaredField("highlightItem").apply { isAccessible = true }
@@ -184,7 +192,9 @@ fun NavGraphBuilder.legacyNavGraph(
                 flow?.value = item
             }.onFailure {
                 runCatching {
-                    val m = vm::class.java.methods.firstOrNull { it.name == "setHighlightItem" && it.parameterTypes.size == 1 }
+                    val m = vm::class.java.methods.firstOrNull {
+                        it.name == "setHighlightItem" && it.parameterTypes.size == 1
+                    }
                     m?.isAccessible = true
                     m?.invoke(vm, item)
                 }
@@ -196,14 +206,15 @@ fun NavGraphBuilder.legacyNavGraph(
             belt = belt,
             topic = topic,
             onBack = { nav.popBackStack() },
-
-            // ✅ FIX: חתימה חדשה + מעבירים גם topic + subTopic
             onSummary = { b, t, sub ->
                 nav.navigate(Route.Summary.make(belt = b, topic = t, subTopic = sub))
             },
-
-            onPractice = { b, t -> nav.navigate(Route.Practice.make(b, t)) },
-            onOpenSettings = { nav.navigate(Route.Settings.route) },
+            onPractice = { b, t ->
+                nav.navigate(Route.Practice.make(b, t))
+            },
+            onOpenSettings = {
+                nav.navigate(Route.Settings.route)
+            },
             onOpenHome = {
                 nav.navigate(Route.Home.route) {
                     popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -223,18 +234,21 @@ fun NavGraphBuilder.legacyNavGraph(
         )
     }
 
-    // 3) מסך "כל הרשימות" (משתמש באותו ExercisesTabsScreen עם topic="__ALL__")
+    // 3) מסך "כל הרשימות"
     composable(
         route = "ex_tabs_all/{beltId}",
-        arguments = listOf(navArgument("beltId"){ type = NavType.StringType })
+        arguments = listOf(navArgument("beltId") { type = NavType.StringType })
     ) { backStackEntry ->
         val beltId = backStackEntry.arguments?.getString("beltId").orEmpty()
-        val belt   = Belt.fromId(beltId) ?: Belt.WHITE
+        val belt = Belt.fromId(beltId) ?: Belt.WHITE
+
         ExercisesTabsScreen(
             vm = vm,
             belt = belt,
             topic = "__ALL__",
-            onPractice = { b, t -> nav.navigate(Route.Practice.make(b, t)) },
+            onPractice = { b, t ->
+                nav.navigate(Route.Practice.make(b, t))
+            },
             subTopicFilter = null,
             onHome = {
                 nav.navigate(Route.Home.route) {
@@ -243,17 +257,22 @@ fun NavGraphBuilder.legacyNavGraph(
                     restoreState = true
                 }
             },
-            onSearch = { nav.navigate(Route.Topics.route) { launchSingleTop = true } }
+            onSearch = {
+                nav.navigate(Route.Topics.route) {
+                    launchSingleTop = true
+                }
+            }
         )
     }
 
-    // 4) Rate-Us – פתיחה ל-Play Store ואז חזרה
+    // 4) Rate-Us
     composable(Route.RateUs.route) {
         val ctx = LocalContext.current
         LaunchedEffect(Unit) {
             val pkg = ctx.packageName
             val market = Uri.parse("market://details?id=$pkg")
-            val web    = Uri.parse("https://play.google.com/store/apps/details?id=$pkg")
+            val web = Uri.parse("https://play.google.com/store/apps/details?id=$pkg")
+
             val i = android.content.Intent(android.content.Intent.ACTION_VIEW, market).apply {
                 addFlags(
                     android.content.Intent.FLAG_ACTIVITY_NO_HISTORY or
@@ -261,23 +280,35 @@ fun NavGraphBuilder.legacyNavGraph(
                             android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK
                 )
             }
+
             runCatching { ctx.startActivity(i) }
-                .onFailure { runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, web)) } }
+                .onFailure {
+                    runCatching {
+                        ctx.startActivity(
+                            android.content.Intent(android.content.Intent.ACTION_VIEW, web)
+                        )
+                    }
+                }
+
             nav.popBackStack()
         }
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
             CircularProgressIndicator()
         }
     }
 
     composable(route = Route.MonthlyCalendar.route) {
-        il.kmi.app.screens.MonthlyCalendarScreen(
+        MonthlyCalendarScreen(
             kmiPrefs = kmiPrefs,
-            onBack   = { nav.popBackStack() }
+            onBack = { nav.popBackStack() }
         )
     }
 
-    // 5) מיפוי ישן → חדש: Route.Registration ⇒ מסלול הרישום החדש
+    // 5) מיפוי ישן → חדש
     composable(Route.Registration.route) {
         LaunchedEffect(Unit) {
             nav.navigate(Route.NewUserTrainee.route) {
@@ -285,7 +316,11 @@ fun NavGraphBuilder.legacyNavGraph(
                 launchSingleTop = true
             }
         }
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
             CircularProgressIndicator()
         }
     }

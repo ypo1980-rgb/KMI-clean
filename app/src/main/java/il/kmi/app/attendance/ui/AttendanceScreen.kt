@@ -46,6 +46,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.Explanations
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+import il.kmi.app.screens.parseSearchKey
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -840,20 +841,6 @@ private fun AttendanceSummaryCard(
     }
 }
 
-/* ========= עזר: לפרק מפתח חיפוש "belt|topic|item" ========= */
-private fun parseSearchKey(key: String): Triple<Belt, String, String> {
-    val parts = when {
-        "|" in key  -> key.split("|",  limit = 3)
-        "::" in key -> key.split("::", limit = 3)
-        "/" in key  -> key.split("/",  limit = 3)
-        else        -> listOf("", "", "")
-    }.let { (it + listOf("", "", "")).take(3) }
-
-    val belt  = Belt.fromId(parts[0]) ?: Belt.WHITE
-    val topic = parts[1]
-    val item  = parts[2]
-    return Triple(belt, topic, item)
-}
 
 /* ========= עזר: למצוא הסבר אמיתי מתוך Explanations ========= */
 private fun findExplanationForHit(
