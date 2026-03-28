@@ -44,6 +44,8 @@ import il.kmi.app.ui.assistant.VoiceNavCommand
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import il.kmi.app.screens.SubTopics.subTopicsByBeltNavGraph
+import il.kmi.app.screens.SubTopics.subTopicsByTopicNavGraph
 
 /**
  * NavHost הראשי של האפליקציה.
@@ -355,8 +357,11 @@ fun MainNavHost(
                 kmiPrefs = kmiPrefs
             )
 
-            // --- NEW: SubTopics graph ---
-            subTopicsNavGraph(
+            // --- NEW: SubTopics graphs ---
+            subTopicsByBeltNavGraph(
+                nav = nav
+            )
+            subTopicsByTopicNavGraph(
                 nav = nav
             )
 
@@ -372,7 +377,12 @@ fun MainNavHost(
             composable(route = Route.MonthlyCalendar.route) {
                 il.kmi.app.screens.MonthlyCalendarScreen(
                     kmiPrefs = kmiPrefs,
-                    onBack   = { nav.popBackStack() }
+                    onBack = { nav.popBackStack() },
+                    onDateClick = { pickedDate ->
+                        nav.navigate(
+                            Route.TrainingSummary.make(pickedDate.toString())
+                        )
+                    }
                 )
             }
 

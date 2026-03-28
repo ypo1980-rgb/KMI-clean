@@ -58,9 +58,12 @@ import il.kmi.app.search.KmiSearchBridge
 
 // ====== Colors & Theme ======
 private val White        = Color(0xFFFFFFFF)
+private val Ink950       = Color(0xFF0B1020)
 private val Ink900       = Color(0xFF0F172A)
+private val Ink800       = Color(0xFF172036)
+private val Ink700       = Color(0xFF24304D)
 private val Ink600       = Color(0xFF475569)
-private val DividerCol   = Color(0xFFE5E7EB)
+private val DividerCol   = Color(0x33FFFFFF)
 private val AccentBlue   = Color(0xFF3B82F6)
 private val AccentGreen  = Color(0xFF16A34A)
 
@@ -312,7 +315,7 @@ fun KmiTopBar(
                 .height(topBarHeight),
             shadowElevation = 0.dp,
             tonalElevation = 0.dp,
-            color = MaterialTheme.colorScheme.surface
+            color = Color.White
         ) {}
 
         CenterAlignedTopAppBar(
@@ -471,8 +474,9 @@ fun KmiTopBar(
             },
 
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                containerColor = Color.White,
+                scrolledContainerColor = Color.White,
+                titleContentColor = Ink900,
                 navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -484,7 +488,7 @@ fun KmiTopBar(
                 .padding(top = topBarHeight - 1.dp)
                 .fillMaxWidth()
                 .height(1.dp),
-            color = Color(0xFFDDDDDD)
+            color = Color(0x14000000)
         )
 
         val ttsHandler: () -> Unit = onTts ?: { /* no-op */ }
@@ -513,6 +517,7 @@ fun KmiTopBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(bottomBarHeight)
+                    .background(Color.White)
                     .zIndex(100f)
             ) {
                 DividerLine()
@@ -521,16 +526,8 @@ fun KmiTopBar(
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(6.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.28f),
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.10f),
-                                    Color.Transparent
-                                )
-                            )
-                        )
+                        .height(2.dp)
+                        .background(Color.Transparent)
                 )
 
                 il.kmi.app.screens.BottomActionsBarEdgeToEdge(
@@ -988,8 +985,8 @@ private fun buildExplanationWithStanceHighlight(
 /** תג מצב ריבועי (מאמן/מתאמן) */
 @Composable
 private fun RoleSquareBadge(isCoach: Boolean) {
-    val bg  = MaterialTheme.colorScheme.primaryContainer
-    val txt = MaterialTheme.colorScheme.onPrimaryContainer
+    val bg  = if (isCoach) Color(0xFF2A1F52) else Color(0xFF1E2947)
+    val txt = Color.White
     val line2 = if (isCoach) "מאמן" else "מתאמן"
 
     Surface(
@@ -997,7 +994,7 @@ private fun RoleSquareBadge(isCoach: Boolean) {
         contentColor = txt,
         shape = RoundedCornerShape(8.dp),
         shadowElevation = 2.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
     ) {
         Text(
             text = "מצב\n$line2",

@@ -95,6 +95,39 @@ private fun hardDisplayTitleFallback(raw: String): String {
     }
 }
 
+private fun normalizeHardNavTopic(raw: String): String {
+    val t = raw.trim()
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace(Regex("\\s+"), " ")
+
+    return when {
+        t == "שחרורים" -> "releases"
+
+        t == "מתפיסות" ||
+                t.contains("תפיסות יד") ||
+                t.contains("שיער") ||
+                t.contains("חולצה") ||
+                t.contains("שחרור מתפיסות") ->
+            "releases_hands_hair_shirt"
+
+        t.contains("חניקות") ||
+                t.contains("שחרור מחניקות") ->
+            "releases_chokes"
+
+        t.contains("מחביקות") ||
+                t.contains("חביקות גוף") ||
+                t.contains("חביקות צוואר") ||
+                t.contains("חביקות צואר") ||
+                t.contains("חביקות זרוע") ->
+            "releases_hugs"
+
+        else -> t
+    }
+}
 
 private fun loadDirectTopicItems(
     belt: Belt,
@@ -214,31 +247,37 @@ fun SubTopicsScreen(
     // ✅ מפענחים את שם הנושא (למקרה שעבר דרך ה-URL Encoded)
     val topicDecoded = remember(topic) { Uri.decode(topic).trim() }
 
-    val hardRootSections = remember(topicDecoded) {
-        HardSectionsCatalog.sectionsForSubject(topicDecoded)
+    // ✅ FIX: alias-ים של שחרורים ("מתפיסות", "חניקות", "מחביקות"...)
+    // צריכים להפוך ל-id קשיח כדי שהמסך לא ייפול ל-flow הרגיל והריק.
+    val hardNavTopic = remember(topicDecoded) {
+        normalizeHardNavTopic(topicDecoded)
     }
 
-    val hardCurrentSection = remember(topicDecoded, hardRootSections) {
+    val hardRootSections = remember(hardNavTopic) {
+        HardSectionsCatalog.sectionsForSubject(hardNavTopic)
+    }
+
+    val hardCurrentSection = remember(hardNavTopic, hardRootSections) {
         if (hardRootSections == null) {
-            HardSectionsCatalog.findAnySectionById(topicDecoded)
+            HardSectionsCatalog.findAnySectionById(hardNavTopic)
         } else {
             null
         }
     }
 
-    val isHardFlow = remember(topicDecoded, hardRootSections, hardCurrentSection) {
-        HardSectionsCatalog.supportsSubject(topicDecoded) ||
+    val isHardFlow = remember(hardNavTopic, hardRootSections, hardCurrentSection) {
+        HardSectionsCatalog.supportsSubject(hardNavTopic) ||
                 hardRootSections != null ||
                 hardCurrentSection != null
     }
 
-    val hardTitle = remember(topicDecoded, hardRootSections, hardCurrentSection) {
+    val hardTitle = remember(hardNavTopic, hardRootSections, hardCurrentSection) {
         when {
             hardCurrentSection != null -> hardCurrentSection.title
             hardRootSections != null ->
-                HardSectionsCatalog.subjectDisplayTitle(topicDecoded)
-                    ?: hardDisplayTitleFallback(topicDecoded)
-            else -> hardDisplayTitleFallback(topicDecoded)
+                HardSectionsCatalog.subjectDisplayTitle(hardNavTopic)
+                    ?: hardDisplayTitleFallback(hardNavTopic)
+            else -> hardDisplayTitleFallback(hardNavTopic)
         }
     }
 

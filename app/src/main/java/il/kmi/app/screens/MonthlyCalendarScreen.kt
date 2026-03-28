@@ -4,7 +4,6 @@ package il.kmi.app.screens
 
 import android.content.Context
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,13 +30,10 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.ui.graphics.graphicsLayer
 import il.kmi.app.training.TrainingCatalog
-import il.kmi.app.training.TrainingData
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.shared.prefs.KmiPrefs
-import org.json.JSONObject
 import java.io.BufferedReader
 import java.time.*
 import java.util.Locale
@@ -91,7 +87,8 @@ private fun DebugBanner(
 @Composable
 fun MonthlyCalendarScreen(
     kmiPrefs: KmiPrefs,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onDateClick: (LocalDate) -> Unit
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
 
@@ -104,8 +101,9 @@ fun MonthlyCalendarScreen(
         val branchRaw = kmiPrefs.branch.orEmpty()
         val groupRaw  = kmiPrefs.ageGroup.orEmpty()
 
-        var dialogDate by remember { mutableStateOf<LocalDate?>(null) }
-        var dialogTrainings by remember { mutableStateOf<List<TrainingData>>(emptyList()) }
+        // ❌ הוסר: דיאלוג אימונים מקומי
+        // var dialogDate by remember { mutableStateOf<LocalDate?>(null) }
+        // var dialogTrainings by remember { mutableStateOf<List<TrainingData>>(emptyList()) }
 
         // פירוק ערכים מרובים
         fun splitMulti(src: String): List<String> =
@@ -350,39 +348,11 @@ fun MonthlyCalendarScreen(
                                             modifier = Modifier.weight(1f),
                                             onClick = {
                                                 selectedDate = date
-
-                                                val dayTrainings = buildList {
-                                                    for (b in normBranchKeys) {
-                                                        for (g in normGroupKeys) {
-                                                            val weekly = TrainingCatalog.trainingsFor(b, g)
-                                                            weekly.forEach { td ->
-                                                                val calDow =
-                                                                    td.cal.get(java.util.Calendar.DAY_OF_WEEK)
-                                                                val calIndex = when (calDow) {
-                                                                    java.util.Calendar.SUNDAY    -> 0
-                                                                    java.util.Calendar.MONDAY    -> 1
-                                                                    java.util.Calendar.TUESDAY   -> 2
-                                                                    java.util.Calendar.WEDNESDAY -> 3
-                                                                    java.util.Calendar.THURSDAY  -> 4
-                                                                    java.util.Calendar.FRIDAY    -> 5
-                                                                    else                         -> 6
-                                                                }
-                                                                val dateIndex = date.dayOfWeek.value % 7
-                                                                if (calIndex == dateIndex) {
-                                                                    add(td)
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                dialogDate = date
-                                                dialogTrainings = dayTrainings
                                             }
                                         )
                                         day++
                                     }
-                                }
-                            }
+                                }                            }
                         }
 
                         Spacer(Modifier.height(8.dp))
@@ -429,6 +399,15 @@ fun MonthlyCalendarScreen(
                                             infoParts.joinToString(" • "),
                                         style = MaterialTheme.typography.bodySmall
                                     )
+
+                                    Spacer(Modifier.height(10.dp))
+
+                                    OutlinedButton(
+                                        onClick = { onDateClick(sel) },
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text("+ סיכום")
+                                    }
                                 }
                             }
                         }
@@ -439,8 +418,7 @@ fun MonthlyCalendarScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(bottom = 8.dp)
-                        ) {
-                            Dot(color = Color(0xFF1565C0), size = 10.dp)
+                        ) {                            Dot(color = Color(0xFF1565C0), size = 10.dp)
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 "אימון",
@@ -458,40 +436,8 @@ fun MonthlyCalendarScreen(
                         }
                     }
 
-                    // דיאלוג פרטי אימון ליום שנבחר
-                    dialogDate?.let { picked ->
-                        val pickedHoliday = holidaysByDate[picked]
-
-                        AlertDialog(
-                            onDismissRequest = { dialogDate = null },
-                            title = {
-                                Text("אימונים ב-${picked.dayOfMonth}.${picked.monthValue}.${picked.year}")
-                            },
-                            text = {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    if (!pickedHoliday.isNullOrBlank()) {
-                                        Text("🎉 $pickedHoliday", style = MaterialTheme.typography.bodyLarge)
-                                    }
-
-                                    if (dialogTrainings.isEmpty()) {
-                                        Text("אין אימון ביום זה.")
-                                    } else {
-                                        dialogTrainings.forEach { td ->
-                                            val h = td.cal.get(java.util.Calendar.HOUR_OF_DAY)
-                                            val m = td.cal.get(java.util.Calendar.MINUTE)
-                                            val timeStr = String.format("%02d:%02d", h, m)
-                                            Text("• $timeStr – אימון קבוע")
-                                        }
-                                    }
-                                }
-                            },
-                            confirmButton = {
-                                TextButton(onClick = { dialogDate = null }) {
-                                    Text("סגור")
-                                }
-                            }
-                        )
-                    }
+                    // ❌ הוסר:
+                    // הדיאלוג הישן של "אימונים ביום זה"
                 }
             }
         }

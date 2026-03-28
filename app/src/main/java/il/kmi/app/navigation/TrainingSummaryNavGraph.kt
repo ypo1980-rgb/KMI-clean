@@ -21,7 +21,12 @@ fun NavGraphBuilder.trainingSummaryNavGraph(
     kmiPrefs: KmiPrefs,
     onBack: (() -> Unit)? = null
 ) {
-    composable(route = Route.TrainingSummary.route) {
+    composable(route = Route.TrainingSummary.route) { backStackEntry ->
+
+        val pickedDateIso = backStackEntry.arguments
+            ?.getString("date")
+            ?.trim()
+            .orEmpty()
 
         // ✅ ב-Vm החגורה בדרך כלל מגיעה כ-il.kmi.shared.domain.Belt (או nullable)
         // לכן אוספים אותה ואז ממירים ל-il.kmi.app.domain.Belt לפי id.
@@ -38,6 +43,7 @@ fun NavGraphBuilder.trainingSummaryNavGraph(
             sp = sp,
             kmiPrefs = kmiPrefs,
             belt = belt,
+            pickedDateIso = pickedDateIso.ifBlank { null },
             onBack = onBack
         )
     }

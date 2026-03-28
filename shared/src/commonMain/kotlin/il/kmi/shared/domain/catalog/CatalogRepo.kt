@@ -3,48 +3,77 @@ package il.kmi.shared.domain.catalog
 import il.kmi.shared.domain.Belt
 
 /**
- * API אחיד לקריאת הקטלוג (Topic/SubTopic/Items) מתוך CatalogData.
- * KMP safe (commonMain).
+ * API אחיד לקריאת הקטלוג.
+ * מקור האמת: HardSectionsCatalog דרך CatalogRepoBuilder.
+ *
+ * שיפור ביצועים:
+ * - בונים snapshot אחד lazy של כל הקטלוג
+ * - כל הקריאות אחר כך עובדות מול cache בזיכרון
  */
 object CatalogRepo {
 
+    private data class CachedBeltContent(
+        val topics: List<CatalogTopic>,
+        val topicByTitle: Map<String, CatalogTopic>,
+        val topicTitles: List<String>
+    )
+
+    private data class CachePayload(
+        val byBelt: Map<Belt, CachedBeltContent>
+    )
+
+    private val cache: CachePayload by lazy {
+        val byBelt = Belt.order
+            .filter { it != Belt.WHITE }
+            .associateWith { belt ->
+                val topics = CatalogRepoBuilder.buildTopicsForBelt(belt)
+                CachedBeltContent(
+                    topics = topics,
+                    topicByTitle = topics.associateBy { it.title },
+                    topicTitles = topics.map { it.title }
+                )
+            }
+
+        CachePayload(byBelt = byBelt)
+    }
+
     fun listTopicTitles(belt: Belt): List<String> {
-        val bc = CatalogData.data[belt] ?: return emptyList()
-        return bc.topics.map { it.title }
+        return cache.byBelt[belt]?.topicTitles.orEmpty()
     }
 
     fun listSubTopicTitles(belt: Belt, topicTitle: String): List<String> {
-        val t = findTopic(belt, topicTitle) ?: return emptyList()
-        return t.subTopics.map { it.title }
+        val topic = findTopic(belt, topicTitle) ?: return emptyList()
+        return topic.subTopics.map { it.title }
     }
 
-    /**
-     * מחזיר את כל הפריטים של נושא.
-     * אם subTopicTitle == null -> כולל גם items של topic וגם כל items של כל תתי הנושא
-     * אם subTopicTitle != null -> רק תת נושא ספציפי
-     */
     fun listItems(
         belt: Belt,
         topicTitle: String,
         subTopicTitle: String? = null
     ): List<String> {
-        val t = findTopic(belt, topicTitle) ?: return emptyList()
+        val topic = findTopic(belt, topicTitle) ?: return emptyList()
 
         if (subTopicTitle.isNullOrBlank()) {
-            val top = t.items
-            val subs = t.subTopics.flatMap { it.items }
+            val top = topic.items
+            val subs = topic.subTopics.flatMap { it.items }
             return (top + subs).distinct()
         }
 
-        val st = t.subTopics.firstOrNull { it.title == subTopicTitle } ?: return emptyList()
-        return st.items.distinct()
+        val subTopic = topic.subTopics.firstOrNull { it.title == subTopicTitle }
+            ?: return emptyList()
+
+        return subTopic.items.distinct()
     }
 
-    fun hasTopic(belt: Belt, topicTitle: String): Boolean =
-        findTopic(belt, topicTitle) != null
+    fun hasTopic(belt: Belt, topicTitle: String): Boolean {
+        return findTopic(belt, topicTitle) != null
+    }
 
-    fun findTopic(belt: Belt, topicTitle: String): CatalogData.Topic? {
-        val bc = CatalogData.data[belt] ?: return null
-        return bc.topics.firstOrNull { it.title == topicTitle }
+    fun findTopic(belt: Belt, topicTitle: String): CatalogTopic? {
+        return cache.byBelt[belt]?.topicByTitle?.get(topicTitle)
+    }
+
+    fun warmUp() {
+        cache
     }
 }

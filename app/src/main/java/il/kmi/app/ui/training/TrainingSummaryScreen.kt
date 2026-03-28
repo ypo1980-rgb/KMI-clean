@@ -19,10 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -60,11 +57,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -74,12 +68,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.mutableLongStateOf
-import java.time.Instant
 import java.time.ZoneId
 import androidx.compose.foundation.clickable
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.Delete
@@ -88,6 +83,35 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.filled.PlaylistAddCheck
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+
+
+// ===========================
+// Training Summary Palette
+// ===========================
+
+private val SummaryBgTop = Color(0xFF08101F)
+private val SummaryBgBottom = Color(0xFF1A315C)
+
+private val SummaryCard = Color(0xFF223454)
+private val SummaryCardInner = Color(0xFF2B3D5F)
+
+private val SummaryBorder = Color(0xFF39527F)
+private val SummaryDivider = Color(0xFF364A72)
+
+private val SummaryChip = Color(0xFF32486F)
+private val SummaryChipSelected = Color(0xFF47649A)
 
 /**
  * פריט תרגיל "לבחירה" שמגיע מהקטלוג (ContentRepo).
@@ -99,6 +123,94 @@ data class ExercisePickItem(
     val topic: String
 )
 
+@Composable
+private fun SummarySectionHeader(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        val rtlStyle = TextStyle(textDirection = TextDirection.Rtl)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.End
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge.merge(rtlStyle),
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall.merge(rtlStyle),
+                    color = Color.White.copy(alpha = 0.72f),
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .background(
+                        brush = Brush.radialGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.95f),
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                            )
+                        ),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PremiumSummaryCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(24.dp),
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = shape,
+        color = SummaryCard,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            1.dp,
+            SummaryBorder
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.End,
+            content = content
+        )
+    }
+}
+
 /**
  * ✅ שים לב: השם V2 כדי למנוע Conflicting overloads אם כבר קיים אצלך TrainingSummaryScreen אחר בפרויקט.
  */
@@ -109,10 +221,20 @@ fun TrainingSummaryScreen(
     sp: SharedPreferences,
     kmiPrefs: KmiPrefs,
     belt: Belt,
+    pickedDateIso: String? = null,
     onBack: (() -> Unit)? = null
 ) {
     val state by vm.state.collectAsState()
     val scrollState = rememberLazyListState()
+    var showAddExercisesSheet by rememberSaveable { mutableStateOf(false) }
+
+    // ✅ אם המסך נפתח מלוח השנה עם תאריך נבחר — נכניס אותו ל-VM מיד בכניסה
+    LaunchedEffect(pickedDateIso) {
+        val iso = pickedDateIso?.trim().orEmpty()
+        if (iso.isNotBlank() && state.dateIso != iso) {
+            vm.setDateIso(iso)
+        }
+    }
 
     // ✅ מקור אמת לסניף/קבוצה/מאמן לפי תאריך (כמו במסך הבית)
     val truth = remember(sp) { HomeScheduleTruth(sp) }
@@ -150,47 +272,46 @@ fun TrainingSummaryScreen(
 
     Scaffold(
         topBar = {
-            if (onBack == null) {
-                KmiTopBar(
-                    title = "סיכום אימון",
-                    showTopHome = false,
-                    lockSearch = true
-                )
-            } else {
-                KmiTopBar(
-                    title = "סיכום אימון",
-                    showTopHome = false,
-                    onBack = onBack,
-                    lockSearch = true
-                )
+            Surface(color = Color(0xFF0B1020)) {
+                if (onBack == null) {
+                    KmiTopBar(
+                        title = "סיכום אימון",
+                        showTopHome = false,
+                        lockSearch = true
+                    )
+                } else {
+                    KmiTopBar(
+                        title = "סיכום אימון",
+                        showTopHome = false,
+                        onBack = onBack,
+                        lockSearch = true
+                    )
+                }
             }
         },
         contentWindowInsets = WindowInsets(0),
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = Color(0xFF0B1020)
     ) { padding ->
 
-        // ✅ רקע “גרניט” יוקרתי (טקסטורה עדינה + גרדיאנט)
-        val granite = Brush.linearGradient(
+        val granite = Brush.verticalGradient(
             colors = listOf(
-                MaterialTheme.colorScheme.surface,
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
-                MaterialTheme.colorScheme.surface
-            ),
-            start = Offset(0f, 0f),
-            end = Offset(900f, 1300f)
+                SummaryBgTop,
+                Color(0xFF0E1A33),
+                Color(0xFF15284D),
+                SummaryBgBottom
+            )
         )
 
-        // שכבת "גרעיניות" עדינה באמצעות diagonal stripes שקופים
         val graniteNoise = Brush.linearGradient(
             colors = listOf(
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f),
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.00f),
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.030f),
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.00f),
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.025f)
+                Color.White.copy(alpha = 0.030f),
+                Color.Transparent,
+                Color.White.copy(alpha = 0.018f),
+                Color.Transparent,
+                Color.White.copy(alpha = 0.014f)
             ),
             start = Offset(0f, 0f),
-            end = Offset(1200f, 1200f)
+            end = Offset(1400f, 1400f)
         )
 
         Box(
@@ -202,7 +323,7 @@ fun TrainingSummaryScreen(
                 .imePadding()
                 .navigationBarsPadding()
         ) {
-        LazyColumn(
+            LazyColumn(
                 state = scrollState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
@@ -228,331 +349,67 @@ fun TrainingSummaryScreen(
                     )
                 }
 
-// חיפוש + בחירה מרובה
+// הוספת תרגילים – כרטיס קומפקטי + פתיחת Bottom Sheet
 // -----------------------------
                 item {
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
+                    PremiumSummaryCard {
+                        SummarySectionHeader(
+                            title = "הוספת תרגילים",
+                            subtitle = "בחר אם להוסיף תרגילים שבוצעו באימון",
+                            icon = Icons.Filled.PlaylistAddCheck
+                        )
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = SummaryDivider,
+                            shape = RoundedCornerShape(999.dp)
+                        ) {
+                            Spacer(Modifier.height(2.dp))
+                        }
+
+                        Text(
+                            text = if (state.selected.isEmpty()) {
+                                "עדיין לא נוספו תרגילים לאימון הזה"
+                            } else {
+                                "נוספו כבר ${state.selected.size} תרגילים לאימון הזה"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.72f),
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                    FilledTonalButton(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp),
+                        onClick = { showAddExercisesSheet = true },
+                        shape = RoundedCornerShape(999.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                            contentColor = Color.White
                         )
                     ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Text("תרגילים שבוצעו", fontWeight = FontWeight.ExtraBold)
-
-                            // =========================
-                        // ✅ בחירת חגורה (קומבו)
-                        // =========================
-                        var beltOpen by remember { mutableStateOf(false) }
-
-                        // התחל מה-belt שנשלח ל-Screen, אבל תן למשתמש לבחור
-                        var selectedBelt by remember { mutableStateOf(belt) }
-
-                        ExposedDropdownMenuBox(
-                            expanded = beltOpen,
-                            onExpandedChange = { beltOpen = !beltOpen }
-                        ) {
-                            OutlinedTextField(
-                                value = beltHebLabel(selectedBelt),
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("חגורה") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = beltOpen) },
-                                modifier = Modifier
-                                    .menuAnchor()
-                                    .fillMaxWidth()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = beltOpen,
-                                onDismissRequest = { beltOpen = false }
-                            ) {
-                                // ✅ Belt הוא enum אצלך
-                                Belt.values().forEach { b ->
-                                    DropdownMenuItem(
-                                        text = { Text(beltHebLabel(b), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                        onClick = {
-                                            selectedBelt = b
-                                            beltOpen = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        // =========================
-                        // ✅ Topics לפי חגורה
-                        // =========================
-                        val topics: List<String> = remember(selectedBelt) {
-                            val viaBridge = runCatching {
-                                il.kmi.app.search.KmiSearchBridge.topicTitlesFor(selectedBelt)
-                            }.getOrDefault(emptyList())
-
-                            if (viaBridge.isNotEmpty()) viaBridge
-                            else {
-                                runCatching {
-                                    val sharedBelt: il.kmi.shared.domain.Belt =
-                                        il.kmi.shared.domain.Belt.fromId(selectedBelt.id)
-                                            ?: il.kmi.shared.domain.Belt.WHITE
-
-                                    il.kmi.shared.domain.SubTopicRegistry
-                                        .allForBelt(sharedBelt)
-                                        .keys
-                                        .toList()
-                                }.getOrDefault(emptyList())
-                            }
-                        }
-
-                        var topic by rememberSaveable { mutableStateOf(topics.firstOrNull().orEmpty()) }
-                        var subTopic by rememberSaveable { mutableStateOf("") }
-
-                        // אם החליפו חגורה וה-topic לא קיים יותר – נאפס
-                        LaunchedEffect(selectedBelt, topics) {
-                            if (topic.isBlank() || topic !in topics) {
-                                topic = topics.firstOrNull().orEmpty()
-                                subTopic = ""
-                            }
-                        }
-
-                        // =========================
-                        // ✅ SubTopics לפי נושא
-                        // =========================
-                            val subTopics: List<String> = remember(selectedBelt, topic) {
-                                runCatching {
-                                    il.kmi.app.domain.ContentRepo
-                                        .listSubTopicTitles(selectedBelt, topic)
-                                        .map { it.trim() }
-                                        .filter { it.isNotBlank() }
-                                }.getOrDefault(emptyList())
-                            }
-
-                            LaunchedEffect(topic, subTopics) {
-                            if (subTopic.isNotBlank() && subTopic !in subTopics) subTopic = ""
-                        }
-
-                        // ===== Topic dropdown =====
-                        var topicOpen by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
-                            expanded = topicOpen,
-                            onExpandedChange = { topicOpen = !topicOpen }
-                        ) {
-                            OutlinedTextField(
-                                value = topic,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("נושא") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = topicOpen) },
-                                modifier = Modifier
-                                    .menuAnchor()
-                                    .fillMaxWidth()
-                            )
-                            ExposedDropdownMenu(
-                                expanded = topicOpen,
-                                onDismissRequest = { topicOpen = false }
-                            ) {
-                                topics.forEach { t ->
-                                    DropdownMenuItem(
-                                        text = { Text(t, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                        onClick = {
-                                            topic = t
-                                            subTopic = ""
-                                            topicOpen = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        // ===== SubTopic dropdown (אם יש) =====
-                        if (subTopics.isNotEmpty()) {
-                            var subOpen by remember { mutableStateOf(false) }
-                            ExposedDropdownMenuBox(
-                                expanded = subOpen,
-                                onExpandedChange = { subOpen = !subOpen }
-                            ) {
-                                OutlinedTextField(
-                                    value = if (subTopic.isBlank()) "כל תתי הנושאים" else subTopic,
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("תת-נושא") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = subOpen) },
-                                    modifier = Modifier
-                                        .menuAnchor()
-                                        .fillMaxWidth()
-                                )
-                                ExposedDropdownMenu(
-                                    expanded = subOpen,
-                                    onDismissRequest = { subOpen = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("כל תתי הנושאים") },
-                                        onClick = {
-                                            subTopic = ""
-                                            subOpen = false
-                                        }
-                                    )
-                                    subTopics.forEach { st ->
-                                        DropdownMenuItem(
-                                            text = { Text(st, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                            onClick = {
-                                                subTopic = st
-                                                subOpen = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // ✅ חיפוש (מסנן בתוך הנושא/תת-נושא שנבחרו)
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = state.searchQuery,
-                            onValueChange = { vm.setSearchQuery(it) },
-                            label = { Text("חיפוש תרגיל (בתוך הנושא)") },
-                            singleLine = true
+                        Icon(
+                            imageVector = Icons.Filled.PlaylistAddCheck,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
                         )
-
-                        // ✅ שליפת תרגילים מהמאגר לפי חגורה/נושא/תת-נושא
-                            val rawItems: List<String> = remember(selectedBelt, topic, subTopic) {
-                                runCatching {
-                                    il.kmi.app.domain.ContentRepo.listItemTitles(
-                                        belt = selectedBelt,
-                                        topicTitle = topic,
-                                        subTopicTitle = subTopic.ifBlank { null }
-                                    )
-                                }.getOrDefault(emptyList())
-                            }
-
-                            val displayItems: List<String> = remember(rawItems) {
-                                rawItems
-                                    .map {
-                                        il.kmi.shared.questions.model.util.ExerciseTitleFormatter
-                                            .displayName(it)
-                                            .ifBlank { it }
-                                            .trim()
-                                    }
-                                    .filter { it.isNotBlank() }
-                                    .distinct()
-                            }
-
-                            val filteredItems: List<String> = remember(displayItems, state.searchQuery) {
-                            val q = state.searchQuery.trim()
-                            if (q.isBlank()) displayItems
-                            else displayItems.filter { it.contains(q, ignoreCase = true) }
-                        }
-
-                            // =========================
-                            // ✅ בחירה מרובה עם “אשר”
-                            // =========================
-                            var pendingPicks by remember {
-                                mutableStateOf<LinkedHashMap<String, ExercisePickItem>>(linkedMapOf())
-                            }
-
-                            Text(
-                                text = "נמצאו ${filteredItems.size} · מסומנים ${state.selected.size} · להוספה ${pendingPicks.size}",
-                                style = MaterialTheme.typography.labelLarge
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // ניקוי בחירות זמניות
-                                if (pendingPicks.isNotEmpty()) {
-                                    TextButton(
-                                        onClick = { pendingPicks = linkedMapOf() }
-                                    ) {
-                                        Text("נקה בחירה")
-                                    }
-                                    Spacer(Modifier.width(10.dp))
-                                }
-
-                                FilledTonalButton(
-                                    onClick = {
-                                        // מוסיפים את כל מה שסומן זמנית, בלי לשכפל
-                                        pendingPicks.values.forEach { p ->
-                                            if (!state.selected.containsKey(p.exerciseId)) {
-                                                vm.toggleExercise(p)
-                                            }
-                                        }
-                                        pendingPicks = linkedMapOf()
-                                    },
-                                    enabled = pendingPicks.isNotEmpty()
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("אשר", fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-
-                            Divider()
-
-                            // ✅ הרשימה מוצגת כבחירה (ללא הגבלה)
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 180.dp, max = 380.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                userScrollEnabled = true
-                            ) {
-                                items(filteredItems, key = { it }) { name ->
-                                    val id = "${selectedBelt.id}|$topic|$subTopic|$name"
-
-                                    val alreadySelected = state.selected.containsKey(id)
-                                    val isPending = pendingPicks.containsKey(id)
-
-                                    ExercisePickRow(
-                                        item = ExercisePickItem(
-                                            exerciseId = id,
-                                            name = name,
-                                            topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
-                                        ),
-                                        checked = alreadySelected || isPending,
-                                        onToggle = {
-                                            // אם כבר נבחר קבוע - משנים דרך ה-VM (הסרה/הוספה)
-                                            if (alreadySelected) {
-                                                vm.toggleExercise(
-                                                    ExercisePickItem(
-                                                        exerciseId = id,
-                                                        name = name,
-                                                        topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
-                                                    )
-                                                )
-                                            } else {
-                                                // אחרת - רק מסמנים/מסירים זמני
-                                                val next = LinkedHashMap(pendingPicks)
-                                                if (next.containsKey(id)) next.remove(id)
-                                                else next[id] = ExercisePickItem(
-                                                    exerciseId = id,
-                                                    name = name,
-                                                    topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
-                                                )
-                                                pendingPicks = next
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "הוסף תרגילים",
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
                     }
                 }
+            }
 
             item {
                 Spacer(Modifier.height(6.dp))
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                    color = SummaryDivider,
                     shape = RoundedCornerShape(999.dp)
                 ) {
                     Spacer(Modifier.height(2.dp))
@@ -565,86 +422,59 @@ fun TrainingSummaryScreen(
 // -----------------------------
             if (state.selected.isNotEmpty()) {
                 item {
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(22.dp),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
+                    PremiumSummaryCard {
+                        SummarySectionHeader(
+                            title = "התרגילים שנוספו לאימון",
+                            subtitle = "ניהול, עריכה והוספת דגשים לכל תרגיל",
+                            icon = Icons.Filled.FitnessCenter
                         )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            horizontalAlignment = Alignment.End
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = SummaryDivider,
+                            shape = RoundedCornerShape(999.dp)
                         ) {
-                            // Header יפה
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.End
-                                ) {
-                                    Text(
-                                        text = "התרגילים שתורגלו באימון היום",
-                                        fontWeight = FontWeight.ExtraBold,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        textAlign = TextAlign.Right,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Text(
-                                        text = "סה\"כ ${state.selected.size} תרגילים",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Right,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
+                            Spacer(Modifier.height(2.dp))
+                        }
 
-                                Spacer(Modifier.width(10.dp))
-
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer
-                                ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AssistChip(
+                                onClick = { },
+                                label = { Text("סה\"כ ${state.selected.size} תרגילים") },
+                                leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.Filled.FitnessCenter,
-                                        contentDescription = null,
-                                        modifier = Modifier.padding(10.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = null
                                     )
-                                }
-                            }
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                                )
+                            )
+                        }
 
-                            // קו הפרדה עדין
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
-                                shape = RoundedCornerShape(999.dp)
-                            ) { Spacer(Modifier.height(2.dp)) }
+                        val selectedList = state.selected.values.toList()
+                            .sortedBy { it.name.lowercase() }
 
-                            val selectedList = state.selected.values.toList()
-                                .sortedBy { it.name.lowercase() }
-
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 120.dp, max = 520.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                                userScrollEnabled = true
-                            ) {
-                                items(selectedList, key = { it.exerciseId }) { ex ->
-                                    SelectedExerciseEditor(
-                                        item = ex,
-                                        onRemove = { vm.removeExercise(ex.exerciseId) },
-                                        onDifficulty = { vm.setDifficulty(ex.exerciseId, it) },
-                                        onHighlight = { vm.setHighlight(ex.exerciseId, it) },
-                                        onHomePractice = { vm.setHomePractice(ex.exerciseId, it) }
-                                    )
-                                }
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 120.dp, max = 560.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            userScrollEnabled = true
+                        ) {
+                            items(selectedList, key = { it.exerciseId }) { ex ->
+                                SelectedExerciseEditor(
+                                    item = ex,
+                                    onRemove = { vm.removeExercise(ex.exerciseId) },
+                                    onDifficulty = { vm.setDifficulty(ex.exerciseId, it) },
+                                    onHighlight = { vm.setHighlight(ex.exerciseId, it) },
+                                    onHomePractice = { vm.setHomePractice(ex.exerciseId, it) }
+                                )
                             }
                         }
                     }
@@ -655,35 +485,49 @@ fun TrainingSummaryScreen(
             // סיכום חופשי (מאמן/מתאמן לפי role)
             // -----------------------------
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = if (state.isCoach) "סיכום השיעור" else "סיכום השיעור",
-                            fontWeight = FontWeight.ExtraBold
-                        )
+                PremiumSummaryCard {
+                    SummarySectionHeader(
+                        title = "סיכום כללי",
+                        subtitle = "סיכום חופשי של האימון, תחושות, דגשים ומה לשפר",
+                        icon = Icons.Filled.Notes
+                    )
 
-                        OutlinedTextField(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 120.dp),
-                            value = state.notes,
-                            onValueChange = { vm.setNotes(it) },
-                            label = {
-                                Text(
-                                    if (state.isCoach) "דגשים מקצועיים, ביצוע, מה לשפר…"
-                                    else "איך היה האימון? מה הרגשת? מה לשפר…"
-                                )
-                            },
-                            minLines = 4
-                        )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = SummaryDivider,
+                        shape = RoundedCornerShape(999.dp)
+                    ) {
+                        Spacer(Modifier.height(2.dp))
                     }
+
+                    OutlinedTextField(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 160.dp),
+                        value = state.notes,
+                        onValueChange = { vm.setNotes(it) },
+                        label = {
+                            Text(
+                                if (state.isCoach) "דגשים מקצועיים, ביצוע, מה לשפר…"
+                                else "איך היה האימון? מה הרגשת? מה לשפר…"
+                            )
+                        },
+                        minLines = 6,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = Color.White
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = SummaryBorder,
+                            unfocusedBorderColor = SummaryDivider,
+                            focusedLabelColor = Color.White.copy(alpha = 0.90f),
+                            unfocusedLabelColor = Color.White.copy(alpha = 0.72f),
+                            cursorColor = Color.White,
+                            focusedContainerColor = SummaryCardInner,
+                            unfocusedContainerColor = SummaryCardInner
+                        )
+                    )
                 }
             }
 
@@ -691,51 +535,482 @@ fun TrainingSummaryScreen(
                 // שמירה
                 // -----------------------------
                 item {
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
+                    PremiumSummaryCard {
+                        SummarySectionHeader(
+                            title = "שמירה",
+                            subtitle = "שמור את הסיכום והתרגילים שנוספו לאימון הזה",
+                            icon = Icons.Filled.Check
+                        )
+
+                    FilledTonalButton(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(58.dp),
+                        onClick = {
+                            vm.save()
+
+                            val key = "training_summary_days"
+                            val cur = sp.getStringSet(key, emptySet())?.toMutableSet() ?: mutableSetOf()
+                            cur.add(state.dateIso.trim())
+                            sp.edit().putStringSet(key, cur).apply()
+                        },
+                        enabled = !state.isSaving,
+                        shape = RoundedCornerShape(999.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = Color(0xFF2563EB).copy(alpha = 0.90f),
+                            contentColor = Color.White
                         )
                     ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            FilledTonalButton(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp),
-                                onClick = {
-                                    // ✅ שמירה רגילה
-                                    vm.save()
+                        Text(
+                            text = if (state.isSaving) "שומר..." else "שמירת סיכום האימון",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
 
-                                    // ✅ סימון היום כ"יש סיכום"
-                                    val key = "training_summary_days"
-                                    val cur = sp.getStringSet(key, emptySet())?.toMutableSet() ?: mutableSetOf()
-                                    cur.add(state.dateIso.trim())
-                                    sp.edit().putStringSet(key, cur).apply()
-                                },
-                                enabled = !state.isSaving
-                            ) {
-                                Text(
-                                    text = if (state.isSaving) "שומר..." else "שמירת סיכום",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
+                item { Spacer(Modifier.height(10.dp)) }
+        } // LazyColumn
+
+            if (showAddExercisesSheet) {
+                AddExercisesBottomSheet(
+                    vm = vm,
+                    state = state,
+                    initialBelt = belt,
+                    beltHebLabel = ::beltHebLabel,
+                    onDismiss = { showAddExercisesSheet = false }
+                )
+            }
+
+        } // Box
+    } // Scaffold
+} // TrainingSummaryScreen
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddExercisesBottomSheet(
+    vm: TrainingSummaryViewModel,
+    state: TrainingSummaryUiState,
+    initialBelt: Belt,
+    beltHebLabel: (Belt) -> String,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var beltOpen by remember { mutableStateOf(false) }
+    var selectedBelt by rememberSaveable { mutableStateOf<Belt?>(null) }
+    var topic by rememberSaveable { mutableStateOf("") }
+    var subTopic by rememberSaveable { mutableStateOf("") }
+
+    var pendingPicks by remember {
+        mutableStateOf<LinkedHashMap<String, ExercisePickItem>>(linkedMapOf())
+    }
+
+    val darkFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = Color.White,
+        unfocusedTextColor = Color.White,
+        focusedBorderColor = SummaryBorder,
+        unfocusedBorderColor = SummaryDivider,
+        focusedLabelColor = Color.White.copy(alpha = 0.88f),
+        unfocusedLabelColor = Color.White.copy(alpha = 0.68f),
+        focusedTrailingIconColor = Color.White.copy(alpha = 0.90f),
+        unfocusedTrailingIconColor = Color.White.copy(alpha = 0.68f),
+        focusedLeadingIconColor = Color.White.copy(alpha = 0.90f),
+        unfocusedLeadingIconColor = Color.White.copy(alpha = 0.68f),
+        cursorColor = Color.White,
+        focusedContainerColor = SummaryCardInner,
+        unfocusedContainerColor = SummaryCardInner
+    )
+
+    val topics: List<String> = remember(selectedBelt) {
+        val belt = selectedBelt ?: return@remember emptyList()
+
+        val viaBridge = runCatching {
+            il.kmi.app.search.KmiSearchBridge.topicTitlesFor(belt)
+        }.getOrDefault(emptyList())
+
+        if (viaBridge.isNotEmpty()) {
+            viaBridge
+        } else {
+            runCatching {
+                val sharedBelt =
+                    il.kmi.shared.domain.Belt.fromId(belt.id)
+                        ?: il.kmi.shared.domain.Belt.WHITE
+
+                il.kmi.shared.domain.SubTopicRegistry
+                    .allForBelt(sharedBelt)
+                    .keys
+                    .toList()
+            }.getOrDefault(emptyList())
+        }
+    }
+
+    val subTopics: List<String> = remember(selectedBelt, topic) {
+        val belt = selectedBelt
+        if (belt == null || topic.isBlank()) return@remember emptyList()
+
+        runCatching {
+            il.kmi.app.domain.ContentRepo
+                .listSubTopicTitles(belt, topic)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .filterNot { it == topic.trim() }
+                .filterNot { it == "כל תתי הנושאים" }
+                .distinct()
+        }.getOrDefault(emptyList())
+    }
+
+    val rawItems: List<String> = remember(selectedBelt, topic, subTopic, subTopics) {
+        val belt = selectedBelt
+        if (belt == null || topic.isBlank()) return@remember emptyList()
+        if (subTopics.isNotEmpty() && subTopic.isBlank()) return@remember emptyList()
+
+        runCatching {
+            il.kmi.app.domain.ContentRepo.listItemTitles(
+                belt = belt,
+                topicTitle = topic,
+                subTopicTitle = subTopic.ifBlank { null }
+            )
+        }.getOrDefault(emptyList())
+    }
+
+    val displayItems: List<String> = remember(rawItems) {
+        rawItems
+            .map {
+                il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+                    .displayName(it)
+                    .ifBlank { it }
+                    .trim()
+            }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    val filteredItems: List<String> = remember(displayItems, state.searchQuery) {
+        val q = state.searchQuery.trim()
+        if (q.isBlank()) displayItems
+        else displayItems.filter { it.contains(q, ignoreCase = true) }
+    }
+
+    val showTopicField = selectedBelt != null
+    val showSubTopicField = showTopicField && topic.isNotBlank() && subTopics.isNotEmpty()
+    val showSearchAndItems = showTopicField && topic.isNotBlank() &&
+            (subTopics.isEmpty() || subTopic.isNotBlank())
+
+    LaunchedEffect(selectedBelt) {
+        topic = ""
+        subTopic = ""
+        pendingPicks = linkedMapOf()
+        vm.setSearchQuery("")
+    }
+
+    LaunchedEffect(topic) {
+        subTopic = ""
+        pendingPicks = linkedMapOf()
+        vm.setSearchQuery("")
+    }
+
+    LaunchedEffect(subTopic) {
+        pendingPicks = linkedMapOf()
+        vm.setSearchQuery("")
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF10182D),
+        scrimColor = Color.Black.copy(alpha = 0.62f),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 6.dp)
+                    .width(54.dp)
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.White.copy(alpha = 0.22f))
+            )
+        }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color(0xFF10182D),
+                            Color(0xFF16213F),
+                            Color(0xFF1B2C56)
+                        )
+                    )
+                )
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                item {
+                    SummarySectionHeader(
+                        title = "הוספת תרגילים",
+                        subtitle = "בחר חגורה, נושא ותת־נושא והוסף תרגילים לאימון",
+                        icon = Icons.Filled.PlaylistAddCheck
+                    )
+                }
+
+                item {
+                    ExposedDropdownMenuBox(
+                        expanded = beltOpen,
+                        onExpandedChange = { beltOpen = !beltOpen }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedBelt?.let(beltHebLabel).orEmpty(),
+                            onValueChange = {},
+                            readOnly = true,
+                            placeholder = { Text("בחר חגורה") },
+                            label = { Text("חגורה") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = beltOpen)
+                            },
+                            colors = darkFieldColors,
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = beltOpen,
+                            onDismissRequest = { beltOpen = false },
+                            containerColor = Color(0xFF182545)
+                        ) {
+                            Belt.values().forEach { b ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = beltHebLabel(b),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            color = Color.White
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedBelt = b
+                                        beltOpen = false
+                                    }
                                 )
                             }
                         }
                     }
                 }
 
-                item { Spacer(Modifier.height(10.dp)) }
-            } // LazyColumn
-        } // Box
-    } // Scaffold
-} // TrainingSummaryScreen
+                if (showTopicField) {
+                    item {
+                        var topicOpen by remember { mutableStateOf(false) }
 
+                        ExposedDropdownMenuBox(
+                            expanded = topicOpen,
+                            onExpandedChange = { topicOpen = !topicOpen }
+                        ) {
+                            OutlinedTextField(
+                                value = topic,
+                                onValueChange = {},
+                                readOnly = true,
+                                placeholder = { Text("בחר נושא") },
+                                label = { Text("נושא") },
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = topicOpen)
+                                },
+                                colors = darkFieldColors,
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = topicOpen,
+                                onDismissRequest = { topicOpen = false },
+                                containerColor = Color(0xFF182545)
+                            ) {
+                                topics.forEach { t ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = t,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = Color.White
+                                            )
+                                        },
+                                        onClick = {
+                                            topic = t
+                                            topicOpen = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (showSubTopicField) {
+                    item {
+                        var subOpen by remember { mutableStateOf(false) }
+
+                        ExposedDropdownMenuBox(
+                            expanded = subOpen,
+                            onExpandedChange = { subOpen = !subOpen }
+                        ) {
+                            OutlinedTextField(
+                                value = subTopic,
+                                onValueChange = {},
+                                readOnly = true,
+                                placeholder = { Text("בחר תת-נושא") },
+                                label = { Text("תת-נושא") },
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = subOpen)
+                                },
+                                colors = darkFieldColors,
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = subOpen,
+                                onDismissRequest = { subOpen = false },
+                                containerColor = Color(0xFF182545)
+                            ) {
+                                subTopics.forEach { st ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = st,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = Color.White
+                                            )
+                                        },
+                                        onClick = {
+                                            subTopic = st
+                                            subOpen = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (showSearchAndItems) {
+                    item {
+                        OutlinedTextField(
+                            modifier = Modifier.fillMaxWidth(),
+                            value = state.searchQuery,
+                            onValueChange = { vm.setSearchQuery(it) },
+                            label = { Text("חיפוש תרגיל") },
+                            singleLine = true,
+                            colors = darkFieldColors
+                        )
+                    }
+
+                    item {
+                        Text(
+                            text = "נמצאו ${filteredItems.size} · כבר נוספו ${state.selected.size} · ממתינים לאישור ${pendingPicks.size}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White.copy(alpha = 0.78f),
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (pendingPicks.isNotEmpty()) {
+                                TextButton(onClick = { pendingPicks = linkedMapOf() }) {
+                                    Text("נקה בחירה", color = Color.White.copy(alpha = 0.82f))
+                                }
+                                Spacer(Modifier.width(10.dp))
+                            }
+
+                            FilledTonalButton(
+                                onClick = {
+                                    pendingPicks.values.forEach { p ->
+                                        if (!state.selected.containsKey(p.exerciseId)) {
+                                            vm.toggleExercise(p)
+                                        }
+                                    }
+                                    pendingPicks = linkedMapOf()
+                                    onDismiss()
+                                },
+                                enabled = pendingPicks.isNotEmpty(),
+                                shape = RoundedCornerShape(999.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = Color(0xFF2563EB).copy(alpha = 0.90f),
+                                    contentColor = Color.White
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("אשר והוסף", fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+
+                    items(filteredItems, key = { it }) { name ->
+                        val belt = selectedBelt ?: return@items
+                        val id = "${belt.id}|$topic|$subTopic|$name"
+                        val alreadySelected = state.selected.containsKey(id)
+                        val isPending = pendingPicks.containsKey(id)
+
+                        ExercisePickRow(
+                            item = ExercisePickItem(
+                                exerciseId = id,
+                                name = name,
+                                topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
+                            ),
+                            checked = alreadySelected || isPending,
+                            onToggle = {
+                                if (alreadySelected) {
+                                    vm.toggleExercise(
+                                        ExercisePickItem(
+                                            exerciseId = id,
+                                            name = name,
+                                            topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
+                                        )
+                                    )
+                                } else {
+                                    val next = LinkedHashMap(pendingPicks)
+                                    if (next.containsKey(id)) next.remove(id)
+                                    else next[id] = ExercisePickItem(
+                                        exerciseId = id,
+                                        name = name,
+                                        topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
+                                    )
+                                    pendingPicks = next
+                                }
+                            }
+                        )
+                    }
+                }
+
+                item { Spacer(Modifier.height(12.dp)) }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -746,8 +1021,6 @@ private fun TrainingInfoCard(
     coachName: String,
     groupKey: String,
     errorText: String?,
-
-    // ✅ חדש
     markedDateIsos: Set<String>,
     onRequestMonthMarks: (year: Int, month1to12: Int) -> Unit
 ) {
@@ -759,325 +1032,297 @@ private fun TrainingInfoCard(
         }.getOrDefault(iso)
     }
 
-    ElevatedCard(
+    val zone = remember { ZoneId.systemDefault() }
+
+    fun isoToMillis(iso: String): Long? {
+        return runCatching {
+            val d = LocalDate.parse(
+                iso.trim(),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
+            )
+            d.atStartOfDay(zone).toInstant().toEpochMilli()
+        }.getOrNull()
+    }
+
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
+    var initialMillis by rememberSaveable {
+        mutableLongStateOf(isoToMillis(dateIso) ?: System.currentTimeMillis())
+    }
+
+    LaunchedEffect(dateIso) {
+        isoToMillis(dateIso)?.let { initialMillis = it }
+    }
+
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        shape = RoundedCornerShape(24.dp),
+        color = SummaryCard,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(1.dp, SummaryBorder)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Text(
-                        text = "אימון",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = prettyDate(dateIso),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            val rtlStyle = TextStyle(textDirection = TextDirection.Rtl)
 
-                Spacer(Modifier.width(10.dp))
-
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.FitnessCenter,
-                        contentDescription = null,
-                        modifier = Modifier.padding(10.dp),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-
-            val zone = remember { ZoneId.systemDefault() }
-
-            fun isoToMillis(iso: String): Long? {
-                return runCatching {
-                    val d = LocalDate.parse(
-                        iso.trim(),
-                        DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
-                    )
-                    d.atStartOfDay(zone).toInstant().toEpochMilli()
-                }.getOrNull()
-            }
-
-            fun millisToIso(millis: Long): String {
-                val d = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
-                return d.format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US))
-            }
-
-            var showDatePicker by rememberSaveable { mutableStateOf(false) }
-            var initialMillis by rememberSaveable {
-                mutableLongStateOf(isoToMillis(dateIso) ?: System.currentTimeMillis())
-            }
-
-            LaunchedEffect(dateIso) {
-                isoToMillis(dateIso)?.let { initialMillis = it }
-            }
-
-            // ✅ כל שורת התאריך לחיצה -> פותח לוח שנה
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .clickable(
-                        interactionSource = remember {
-                            androidx.compose.foundation.interaction.MutableInteractionSource()
-                        },
-                        indication = null
-                    ) { showDatePicker = true }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                OutlinedTextField(
-                    value = dateIso,
-                    onValueChange = {},
-                    enabled = false,
-                    readOnly = true,
-                    label = { Text("תאריך") },
-                    singleLine = true,
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    leadingIcon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
-                    trailingIcon = {
-                        Icon(Icons.Filled.CalendarMonth, contentDescription = "בחר תאריך")
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        disabledLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        disabledContainerColor = MaterialTheme.colorScheme.surface
-                    )
-                )
-            }
-
-            // ✅ חדש: כפתור מפורש לפתיחת היומן עם הסימונים (קריאת סיכומים)
-            FilledTonalButton(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp),
-                onClick = { showDatePicker = true }
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CalendarMonth,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("קריאת סיכומים (יומן)")
-            }
-
-            if (showDatePicker) {
-
-                // ✅ נתחיל מהתאריך הנוכחי של המסך
-                val initDate = remember(dateIso) {
-                    runCatching { LocalDate.parse(dateIso.trim()) }.getOrNull() ?: LocalDate.now()
-                }
-
-                var viewYear  by rememberSaveable(initDate) { mutableStateOf(initDate.year) }
-                var viewMonth by rememberSaveable(initDate) { mutableStateOf(initDate.monthValue) } // 1..12
-                var pickedDay by rememberSaveable(initDate) { mutableStateOf(initDate.dayOfMonth) }
-
-                // ✅ בכל פתיחה/מעבר חודש – נבקש מה-VM להביא ימים עם סיכום לחודש הזה
-                LaunchedEffect(viewYear, viewMonth, showDatePicker) {
-                    if (showDatePicker) onRequestMonthMarks(viewYear, viewMonth)
-                }
-
-                AlertDialog(
-                    onDismissRequest = { showDatePicker = false },
-                    title = {
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.End
+                    ) {
                         Text(
-                            text = "בחירת תאריך",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
+                            text = "פרטי האימון",
+                            style = MaterialTheme.typography.titleLarge.merge(rtlStyle),
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
                             textAlign = TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
-                    },
-                    text = {
-                        Surface(
-                            shape = RoundedCornerShape(18.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 1.dp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .widthIn(max = 360.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
 
-                                // Header חודש + ניווט
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    TextButton(
-                                        onClick = {
-                                            val next = LocalDate.of(viewYear, viewMonth, 1).plusMonths(1)
-                                            viewYear = next.year
-                                            viewMonth = next.monthValue
-                                            pickedDay = 1
-                                        }
-                                    ) { Text("הבא") }
+                        Spacer(Modifier.height(4.dp))
 
-                                    Spacer(Modifier.weight(1f))
-
-                                    val monthTitle = remember(viewYear, viewMonth) {
-                                        val d = LocalDate.of(viewYear, viewMonth, 1)
-                                        val fmt = DateTimeFormatter.ofPattern("MMMM yyyy", Locale("he", "IL"))
-                                        d.format(fmt)
-                                    }
-
-                                    Text(
-                                        text = monthTitle,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        textAlign = TextAlign.Center
-                                    )
-
-                                    Spacer(Modifier.weight(1f))
-
-                                    TextButton(
-                                        onClick = {
-                                            val prev = LocalDate.of(viewYear, viewMonth, 1).minusMonths(1)
-                                            viewYear = prev.year
-                                            viewMonth = prev.monthValue
-                                            pickedDay = 1
-                                        }
-                                    ) { Text("הקודם") }
-                                }
-
-                                // ימי שבוע
-                                val week = listOf("א", "ב", "ג", "ד", "ה", "ו", "ש")
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    week.forEach { wd ->
-                                        Text(
-                                            text = wd,
-                                            modifier = Modifier.weight(1f),
-                                            textAlign = TextAlign.Center,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
-                                // Grid ימים (עם סימונים)
-                                MonthGridWithMarks(
-                                    year = viewYear,
-                                    month1to12 = viewMonth,
-                                    pickedDay = pickedDay,
-                                    markedDateIsos = markedDateIsos,
-                                    onPickDay = { pickedDay = it }
-                                )
-
-                                val chosenIso = remember(viewYear, viewMonth, pickedDay) {
-                                    LocalDate.of(viewYear, viewMonth, pickedDay)
-                                        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US))
-                                }
-                                Text(
-                                    text = "נבחר: $chosenIso",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                val picked = LocalDate.of(viewYear, viewMonth, pickedDay)
-                                onDateChange(picked.format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)))
-                                showDatePicker = false
-                            }
-                        ) { Text("בחר") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showDatePicker = false }) { Text("ביטול") }
+                        Text(
+                            text = prettyDate(dateIso),
+                            style = MaterialTheme.typography.bodySmall.merge(rtlStyle),
+                            color = Color.White.copy(alpha = 0.75f),
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-                )
-            }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                AssistChip(
-                    onClick = { },
-                    label = { Text(branchName.ifBlank { "סניף: —" }) },
-                    leadingIcon = { Icon(Icons.Filled.Groups, contentDescription = null) },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                    )
-                )
-            }
+                    Spacer(Modifier.width(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                AssistChip(
-                    onClick = { },
-                    label = { Text(coachName.ifBlank { "מאמן: —" }) },
-                    leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                    )
-                )
-                Spacer(Modifier.width(8.dp))
-                AssistChip(
-                    onClick = { },
-                    label = { Text(groupKey.ifBlank { "קבוצה: —" }) },
-                    leadingIcon = { Icon(Icons.Filled.Groups, contentDescription = null) },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                    )
-                )
-            }
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                brush = Brush.radialGradient(
+                                    listOf(Color(0xFF8B5CF6), Color(0xFF312E81))
+                                ),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.FitnessCenter,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
 
-            if (!errorText.isNullOrBlank()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.errorContainer
+                    shape = RoundedCornerShape(18.dp),
+                    color = SummaryCardInner
                 ) {
-                    Text(
-                        text = errorText,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp)
+                    Column(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        PremiumInfoRow(
+                            label = "סניף",
+                            value = branchName.ifBlank { "לא נמצא סניף" }
+                        )
+
+                        PremiumInfoRow(
+                            label = "מאמן",
+                            value = coachName.ifBlank { "מאמן לא ידוע" }
+                        )
+
+                        if (groupKey.isNotBlank()) {
+                            PremiumInfoRow(
+                                label = "קבוצה",
+                                value = groupKey
+                            )
+                        }
+                    }
+                }
+
+                FilledTonalButton(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    onClick = { showDatePicker = true },
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(999.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CalendarMonth,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color.White
                     )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "קריאת סיכומים",
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                }
+
+                if (!errorText.isNullOrBlank()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
+                    ) {
+                        Text(
+                            text = errorText,
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        )
+                    }
                 }
             }
         }
+    }
+
+    if (showDatePicker) {
+        val initDate = remember(dateIso) {
+            runCatching { LocalDate.parse(dateIso.trim()) }.getOrNull() ?: LocalDate.now()
+        }
+
+        var viewYear by rememberSaveable(initDate) { mutableStateOf(initDate.year) }
+        var viewMonth by rememberSaveable(initDate) { mutableStateOf(initDate.monthValue) }
+        var pickedDay by rememberSaveable(initDate) { mutableStateOf(initDate.dayOfMonth) }
+
+        LaunchedEffect(viewYear, viewMonth, showDatePicker) {
+            if (showDatePicker) onRequestMonthMarks(viewYear, viewMonth)
+        }
+
+        AlertDialog(
+            onDismissRequest = { showDatePicker = false },
+            title = {
+                Text(
+                    text = "בחירת תאריך",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 360.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    val next = LocalDate.of(viewYear, viewMonth, 1).plusMonths(1)
+                                    viewYear = next.year
+                                    viewMonth = next.monthValue
+                                    pickedDay = 1
+                                }
+                            ) { Text("הבא") }
+
+                            Spacer(Modifier.weight(1f))
+
+                            val monthTitle = remember(viewYear, viewMonth) {
+                                val d = LocalDate.of(viewYear, viewMonth, 1)
+                                val fmt = DateTimeFormatter.ofPattern("MMMM yyyy", Locale("he", "IL"))
+                                d.format(fmt)
+                            }
+
+                            Text(
+                                text = monthTitle,
+                                fontWeight = FontWeight.ExtraBold,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(Modifier.weight(1f))
+
+                            TextButton(
+                                onClick = {
+                                    val prev = LocalDate.of(viewYear, viewMonth, 1).minusMonths(1)
+                                    viewYear = prev.year
+                                    viewMonth = prev.monthValue
+                                    pickedDay = 1
+                                }
+                            ) { Text("הקודם") }
+                        }
+
+                        val week = listOf("א", "ב", "ג", "ד", "ה", "ו", "ש")
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            week.forEach { wd ->
+                                Text(
+                                    text = wd,
+                                    modifier = Modifier.weight(1f),
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        MonthGridWithMarks(
+                            year = viewYear,
+                            month1to12 = viewMonth,
+                            pickedDay = pickedDay,
+                            markedDateIsos = markedDateIsos,
+                            onPickDay = { pickedDay = it }
+                        )
+
+                        val chosenIso = remember(viewYear, viewMonth, pickedDay) {
+                            LocalDate.of(viewYear, viewMonth, pickedDay)
+                                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US))
+                        }
+
+                        Text(
+                            text = "נבחר: $chosenIso",
+                            style = MaterialTheme.typography.labelLarge,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val picked = LocalDate.of(viewYear, viewMonth, pickedDay)
+                        onDateChange(
+                            picked.format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US))
+                        )
+                        showDatePicker = false
+                    }
+                ) { Text("בחר") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("ביטול") }
+            }
+        )
     }
 }
 
@@ -1323,6 +1568,39 @@ private fun CalendarMonthGrid(
 }
 
 @Composable
+private fun PremiumInfoRow(
+    label: String,
+    value: String
+) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        val rtlStyle = TextStyle(textDirection = TextDirection.Rtl)
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.merge(rtlStyle),
+                color = Color(0xFFBFDBFE),
+                textAlign = TextAlign.Right,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium.merge(rtlStyle),
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Right,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
 private fun InfoRow(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1359,21 +1637,25 @@ private fun ExercisePickRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp)),
+            .clip(RoundedCornerShape(16.dp)),
         color = if (checked)
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+            Color(0xFF3B82F6).copy(alpha = 0.22f)
         else
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        tonalElevation = 1.dp
+            SummaryCardInner.copy(alpha = 0.45f),
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            1.dp,
+            if (checked) Color(0xFF60A5FA).copy(alpha = 0.45f)
+            else Color.White.copy(alpha = 0.08f)
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.End
         ) {
-            // ✅ טקסטים מימין (RTL)
             Column(
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.End
@@ -1382,13 +1664,14 @@ private fun ExercisePickRow(
                     text = item.name,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
                     textAlign = TextAlign.Right,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     text = item.topic,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = Color.White.copy(alpha = 0.70f),
                     textAlign = TextAlign.Right,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1396,7 +1679,6 @@ private fun ExercisePickRow(
 
             Spacer(Modifier.width(10.dp))
 
-            // ✅ צ'קבוקס בצד שמאל-ויזואלית אבל בקצה (RTL)
             Checkbox(
                 checked = checked,
                 onCheckedChange = { onToggle() }
@@ -1413,7 +1695,6 @@ private fun SelectedExerciseEditor(
     onHighlight: (String) -> Unit,
     onHomePractice: (Boolean) -> Unit
 ) {
-    // ✅ UX: שדה הערות נפתח רק כשצריך
     var notesOpen by rememberSaveable(item.exerciseId) {
         mutableStateOf(item.highlight.isNotBlank())
     }
@@ -1421,115 +1702,178 @@ private fun SelectedExerciseEditor(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
-        tonalElevation = 1.dp
+            .clip(RoundedCornerShape(22.dp)),
+        color = SummaryCardInner,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            1.dp,
+            SummaryBorder
+        )
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.End
         ) {
-
-            // ===== Header (מודרני) =====
             Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(Modifier.height(6.dp))
+
+                        AssistChip(
+                            onClick = { },
+                            label = {
+                                Text(
+                                    text = item.topic.ifBlank { "ללא נושא" },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = Color.White
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = SummaryChip,
+                                labelColor = Color.White,
+                                leadingIconContentColor = Color.White
+                            )
+                        )
+                    }
+
+                    Spacer(Modifier.width(10.dp))
+
+                    FilledTonalIconButton(
+                        onClick = { notesOpen = !notesOpen },                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.EditNote,
+                            contentDescription = if (notesOpen) "סגור הערות" else "פתח הערות"
+                        )
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    OutlinedIconButton(
+                        onClick = onRemove,
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.error.copy(alpha = 0.60f)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "מחק תרגיל",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
+                color = SummaryDivider,
+                shape = RoundedCornerShape(999.dp)
             ) {
-
-                // טקסטים מימין (RTL)
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text(
-                        text = item.topic,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Spacer(Modifier.width(10.dp))
-
-                // ✅ כפתור "+"/הערות – מודרני
-                FilledTonalIconButton(
-                    onClick = { notesOpen = !notesOpen }
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.EditNote,
-                        contentDescription = if (notesOpen) "סגור הערות" else "הוסף הערה"
-                    )
-                }
-
-                Spacer(Modifier.width(8.dp))
-
-                // ✅ מחיקה – אייקון פח במקום X
-                OutlinedIconButton(
-                    onClick = onRemove,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.55f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = "מחק תרגיל",
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
+                Spacer(Modifier.height(1.5.dp))
             }
 
-            // ===== Preview when closed (אם יש הערה קיימת) =====
+            Text(
+                text = "רמת קושי",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                textAlign = TextAlign.Right,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                AssistChip(
+                    onClick = { onHomePractice(!item.homePractice) },
+                    label = {
+                        Text(
+                            if (item.homePractice) "סומן לעבודה בבית" else "סמן לעבודה בבית"
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null
+                        )
+                    },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (item.homePractice)
+                            SummaryChipSelected
+                        else
+                            SummaryChip,
+                        labelColor = Color.White,
+                        leadingIconContentColor = Color.White
+                    )
+                )
+            }
+
             if (!notesOpen && item.highlight.isNotBlank()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    shape = RoundedCornerShape(14.dp),
+                    color = SummaryChip
                 ) {
-                    Text(
-                        text = item.highlight,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                        Text(
+                            text = item.highlight,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
-            }
 
-            // ===== Notes editor when open =====
             if (notesOpen) {
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
                     value = item.highlight,
                     onValueChange = { onHighlight(it) },
                     label = { Text("דגשים והערות לתרגיל") },
-                    minLines = 2
+                    minLines = 3,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = Color.White
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = SummaryBorder,
+                        unfocusedBorderColor = SummaryDivider,
+                        focusedLabelColor = Color.White,
+                        unfocusedLabelColor = Color.White.copy(alpha = 0.78f),
+                        cursorColor = Color.White,
+                        focusedContainerColor = SummaryCardInner,
+                        unfocusedContainerColor = SummaryCardInner
+                    )
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun rememberFilteredExercises(
-    allExercises: List<ExercisePickItem>,
-    query: String
-): List<ExercisePickItem> {
-    val q = query.trim().lowercase()
-    if (q.isBlank()) return allExercises
-    return allExercises.filter { ex ->
-        ex.name.lowercase().contains(q) || ex.topic.lowercase().contains(q)
     }
 }
 

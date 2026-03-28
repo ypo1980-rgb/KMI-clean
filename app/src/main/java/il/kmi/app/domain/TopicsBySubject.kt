@@ -72,23 +72,23 @@ object TopicsBySubjectRegistry {
         SubjectTopic(
             id = "hands_all",
             titleHeb = "עבודת ידיים",
-            description = "מכות יד + מכות מרפק",
+            description = "מכות יד + מכות מרפק + מכות במקל / רובה",
             belts = listOf(
                 Belt.YELLOW,
                 Belt.ORANGE,
-                Belt.GREEN
+                Belt.GREEN,
+                Belt.BLACK
             ),
             topicsByBelt = mapOf(
-                // ✅ בפועל בצהוב/כתום זה "עבודת ידיים" (כמו שהלוג שלך הראה ב-subjectId='punches')
                 Belt.YELLOW to listOf("עבודת ידיים", "מכות ידיים", "מכות יד"),
                 Belt.ORANGE to listOf("עבודת ידיים", "מכות יד", "מכות ידיים"),
-
-                // ✅ בירוק זה "מכות מרפק"
-                Belt.GREEN to listOf("מכות מרפק")
+                Belt.GREEN to listOf("מכות מרפק", "מכות במקל / רובה"),
+                Belt.BLACK to listOf("מכות במקל / רובה", "מכות במקל קצר")
             ),
             subTopics = listOf(
                 "מכות יד",
-                "מכות מרפק"
+                "מכות מרפק",
+                "מכות במקל / רובה"
             )
         ),
 
@@ -110,6 +110,47 @@ object TopicsBySubjectRegistry {
             ),
             includeItemKeywords = listOf("בלימ", "גלגול")
         ),
+
+        // ================== עמידת מוצא ==================
+        SubjectTopic(
+            id = "topic_ready_stance",
+            titleHeb = "עמידת מוצא",
+            description = "עמידות מוצא בסיסיות",
+            belts = listOf(
+                Belt.YELLOW
+            ),
+            topicsByBelt = mapOf(
+                Belt.YELLOW to listOf("עמידת מוצא")
+            )
+        ),
+
+        // ================== הכנה לעבודת קרקע ==================
+        SubjectTopic(
+            id = "topic_ground_prep",
+            titleHeb = "הכנה לעבודת קרקע",
+            description = "הוצאת אגן, הרמת אגן ומוצא לעבודת קרקע",
+            belts = listOf(
+                Belt.YELLOW
+            ),
+            topicsByBelt = mapOf(
+                Belt.YELLOW to listOf("הכנה לעבודת קרקע")
+            )
+        ),
+
+        // ================== קאוולר ==================
+        SubjectTopic(
+            id = "topic_kawalr",
+            titleHeb = "קאוולר",
+            description = "תרגילי קאוולר",
+            belts = listOf(
+                Belt.GREEN
+            ),
+            topicsByBelt = mapOf(
+                Belt.GREEN to listOf("קאוולר")
+            )
+        ),
+
+
 
         // ================== הגנות פנימיות – אגרופים ==================
         SubjectTopic(

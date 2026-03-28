@@ -47,6 +47,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import shareCurrentScreen
 
@@ -141,8 +142,10 @@ fun BottomActionsBarEdgeToEdge(
             )
     }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val barColor     = MaterialTheme.colorScheme.surface
+
+    val barColor = Color.White
     val contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
 
     Surface(
         modifier = Modifier
@@ -182,7 +185,7 @@ fun BottomActionsBarEdgeToEdge(
                 Icon(
                     imageVector = Icons.Filled.Search,
                     contentDescription = "חיפוש",
-                    tint = contentColor.copy(alpha = if (canSearch) 1f else 0.45f),
+                    tint = if (canSearch) contentColor else disabledContentColor,
                     modifier = Modifier.size(iconSize)
                 )
             }
@@ -205,7 +208,7 @@ fun BottomActionsBarEdgeToEdge(
                 Icon(
                     imageVector = Icons.Filled.Home,
                     contentDescription = "בית",
-                    tint = contentColor.copy(alpha = if (homeEnabled) 1f else 0.45f),
+                    tint = if (homeEnabled) contentColor else disabledContentColor,
                     modifier = Modifier.size(iconSize)
                 )
             }
@@ -283,7 +286,7 @@ fun BottomActionsBarEdgeToEdge(
                     Icon(
                         imageVector = Icons.Filled.Chat,
                         contentDescription = "שידור מאמן",
-                        tint = contentColor.copy(alpha = if (canBroadcast) 1f else 0.45f),
+                        tint = if (canBroadcast) contentColor else disabledContentColor,
                         modifier = Modifier.size(iconSize)
                     )
                 }

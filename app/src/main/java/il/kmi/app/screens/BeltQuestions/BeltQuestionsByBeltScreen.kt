@@ -199,7 +199,6 @@ internal fun formatCount(n: Int): String = when {
 }
 
 /* ------------------------------ API ציבורי למסך ------------------------------ */
-
 @Composable
 fun BeltQuestionsByBeltScreen(
     vm: KmiViewModel,
@@ -827,14 +826,13 @@ private fun TopicsCardForBelt(
                                                         clickSound()
                                                         haptic(true)
 
-                                                        // ✅ FIX: גם בהגנות מעבירים את שם תת־הנושא שנבחר
+                                                        // ✅ תתי־נושאים נפתחים דרך אותו flow של "לפי חגורה"
                                                         onOpenSubTopic(belt, title, sub)
                                                     },
                                                 shape = RoundedCornerShape(16.dp),
                                                 color = Color.White.copy(alpha = 0.22f)
                                             ) {
-                                                Text(
-                                                    text = sub,
+                                                Text(                                               text = sub,
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -857,7 +855,6 @@ private fun TopicsCardForBelt(
                                                     clickSound()
                                                     haptic(true)
 
-                                                    // ✅ FIX: גם כאן "הגנות" → MaterialsScreen
                                                     if (isDefenseTopic) {
                                                         onOpenDefenseMenu(belt, title)
                                                     } else {

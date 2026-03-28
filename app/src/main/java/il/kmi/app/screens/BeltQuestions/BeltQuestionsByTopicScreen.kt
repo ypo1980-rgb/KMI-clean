@@ -59,6 +59,7 @@ private fun handsSectionIdFor(raw: String): String? {
     return when (t) {
         "מכות יד" -> "hands_strikes"
         "מכות מרפק" -> "hands_elbows"
+        "מכות במקל / רובה" -> "hands_stick_rifle"
         else -> null
     }
 }
@@ -233,7 +234,22 @@ internal fun TopicsBySubjectCard(
     var askHands by rememberSaveable { mutableStateOf(false) }
     var askKind by rememberSaveable { mutableStateOf<il.kmi.app.domain.DefenseKind?>(null) }
 
+    fun applyPayload(payload: SubjectTopicsUiLogic.TopicsUiCountsPayload) {
+        subjectCounts = payload.subjectCounts
+        handsRootCount = payload.handsRootCount
+        handsPickCounts = payload.handsPickCounts
+        uiSectionCounts = payload.uiSectionCounts
+        subTopicsPickCountsBySubjectId = payload.subTopicsPickCountsBySubjectId
+        countsReady = true
+    }
+
     LaunchedEffect(subjects, handsBase) {
+        // ✅ אם כבר יש cache בזיכרון — משתמשים בו מיידית בלי חישוב מחדש
+        SubjectTopicsUiLogic.getCachedTopicsUiCountsPayload()?.let { cached ->
+            applyPayload(cached)
+            return@LaunchedEffect
+        }
+
         val payload = withContext(Dispatchers.Default) {
             SubjectTopicsUiLogic.buildTopicsUiCountsPayload(
                 subjects = subjects,
@@ -241,12 +257,8 @@ internal fun TopicsBySubjectCard(
             )
         }
 
-        subjectCounts = payload.subjectCounts
-        handsRootCount = payload.handsRootCount
-        handsPickCounts = payload.handsPickCounts
-        uiSectionCounts = payload.uiSectionCounts
-        subTopicsPickCountsBySubjectId = payload.subTopicsPickCountsBySubjectId
-        countsReady = true
+        SubjectTopicsUiLogic.cacheTopicsUiCountsPayload(payload)
+        applyPayload(payload)
     }
 
     // ----------------- UI -----------------
@@ -369,7 +381,13 @@ internal fun TopicsBySubjectCard(
                     title = card.title,
                     subtitle = card.subtitle,
                     countText = card.countText,
-                    onClick = { askSubTopicsForId = card.id }
+                    onClick = {
+                        if (card.id == "releases_hugs") {
+                            onOpenHardSubjectRoute(currentBelt, "releases_hugs")
+                        } else {
+                            askSubTopicsForId = card.id
+                        }
+                    }
                 )
             }
 

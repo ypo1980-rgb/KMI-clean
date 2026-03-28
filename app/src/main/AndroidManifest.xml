@@ -76,6 +76,26 @@
             android:name=".free_sessions.reminders.FreeSessionReminderReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".reminders.DailyReminderAnotherReceiver"
+            android:exported="false"/>
+
+        <receiver
+            android:name=".reminders.DailyReminderFavoriteReceiver"
+            android:exported="false"/>
+
+        <!-- ===== Receiver לתרגיל יומי ===== -->
+        <receiver
+            android:name=".reminders.DailyReminderReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- ===== כרטיס תרגיל יומי ===== -->
+        <activity
+            android:name=".reminders.DailyReminderCardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Material3.DayNight.Dialog" />
+
         <!-- ===== Main Activity ===== -->
         <activity
             android:name=".MainActivity"

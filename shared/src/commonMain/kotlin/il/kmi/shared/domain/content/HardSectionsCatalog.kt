@@ -1,16 +1,8 @@
 package il.kmi.shared.domain.content
 
 import il.kmi.shared.domain.Belt
+import kotlin.collections.LinkedHashSet
 
-
-/**
- * קטלוג “קשיח” למסכים מיוחדים (שאינם נבנים ישירות מה-CatalogData),
- * כשהדגש הוא: ✅ הצגה לפי חגורות (כמו בתמונה).
- *
- * הערה:
- * - items כאן הם שמות/מפתחות כפי שהם מופיעים אצלך ב-Content/Catalog (לא Compose).
- * - אם תרצה להפוך אותם ל-canonicalId אמיתי (למשל def:...::...), אפשר לעשות שכבת נרמול אחת במי שמציג.
- */
 object HardSectionsCatalog {
 
     data class BeltGroup(
@@ -74,25 +66,64 @@ object HardSectionsCatalog {
     }
 
     private fun canonicalSubjectId(raw: String): String {
-        return when (raw.trim()) {
-            "שחרורים" -> "releases"
-            "הגנות מסכין" -> "knife_defense"
-            "הגנות מאיום אקדח" -> "gun_threat_defense"
-            "הגנות נגד מקל" -> "stick_defense"
-            "עבודת ידיים" -> "hands_all"
-            "מכות יד" -> "hands_strikes"
-            "מכות מרפק" -> "hands_elbows"
-            "הגנות נגד בעיטות" -> "kicks_hard"
-            "הגנות פנימיות - אגרופים" -> "def_internal_punch"
-            "הגנות פנימיות - בעיטות" -> "def_internal_kick"
-            "הגנות חיצוניות - אגרופים" -> "def_external_punch"
-            "הגנות חיצוניות - בעיטות" -> "def_external_kick"
+        val t = raw.trim()
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace(Regex("\\s+"), " ")
 
-            // ✅ נושאים רגילים
-            "בעיטות" -> "topic_kicks"
-            "בלימות וגלגולים" -> "topic_breakfalls_rolls"
+        return when {
+            t == "שחרורים" -> "releases"
 
-            else -> raw.trim()
+            t == "שחרור מתפיסות" ||
+                    t == "שחרורים מתפיסות" ||
+                    t == "שחרור מתפיסות ידיים" ||
+                    t == "שחרורים מתפיסות ידיים" ||
+                    t == "שחרור מתפיסות ידיים / שיער / חולצה" ||
+                    t == "שחרורים מתפיסות ידיים / שיער / חולצה" ||
+                    t.contains("תפיסות יד") ||
+                    t.contains("שיער") ||
+                    t.contains("חולצה") ->
+                "releases_hands_hair_shirt"
+
+            t == "שחרור מחניקות" ||
+                    t == "שחרורים מחניקות" ||
+                    t.contains("חניקות") ->
+                "releases_chokes"
+
+            t == "שחרור מחביקות" ||
+                    t == "שחרורים מחביקות" ||
+                    t.contains("מחביקות") ||
+                    t.contains("חביקות גוף") ||
+                    t.contains("חביקות צוואר") ||
+                    t.contains("חביקות צואר") ||
+                    t.contains("חביקות זרוע") ->
+                "releases_hugs"
+
+            t == "הגנות מסכין" -> "knife_defense"
+            t == "הגנות מאיום אקדח" -> "gun_threat_defense"
+            t == "הגנות נגד מקל" -> "stick_defense"
+            t == "עבודת ידיים" -> "hands_all"
+            t == "מכות יד" -> "hands_strikes"
+            t == "מכות מרפק" -> "hands_elbows"
+            t == "מכות במקל / רובה" -> "hands_stick_rifle"
+            t == "מכות ידיים" -> "topic_hands"
+            t == "הגנות נגד בעיטות" -> "kicks_hard"
+            t == "הגנות פנימיות - אגרופים" -> "def_internal_punch"
+            t == "הגנות פנימיות - בעיטות" -> "def_internal_kick"
+            t == "הגנות חיצוניות - אגרופים" -> "def_external_punch"
+            t == "הגנות חיצוניות - בעיטות" -> "def_external_kick"
+
+            t == "כללי" -> "topic_general"
+            t == "בעיטות" -> "topic_kicks"
+            t == "בלימות וגלגולים" -> "topic_breakfalls_rolls"
+            t == "עמידת מוצא" -> "topic_ready_stance"
+            t == "הכנה לעבודת קרקע" -> "topic_ground_prep"
+            t == "קאוולר" -> "topic_kawalr"
+
+            else -> t
         }
     }
 
@@ -104,13 +135,19 @@ object HardSectionsCatalog {
         "hands_all",
         "hands_strikes",
         "hands_elbows",
+        "hands_stick_rifle",
+        "topic_hands",
         "kicks_hard",
         "def_internal_punch",
         "def_internal_kick",
         "def_external_punch",
         "def_external_kick",
+        "topic_general",
         "topic_kicks",
-        "topic_breakfalls_rolls"
+        "topic_breakfalls_rolls",
+        "topic_ready_stance",
+        "topic_ground_prep",
+        "topic_kawalr",
     )
 
     fun supportsSubject(subjectId: String): Boolean {
@@ -146,12 +183,18 @@ object HardSectionsCatalog {
             id == "hands_all" -> handsAll
             id == "hands_strikes" -> handsAll.filter { it.id == "hands_strikes" }
             id == "hands_elbows" -> handsAll.filter { it.id == "hands_elbows" }
+            id == "hands_stick_rifle" -> handsAll.filter { it.id == "hands_stick_rifle" }
+            id == "topic_hands" -> handsAll
             id == "def_internal_punch" -> defensesInternalPunch
             id == "def_internal_kick" -> defensesInternalKick
             id == "def_external_punch" -> defensesExternalPunch
             id == "def_external_kick" -> defensesExternalKick
+            id == "topic_general" -> topicGeneral
             id == "topic_kicks" -> topicKicks
             id == "topic_breakfalls_rolls" -> topicBreakfallsRolls
+            id == "topic_ready_stance" -> topicReadyStance
+            id == "topic_ground_prep" -> topicGroundPrep
+            id == "topic_kawalr" -> topicKawalr
 
             else -> null
         }
@@ -167,14 +210,56 @@ object HardSectionsCatalog {
             "hands_all" -> "עבודת ידיים"
             "hands_strikes" -> "מכות יד"
             "hands_elbows" -> "מכות מרפק"
+            "hands_stick_rifle" -> "מכות במקל / רובה"
+            "topic_hands" -> "מכות ידיים"
             "def_internal_punch" -> "הגנות פנימיות - אגרופים"
             "def_internal_kick" -> "הגנות פנימיות - בעיטות"
             "def_external_punch" -> "הגנות חיצוניות - אגרופים"
             "def_external_kick" -> "הגנות חיצוניות - בעיטות"
+            "topic_general" -> "כללי"
             "topic_kicks" -> "בעיטות"
             "topic_breakfalls_rolls" -> "בלימות וגלגולים"
+            "topic_ready_stance" -> "עמידת מוצא"
+            "topic_ground_prep" -> "הכנה לעבודת קרקע"
+            "topic_kawalr" -> "קאוולר"
             else -> null
         }
+    }
+
+    fun subjectItemsFor(subjectId: String, belt: Belt): List<String> {
+        val roots = sectionsForSubject(subjectId).orEmpty()
+        if (roots.isEmpty()) return emptyList()
+
+        val seen = LinkedHashSet<String>()
+
+        roots.forEach { section ->
+            section.itemsFor(belt)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .forEach { seen.add(it) }
+        }
+
+        return seen.toList()
+    }
+
+    fun subjectSubSectionsFor(subjectId: String): List<Section> {
+        return sectionsForSubject(subjectId)
+            .orEmpty()
+            .filter { it.hasItems() }
+    }
+
+    fun subjectSubSectionItemsFor(
+        subjectId: String,
+        subSectionId: String,
+        belt: Belt
+    ): List<String> {
+        val roots = sectionsForSubject(subjectId).orEmpty()
+        val target = roots.firstOrNull { it.id == subSectionId } ?: return emptyList()
+
+        return target.itemsFor(belt)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
     }
 
     fun findAnySectionById(sectionId: String): Section? {
@@ -185,6 +270,45 @@ object HardSectionsCatalog {
         }
         return null
     }
+
+    // ----------------------------
+    // כללי – לפי חגורה
+    // ----------------------------
+    val topicGeneral: List<Section> = listOf(
+        Section(
+            id = "topic_general_main",
+            title = "כללי",
+            beltGroups = listOf(
+                BeltGroup(
+                    belt = Belt.YELLOW,
+                    items = listOf(
+                        "תזוזות",
+                        "גלגול לפנים – צד ימין",
+                        "הוצאות אגן, הרמת אגן והפניית גוף למעלה ",
+                        "צל בוקס",
+                        "סגירת אגרוף",
+                        "אצבעות לפנים",
+                        "מכת קשת האצבע והאגודל"
+                    )
+                ),
+                BeltGroup(
+                    belt = Belt.ORANGE,
+                    items = listOf(
+                        "גלגול לאחור צד ימין",
+                        "גלגול לאחור צד שמאל",
+                        "גלגול לפנים צד שמאל",
+                        "שילובי ידיים רגליים",
+                        "בלימה לצד ימין",
+                        "בלימה לצד שמאל"
+                    )
+                ),
+                BeltGroup(belt = Belt.GREEN, items = emptyList()),
+                BeltGroup(belt = Belt.BLUE, items = emptyList()),
+                BeltGroup(belt = Belt.BROWN, items = emptyList()),
+                BeltGroup(belt = Belt.BLACK, items = emptyList())
+            )
+        )
+    )
 
     // ----------------------------
     // בעיטות – לפי חגורה
@@ -249,7 +373,11 @@ object HardSectionsCatalog {
                 ),
                 BeltGroup(
                     belt = Belt.BROWN,
-                    items = emptyList()
+                    items = listOf(
+                        "בעיטת מגל בניתור",
+                        "בעיטה רגילה ובעיטת מגל בניתור",
+                        "בעיטת מגל כפולה בניתור"
+                    )
                 ),
                 BeltGroup(
                     belt = Belt.BLACK,
@@ -260,7 +388,6 @@ object HardSectionsCatalog {
                         "בעיטת לצד בסיבוב מלא בניתור",
                         "בעיטת מגל לאחור בסיבוב בניתור",
                         "בעיטת הגנה לאחור בניתור"
-
                     )
                 )
             )
@@ -310,25 +437,100 @@ object HardSectionsCatalog {
                 BeltGroup(
                     belt = Belt.BLUE,
                     items = listOf(
-                    "מניעת נפילה מחביקת שוקיים מלפנים להפלה",
-                    "גלגול לצד — ימין",
-                    "גלגול לצד — שמאל",
-                    "גלגול ברחיפה — ימין",
-                    "גלגול ברחיפה — שמאל",
-                    "גלגול לגובה — ימין",
-                    "גלגול לגובה — שמאל",
-                    "גלגול ללא ידיים — ימין",
-                    "גלגול ללא ידיים — שמאל"
+                        "מניעת נפילה מחביקת שוקיים מלפנים להפלה",
+                        "גלגול לצד — ימין",
+                        "גלגול לצד — שמאל",
+                        "גלגול ברחיפה — ימין",
+                        "גלגול ברחיפה — שמאל",
+                        "גלגול לגובה — ימין",
+                        "גלגול לגובה — שמאל",
+                        "גלגול ללא ידיים — ימין",
+                        "גלגול ללא ידיים — שמאל"
                     )
                 ),
                 BeltGroup(
                     belt = Belt.BROWN,
-                    items = emptyList()
+                    items = listOf(
+                        "גלגול עם רובה"
+                    )
                 ),
                 BeltGroup(
                     belt = Belt.BLACK,
                     items = emptyList()
                 )
+            )
+        )
+    )
+
+    // ----------------------------
+    // נושאים רגילים נוספים – לפי חגורה
+    // ----------------------------
+    val topicReadyStance: List<Section> = listOf(
+        Section(
+            id = "topic_ready_stance_main",
+            title = "עמידת מוצא",
+            beltGroups = listOf(
+                BeltGroup(
+                    belt = Belt.YELLOW,
+                    items = listOf(
+                        "עמידת מוצא רגילה",
+                        "עמידת מוצא להגנות פנימיות",
+                        "עמידת מוצא להגנות חיצוניות",
+                        "עמידת מוצא צידית",
+                        "עמידת מוצא כללית מספר 1",
+                        "עמידת מוצא כללית מספר 2"
+                    )
+                ),
+                BeltGroup(belt = Belt.ORANGE, items = emptyList()),
+                BeltGroup(belt = Belt.GREEN, items = emptyList()),
+                BeltGroup(belt = Belt.BLUE, items = emptyList()),
+                BeltGroup(belt = Belt.BROWN, items = emptyList()),
+                BeltGroup(belt = Belt.BLACK, items = emptyList())
+            )
+        )
+    )
+
+    val topicGroundPrep: List<Section> = listOf(
+        Section(
+            id = "topic_ground_prep_main",
+            title = "הכנה לעבודת קרקע",
+            beltGroups = listOf(
+                BeltGroup(
+                    belt = Belt.YELLOW,
+                    items = listOf(
+                        "הוצאת אגן",
+                        "הרמת אגן והפניית גוף לכיון ההפלה",
+                        "מוצא לעבודת קרקע"
+                    )
+                ),
+                BeltGroup(belt = Belt.ORANGE, items = emptyList()),
+                BeltGroup(belt = Belt.GREEN, items = emptyList()),
+                BeltGroup(belt = Belt.BLUE, items = emptyList()),
+                BeltGroup(belt = Belt.BROWN, items = emptyList()),
+                BeltGroup(belt = Belt.BLACK, items = emptyList())
+            )
+        )
+    )
+
+    val topicKawalr: List<Section> = listOf(
+        Section(
+            id = "topic_kawalr_main",
+            title = "קאוולר",
+            beltGroups = listOf(
+                BeltGroup(belt = Belt.YELLOW, items = emptyList()),
+                BeltGroup(belt = Belt.ORANGE, items = emptyList()),
+                BeltGroup(
+                    belt = Belt.GREEN,
+                    items = listOf(
+                        "קאוולר - הליכה לאחור",
+                        "קאוולר נגד התנגדות - הליכה לפנים",
+                        "קאוולר - אגודלים",
+                        "קאוולר – מרפק"
+                    )
+                ),
+                BeltGroup(belt = Belt.BLUE, items = emptyList()),
+                BeltGroup(belt = Belt.BROWN, items = emptyList()),
+                BeltGroup(belt = Belt.BLACK, items = emptyList())
             )
         )
     )
@@ -646,20 +848,38 @@ object HardSectionsCatalog {
                 BeltGroup(
                     belt = Belt.YELLOW,
                     items = listOf(
-                        "אגרוף ישר שמאל",
-                        "אגרוף ישר ימין",
-                        "אגרוף ימין ושמאל למטרה אחת",
-                        "אגרוף שמאל וימין למטרה אחת",
-                        "אגרוף ימין ושמאל לשתי מטרות"
+                        "מכת פיסת יד שמאל לפנים",
+                        "מכת פיסת יד ימין לפנים",
+                        "מכת פיסת יד שמאל-ימין לפנים",
+                        "מכת פיסת יד שמאל-ימין-שמאל לפנים",
+                        "מכת פיסת יד מהצד",
+                        "אגרוף ימין לפנים",
+                        "אגרוף שמאל-ימין לפנים",
+                        "אגרוף שמאל בהתקדמות",
+                        "אגרוף ימין בהתקדמות",
+                        "אגרוף שמאל-ימין בהתקדמות",
+                        "אגרוף שמאל-ימין ושמאל בהתקדמות",
+                        "אגרוף שמאל בנסיגה",
+                        "אגרוף שמאל למטה בהתקפה",
+                        "אגרוף ימין למטה בהתקפה",
+                        "אגרוף שמאל למטה בהגנה",
+                        "אגרוף ימין למטה בהגנה",
+                        "מכת מגל שמאל",
+                        "מכת מגל ימין",
+                        "מכת מגל למטה ולמעלה בהתחלפות",
+                        "מכת סנוקרת שמאל",
+                        "מכת סנוקרת ימין"
                     )
                 ),
                 BeltGroup(
                     belt = Belt.ORANGE,
                     items = listOf(
-                        "אגרוף עליון",
+                        "מכת גב יד בהצלפה",
+                        "מכת גב יד בהצלפה בסיבוב",
                         "מכת פטיש",
-                        "מכת פטיש בסיבוב",
                         "מכת פטיש מהצד",
+                        "אגרוף עליון",
+                        "מכת פטיש בסיבוב",
                         "מכת פטיש לאחור",
                         "מכת פטיש מלמטה למעלה",
                         "פיסת יד פנימית",
@@ -668,6 +888,22 @@ object HardSectionsCatalog {
                         "מגל",
                         "סנוקרת"
                     )
+                ),
+                BeltGroup(
+                    belt = Belt.GREEN,
+                    items = emptyList()
+                ),
+                BeltGroup(
+                    belt = Belt.BLUE,
+                    items = emptyList()
+                ),
+                BeltGroup(
+                    belt = Belt.BROWN,
+                    items = emptyList()
+                ),
+                BeltGroup(
+                    belt = Belt.BLACK,
+                    items = emptyList()
                 )
             )
         ),
@@ -679,19 +915,94 @@ object HardSectionsCatalog {
                 BeltGroup(
                     belt = Belt.YELLOW,
                     items = listOf(
+                        "מכת מרפק אופקית לאחור",
+                        "מכת מרפק אופקית לצד",
                         "מכת מרפק אופקית לפנים",
-                        "מכת מרפק אנכי למטה",
-                        "מכת מרפק אנכי למעלה",
                         "מכת מרפק לאחור",
                         "מכת מרפק לאחור למעלה",
-                        "מכת מרפק אופקית לאחור",
-                        "מכת מרפק אופקית לצד"
+                        "מכת מרפק אנכי למטה",
+                        "מכת מרפק אנכי למעלה"
                     )
+                ),
+                BeltGroup(
+                    belt = Belt.ORANGE,
+                    items = emptyList()
                 ),
                 BeltGroup(
                     belt = Belt.GREEN,
                     items = listOf(
-                "מכת מרפק נגד קבוצה"
+                        "מכת מרפק נגד קבוצה"
+                    )
+                ),
+                BeltGroup(
+                    belt = Belt.BLUE,
+                    items = emptyList()
+                ),
+                BeltGroup(
+                    belt = Belt.BROWN,
+                    items = emptyList()
+                ),
+                BeltGroup(
+                    belt = Belt.BLACK,
+                    items = emptyList()
+                )
+            )
+        ),
+
+        Section(
+            id = "hands_stick_rifle",
+            title = "מכות במקל / רובה",
+            beltGroups = listOf(
+                BeltGroup(
+                    belt = Belt.YELLOW,
+                    items = emptyList()
+                ),
+                BeltGroup(
+                    belt = Belt.ORANGE,
+                    items = emptyList()
+                ),
+                BeltGroup(
+                    belt = Belt.GREEN,
+                    items = listOf(
+                        "התקפה עם מקל לנקודות תורפה"
+                    )
+                ),
+                BeltGroup(
+                    belt = Belt.BLUE,
+                    items = emptyList()
+                ),
+                BeltGroup(
+                    belt = Belt.BROWN,
+                    items = emptyList()
+                ),
+                BeltGroup(
+                    belt = Belt.BLACK,
+                    items = listOf(
+                        "מכות במקל קצר - מכת מקל לראש",
+                        "מכות במקל קצר - מכת מקל לרקה",
+                        "מכות במקל קצר - מכת מקל ללסת / צוואר",
+                        "מכות במקל קצר - מכת מקל לעצם הבריח",
+                        "מכות במקל קצר - מכת מקל למפרק",
+                        "מכות במקל קצר - מכת מקל לשורש כף היד",
+                        "מכות במקל קצר - מכת מקל לפרקי האצבעות",
+                        "מכות במקל קצר - מכת מקל לברך",
+                        "מכות במקל קצר - מכת מקל למפסעה",
+                        "מכות במקל קצר - הצלפת מקל לצלעות",
+                        "מכות במקל קצר - דקירת מקל חיצונית לצלעות",
+                        "מכות במקל קצר - דקירת מקל ישרה לבטן / לגרון",
+                        "מכות במקל קצר - דקירת מקל הפוכה",
+                        "מכות במקל / רובה - מכה אופקית לצוואר",
+                        "מכות במקל / רובה - דקירה",
+                        "מכות במקל / רובה - מכת מגל",
+                        "מכות במקל / רובה - שיסוף",
+                        "מכות במקל / רובה - מכה למפסעה",
+                        "מכות במקל / רובה - מכת סנוקרת",
+                        "מכות במקל / רובה - מכה לצד",
+                        "מכות במקל / רובה - מכה לאחור",
+                        "מכות במקל / רובה - מכה אופקית לאחור",
+                        "מכות במקל / רובה - מכה אופקית ובעיטה רגילה למפסעה",
+                        "מכות במקל / רובה - מכה אופקית ובעיטת הגנה לפנים",
+                        "מכות במקל / רובה - מכה לצד ובעיטה לצד"
                     )
                 )
             )

@@ -252,7 +252,7 @@ fun NavGraphBuilder.homeNavGraph(
         ) {
             vm.setSelectedBelt(belt)
 
-            val route = SubTopicsRoute.build(
+            val route = il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
                 belt = belt,
                 topic = topic
             )
@@ -275,7 +275,7 @@ fun NavGraphBuilder.homeNavGraph(
         ) {
             vm.setSelectedBelt(belt)
 
-            val route = buildMaterialsSubRoute(
+            val route = Route.MaterialsSub.make(
                 belt = belt,
                 topic = topic,
                 subTopic = subTopic

@@ -247,6 +247,22 @@ internal fun HandsPickModeDialogModern(
 ) {
     val accent = Color(0xFF8E24AA)
 
+    val orderedPicks = picks.ifEmpty {
+        listOf(
+            "מכות יד",
+            "מכות מרפק",
+            "מכות במקל / רובה"
+        )
+    }
+
+    fun pickIcon(pick: String): String {
+        return when {
+            pick.contains("מרפק") -> "💪"
+            pick.contains("מקל") || pick.contains("רובה") -> "🪵"
+            else -> "👊"
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
@@ -273,21 +289,15 @@ internal fun HandsPickModeDialogModern(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                ModernPickCard(
-                    title = "מכות מרפק",
-                    accent = accent,
-                    icon = "💪",
-                    countText = "${counts["מכות מרפק"] ?: 0} תרגילים",
-                    onClick = { onPick("מכות מרפק") }
-                )
-
-                ModernPickCard(
-                    title = "מכות יד",
-                    accent = accent,
-                    icon = "👊",
-                    countText = "${counts["מכות יד"] ?: 0} תרגילים",
-                    onClick = { onPick("מכות יד") }
-                )
+                orderedPicks.forEach { pick ->
+                    ModernPickCard(
+                        title = pick,
+                        accent = accent,
+                        icon = pickIcon(pick),
+                        countText = "${counts[pick] ?: 0} תרגילים",
+                        onClick = { onPick(pick) }
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -805,6 +815,47 @@ internal object SubjectTopicsUiLogic {
         val uiSectionCounts: Map<String, Int>,
         val subTopicsPickCountsBySubjectId: Map<String, Map<String, Int>>
     )
+
+    // ✅ PERF CACHE: שומר את ה-payload בזיכרון כדי לא לחשב מחדש בכל פתיחת מסך
+    private object TopicsUiCountsMemoryCache {
+        @Volatile
+        private var payload: TopicsUiCountsPayload? = null
+
+        fun get(): TopicsUiCountsPayload? = payload
+
+        fun put(value: TopicsUiCountsPayload) {
+            payload = value
+        }
+
+        fun clear() {
+            payload = null
+        }
+    }
+
+    fun getCachedTopicsUiCountsPayload(): TopicsUiCountsPayload? =
+        TopicsUiCountsMemoryCache.get()
+
+    fun cacheTopicsUiCountsPayload(value: TopicsUiCountsPayload) {
+        TopicsUiCountsMemoryCache.put(value)
+    }
+
+    fun clearCachedTopicsUiCountsPayload() {
+        TopicsUiCountsMemoryCache.clear()
+    }
+
+    fun ensureTopicsUiCountsPreloaded(
+        subjects: List<SubjectTopic>,
+        handsBase: SubjectTopic?
+    ) {
+        if (getCachedTopicsUiCountsPayload() != null) return
+
+        val payload = buildTopicsUiCountsPayload(
+            subjects = subjects,
+            handsBase = handsBase
+        )
+
+        cacheTopicsUiCountsPayload(payload)
+    }
 
     private fun normReleaseTitle(raw: String): String =
         raw.trim()

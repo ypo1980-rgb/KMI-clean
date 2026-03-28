@@ -1,8 +1,24 @@
 package il.kmi.shared.tts
 
-import kotlinx.coroutines.*
-import platform.AVFoundation.*
-import platform.Foundation.*
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.refTo
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import platform.AVFAudio.AVAudioPlayer
+import platform.Foundation.NSDate
+import platform.Foundation.NSData
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSMutableData
+import platform.Foundation.NSMutableURLRequest
+import platform.Foundation.NSNumber
+import platform.Foundation.NSHTTPURLResponse
+import platform.Foundation.NSURL
+import platform.Foundation.NSURLSession
+import platform.Foundation.NSUserDefaults
+import platform.Foundation.NSTemporaryDirectory
+import platform.Foundation.NSFileSize
 import platform.posix.memcpy
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -26,7 +42,11 @@ actual object PlatformPrefs {
 actual object PlatformHttp {
     actual suspend fun postJson(url: String, jsonBody: String): ByteArray {
         return suspendCoroutine { cont ->
-            val nsUrl = NSURL.URLWithString(url)!!
+            val nsUrl = NSURL.URLWithString(url)
+                ?: return@suspendCoroutine cont.resumeWithException(
+                    IllegalArgumentException("Invalid URL: $url")
+                )
+
             val req = NSMutableURLRequest.requestWithURL(nsUrl).apply {
                 setHTTPMethod("POST")
                 setValue("application/json; charset=utf-8", forHTTPHeaderField = "Content-Type")
@@ -38,12 +58,14 @@ actual object PlatformHttp {
                     cont.resumeWithException(Exception(error.localizedDescription))
                     return@dataTaskWithRequest
                 }
+
                 val http = response as? NSHTTPURLResponse
                 val code = http?.statusCode?.toInt() ?: -1
                 if (code !in 200..299) {
                     cont.resumeWithException(IllegalStateException("HTTP $code"))
                     return@dataTaskWithRequest
                 }
+
                 val bytes = data?.toByteArray() ?: ByteArray(0)
                 cont.resume(bytes)
             }.resume()
@@ -51,6 +73,7 @@ actual object PlatformHttp {
     }
 }
 
+@OptIn(ExperimentalForeignApi::class)
 actual object PlatformCache {
     private fun dir(): String = NSTemporaryDirectory()
 
@@ -70,8 +93,12 @@ actual object PlatformCache {
     actual fun deleteByPrefix(prefix: String, suffix: String): Int {
         val fm = NSFileManager.defaultManager
         val dirUrl = NSURL.fileURLWithPath(dir())
-        val files = fm.contentsOfDirectoryAtURL(dirUrl, includingPropertiesForKeys = null, options = 0u, error = null)
-            ?: return 0
+        val files = fm.contentsOfDirectoryAtURL(
+            url = dirUrl,
+            includingPropertiesForKeys = null,
+            options = 0u,
+            error = null
+        ) ?: return 0
 
         var deleted = 0
         (files as List<*>).forEach { u ->
@@ -85,8 +112,11 @@ actual object PlatformCache {
     }
 }
 
+@OptIn(ExperimentalForeignApi::class)
 actual class PlatformFile(private val path: String) {
-    actual val absolutePath: String get() = path
+    actual val absolutePath: String
+        get() = path
+
     actual val sizeBytes: Long
         get() {
             val attrs = NSFileManager.defaultManager.attributesOfItemAtPath(path, error = null)
@@ -100,6 +130,7 @@ actual class PlatformAudioPlayer {
 
     actual fun playFile(path: String, speed: Float) {
         stop()
+
         val url = NSURL.fileURLWithPath(path)
         val p = AVAudioPlayer(contentsOfURL = url, error = null) ?: return
         p.enableRate = true
@@ -114,14 +145,18 @@ actual class PlatformAudioPlayer {
         player = null
     }
 
-    actual fun release() = stop()
+    actual fun release() {
+        stop()
+    }
 }
 
 actual object PlatformCoroutines {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     actual fun launchBackground(block: suspend () -> Unit) {
         scope.launch(Dispatchers.Default) { block() }
     }
+
     actual fun launchMain(block: () -> Unit) {
         scope.launch(Dispatchers.Main) { block() }
     }
@@ -132,14 +167,17 @@ actual object PlatformClock {
 }
 
 // ------- helpers -------
+
+@OptIn(ExperimentalForeignApi::class)
 private fun ByteArray.toNSData(): NSData {
     val data = NSMutableData.dataWithLength(size.toULong()) as NSMutableData
-    if (size > 0) {
-        memcpy(data.mutableBytes, this.refTo(0), size.toULong())
+    if (isNotEmpty()) {
+        memcpy(data.mutableBytes, refTo(0), size.toULong())
     }
     return data
 }
 
+@OptIn(ExperimentalForeignApi::class)
 private fun NSData.toByteArray(): ByteArray {
     val out = ByteArray(length.toInt())
     if (out.isNotEmpty()) {

@@ -95,12 +95,27 @@ fun NavGraphBuilder.materialsNavGraph(
         val topicEnc = backStackEntry.arguments?.getString("topic").orEmpty()
         val subEnc = backStackEntry.arguments?.getString("subTopic").orEmpty()
 
+        android.util.Log.e(
+            "KMI_MAT",
+            "ENTER MaterialsSub beltId='$beltId' topicEnc='$topicEnc' subEnc='$subEnc'"
+        )
+
         val topic = remember(topicEnc) {
             runCatching { Uri.decode(topicEnc) }.getOrDefault(topicEnc).trim()
         }
         val subTopic = remember(subEnc) {
             runCatching { Uri.decode(subEnc) }.getOrDefault(subEnc).trim()
         }
+
+        android.util.Log.e(
+            "KMI_MAT",
+            "DECODE MaterialsSub belt='${belt.id}' topic='$topic' subTopic='$subTopic'"
+        )
+
+        android.util.Log.e(
+            "KMI_MAT",
+            "OPEN MaterialsScreen belt='${belt.id}' topic='$topic' subTopicFilter='$subTopic'"
+        )
 
         MaterialsScreen(
             vm = vm,

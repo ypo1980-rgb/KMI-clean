@@ -13,7 +13,7 @@ import il.kmi.app.search.AppSearchHit
 import il.kmi.app.search.KmiSearchBridge
 import kotlinx.coroutines.flow.asStateFlow
 import il.kmi.app.data.training.TrainingSummaryLocalRepo
-import il.kmi.shared.domain.catalog.CatalogData
+import il.kmi.shared.domain.catalog.CatalogRepo
 import kotlinx.coroutines.launch
 
 // ========= הדגשת תרגיל במסך הפריטים =========
@@ -249,11 +249,13 @@ class KmiViewModel(
     )
 
     private fun getCatalogEntriesForBelt(belt: Belt): List<CatalogEntry> {
-        val beltContent = CatalogData.data[belt] ?: return emptyList()
         val out = mutableListOf<CatalogEntry>()
 
-        for (topic in beltContent.topics) {
-            val topicTitle = topic.title
+        val topicTitles = CatalogRepo.listTopicTitles(belt)
+        if (topicTitles.isEmpty()) return emptyList()
+
+        for (topicTitle in topicTitles) {
+            val topic = CatalogRepo.findTopic(belt, topicTitle) ?: continue
             val subs = topic.subTopics
 
             if (subs.isNotEmpty()) {
@@ -310,11 +312,28 @@ class KmiViewModel(
         _progress.value = newProgress
     }
 
+    fun preloadTopicsBySubjectCounts() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            try {
+                val subjects = il.kmi.app.domain.TopicsBySubjectRegistry.allSubjects()
+                val handsBase = subjects.firstOrNull { it.id == "hands_all" }
+
+                il.kmi.app.screens.BeltQuestions.SubjectTopicsUiLogic
+                    .ensureTopicsUiCountsPreloaded(
+                        subjects = subjects,
+                        handsBase = handsBase
+                    )
+            } catch (t: Throwable) {
+                android.util.Log.e("KMI_PERF", "preloadTopicsBySubjectCounts failed", t)
+            }
+        }
+    }
+
     init {
         recalcProgress()
+        preloadTopicsBySubjectCounts()
     }
-} // ✅ סוגרים את KmiViewModel פה (ה־Factory חייב להיות מחוץ ל-class)
-
+}
 
 // ─────────────────────────────────────────────
 // Factory עבור KmiViewModel (להישאר באותו קובץ)

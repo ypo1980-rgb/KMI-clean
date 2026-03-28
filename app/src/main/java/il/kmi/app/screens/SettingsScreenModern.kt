@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.domain.Belt
 import android.content.Context
+import android.app.TimePickerDialog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import il.kmi.app.KmiCalendarSync
@@ -67,6 +68,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.pm.PackageInfoCompat
 import il.kmi.app.ui.ext.color
+import il.kmi.app.reminders.ReminderPrefs
+import il.kmi.app.reminders.DailyReminderScheduler
 
 typealias StatsVm = AppStatsVm
 
@@ -167,6 +170,37 @@ fun SettingsScreenModern(
     // (אופציונלי, נשאר לעתיד)
     var tapSound by rememberSaveable { mutableStateOf(sp.getBoolean("tap_sound", false)) }
     var shortHaptic by rememberSaveable { mutableStateOf(sp.getBoolean("short_haptic", false)) }
+
+    // --- תרגיל יומי ---
+    val appCtx = LocalContext.current
+    val reminderPrefsSp = remember { appCtx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
+    val reminderPrefs = remember { ReminderPrefs(reminderPrefsSp) }
+
+    var dailyReminderEnabled by rememberSaveable(isCoach) {
+        mutableStateOf(reminderPrefs.isEnabledForRole(isCoach))
+    }
+    var dailyReminderHour by rememberSaveable {
+        mutableStateOf(reminderPrefs.getHour().takeIf { it in 0..23 } ?: 20)
+    }
+    var dailyReminderMinute by rememberSaveable {
+        mutableStateOf(reminderPrefs.getMinute().takeIf { it in 0..59 } ?: 0)
+    }
+
+    fun applyDailyReminderSettings(enabled: Boolean, hour: Int = dailyReminderHour, minute: Int = dailyReminderMinute) {
+        reminderPrefs.setHour(hour)
+        reminderPrefs.setMinute(minute)
+        reminderPrefs.setEnabledForRole(isCoach, enabled)
+
+        dailyReminderEnabled = enabled
+        dailyReminderHour = hour
+        dailyReminderMinute = minute
+
+        if (enabled) {
+            DailyReminderScheduler.schedule(appCtx)
+        } else {
+            DailyReminderScheduler.cancel(appCtx)
+        }
+    }
 
     // ▼▼ דיבוג: הדפסת כל המפתחות שקיימים ב-SharedPreferences למסך ה-Logcat ▼▼
     LaunchedEffect(Unit) {
@@ -447,6 +481,105 @@ fun SettingsScreenModern(
                     }
                 }
             } // ← סוף כרטיס תזכורות אימון
+
+            // --- תרגיל יומי ---
+            SettingsCard(
+                title = "תרגיל יומי",
+                subtitle = "קבל כל יום תרגיל מהחגורה הבאה בשעה שתבחר",
+                icon = Icons.Filled.NotificationsActive,
+                iconTint = sectionIconTint
+            ) {
+                val ctx = LocalContext.current
+
+                val notifPermissionLauncher =
+                    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                        if (granted) {
+                            applyDailyReminderSettings(
+                                enabled = true,
+                                hour = dailyReminderHour,
+                                minute = dailyReminderMinute
+                            )
+                        } else {
+                            applyDailyReminderSettings(enabled = false)
+                        }
+                    }
+
+                val formattedDailyTime = remember(dailyReminderHour, dailyReminderMinute) {
+                    String.format("%02d:%02d", dailyReminderHour, dailyReminderMinute)
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (isCoach)
+                                "המאמן יכול לכבות או להפעיל תרגיל יומי לעצמו"
+                            else
+                                "שלח לי בכל יום תרגיל מהחגורה הבאה",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Right
+                        )
+
+                        Switch(
+                            checked = dailyReminderEnabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled) {
+                                    if (Build.VERSION.SDK_INT >= 33) {
+                                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        applyDailyReminderSettings(
+                                            enabled = true,
+                                            hour = dailyReminderHour,
+                                            minute = dailyReminderMinute
+                                        )
+                                    }
+                                } else {
+                                    applyDailyReminderSettings(enabled = false)
+                                }
+                            }
+                        )
+                    }
+
+                    if (dailyReminderEnabled) {
+                        OutlinedButton(
+                            onClick = {
+                                TimePickerDialog(
+                                    ctx,
+                                    { _, hourOfDay, minute ->
+                                        applyDailyReminderSettings(
+                                            enabled = true,
+                                            hour = hourOfDay,
+                                            minute = minute
+                                        )
+                                    },
+                                    dailyReminderHour,
+                                    dailyReminderMinute,
+                                    true
+                                ).show()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("שעת התזכורת: $formattedDailyTime")
+                        }
+
+                        Text(
+                            text = "תקבל התראה יומית עם אפשרות לפתוח כרטיס תרגיל, לשמור למועדפים ולקבל תרגיל נוסף.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
 
             // --- תזכורות אימונים חופשיים ---
             SettingsCard(

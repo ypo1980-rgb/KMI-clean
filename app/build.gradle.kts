@@ -79,6 +79,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
     implementation("androidx.lifecycle:lifecycle-process:2.9.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
+    implementation("com.kosherjava:zmanim:2.5.0")
 
     // ✅ Coil לתמונות (כולל AsyncImage בפורום)
     implementation("io.coil-kt:coil-compose:2.6.0")

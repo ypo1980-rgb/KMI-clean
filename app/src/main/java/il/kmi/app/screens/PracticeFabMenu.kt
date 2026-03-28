@@ -1,4 +1,3 @@
-// File: app/src/main/java/il/kmi/app/screens/PracticeFabMenu.kt
 package il.kmi.app.screens
 
 import androidx.compose.animation.AnimatedVisibility
@@ -61,18 +60,8 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.ui.ext.color
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.ContentRepo
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
+import il.kmi.shared.domain.catalog.CatalogRepo
+import java.util.LinkedHashSet
 
 @Immutable
 data class PracticeByTopicsSelection(
@@ -367,21 +356,43 @@ private fun PracticeByTopicsPickerDialog(
             mutableStateOf<Map<Belt, Set<String>>>(emptyMap())
         }
 
+        @Composable
         fun topicTitlesForBelt(belt: Belt): List<String> {
-            val viaBridge = runCatching {
-                il.kmi.app.search.KmiSearchBridge.topicTitlesFor(belt)
-            }.getOrDefault(emptyList())
-            if (viaBridge.isNotEmpty()) return viaBridge
+            return remember(belt) {
+                val sharedBelt = runCatching {
+                    il.kmi.shared.domain.Belt.fromId(belt.id)
+                }.getOrNull() ?: il.kmi.shared.domain.Belt.WHITE
 
-            return runCatching {
-                val sharedBelt = il.kmi.shared.domain.Belt.fromId(belt.id)
-                    ?: il.kmi.shared.domain.Belt.WHITE
+                val ordered = LinkedHashSet<String>()
 
-                il.kmi.shared.domain.SubTopicRegistry
-                    .allForBelt(sharedBelt)
-                    .keys
-                    .toList()
-            }.getOrDefault(emptyList())
+                val viaBridge = runCatching {
+                    il.kmi.app.search.KmiSearchBridge.topicTitlesFor(belt)
+                }.getOrDefault(emptyList())
+
+                val viaCatalog = runCatching {
+                    CatalogRepo.listTopicTitles(sharedBelt)
+                }.getOrDefault(emptyList())
+
+                val viaSubTopics = runCatching {
+                    il.kmi.shared.domain.SubTopicRegistry
+                        .allForBelt(sharedBelt)
+                        .keys
+                        .toList()
+                }.getOrDefault(emptyList())
+
+                fun addAll(items: List<String>) {
+                    items.asSequence()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .forEach { ordered.add(it) }
+                }
+
+                addAll(viaBridge)
+                addAll(viaCatalog)
+                addAll(viaSubTopics)
+
+                ordered.toList()
+            }
         }
 
         val canConfirm =

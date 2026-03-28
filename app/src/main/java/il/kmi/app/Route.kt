@@ -86,21 +86,8 @@ sealed class Route(val route: String) {
             "attendance_group_stats/${enc(branch)}/${enc(groupKey)}"
     }
 
-    // ✅ NEW: מסך תרגילים לפי נושא מתוך CatalogData/CatalogRepo
-    object CatalogTopicExercises : Route("catalog_topic/{beltId}/{topic}?sub={sub}") {
 
-        fun make(belt: Belt, topic: String, sub: String? = null): String {
-            val base = "catalog_topic/${belt.id}/${enc(topic)}"
-            return if (sub.isNullOrBlank()) base else "$base?sub=${enc(sub)}"
-        }
-
-        fun makeId(beltId: String, topic: String, sub: String? = null): String {
-            val base = "catalog_topic/$beltId/${enc(topic)}"
-            return if (sub.isNullOrBlank()) base else "$base?sub=${enc(sub)}"
-        }
-    }
-
-    // ✅ NEW: מסך תרגילים לפי חגורה+נושא, ותת־נושא אופציונלי ב-query
+    // ✅ מסך תרגילים לפי חגורה+נושא, ותת־נושא אופציונלי ב-query
     object TopicExercises : Route("topic_ex/{beltId}/{topic}?sub={sub}") {
 
         fun make(belt: Belt, topic: String, sub: String? = null): String {
@@ -132,7 +119,17 @@ sealed class Route(val route: String) {
     }
 
     // ✅ NEW: Training Summary (סיכום אימון)
-    object TrainingSummary : Route("training_summary")
+    object TrainingSummary : Route("training_summary?date={date}") {
+
+        fun make(dateIso: String? = null): String {
+            val clean = dateIso?.trim().orEmpty()
+            return if (clean.isBlank()) {
+                "training_summary"
+            } else {
+                "training_summary?date=${enc(clean)}"
+            }
+        }
+    }
 
     // ↓ הוסף לצד שאר המסלולים
     object AboutAvi : Route("about_avi")

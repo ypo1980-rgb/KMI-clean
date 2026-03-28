@@ -1,4 +1,4 @@
-package il.kmi.app.navigation
+package il.kmi.app.screens.SubTopics
 
 import android.net.Uri
 import android.util.Log
@@ -11,21 +11,7 @@ import il.kmi.app.Route
 import il.kmi.app.screens.SubTopicsScreen
 import il.kmi.shared.domain.Belt
 
-object SubTopicsRoute {
-    const val beltArg = "beltId"
-    const val topicArg = "topic"
-
-    const val route = "sub_topics/{$beltArg}/{$topicArg}"
-
-    fun build(
-        belt: Belt,
-        topic: String
-    ): String {
-        return "sub_topics/${Uri.encode(belt.id)}/${Uri.encode(topic)}"
-    }
-}
-
-fun buildMaterialsSubRoute(
+private fun buildMaterialsSubRouteByTopic(
     belt: Belt,
     topic: String,
     subTopic: String
@@ -45,7 +31,7 @@ fun buildMaterialsSubRoute(
     }
 
     if (mappedHardSubjectId != null) {
-        return SubTopicsRoute.build(
+        return SubTopicsByTopicRoute.build(
             belt = belt,
             topic = mappedHardSubjectId
         )
@@ -56,7 +42,7 @@ fun buildMaterialsSubRoute(
                 il.kmi.shared.domain.content.HardSectionsCatalog.findAnySectionById(topic) != null
 
     if (isHardTopic) {
-        return SubTopicsRoute.build(
+        return SubTopicsByTopicRoute.build(
             belt = belt,
             topic = clean
         )
@@ -67,8 +53,9 @@ fun buildMaterialsSubRoute(
     return if (isDefenseTopic) {
         val fixedSub = when {
             clean.contains("בעיט") &&
-                    (clean.contains("פנימ") || clean.contains("חיצונ")) ->
+                    (clean.contains("פנימ") || clean.contains("חיצונ")) -> {
                 "הגנות נגד בעיטות"
+            }
 
             else -> clean
         }
@@ -80,9 +67,7 @@ fun buildMaterialsSubRoute(
         )
     } else {
         val fixedSubTopic = when {
-            clean.contains("מגל") && clean.contains("סנוקרת") ->
-                "מגל + סנוקרת"
-
+            clean.contains("מגל") && clean.contains("סנוקרת") -> "מגל + סנוקרת"
             else -> clean
         }
 
@@ -94,33 +79,26 @@ fun buildMaterialsSubRoute(
     }
 }
 
-/**
- * מקור אמת יחיד לניווט תתי־נושאים.
- *
- * זרימה:
- * 1) כל מסך שרוצה לפתוח תתי־נושאים -> nav.navigate(SubTopicsRoute.build(...))
- * 2) הבחירה בתוך SubTopicsScreen -> buildMaterialsSubRoute(...)
- */
-fun NavGraphBuilder.subTopicsNavGraph(
+fun NavGraphBuilder.subTopicsByTopicNavGraph(
     nav: NavHostController
 ) {
     composable(
-        route = SubTopicsRoute.route,
+        route = SubTopicsByTopicRoute.route,
         arguments = listOf(
-            navArgument(SubTopicsRoute.beltArg) { type = NavType.StringType },
-            navArgument(SubTopicsRoute.topicArg) { type = NavType.StringType }
+            navArgument(SubTopicsByTopicRoute.beltArg) { type = NavType.StringType },
+            navArgument(SubTopicsByTopicRoute.topicArg) { type = NavType.StringType }
         )
     ) { entry ->
-        val beltIdEnc = entry.arguments?.getString(SubTopicsRoute.beltArg).orEmpty()
-        val topicEnc = entry.arguments?.getString(SubTopicsRoute.topicArg).orEmpty()
+        val beltIdEnc = entry.arguments?.getString(SubTopicsByTopicRoute.beltArg).orEmpty()
+        val topicEnc = entry.arguments?.getString(SubTopicsByTopicRoute.topicArg).orEmpty()
 
         val beltId = Uri.decode(beltIdEnc)
         val belt = Belt.fromId(beltId) ?: Belt.GREEN
         val topic = Uri.decode(topicEnc).trim()
 
         Log.e(
-            "KMI_SUB",
-            "SubTopicsRoute composable belt=${belt.id} topic='$topic'"
+            "KMI_SUB_TOPIC",
+            "SubTopicsByTopicRoute composable belt=${belt.id} topic='$topic'"
         )
 
         SubTopicsScreen(
@@ -135,15 +113,15 @@ fun NavGraphBuilder.subTopicsNavGraph(
                 }
             },
             onOpenSubTopic = { subTitle ->
-                val route = buildMaterialsSubRoute(
+                val route = buildMaterialsSubRouteByTopic(
                     belt = belt,
                     topic = topic,
                     subTopic = subTitle
                 ) ?: return@SubTopicsScreen
 
                 Log.e(
-                    "KMI_SUB",
-                    "SubTopicsRoute onOpenSubTopic belt=${belt.id} topic='$topic' sub='$subTitle' route='$route'"
+                    "KMI_SUB_TOPIC",
+                    "SubTopicsByTopicRoute onOpenSubTopic belt=${belt.id} topic='$topic' sub='$subTitle' route='$route'"
                 )
 
                 nav.navigate(route) {
@@ -155,8 +133,8 @@ fun NavGraphBuilder.subTopicsNavGraph(
                 val route = Route.Exercise.make(itemName)
 
                 Log.e(
-                    "KMI_SUB",
-                    "SubTopicsRoute onOpenExercise item='$itemName' route='$route'"
+                    "KMI_SUB_TOPIC",
+                    "SubTopicsByTopicRoute onOpenExercise item='$itemName' route='$route'"
                 )
 
                 nav.navigate(route) {

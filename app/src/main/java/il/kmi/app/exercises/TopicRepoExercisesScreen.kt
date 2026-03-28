@@ -70,10 +70,14 @@ fun TopicRepoExercisesScreen(
     onOpenExercise: (String) -> Unit = {},
     onOpenSubTopic: (topicId: String, subTopicId: String) -> Unit = { _, _ -> } // ✅ NEW
 ) {
-    Log.e("DEF_DEBUG", "ENTER SCREEN belt=${belt.id} topicId='$topicId' subTopicId='$subTopicId'")
+    android.util.Log.e("DEF_DEBUG", "ENTER SCREEN belt=${belt.id} topicId='$topicId' subTopicId='$subTopicId'")
+    println("DEF_DEBUG ENTER SCREEN belt=${belt.id} topicId='$topicId' subTopicId='$subTopicId'")
 
     LaunchedEffect(Unit) {
-        Log.e("DEF_DEBUG", "SCREEN SHOWN TopicRepoExercisesScreen")
+        Log.e(
+            "DEF_DEBUG",
+            "SCREEN SHOWN TopicRepoExercisesScreen belt=${belt.id} topicId='$topicId' subTopicId='$subTopicId'"
+        )
     }
 
     // ✅ FIX: Uri.decode לא מחזיר '+' לרווח. Route.make משתמש ב-URLEncoder שמחזיר '+'
@@ -84,12 +88,18 @@ fun TopicRepoExercisesScreen(
 
     val topic = remember(topicId) { decArg(topicId) }
 
-
     val isDefenseFamily = remember(topic) { topic.contains("הגנות") }
 
     val subTopicOrNull = remember(subTopicId) {
         val decoded = decArg(subTopicId)
         decoded.takeIf { it.isNotBlank() && it != "__all__" }
+    }
+
+    LaunchedEffect(topicId, subTopicId, topic, subTopicOrNull) {
+        Log.e(
+            "DEF_DEBUG",
+            "DECODED topicId='$topicId' -> topic='$topic' | subTopicId='$subTopicId' -> sub='${subTopicOrNull ?: "null"}'"
+        )
     }
 
     // ✅ FIX: לבחור topic אמיתי ל-Repo לפי מה שנכנס מה-UI (כדי שלא יהיו unresolved)
@@ -129,21 +139,46 @@ fun TopicRepoExercisesScreen(
             .trim()
     }
 
-    // ✅ NEW: aliases שמגיעים מה-Registry (למשל "שחרור מחביקות גוף") אל titles אמיתיים ב-HardCatalog
+    // ✅ NEW: aliases שמגיעים מה-Registry / UI / hard ids אל titles אמיתיים ב-HardCatalog
     fun normalizeReleasesSubAlias(ui: String): String {
-        val n = baseHardTitle(ui)
+        val n0 = baseHardTitle(ui).trim()
+        val n = n0
+            .removePrefix("שחרור ").trim()
+            .removePrefix("שחרורים ").trim()
 
-        // דוגמאות: "שחרור מחביקות גוף" / "שחרור מחביקות - גוף"
-        if (n.contains("שחרור מחביקות")) {
-            return when {
-                n.contains("גוף") -> "חביקות גוף"
-                n.contains("צוואר") || n.contains("צואר") -> "חביקות צוואר"
-                n.contains("זרוע") -> "חביקות זרוע"
+        return when {
+            // ✅ hard ids ישירים
+            n0 == "releases" -> "שחרורים"
+            n0 == "releases_hands_hair_shirt" -> "שחרור מתפיסות ידיים / שיער / חולצה"
+            n0 == "releases_chokes" -> "שחרור מחניקות"
+            n0 == "releases_hugs" -> "שחרור מחביקות"
+            n0 == "releases_hugs_body" -> "חביקות גוף"
+            n0 == "releases_hugs_neck" -> "חביקות צוואר"
+            n0 == "releases_hugs_arm" -> "חביקות זרוע"
+
+            // ✅ מתפיסות
+            n0.contains("תפיס") || n0.contains("שיער") || n0.contains("חולצה") ||
+                    n.contains("תפיס") || n.contains("שיער") || n.contains("חולצה") ->
+                "שחרור מתפיסות ידיים / שיער / חולצה"
+
+            // ✅ חניקות
+            n0.contains("חניק") || n.contains("חניק") ->
+                "שחרור מחניקות"
+
+            // ✅ מחביקות הורה / תתי-נושאים
+            n0.contains("מחביק") || n.contains("מחביק") ||
+                    n0.startsWith("releases_hugs") -> when {
+                n0.contains("body") || n0.contains("גוף") || n.contains("גוף") -> "חביקות גוף"
+                n0.contains("neck") || n0.contains("צוואר") || n0.contains("צואר") || n.contains("צוואר") || n.contains("צואר") -> "חביקות צוואר"
+                n0.contains("arm") || n0.contains("זרוע") || n.contains("זרוע") -> "חביקות זרוע"
                 else -> "שחרור מחביקות"
             }
-        }
 
-        return n
+            // ✅ שורש
+            n0 == "שחרורים" || n == "שחרורים" -> "שחרורים"
+
+            else -> n0
+        }
     }
 
     fun isReleasesHardTopic(uiTopic: String): Boolean {
@@ -236,7 +271,7 @@ fun TopicRepoExercisesScreen(
 
                 Log.e(
                     "DEF_DEBUG",
-                    "HARD_RELEASES_SUBSECTIONS via topic='שחרורים' parent='${parent.title}' subSections=${parent.subSections.map { it.title }}"
+                    "HARD_RELEASES_SUBSECTIONS via topic='שחרורים' parent='${parent.title}' subSections=${parent.subSections.map { "${it.id}:${it.title}" }}"
                 )
 
                 return@LaunchedEffect
@@ -257,7 +292,7 @@ fun TopicRepoExercisesScreen(
 
                 Log.e(
                     "DEF_DEBUG",
-                    "HARD_RELEASES_SUBSECTIONS parent='${parent.title}' subSections=${parent.subSections.map { it.title }}"
+                    "HARD_RELEASES_SUBSECTIONS parent='${parent.title}' subSections=${parent.subSections.map { "${it.id}:${it.title}" }}"
                 )
 
                 return@LaunchedEffect
@@ -281,8 +316,13 @@ fun TopicRepoExercisesScreen(
                 .distinct()
                 .toList()
 
-            Log.e("DEF_DEBUG", "HARD_RELEASES count=${hard.size} topic='$uiTopic' sub='${uiSub ?: "null"}'")
-            hard.take(20).forEachIndexed { i, it -> Log.e("DEF_DEBUG", "HARD[$i] = '$it'") }
+            Log.e(
+                "DEF_DEBUG",
+                "HARD_RELEASES count=${hard.size} topic='$uiTopic' sub='${uiSub ?: "null"}' normalizedTopic='${normalizeReleasesSubAlias(uiTopic)}' normalizedSub='${uiSub?.let(::normalizeReleasesSubAlias) ?: "null"}'"
+            )
+            hard.take(20).forEachIndexed { i, it ->
+                Log.e("DEF_DEBUG", "HARD[$i] = '$it'")
+            }
 
             items = hard
                 .asSequence()
@@ -414,6 +454,12 @@ fun TopicRepoExercisesScreen(
             // ✅ אם יש תתי־נושאים קשיחים (למשל "שחרור מחביקות") – מציגים אותם במקום items
             if (hardSubSections.isNotEmpty()) {
 
+                android.util.Log.e(
+                    "DEF_DEBUG",
+                    "SHOW HARD_SUB_SECTIONS belt=${belt.id} topicId='$topicId' topic='$topic' subTopicId='$subTopicId' sections=${hardSubSections.map { "${it.id}:${it.title}" }}"
+                )
+                println("DEF_DEBUG SHOW HARD_SUB_SECTIONS belt=${belt.id} topicId='$topicId' topic='$topic' subTopicId='$subTopicId' sections=${hardSubSections.map { "${it.id}:${it.title}" }}")
+
                 Text(
                     text = "בחר תת־נושא",
                     style = MaterialTheme.typography.titleMedium,
@@ -427,9 +473,15 @@ fun TopicRepoExercisesScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
+                                android.util.Log.e(
+                                    "DEF_DEBUG",
+                                    "CLICK HARD_SUB topicId='$topicId' topic='$topic' subTopicId='$subTopicId' -> targetSectionId='${sec.id}' targetTitle='${sec.title}'"
+                                )
+                                println("DEF_DEBUG CLICK HARD_SUB topicId='$topicId' topic='$topic' subTopicId='$subTopicId' -> targetSectionId='${sec.id}' targetTitle='${sec.title}'")
+
                                 onOpenSubTopic(
-                                    topic,
-                                    sec.title
+                                    topicId,
+                                    sec.id
                                 )
                             },
                         shape = MaterialTheme.shapes.large,

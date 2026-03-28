@@ -1,10 +1,15 @@
 package il.kmi.app
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,6 +46,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        ensureNotificationPermission()
 
         // 👇 חדש: קליטה מהתראה (גם כשהאפליקציה סגורה)
         handleCoachGateIntent(intent)
@@ -154,6 +161,23 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             .apply()
     }
 
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!granted) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_CODE_POST_NOTIFICATIONS
+            )
+        }
+    }
+
     /**
      * בכל פתיחה "קרה" של האפליקציה נכפה אימות (אם מוגדרת נעילה).
      * כך אחרי סגירה ופתיחה מחדש תמיד תתבקש סיסמה / ביומטרי.
@@ -218,6 +242,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     }
 
     companion object {
+
+        private const val REQUEST_CODE_POST_NOTIFICATIONS = 41024
 
         /**
          * קריאה מכפתור "התנתק":

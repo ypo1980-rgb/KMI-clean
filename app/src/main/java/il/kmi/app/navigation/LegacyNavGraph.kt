@@ -29,6 +29,8 @@ import il.kmi.app.screens.IntroScreen
 import il.kmi.app.screens.MaterialsScreen
 import il.kmi.app.screens.MonthlyCalendarScreen
 import il.kmi.app.screens.MyProfileScreen
+import il.kmi.app.screens.SubTopics.subTopicsByBeltNavGraph
+import il.kmi.app.screens.SubTopics.subTopicsByTopicNavGraph
 import il.kmi.app.screens.registration.RegistrationNavHost
 import il.kmi.app.ui.DrawerBridge
 import il.kmi.shared.domain.Belt
@@ -86,10 +88,8 @@ fun NavGraphBuilder.legacyNavGraph(
     trainingNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     homeNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     topicsNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
-
-    // ✅ מקור האמת החדש של תתי־נושאים
-    subTopicsNavGraph(nav = nav)
-
+    subTopicsByBeltNavGraph(nav = nav)
+    subTopicsByTopicNavGraph(nav = nav)
     materialsNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     summaryNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     practiceNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
@@ -304,7 +304,12 @@ fun NavGraphBuilder.legacyNavGraph(
     composable(route = Route.MonthlyCalendar.route) {
         MonthlyCalendarScreen(
             kmiPrefs = kmiPrefs,
-            onBack = { nav.popBackStack() }
+            onBack = { nav.popBackStack() },
+            onDateClick = { pickedDate ->
+                nav.navigate(
+                    Route.TrainingSummary.make(pickedDate.toString())
+                )
+            }
         )
     }
 

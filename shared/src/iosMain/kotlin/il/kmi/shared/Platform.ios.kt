@@ -3,15 +3,16 @@ package il.kmi.shared
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.refTo
 import platform.Foundation.NSData
+import platform.Foundation.NSMutableData
 import platform.Foundation.NSString
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.create
 import platform.Foundation.stringByAppendingPathComponent
 import platform.Foundation.writeToFile
+import platform.posix.memcpy
 
 actual object Platform {
 
-    // אפשר לשמור כל אובייקט שיועבר מ-iOS (אם בכלל)
     private var appObj: Any? = null
 
     actual fun init(appContext: Any?) {
@@ -24,7 +25,7 @@ actual object Platform {
     actual fun setClickSoundsEnabled(enabled: Boolean) { /* no-op */ }
     actual fun setHapticsEnabled(enabled: Boolean) { /* no-op */ }
 
-    actual fun scheduleWeeklyTrainingAlarms(leadMinutes: Int) { /* TODO: UNUserNotificationCenter */ }
+    actual fun scheduleWeeklyTrainingAlarms(leadMinutes: Int) { /* TODO */ }
     actual fun cancelWeeklyTrainingAlarms() { /* TODO */ }
 
     actual fun saveTextAsFile(
@@ -34,7 +35,6 @@ actual object Platform {
     ): PlatformFile {
         val safeName = if (filename.endsWith(".html", ignoreCase = true)) filename else "$filename.html"
 
-        // כתיבה ל-temp של iOS
         val tmpDir: String = NSTemporaryDirectory()
         val path: String = NSString.create(string = tmpDir).stringByAppendingPathComponent(safeName)
 
@@ -47,5 +47,10 @@ actual object Platform {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun ByteArray.toNSData(): NSData =
-    NSData.create(bytes = this.refTo(0), length = this.size.toULong())
+private fun ByteArray.toNSData(): NSData {
+    val data = NSMutableData.dataWithLength(size.toULong()) as NSMutableData
+    if (isNotEmpty()) {
+        memcpy(data.mutableBytes, refTo(0), size.toULong())
+    }
+    return data
+}
