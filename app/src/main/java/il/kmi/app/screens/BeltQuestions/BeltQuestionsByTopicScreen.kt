@@ -1,25 +1,35 @@
 package il.kmi.app.screens.BeltQuestions
 
+import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.material3.LocalTextStyle
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.domain.SubjectTopic
+import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.FloatingBeltQuickMenu
+import il.kmi.app.screens.parseSearchKey
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -64,6 +74,45 @@ private fun handsSectionIdFor(raw: String): String? {
     }
 }
 
+private fun normalizeFavoriteId(raw: String): String =
+    raw.substringAfter("::", raw)
+        .substringAfter(":", raw)
+        .trim()
+
+private fun findExplanationForHitLocal(
+    belt: Belt,
+    rawItem: String,
+    topic: String
+): String {
+    val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
+
+    fun String.clean(): String = this
+        .replace('–', '-')
+        .replace('־', '-')
+        .replace("  ", " ")
+        .trim()
+
+    val candidates = buildList {
+        add(rawItem)
+        add(display)
+        add(display.clean())
+        add(display.substringBefore("(").trim().clean())
+    }.distinct()
+
+    for (candidate in candidates) {
+        val got = il.kmi.app.domain.Explanations.get(belt, candidate).trim()
+        if (
+            got.isNotBlank() &&
+            !got.startsWith("הסבר מפורט על") &&
+            !got.startsWith("אין כרגע")
+        ) {
+            return if ("::" in got) got.substringAfter("::").trim() else got
+        }
+    }
+
+    return "אין כרגע הסבר לתרגיל הזה."
+}
+
 @Composable
 private fun rememberEnsureContentRepoInitialized() {
     val scope = rememberCoroutineScope()
@@ -95,21 +144,29 @@ fun BeltQuestionsByTopicScreen(
 ) {
     rememberEnsureContentRepoInitialized()
 
+    val ctx = LocalContext.current
+    val notePrefs = remember(ctx) {
+        ctx.getSharedPreferences("kmi_exercise_notes", Context.MODE_PRIVATE)
+    }
+
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var effectiveBelt by rememberSaveable { mutableStateOf(Belt.GREEN) }
+    var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "נושאים",
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+            il.kmi.app.ui.KmiTopBar(
+                title = "נושאים",
+                onHome = { },
+                lockHome = false,
+                showTopHome = false,
+                onPickSearchResult = { key ->
+                    pickedKey = key
+                },
+                lockSearch = false,
+                showBottomActions = true,
+                centerTitle = true
             )
         }
     ) { innerPadding ->
@@ -187,6 +244,181 @@ fun BeltQuestionsByTopicScreen(
                 onVoice = { onOpenVoiceAssistant(effectiveBelt) },
                 onPdf = { onOpenPdfMaterials(effectiveBelt) }
             )
+
+            pickedKey?.let { key ->
+                val (belt, topic, item) = parseSearchKey(key)
+
+                val displayName = ExerciseTitleFormatter
+                    .displayName(item)
+                    .ifBlank { item }
+
+                val favoriteId = remember(item) { normalizeFavoriteId(item) }
+                val favorites: Set<String> by FavoritesStore
+                    .favoritesFlow
+                    .collectAsState(initial = emptySet())
+                val isFavorite = favorites.contains(favoriteId)
+
+                val noteKey = remember(belt, topic, favoriteId) {
+                    "note_${belt.id}_${topic.trim()}_${favoriteId}"
+                }
+
+                var noteText by remember(noteKey) {
+                    mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+                }
+
+                var showNoteEditor by remember { mutableStateOf(false) }
+
+                val explanation = remember(belt, item) {
+                    findExplanationForHitLocal(
+                        belt = belt,
+                        rawItem = item,
+                        topic = topic
+                    )
+                }
+
+                AlertDialog(
+                    onDismissRequest = { pickedKey = null },
+                    title = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment = Alignment.End
+                            ) {
+                                Text(
+                                    text = displayName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Text(
+                                    text = "${topic} • ${belt.heb}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    showNoteEditor = true
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "הערה",
+                                    tint = Color(0xFF42A5F5)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    FavoritesStore.toggle(favoriteId)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = "מועדפים",
+                                    tint = if (isFavorite) Color(0xFFFFC107) else Color.Gray
+                                )
+                            }
+                        }
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Text(
+                                text = explanation,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            if (noteText.isNotBlank()) {
+                                Spacer(Modifier.height(12.dp))
+
+                                HorizontalDivider(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = Color.LightGray.copy(alpha = 0.65f)
+                                )
+
+                                Spacer(Modifier.height(10.dp))
+
+                                Text(
+                                    text = "הערה של המתאמן:",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(Modifier.height(6.dp))
+
+                                Text(
+                                    text = noteText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { pickedKey = null }) {
+                            Text("סגור")
+                        }
+                    }
+                )
+
+                if (showNoteEditor) {
+                    AlertDialog(
+                        onDismissRequest = { showNoteEditor = false },
+                        title = {
+                            Text(
+                                text = "הערה לתרגיל",
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        text = {
+                            OutlinedTextField(
+                                value = noteText,
+                                onValueChange = { noteText = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
+                                label = {
+                                    Text("כתוב הערה")
+                                }
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    notePrefs.edit()
+                                        .putString(noteKey, noteText.trim())
+                                        .apply()
+                                    showNoteEditor = false
+                                }
+                            ) {
+                                Text("שמור")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { showNoteEditor = false }
+                            ) {
+                                Text("ביטול")
+                            }
+                        }
+                    )
+                }
+            }
         }
     }
 }

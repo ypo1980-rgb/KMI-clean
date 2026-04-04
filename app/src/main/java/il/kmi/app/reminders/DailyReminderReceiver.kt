@@ -1,7 +1,6 @@
 package il.kmi.app.reminders
 
 import android.Manifest
-import android.app.BroadcastOptions
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -14,7 +13,6 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import il.kmi.app.MainActivity
 import il.kmi.app.domain.Explanations
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.reminders.DailyExercisePicker

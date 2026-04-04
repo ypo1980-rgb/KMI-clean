@@ -2,7 +2,6 @@ package il.kmi.shared.reminders
 
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.ContentRepo
-import kotlin.random.Random
 
 class DailyExercisePicker {
 

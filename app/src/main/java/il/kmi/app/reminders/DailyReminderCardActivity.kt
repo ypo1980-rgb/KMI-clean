@@ -1,6 +1,5 @@
 package il.kmi.app.reminders
 
-import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity

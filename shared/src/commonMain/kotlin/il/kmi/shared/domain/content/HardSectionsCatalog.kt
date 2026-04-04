@@ -321,7 +321,7 @@ object HardSectionsCatalog {
                 BeltGroup(
                     belt = Belt.YELLOW,
                     items = listOf(
-                        "בעיטה ישירה למפסעה",
+                        "בעיטה רגילה למפסעה",
                         "בעיטה רגילה לסנטר",
                         "בעיטת מגל נמוכה",
                         "בעיטת מגל אופקית",

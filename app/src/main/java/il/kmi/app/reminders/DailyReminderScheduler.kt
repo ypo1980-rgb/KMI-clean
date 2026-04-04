@@ -29,15 +29,38 @@ object DailyReminderScheduler {
         val hour = reminderPrefs.getHour()
         val minute = reminderPrefs.getMinute()
 
-        val triggerAtMillis =
+        var triggerAtMillis =
             ShabbatHolidayChecker.computeNextAllowedTriggerTimeMillis(
                 preferredHour = hour,
                 preferredMinute = minute
             )
 
+        val now = System.currentTimeMillis()
+
+        if (triggerAtMillis <= now + 60_000L) {
+            val tomorrow = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, 1)
+                set(Calendar.HOUR_OF_DAY, hour)
+                set(Calendar.MINUTE, minute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+
+            triggerAtMillis =
+                ShabbatHolidayChecker.computeNextAllowedTriggerTimeMillis(
+                    preferredHour = tomorrow.get(Calendar.HOUR_OF_DAY),
+                    preferredMinute = tomorrow.get(Calendar.MINUTE)
+                )
+
+            android.util.Log.w(
+                "KMI_REMINDER",
+                "schedule adjusted triggerAtMillis because computed time was too close/past. adjusted=$triggerAtMillis now=$now"
+            )
+        }
+
         android.util.Log.d(
             "KMI_REMINDER",
-            "schedule triggerAtMillis=$triggerAtMillis hour=$hour minute=$minute"
+            "schedule triggerAtMillis=$triggerAtMillis hour=$hour minute=$minute now=$now"
         )
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -73,9 +96,20 @@ object DailyReminderScheduler {
             set(Calendar.MILLISECOND, 0)
         }
 
+        val triggerAtMillis =
+            ShabbatHolidayChecker.computeNextAllowedTriggerTimeMillis(
+                preferredHour = calendar.get(Calendar.HOUR_OF_DAY),
+                preferredMinute = calendar.get(Calendar.MINUTE)
+            )
+
+        android.util.Log.d(
+            "KMI_REMINDER",
+            "rescheduleNextDay triggerAtMillis=$triggerAtMillis hour=${calendar.get(Calendar.HOUR_OF_DAY)} minute=${calendar.get(Calendar.MINUTE)}"
+        )
+
         scheduleExactAlarm(
             alarmManager = alarmManager,
-            triggerAtMillis = calendar.timeInMillis,
+            triggerAtMillis = triggerAtMillis,
             pendingIntent = pendingIntent
         )
     }

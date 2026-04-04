@@ -14,9 +14,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import il.kmi.shared.domain.Belt
@@ -40,8 +40,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.ui.AbsoluteAlignment
+import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.KmiTtsManager.speak
 import il.kmi.app.ui.ext.lightColor
@@ -53,6 +55,42 @@ import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 
 // ✅ NEW: טוקן לתרגול לפי נושאים (חגורות+נושאים) – חייב להתאים ל-HomeNavGraph/PracticeFabMenu
 private const val TOPICS_PICK_TOKEN = "__TOPICS_PICK__"
+
+private fun findExplanationForPractice(
+    belt: Belt,
+    rawItem: String
+): String {
+
+    val display = il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+        .displayName(rawItem)
+        .ifBlank { rawItem }
+        .trim()
+
+    fun String.clean(): String =
+        this.replace('-', ' ')
+            .replace("־", " ")
+            .replace("  ", " ")
+            .trim()
+
+    val candidates = listOf(
+        rawItem,
+        display,
+        display.clean(),
+        display.substringBefore("(").trim().clean()
+    ).distinct()
+
+    for (candidate in candidates) {
+        val got = il.kmi.app.domain.Explanations.get(belt, candidate).trim()
+        if (got.isNotBlank()) return got
+    }
+
+    return "אין כרגע הסבר לתרגיל הזה."
+}
+
+private fun normalizeFavoriteId(raw: String): String =
+    raw.substringAfter("::", raw)
+        .substringAfter(":", raw)
+        .trim()
 
 private fun decTokenPart(s: String): String =
     runCatching { URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
@@ -105,6 +143,10 @@ fun RandomPracticeScreen(
 
     val context = LocalContext.current
     val sp = remember { context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
+    val notePrefs = remember(context) {
+        context.getSharedPreferences("kmi_exercise_notes", android.content.Context.MODE_PRIVATE)
+    }
+
     // ✅ Favorites – source of truth אחד לכל האפליקציה
     val favorites: Set<String> by FavoritesStore.favoritesFlow.collectAsState(initial = emptySet())
 
@@ -736,28 +778,22 @@ fun RandomPracticeScreen(
                 val (b, t, item) = pickedSearchHit!!
 
                 val explanation = remember(b, item, t) {
-                    val direct = il.kmi.app.domain.Explanations.get(b, item).trim()
-                    if (direct.isNotBlank()) direct
-                    else {
-                        val alt = item.substringAfter("::", item).substringAfter(":", item).trim()
-                        il.kmi.app.domain.Explanations.get(b, alt).ifBlank {
-                            "לא נמצא הסבר עבור \"$item\"."
-                        }
-                    }
+                    findExplanationForPractice(b, item)
                 }
 
-                // ✅ מועדפים – דרך FavoritesStore (ללא SP)
-                val favId = remember(item) {
-                    il.kmi.shared.questions.model.util.ExerciseTitleFormatter
-                        .displayName(item)
-                        .ifBlank { item }
-                        .trim()
+                val favId = remember(item) { normalizeFavoriteId(item) }
+                val isFav = favorites.contains(favId)
+
+                val noteKey = remember(b, t, favId) {
+                    "note_${b.id}_${t.trim()}_${favId}"
                 }
-                val isFav = item != null && favorites.contains(favId)
+                var noteText by remember(noteKey) {
+                    mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+                }
+                var showNoteEditor by remember { mutableStateOf(false) }
 
                 fun toggleFav() {
-                    if (item.isNullOrBlank()) return
-                    // ✅ FIX: FavoritesStore כרגע גלובלי – אין toggleScoped
+                    if (item.isBlank()) return
                     FavoritesStore.toggle(favId)
                 }
 
@@ -786,26 +822,34 @@ fun RandomPracticeScreen(
                                 .fillMaxWidth()
                                 .padding(bottom = 12.dp)
                         ) {
-                            // ⭐ בצד שמאל
-                            IconButton(
-                                onClick = { toggleFav() },
-                                modifier = Modifier.align(AbsoluteAlignment.CenterLeft)
+                            Row(
+                                modifier = Modifier.align(AbsoluteAlignment.CenterLeft),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                if (isFav) {
+                                IconButton(onClick = { toggleFav() }) {
+                                    if (isFav) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Star,
+                                            contentDescription = "הסר ממועדפים",
+                                            tint = Color(0xFFFFC107)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Outlined.StarBorder,
+                                            contentDescription = "הוסף למועדפים"
+                                        )
+                                    }
+                                }
+
+                                IconButton(onClick = { showNoteEditor = true }) {
                                     Icon(
-                                        imageVector = Icons.Filled.Star,
-                                        contentDescription = "הסר ממועדפים",
-                                        tint = Color(0xFFFFC107)
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = "הוסף למועדפים"
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = "ערוך הערה",
+                                        tint = Color(0xFF42A5F5)
                                     )
                                 }
                             }
 
-                            // שם התרגיל + החגורה בצד ימין
                             Column(
                                 modifier = Modifier
                                     .align(AbsoluteAlignment.CenterRight)
@@ -820,7 +864,7 @@ fun RandomPracticeScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Text(
-                                    text = "(${b.heb})",
+                                    text = "${t} • ${b.heb}",
                                     style = MaterialTheme.typography.labelMedium,
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
@@ -828,12 +872,40 @@ fun RandomPracticeScreen(
                             }
                         }
 
-                        Text(
-                            text = explanation,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Text(
+                                text = explanation,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            if (noteText.isNotBlank()) {
+                                Spacer(Modifier.height(12.dp))
+                                HorizontalDivider()
+                                Spacer(Modifier.height(10.dp))
+
+                                Text(
+                                    text = "הערה של המתאמן:",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(Modifier.height(6.dp))
+
+                                Text(
+                                    text = noteText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
 
                         Spacer(Modifier.height(16.dp))
 
@@ -854,6 +926,45 @@ fun RandomPracticeScreen(
                         Spacer(Modifier.height(6.dp))
                     }
                 }
+
+                if (showNoteEditor) {
+                    AlertDialog(
+                        onDismissRequest = { showNoteEditor = false },
+                        title = {
+                            Text(
+                                text = "הערה לתרגיל",
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        text = {
+                            OutlinedTextField(
+                                value = noteText,
+                                onValueChange = { noteText = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
+                                label = { Text("כתוב הערה") }
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    notePrefs.edit()
+                                        .putString(noteKey, noteText.trim())
+                                        .apply()
+                                    showNoteEditor = false
+                                }
+                            ) {
+                                Text("שמור")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showNoteEditor = false }) {
+                                Text("ביטול")
+                            }
+                        }
+                    )
+                }
             }
 
             showHelp -> {
@@ -863,28 +974,26 @@ fun RandomPracticeScreen(
                     if (item.isNullOrBlank()) {
                         "לא נבחר תרגיל להצגה."
                     } else {
-                        val raw = il.kmi.app.domain.Explanations.get(belt, item).trim()
-                        if (raw.isNotBlank()) raw
-                        else {
-                            val alt = item.substringAfter("::", item).substringAfter(":", item).trim()
-                            il.kmi.app.domain.Explanations.get(belt, alt).ifBlank {
-                                "אין כרגע הסבר לתרגיל הזה."
-                            }
-                        }
+                        findExplanationForPractice(belt, item)
                     }
                 }
 
-                // ✅ מועדפים גלובליים – source of truth אחד (FavoritesStore)
                 val safeItem = item.orEmpty()
 
-                val favId = remember(key1 = safeItem) {
-                    il.kmi.shared.questions.model.util.ExerciseTitleFormatter
-                        .displayName(safeItem)
-                        .ifBlank { safeItem }
-                        .trim()
-                }
+                val favId = remember(safeItem) { normalizeFavoriteId(safeItem) }
 
                 val isFav = safeItem.isNotBlank() && favorites.contains(favId)
+
+                val noteTopic = remember(topicFilter) {
+                    topicFilter?.takeIf { it.isNotBlank() } ?: "general"
+                }
+                val noteKey = remember(belt, noteTopic, favId) {
+                    "note_${belt.id}_${noteTopic.trim()}_${favId}"
+                }
+                var noteText by remember(noteKey) {
+                    mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+                }
+                var showNoteEditor by remember { mutableStateOf(false) }
 
                 fun toggleFav() {
                     if (safeItem.isBlank()) return
@@ -911,20 +1020,30 @@ fun RandomPracticeScreen(
                                 .fillMaxWidth()
                                 .padding(bottom = 12.dp)
                         ) {
-                            IconButton(
-                                onClick = { toggleFav() },
-                                modifier = Modifier.align(Alignment.CenterStart)
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterStart),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                if (isFav) {
+                                IconButton(onClick = { toggleFav() }) {
+                                    if (isFav) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Star,
+                                            contentDescription = "הסר ממועדפים",
+                                            tint = Color(0xFFFFC107)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Outlined.StarBorder,
+                                            contentDescription = "הוסף למועדפים"
+                                        )
+                                    }
+                                }
+
+                                IconButton(onClick = { showNoteEditor = true }) {
                                     Icon(
-                                        imageVector = Icons.Filled.Star,
-                                        contentDescription = "הסר ממועדפים",
-                                        tint = Color(0xFFFFC107)
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = "הוסף למועדפים"
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription = "ערוך הערה",
+                                        tint = Color(0xFF42A5F5)
                                     )
                                 }
                             }
@@ -951,12 +1070,40 @@ fun RandomPracticeScreen(
                             }
                         }
 
-                        Text(
-                            text = explanation,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Text(
+                                text = explanation,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            if (noteText.isNotBlank()) {
+                                Spacer(Modifier.height(12.dp))
+                                HorizontalDivider()
+                                Spacer(Modifier.height(10.dp))
+
+                                Text(
+                                    text = "הערה של המתאמן:",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(Modifier.height(6.dp))
+
+                                Text(
+                                    text = noteText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
 
                         Spacer(Modifier.height(16.dp))
 
@@ -971,6 +1118,45 @@ fun RandomPracticeScreen(
 
                         Spacer(Modifier.height(6.dp))
                     }
+                }
+
+                if (showNoteEditor) {
+                    AlertDialog(
+                        onDismissRequest = { showNoteEditor = false },
+                        title = {
+                            Text(
+                                text = "הערה לתרגיל",
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        text = {
+                            OutlinedTextField(
+                                value = noteText,
+                                onValueChange = { noteText = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
+                                label = { Text("כתוב הערה") }
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    notePrefs.edit()
+                                        .putString(noteKey, noteText.trim())
+                                        .apply()
+                                    showNoteEditor = false
+                                }
+                            ) {
+                                Text("שמור")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showNoteEditor = false }) {
+                                Text("ביטול")
+                            }
+                        }
+                    )
                 }
             }
 
@@ -1074,127 +1260,7 @@ fun RandomPracticeScreen(
             }
         }
     }
-
-// -------------------------------------------------------------------------------------
-
-    if (showHelp) {
-            val item = weightedItems.getOrNull(currentIndex)
-
-            val favTopic = topicFilter?.takeIf { it.isNotBlank() } ?: "general"
-            val favKey = "fav_${belt.id}_$favTopic"
-            val favState = remember(showHelp, favKey) {
-                mutableStateOf(
-                    sp.getStringSet(favKey, emptySet())?.toMutableSet() ?: mutableSetOf()
-                )
-            }
-            val isFav = item != null && favState.value.contains(item)
-
-            fun toggleFavorite() {
-                if (item.isNullOrBlank()) return
-                val set = favState.value.toMutableSet()
-                if (!set.add(item)) set.remove(item)
-                favState.value = set
-                sp.edit().putStringSet(favKey, set).apply()
-            }
-
-            val explanation = if (item.isNullOrBlank()) {
-                "לא נבחר תרגיל להצגה."
-            } else {
-                val raw = il.kmi.app.domain.Explanations.get(belt, item).trim()
-                if (raw.isNotBlank()) raw
-                else {
-                    val alt = item.substringAfter("::", item).substringAfter(":", item).trim()
-                    il.kmi.app.domain.Explanations.get(belt, alt).ifBlank {
-                        "אין כרגע הסבר לתרגיל הזה."
-                    }
-                }
-            }
-
-            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-            ModalBottomSheet(
-                onDismissRequest = { showHelp = false },
-                sheetState = sheetState,
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp)
-                    ) {
-                        IconButton(
-                            onClick = { toggleFavorite() },
-                            modifier = Modifier.align(Alignment.CenterStart)
-                        ) {
-                            if (isFav) {
-                                Icon(
-                                    imageVector = Icons.Filled.Star,
-                                    contentDescription = "הסר ממועדפים",
-                                    tint = Color(0xFFFFC107)
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Outlined.StarBorder,
-                                    contentDescription = "הוסף למועדפים"
-                                )
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .fillMaxWidth(),
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            Text(
-                                text = item ?: "תרגיל",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                text = "(${belt.heb})",
-                                style = MaterialTheme.typography.labelMedium,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = explanation,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { showHelp = false }) {
-                            Text("סגור")
-                        }
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-                }
-            }
-        }
-    }
-
-// -------------------------------------------------------------------------------------
+}
 
 /* ===== דיאלוג בחירת זמן תרגול (Top-level) ===== */
 @OptIn(ExperimentalMaterial3Api::class)
