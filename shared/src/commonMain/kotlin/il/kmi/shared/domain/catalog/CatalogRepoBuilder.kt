@@ -110,9 +110,9 @@ object CatalogRepoBuilder {
             )
         ),
         CatalogTopic(
-            title = "קאוולר",
+            title = "קוואלר",
             items = HardSectionsCatalog.subjectItemsFor(
-                subjectId = "topic_kawalr",
+                subjectId = "topic_kavaler",
                 belt = Belt.GREEN
             )
         ),

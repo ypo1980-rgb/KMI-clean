@@ -19,7 +19,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -55,7 +54,6 @@ import androidx.compose.material3.Switch
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.app.ui.rememberClickSound
 import il.kmi.app.ui.assistant.AiAssistantDialog
-// ⭐ Firebase – בשביל הודעות המאמן
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -67,9 +65,21 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import il.kmi.app.favorites.FavoritesStore
+import android.app.Activity
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
+//=================================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,11 +159,13 @@ private fun CoachInfoCard(
 }
 
 @Composable
-private fun TrainingsWeekHeader(modifier: Modifier = Modifier) {
+private fun TrainingsWeekHeader(
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
+) {
     val heb = java.util.Locale("he", "IL")
     val dateFmt = java.text.SimpleDateFormat("dd/MM", heb)
     val dayFmt  = java.text.SimpleDateFormat("EEEE", heb)   // שם היום בעברית
-
     val start = java.util.Calendar.getInstance()
     val end   = (start.clone() as java.util.Calendar).apply {
         add(java.util.Calendar.DAY_OF_YEAR, 6)
@@ -174,7 +186,7 @@ private fun TrainingsWeekHeader(modifier: Modifier = Modifier) {
             modifier = Modifier.padding(top = 4.dp, bottom = 9.dp)
         ) {
             Text(
-                text = "אימונים לשבוע הקרוב",
+                text = if (isEnglish) "Trainings for the upcoming week" else "אימונים לשבוע הקרוב",
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
@@ -218,6 +230,9 @@ fun HomeScreen(
     var showAiDialog by rememberSaveable { mutableStateOf(false) }
 
     val ctxRole = LocalContext.current
+    val contextLang = LocalContext.current
+    val langManager = remember { AppLanguageManager(contextLang) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val userSpRole = remember { ctxRole.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
     var userRole by remember { mutableStateOf(userSpRole.getString("user_role", "trainee")) }
 
@@ -276,12 +291,32 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
+
+            val contextLang = LocalContext.current
+            val langManager = remember { AppLanguageManager(contextLang) }
+
             il.kmi.app.ui.KmiTopBar(
-                title = "מסך הבית",
+                title = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "Home" else "מסך הבית",
                 onHome = { /* no-op במסך הבית */ },
                 lockHome = true,
                 homeDisabledToast = "אתה כבר במסך הבית 🙂",
                 showTopHome = false,
+
+                currentLang =
+                    if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+
+                onToggleLanguage = {
+
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW)
+                            AppLanguage.ENGLISH
+                        else
+                            AppLanguage.HEBREW
+
+                    langManager.setLanguage(newLang)
+
+                    (contextLang as Activity).recreate()
+                },
 
                 // חיפוש תרגיל מהסרגל התחתון
                 onPickSearchResult = { key ->
@@ -304,6 +339,15 @@ fun HomeScreen(
                 )
                 .background(backgroundBrush)
         ) {
+            val listState = rememberLazyListState()
+
+            val showFab by remember(listState) {
+                derivedStateOf {
+                    listState.firstVisibleItemIndex > 0 ||
+                            listState.firstVisibleItemScrollOffset > 120
+                }
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -525,7 +569,7 @@ fun HomeScreen(
                 }
 
                 Text(
-                    text = "מסך הבית",
+                    text = if (isEnglish) "Home" else "מסך הבית",
                     style = MaterialTheme.typography.headlineMedium,
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
@@ -544,6 +588,7 @@ fun HomeScreen(
                             .padding(vertical = 10.dp)
                     ) {
                         TrainingsWeekHeader(
+                            isEnglish = isEnglish,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
@@ -561,6 +606,7 @@ fun HomeScreen(
                             .padding(vertical = 10.dp)
                     ) {
                         TrainingsWeekHeader(
+                            isEnglish = isEnglish,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
@@ -600,53 +646,55 @@ fun HomeScreen(
                 ): Sequence<java.time.LocalDate> =
                     generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }
 
-                val HOLIDAYS_BY_YEAR: Map<Int, Set<java.time.LocalDate>> = remember {
-                    buildMap {
-                        put(
-                            2025,
-                            buildSet {
-                                datesRange(
-                                    java.time.LocalDate.of(2025, 9, 22),
-                                    java.time.LocalDate.of(2025, 9, 24)
-                                ).forEach { add(it) }
-                                datesRange(
-                                    java.time.LocalDate.of(2025, 10, 1),
-                                    java.time.LocalDate.of(2025, 10, 2)
-                                ).forEach { add(it) }
-                                datesRange(
-                                    java.time.LocalDate.of(2025, 10, 6),
-                                    java.time.LocalDate.of(2025, 10, 14)
-                                ).forEach { add(it) }
-                            }
-                        )
-                        put(
-                            2026,
-                            buildSet {
-                                datesRange(
-                                    java.time.LocalDate.of(2026, 4, 1),
-                                    java.time.LocalDate.of(2026, 4, 8)
-                                ).forEach { add(it) }
-                                add(java.time.LocalDate.of(2026, 4, 13))
-                                add(java.time.LocalDate.of(2026, 4, 22))
-                                datesRange(
-                                    java.time.LocalDate.of(2026, 5, 21),
-                                    java.time.LocalDate.of(2026, 5, 22)
-                                ).forEach { add(it) }
-                            }
-                        )
-                    }
-                }
-
                 fun java.util.Calendar.toLocalDate(): java.time.LocalDate =
                     this.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate()
 
-                fun isBlockedHolidayDate(cal: java.util.Calendar): Boolean {
-                    val d = cal.toLocalDate()
-                    val set = HOLIDAYS_BY_YEAR[d.year] ?: emptySet()
-                    return d in set
+                val holidayDates: Set<java.time.LocalDate> = remember {
+                    runCatching {
+                        val input = ctx.assets.open("holidays_hebrew_2024_2026.json")
+                        val text = input.bufferedReader().use { it.readText() }
+
+                        val root = org.json.JSONObject(text)
+                        val arr = root.getJSONArray("items")
+
+                        val set = mutableSetOf<java.time.LocalDate>()
+
+                        for (i in 0 until arr.length()) {
+                            val obj = arr.getJSONObject(i)
+                            if (obj.has("date_iso")) {
+                                val date = java.time.LocalDate.parse(obj.getString("date_iso"))
+                                set.add(date)
+                            }
+                        }
+
+                        set
+                    }.getOrElse { emptySet() }
                 }
 
-                val upcoming: List<TrainingData> =
+                fun isBlockedHolidayDate(cal: java.util.Calendar): Boolean {
+                    val d = cal.toLocalDate()
+                    return holidayDates.contains(d)
+                }
+
+                val nowCal = remember {
+                    java.util.Calendar.getInstance()
+                }
+
+                val weekEndCal = remember {
+                    (java.util.Calendar.getInstance()).apply {
+                        add(java.util.Calendar.DAY_OF_YEAR, 6)
+                        set(java.util.Calendar.HOUR_OF_DAY, 23)
+                        set(java.util.Calendar.MINUTE, 59)
+                        set(java.util.Calendar.SECOND, 59)
+                        set(java.util.Calendar.MILLISECOND, 999)
+                    }
+                }
+
+                fun isWithinCurrentWeek(cal: java.util.Calendar): Boolean {
+                    return cal.timeInMillis in nowCal.timeInMillis..weekEndCal.timeInMillis
+                }
+
+                val currentWeekCandidates: List<TrainingData> =
                     remember(branchesEffective, groupsEffective, coachFromPrefs) {
                         val all = mutableListOf<TrainingData>()
 
@@ -686,16 +734,29 @@ fun HomeScreen(
 
                                 all += branchItems
                                     .map { it.copy(cal = rollForwardIfPast(it.cal, 60)) }
-                                    .filterNot { isBlockedHolidayDate(it.cal) }
+                                    .filter { isWithinCurrentWeek(it.cal) }
                             }
                         }
 
                         all.distinctBy { it.cal.timeInMillis.toString() + "|" + it.address }
                             .sortedBy { it.cal.timeInMillis }
-                            .take(4)
                     }
 
-                val listState = rememberLazyListState()
+                val blockedWeekTrainings = remember(currentWeekCandidates) {
+                    currentWeekCandidates.filter { isBlockedHolidayDate(it.cal) }
+                }
+
+                val upcoming: List<TrainingData> = remember(currentWeekCandidates) {
+                    currentWeekCandidates
+                        .filterNot { isBlockedHolidayDate(it.cal) }
+                        .take(4)
+                }
+
+                val weekBlockedByHoliday = remember(currentWeekCandidates, blockedWeekTrainings) {
+                    currentWeekCandidates.isNotEmpty() &&
+                            blockedWeekTrainings.isNotEmpty() &&
+                            blockedWeekTrainings.size == currentWeekCandidates.size
+                }
 
                 LazyColumn(
                     state = listState,
@@ -711,15 +772,24 @@ fun HomeScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 72.dp),
+                                    .heightIn(min = 96.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "אין אימונים קרובים",
+                                    text = if (weekBlockedByHoliday) {
+                                        if (isEnglish)
+                                            "Passover holiday\nNo trainings this week"
+                                        else
+                                            "חג פסח / חול המועד פסח\nאין אימונים בשבוע זה"
+                                    } else {
+                                        if (isEnglish) "No upcoming trainings" else "אין אימונים קרובים"
+                                    },
                                     style = MaterialTheme.typography.titleMedium,
                                     color = Color.White,
                                     textAlign = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
                                 )
                             }
                         }
@@ -728,7 +798,10 @@ fun HomeScreen(
                             items = upcoming,
                             key = { it.cal.timeInMillis }
                         ) { training ->
-                            TrainingCardCompact(training = training)
+                            TrainingCardCompact(
+                                training = training,
+                                isEnglish = isEnglish
+                            )
                         }
                         item { Spacer(Modifier.height(6.dp)) }
                     }
@@ -764,13 +837,16 @@ fun HomeScreen(
                                 .padding(horizontal = 16.dp)
                         ) {
                             Column(Modifier.padding(16.dp)) {
-                                Text("הודעות מהמאמן", style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    text = if (isEnglish) "Coach Messages" else "הודעות מהמאמן",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
                                 Spacer(Modifier.height(6.dp))
 
                                 val msg = lastCoachMessage?.trim()
                                 if (msg.isNullOrEmpty()) {
                                     Text(
-                                        "אין הודעות חדשות כרגע",
+                                        text = if (isEnglish) "No new messages right now" else "אין הודעות חדשות כרגע",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -813,6 +889,20 @@ fun HomeScreen(
 
                 Spacer(Modifier.height(4.dp))
 
+                var bubbleOffset by remember { mutableStateOf(0f) }
+
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        animate(
+                            initialValue = -120f,
+                            targetValue = 320f,
+                            animationSpec = tween(2600)
+                        ) { value, _ ->
+                            bubbleOffset = value
+                        }
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -820,18 +910,89 @@ fun HomeScreen(
                         .imePadding()
                         .padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
-                    Button(
+                    Surface(
                         onClick = {
                             clickSound()
                             haptic(true)
                             onContinue()
                         },
+                        shape = RoundedCornerShape(18.dp),
+                        shadowElevation = 5.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
-                        shape = MaterialTheme.shapes.medium
+                            .height(60.dp)
+                            .shadow(12.dp, RoundedCornerShape(18.dp))
+                            .graphicsLayer {
+                                scaleX = 1.02f
+                                scaleY = 1.02f
+                            }
+                            .border(
+                                width = 1.dp,
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.85f),
+                                        Color.White.copy(alpha = 0.25f),
+                                        Color.White.copy(alpha = 0.85f)
+                                    )
+                                ),
+                                shape = RoundedCornerShape(18.dp)
+                            )
                     ) {
-                        Text(text = "מעבר לבחירת חגורה", fontWeight = FontWeight.Bold)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            Color(0xFF7F00FF),
+                                            Color(0xFF3F51B5),
+                                            Color(0xFF03A9F4)
+                                        )
+                                    )
+                                )
+                        ) {
+
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = bubbleOffset.dp)
+                                    .size(140.dp)
+                                    .background(
+                                        Brush.radialGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.45f),
+                                                Color.Transparent
+                                            )
+                                        ),
+                                        shape = CircleShape
+                                    )
+                            )
+
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Star,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+
+                                    Spacer(Modifier.width(8.dp))
+
+                                    Text(
+                                        text = if (isEnglish) "Go to Belt Selection" else "מעבר לבחירת חגורה",
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -842,6 +1003,10 @@ fun HomeScreen(
 // ✅ Speed-Dial FAB (עוזר קולי + אימונים חופשיים)
 // ===============================
             val mainIcon = if (fabExpanded) Icons.Filled.Close else Icons.Filled.Add
+            val fabRotation by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (fabExpanded) 45f else 0f,
+                label = "fabRotation"
+            )
 
 // (אופציונלי) שכבת לחיצה לסגירה כשפתוח
             if (fabExpanded) {
@@ -859,7 +1024,7 @@ fun HomeScreen(
                 modifier = Modifier
                     // ✅ ב-RTL: Start = ימין, End = שמאל
                     .align(Alignment.BottomStart)
-                    .padding(start = 20.dp, bottom = 150.dp),
+                    .padding(start = 20.dp, bottom = 140.dp),
                 enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(),
                 exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut()
             ) {
@@ -1133,28 +1298,53 @@ fun HomeScreen(
             }
 
 // הכפתור הראשי (הגדול) – תמיד מוצג
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                shadowElevation = 10.dp,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 20.dp, bottom = 80.dp)
-                    .size(58.dp)
-                    .border(width = 3.dp, color = Color.White, shape = CircleShape)
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showFab,
+                modifier = Modifier.align(Alignment.BottomEnd),
+                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(),
+                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut()
             ) {
-                IconButton(
-                    onClick = {
-                        clickSound()
-                        haptic(true)
-                        fabExpanded = !fabExpanded
-                    }
+                Box(
+                    modifier = Modifier
+                        .padding(end = 18.dp, bottom = 72.dp)
+                        .size(56.dp)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = CircleShape
+                        )
                 ) {
-                    Icon(
-                        imageVector = mainIcon,
-                        contentDescription = "פעולות מהירות",
-                        tint = Color.White
-                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        shadowElevation = 10.dp,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .border(width = 2.dp, color = Color.White, shape = CircleShape)
+                    ) {
+                        IconButton(
+                            onClick = {
+                                clickSound()
+                                haptic(true)
+                                fabExpanded = !fabExpanded
+                            }
+                        ) {
+                            Icon(
+                                imageVector = mainIcon,
+                                contentDescription = "פעולות מהירות",
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .graphicsLayer {
+                                        rotationZ = fabRotation
+                                    }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1440,7 +1630,8 @@ private fun buildExplanationWithStanceHighlight(
 /** כרטיס אימון קומפקטי – כמו לפני השינוי, עם סדר אייקונים ישן */
 @Composable
 private fun TrainingCardCompact(
-    training: TrainingData
+    training: TrainingData,
+    isEnglish: Boolean
 ) {
     val ctx = LocalContext.current
     val haptic = rememberHapticsGlobal()
@@ -1568,11 +1759,16 @@ private fun TrainingCardCompact(
         readIntField("durationMinutes", "durationMinuets", "duration", "dur", fallback = 90)
     }
 
-    val locale = java.util.Locale("he", "IL")
-    val dayText = remember(training.cal.timeInMillis) {
+    val locale = if (isEnglish) {
+        java.util.Locale.ENGLISH
+    } else {
+        java.util.Locale("he", "IL")
+    }
+
+    val dayText = remember(training.cal.timeInMillis, isEnglish) {
         java.text.SimpleDateFormat("EEEE", locale).format(training.cal.time)
     }
-    val dateText = remember(training.cal.timeInMillis) {
+    val dateText = remember(training.cal.timeInMillis, isEnglish) {
         java.text.SimpleDateFormat("dd/MM/yyyy", locale).format(training.cal.time)
     }
     val timeText = remember(training.cal.timeInMillis, durationMin) {
@@ -1629,13 +1825,25 @@ private fun TrainingCardCompact(
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
-            val branchLine = remember(training.place, training.address) {
-                training.place?.takeIf { it.isNotBlank() } ?: run {
+            val branchLine = remember(training.place, training.address, isEnglish) {
+                val raw = training.place?.takeIf { it.isNotBlank() } ?: run {
                     val parts = training.address
                         .split('–', '-', ',', '·')
                         .map { it.trim() }
                         .filter { it.isNotBlank() }
                     if (parts.size >= 2) parts[1] else parts.firstOrNull().orEmpty()
+                }
+
+                if (!isEnglish) {
+                    raw
+                } else {
+                    when (raw.trim()) {
+                        "מרכז קהילתי אופק" -> "Ofek Community Center"
+                        "מרכז קהילתי סוקולוב" -> "Sokolov Community Center"
+                        "נורדאו" -> "Nordau"
+                        "מושב עזריאל" -> "Moshav Azriel"
+                        else -> raw
+                    }
                 }
             }
             Text(
@@ -1686,6 +1894,7 @@ private fun TrainingCardCompact(
             ) {
                 NavigationChip(
                     address = training.address,
+                    isEnglish = isEnglish,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -1703,6 +1912,7 @@ private enum class NavChoice { GOOGLE_MAPS, WAZE }
 @Composable
 private fun NavigationChip(
     address: String?,
+    isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
@@ -1765,7 +1975,7 @@ private fun NavigationChip(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "ניווט",
+                    text = if (isEnglish) "Navigate" else "ניווט",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF0B1220),
@@ -1773,7 +1983,11 @@ private fun NavigationChip(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = if (safeAddress.isBlank()) "אין כתובת" else safeAddress,
+                    text = if (safeAddress.isBlank()) {
+                        if (isEnglish) "No address" else "אין כתובת"
+                    } else {
+                        safeAddress
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

@@ -47,6 +47,13 @@ import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.Explanations
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.screens.parseSearchKey
+import il.kmi.app.privacy.DemoPrivacy
+import il.kmi.app.privacy.DemoTrainees
+import android.app.Activity
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
+//========================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -205,6 +212,16 @@ fun AttendanceScreen(
         state.members.distinctBy { it.displayName.nameKey() }
     }
 
+    val demoUiMap = remember(displayMembers) {
+        displayMembers.mapIndexed { index, member ->
+            val demo = DemoTrainees.trainees.getOrNull(index)
+            member.id to Pair(
+                demo?.name ?: "מתאמן ${index + 1}",
+                demo?.attendancePercent
+            )
+        }.toMap()
+    }
+
     val totalMembers = displayMembers.size
     val presentCount = displayMembers.count { statusById[it.id] == AttendanceStatus.PRESENT }
     val absentCount  = displayMembers.count { statusById[it.id] == AttendanceStatus.ABSENT }
@@ -214,16 +231,34 @@ fun AttendanceScreen(
 
     Scaffold(
         topBar = {
+
+            val contextLang = LocalContext.current
+            val langManager = remember { AppLanguageManager(contextLang) }
+
             KmiTopBar(
                 title = "נוכחות",
                 showTopHome = false,
                 showTopSearch = false,
-                showBottomActions = false,
+                showBottomActions = true,
                 lockSearch = false,
                 lockHome = false,
                 centerTitle = true,
                 onHome = onHomeClick,
-                onPickSearchResult = { key -> pickedKey = key }
+                onPickSearchResult = { key -> pickedKey = key },
+
+                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                            AppLanguage.ENGLISH
+                        } else {
+                            AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLang)
+                    (contextLang as? Activity)?.recreate()
+                }
             )
         },
         floatingActionButton = {
@@ -301,13 +336,33 @@ fun AttendanceScreen(
                 items(displayMembers, key = { it.id }) { m ->
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                         Column(Modifier.fillMaxWidth()) {
+
+                            val demoUi = demoUiMap[m.id]
+                            val uiName = if (DemoPrivacy.ENABLED) {
+                                demoUi?.first ?: "מתאמן"
+                            } else {
+                                m.displayName
+                            }
+
                             Text(
-                                text = m.displayName,
+                                text = uiName,
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Start,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color.White
                             )
+
+                            if (DemoPrivacy.ENABLED) {
+                                demoUi?.second?.let { attendancePercent ->
+                                    Text(
+                                        text = "נוכחות חודשית: $attendancePercent%",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF67E8F9),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Start
+                                    )
+                                }
+                            }
 
                             Spacer(Modifier.height(6.dp))
 
@@ -398,7 +453,12 @@ fun AttendanceScreen(
                                     ) {
                                         IconButton(onClick = {
                                             val mid: Long? = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull()
-                                            onOpenMemberStats(mid, m.displayName)
+                                            val uiName = if (DemoPrivacy.ENABLED) {
+                                                demoUiMap[m.id]?.first ?: "מתאמן"
+                                            } else {
+                                                m.displayName
+                                            }
+                                            onOpenMemberStats(mid, uiName)
                                         }) {
                                             Icon(
                                                 Icons.Filled.Assessment,
@@ -409,7 +469,12 @@ fun AttendanceScreen(
 
                                         IconButton(onClick = {
                                             val id = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull() ?: return@IconButton
-                                            pendingDelete = id to m.displayName
+                                            val uiName = if (DemoPrivacy.ENABLED) {
+                                                demoUiMap[m.id]?.first ?: "מתאמן"
+                                            } else {
+                                                m.displayName
+                                            }
+                                            pendingDelete = id to uiName
                                         }) {
                                             Icon(
                                                 Icons.Filled.Delete,

@@ -1,6 +1,5 @@
 package il.kmi.app.screens
 
-import il.kmi.app.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,7 +50,12 @@ import il.kmi.shared.platform.PlatformSoundPlayer
 import java.net.URLDecoder   // ✅ נשאר רק זה
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
+//==========================================================================
 
 // ✅ NEW: טוקן לתרגול לפי נושאים (חגורות+נושאים) – חייב להתאים ל-HomeNavGraph/PracticeFabMenu
 private const val TOPICS_PICK_TOKEN = "__TOPICS_PICK__"
@@ -576,11 +580,14 @@ fun RandomPracticeScreen(
 
     Scaffold(
         topBar = {
+            val contextLang = LocalContext.current
+            val langManager = remember { AppLanguageManager(contextLang) }
+
             il.kmi.app.ui.KmiTopBar(
-                title = if (!topicFilter.isNullOrBlank() && topicFilter.startsWith("$TOPICS_PICK_TOKEN:")) {
+                title = if (!topicFilter.isNullOrBlank() && topicFilter.startsWith("תת")) {
                     "תרגול לפי נושא"
                 } else {
-                    "תרגול אקראי – ${belt.heb}"
+                    " - תרגול אקראי${belt.heb}"
                 },
                 onBack = null,
                 showBottomActions = true,
@@ -588,7 +595,19 @@ fun RandomPracticeScreen(
                 onSearch = { showSearch = true },
                 lockSearch = false,
                 showTopHome = false,
-                showTopSearch = false
+                showTopSearch = false,
+                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                            AppLanguage.ENGLISH
+                        } else {
+                            AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLang)
+                    (contextLang as? Activity)?.recreate()
+                }
             )
         },
     ) { padding ->

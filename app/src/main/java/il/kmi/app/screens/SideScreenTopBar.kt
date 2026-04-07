@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
@@ -50,6 +51,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import shareCurrentScreen
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
+//========================================================================
 
 /**
  * TopBar למסכי צד:
@@ -117,7 +122,66 @@ fun BottomActionsBarEdgeToEdge(
     homeDisabledToast: String? = null
 ) {
     val ctx = LocalContext.current
+    val isEnglish = currentLang.equals("en", ignoreCase = true)
 
+    val tSearch = if (isEnglish) "Search" else "חיפוש"
+    val tHome = if (isEnglish) "Home" else "בית"
+    val tSettings = if (isEnglish) "Settings" else "הגדרות"
+    val tAssistant = if (isEnglish) "Assistant" else "עוזר"
+    val tShare = if (isEnglish) "Share" else "שתף"
+    val tBroadcast = if (isEnglish) "Broadcast" else "שידור"
+
+    val tSearchLocked = if (isEnglish) {
+        "Search is available after login/registration"
+    } else {
+        "החיפוש זמין לאחר כניסה/רישום"
+    }
+
+    val tHomeLocked = homeDisabledToast ?: if (isEnglish) {
+        "Home screen will be available after login/registration"
+    } else {
+        "מסך הבית יהיה זמין לאחר כניסה/רישום"
+    }
+
+    val tBroadcastLocked = if (isEnglish) {
+        "Broadcast will be available after login/registration"
+    } else {
+        "שידור יהיה זמין לאחר כניסה/רישום"
+    }
+
+    val tSearchExercise = if (isEnglish) {
+        "Search exercise (e.g. kick, defense)"
+    } else {
+        "חפש תרגיל (למשל: בעיטה, הגנה)"
+    }
+
+    val tClearSearch = if (isEnglish) "Clear search" else "נקה חיפוש"
+
+    val tSearchErrorPrefix = if (isEnglish) {
+        "Search error:"
+    } else {
+        "שגיאה בעת חיפוש:"
+    }
+
+    val tSearchHint = if (isEnglish) {
+        "Type a word or phrase to see matching exercises."
+    } else {
+        "הקלד מילה או ביטוי כדי לראות תרגילים תואמים."
+    }
+
+    val tNoExercisesFound = if (isEnglish) {
+        "No exercises found for"
+    } else {
+        "לא נמצאו תרגילים עבור"
+    }
+
+    val tShareSubject = if (isEnglish) {
+        "K.M.I – Krav Magen Israeli"
+    } else {
+        "ק.מ.י – קרב מגן ישראלי"
+    }
+
+    val tShareChooser = if (isEnglish) "Share via" else "שתף באמצעות"
     /* --- state לחיפוש (כולל שכבה מודאלית) --- */
     var showSearch by rememberSaveable(isRegistered) { mutableStateOf(false) }
     LaunchedEffect(isRegistered) {
@@ -169,11 +233,11 @@ fun BottomActionsBarEdgeToEdge(
             // 1) חיפוש (נעול עד רישום)
             val canSearch = isRegistered
             BarAction(
-                label = "חיפוש",
+                label = tSearch,
                 onClick = {
                     if (!canSearch) {
                         android.widget.Toast
-                            .makeText(ctx, "החיפוש זמין לאחר כניסה/רישום", android.widget.Toast.LENGTH_SHORT)
+                            .makeText(ctx, tSearchLocked, android.widget.Toast.LENGTH_SHORT)
                             .show()
                         return@BarAction
                     }
@@ -184,7 +248,7 @@ fun BottomActionsBarEdgeToEdge(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Search,
-                    contentDescription = "חיפוש",
+                    contentDescription = tSearch,
                     tint = if (canSearch) contentColor else disabledContentColor,
                     modifier = Modifier.size(iconSize)
                 )
@@ -192,10 +256,10 @@ fun BottomActionsBarEdgeToEdge(
 
             // 2) בית
             BarAction(
-                label = "בית",
+                label = tHome,
                 onClick = {
                     if (!homeEnabled) {
-                        val msg = homeDisabledToast ?: "מסך הבית יהיה זמין לאחר כניסה/רישום"
+                        val msg = tHomeLocked
                         android.widget.Toast
                             .makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT)
                             .show()
@@ -207,17 +271,32 @@ fun BottomActionsBarEdgeToEdge(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Home,
-                    contentDescription = "בית",
+                    contentDescription = tHome,
                     tint = if (homeEnabled) contentColor else disabledContentColor,
                     modifier = Modifier.size(iconSize)
                 )
             }
 
             // 3) הגדרות
-            BarAction("הגדרות", { onSettings?.invoke() }) {
+            BarAction(
+                label = tSettings,
+                onClick = {
+                    if (onSettings != null) {
+                        onSettings()
+                    } else {
+                        android.widget.Toast
+                            .makeText(
+                                ctx,
+                                if (isEnglish) "Settings is not connected yet" else "מסך ההגדרות עדיין לא מחובר",
+                                android.widget.Toast.LENGTH_SHORT
+                            )
+                            .show()
+                    }
+                }
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Settings,
-                    contentDescription = "הגדרות",
+                    contentDescription = tSettings,
                     tint = contentColor,
                     modifier = Modifier.size(iconSize)
                 )
@@ -226,12 +305,12 @@ fun BottomActionsBarEdgeToEdge(
             // 4) עוזר חכם (AI) ✅ חדש
             if (onOpenAi != null) {
                 BarAction(
-                    label = "עוזר",
+                    label = tAssistant,
                     onClick = { onOpenAi() }
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Lightbulb,
-                        contentDescription = "עוזר חכם",
+                        contentDescription = tAssistant,
                         tint = contentColor,
                         modifier = Modifier.size(iconSize)
                     )
@@ -239,7 +318,7 @@ fun BottomActionsBarEdgeToEdge(
             }
 
             // 5) שתף (שיתוף צילום מסך או fallback לטקסט)
-            BarAction("שתף", {
+            BarAction(tShare, {
                 if (onShare != null) {
                     onShare()
                 } else {
@@ -261,7 +340,7 @@ fun BottomActionsBarEdgeToEdge(
             }) {
                 Icon(
                     imageVector = Icons.Filled.Share,
-                    contentDescription = "שתף",
+                    contentDescription = tShare,
                     tint = contentColor,
                     modifier = Modifier.size(iconSize)
                 )
@@ -271,7 +350,7 @@ fun BottomActionsBarEdgeToEdge(
             if (showCoachBroadcastAction) {
                 val canBroadcast = isRegistered
                 BarAction(
-                    label = "שידור",
+                    label = tBroadcast,
                     onClick = {
                         if (!canBroadcast) {
                             android.widget.Toast
@@ -285,10 +364,43 @@ fun BottomActionsBarEdgeToEdge(
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Chat,
-                        contentDescription = "שידור מאמן",
+                        contentDescription = tBroadcast,
                         tint = if (canBroadcast) contentColor else disabledContentColor,
                         modifier = Modifier.size(iconSize)
                     )
+                }
+            }
+
+            // 7) החלפת שפה
+            if (onToggleLanguage != null) {
+
+                val nextLang = if (currentLang == "he") "EN" else "עב"
+
+                BarAction(
+                    label = "",
+                    onClick = { onToggleLanguage() }
+                ) {
+
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        modifier = Modifier.size(32.dp)
+                    ) {
+
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+
+                            Text(
+                                text = nextLang,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                        }
+                    }
                 }
             }
         }
@@ -336,7 +448,7 @@ fun BottomActionsBarEdgeToEdge(
                         }
                     },
                     singleLine = true,
-                    label = { Text("חפש תרגיל (למשל: \"בעיטה\", \"הגנה\")") },
+                    label = { Text(tSearchExercise) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
@@ -373,7 +485,7 @@ fun BottomActionsBarEdgeToEdge(
                                     }) {
                                         Icon(
                                             imageVector = Icons.Filled.Close,
-                                            contentDescription = "נקה חיפוש"
+                                            contentDescription = tClearSearch
                                         )
                                     }
                                 }
@@ -403,14 +515,14 @@ fun BottomActionsBarEdgeToEdge(
                     }
                     query.isBlank() -> {
                         Text(
-                            "הקלד מילה או ביטוי כדי לראות תרגילים תואמים.",
+                            tSearchHint,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     results.isEmpty() -> {
                         Text(
-                            "לא נמצאו תרגילים עבור: $query",
+                            "$tNoExercisesFound: $query",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -522,12 +634,26 @@ fun BarAction(
     }
 }
 
-private fun shareAppDefault(ctx: Context, text: String = "הורידו את KAMI – ק.מ.י") {
+private fun shareAppDefault(ctx: Context, text: String? = null) {
+    val isEnglish = AppLanguageManager(ctx).getCurrentLanguage() == AppLanguage.ENGLISH
+
+    val shareText = text ?: if (isEnglish) {
+        "Download the KMI app"
+    } else {
+        "הורידו את אפליקציית ק.מ.י"
+    }
+
+    val chooserTitle = if (isEnglish) {
+        "Share via"
+    } else {
+        "שתף באמצעות"
+    }
+
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, text)
+        putExtra(Intent.EXTRA_TEXT, shareText)
     }
-    val chooser = Intent.createChooser(send, "שתף באמצעות")
+    val chooser = Intent.createChooser(send, chooserTitle)
     if (ctx !is Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     ctx.startActivity(chooser)
 }

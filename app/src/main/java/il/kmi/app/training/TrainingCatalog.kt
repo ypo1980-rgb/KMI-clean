@@ -339,7 +339,7 @@ object TrainingCatalog {
         addAll(
             listOf(
                 TrainingSlot(
-                    branch = "נתניה – מרכז קהילתי אופק",
+                    branch = AppStrings.t("branch_netanya_ofek"),
                     groups = listOf("גן חובה - כיתה א'"),
                     dayOfWeek = Calendar.MONDAY,   // 16:45–17:15
                     startHour = 16, startMinute = 45,
@@ -349,7 +349,7 @@ object TrainingCatalog {
                     coach = "יוני מלסה"
                 ),
                 TrainingSlot(
-                    branch = "נתניה – מרכז קהילתי אופק",
+                    branch = AppStrings.t("branch_netanya_ofek"),
                     groups = listOf("גן חובה - כיתה א'"),
                     dayOfWeek = Calendar.THURSDAY, // 16:45–17:15
                     startHour = 16, startMinute = 45,
@@ -363,7 +363,7 @@ object TrainingCatalog {
         addAll(
             listOf(
                 TrainingSlot(
-                    branch = "נתניה – מרכז קהילתי אופק",
+                    branch = AppStrings.t("branch_netanya_ofek"),
                     groups = listOf("כיתה ב' - כיתה ה'"),
                     dayOfWeek = Calendar.MONDAY,   // 17:15–18:00
                     startHour = 17, startMinute = 15,
@@ -373,7 +373,7 @@ object TrainingCatalog {
                     coach = "יוני מלסה"
                 ),
                 TrainingSlot(
-                    branch = "נתניה – מרכז קהילתי אופק",
+                    branch = AppStrings.t("branch_netanya_ofek"),
                     groups = listOf("כיתה ב' - כיתה ה'"),
                     dayOfWeek = Calendar.THURSDAY, // 17:15–18:00
                     startHour = 17, startMinute = 15,
@@ -387,7 +387,7 @@ object TrainingCatalog {
         addAll(
             listOf(
                 TrainingSlot(
-                    branch = "נתניה – מרכז קהילתי אופק",
+                    branch = AppStrings.t("branch_netanya_ofek"),
                     groups = listOf("כיתה ו' - כיתה ח'"),
                     dayOfWeek = Calendar.MONDAY,   // 18:00–19:00
                     startHour = 18, startMinute = 0,
@@ -397,7 +397,7 @@ object TrainingCatalog {
                     coach = "יוני מלסה"
                 ),
                 TrainingSlot(
-                    branch = "נתניה – מרכז קהילתי אופק",
+                    branch = AppStrings.t("branch_netanya_ofek"),
                     groups = listOf("כיתה ו' - כיתה ח'"),
                     dayOfWeek = Calendar.THURSDAY, // 18:00–19:00
                     startHour = 18, startMinute = 0,
@@ -411,7 +411,7 @@ object TrainingCatalog {
         addAll(
             listOf(
                 TrainingSlot(
-                    branch = "נתניה – מרכז קהילתי אופק",
+                    branch = AppStrings.t("branch_netanya_ofek"),
                     groups = listOf("נוער + בוגרים"),
                     dayOfWeek = Calendar.MONDAY,   // 19:00–20:30
                     startHour = 19, startMinute = 0,
@@ -421,7 +421,7 @@ object TrainingCatalog {
                     coach = "יוני מלסה"
                 ),
                 TrainingSlot(
-                    branch = "נתניה – מרכז קהילתי אופק",
+                    branch = AppStrings.t("branch_netanya_ofek"),
                     groups = listOf("נוער + בוגרים"),
                     dayOfWeek = Calendar.THURSDAY, // 19:00–20:30
                     startHour = 19, startMinute = 0,
@@ -434,7 +434,7 @@ object TrainingCatalog {
         )
         add(
             TrainingSlot(
-                branch = "נתניה – מרכז קהילתי אופק",
+                branch = AppStrings.t("branch_netanya_ofek"),
                 groups = listOf("בוגרים"),
                 dayOfWeek = Calendar.MONDAY,  // 20:30–22:00
                 startHour = 20, startMinute = 30,

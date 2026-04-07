@@ -5,12 +5,14 @@ package il.kmi.app.screens.coach
 import android.app.Application
 import android.content.Context
 import android.util.Log
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +39,14 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 import java.util.Locale
+import il.kmi.app.privacy.DemoPrivacy
+import il.kmi.app.privacy.DemoTrainees
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
+//=========================================================================
 
 data class TraineeProfile(
     val id: String,
@@ -44,7 +54,9 @@ data class TraineeProfile(
     val belt: String,
     val seniority: String,
     val age: Int,
-    val attendancePct: Int = 0
+    val attendancePct: Int = 0,
+    val branch: String = "",
+    val groupKey: String = ""
 )
 
 @Composable
@@ -360,7 +372,9 @@ fun CoachTraineesScreen(
                     belt = belt,
                     seniority = "",        // אין אצלך שדה כזה כרגע
                     age = age,
-                    attendancePct = pct
+                    attendancePct = pct,
+                    branch = branchDbKey,
+                    groupKey = groupName
                 )
             }
         }
@@ -371,12 +385,27 @@ fun CoachTraineesScreen(
     if (!role.equals("coach", ignoreCase = true)) {
         Scaffold(
             topBar = {
+                val contextLang = LocalContext.current
+                val langManager = remember { AppLanguageManager(contextLang) }
+
                 KmiTopBar(
-                    title = "אודות מתאמנים",
+                    title = "אודות המתאמנים",
                     onOpenDrawer = onOpenDrawer,
                     showRoleStatus = false,
                     lockSearch = true,
-                    showBottomActions = true
+                    showBottomActions = true,
+                    currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                    onToggleLanguage = {
+                        val newLang =
+                            if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                                AppLanguage.ENGLISH
+                            } else {
+                                AppLanguage.HEBREW
+                            }
+
+                        langManager.setLanguage(newLang)
+                        (contextLang as? Activity)?.recreate()
+                    }
                 )
             },
             containerColor = Color.Transparent,
@@ -395,16 +424,34 @@ fun CoachTraineesScreen(
         return
     }
 
+    val uiProfiles = remember(traineeProfiles) {
+        if (!DemoPrivacy.ENABLED) {
+            traineeProfiles
+        } else {
+            traineeProfiles.mapIndexed { index, trainee ->
+                val demo = DemoTrainees.trainees.getOrNull(index)
+
+                trainee.copy(
+                    fullName = demo?.name ?: "מתאמן ${index + 1}",
+                    belt = demo?.belt?.heb ?: trainee.belt,
+                    seniority = demo?.yearsTraining?.let { "$it שנים" } ?: trainee.seniority,
+                    age = demo?.age ?: trainee.age,
+                    attendancePct = demo?.attendancePercent ?: trainee.attendancePct
+                )
+            }
+        }
+    }
+
     // בחירה נוכחית
     var selectedId by remember { mutableStateOf<String?>(null) }
-    val selected: TraineeProfile? = traineeProfiles.firstOrNull { it.id == selectedId }
-        ?: traineeProfiles.firstOrNull()
+    val selected: TraineeProfile? = uiProfiles.firstOrNull { it.id == selectedId }
+        ?: uiProfiles.firstOrNull()
 
-    LaunchedEffect(traineeProfiles) {
-        if (selectedId == null && traineeProfiles.isNotEmpty()) {
-            selectedId = traineeProfiles.first().id
-        } else if (traineeProfiles.none { it.id == selectedId }) {
-            selectedId = traineeProfiles.firstOrNull()?.id
+    LaunchedEffect(uiProfiles) {
+        if (selectedId == null && uiProfiles.isNotEmpty()) {
+            selectedId = uiProfiles.first().id
+        } else if (uiProfiles.none { it.id == selectedId }) {
+            selectedId = uiProfiles.firstOrNull()?.id
         }
     }
 
@@ -413,16 +460,31 @@ fun CoachTraineesScreen(
 
     Scaffold(
         topBar = {
+            val contextLang = LocalContext.current
+            val langManager = remember { AppLanguageManager(contextLang) }
+
             KmiTopBar(
-                title = "אודות מתאמנים",
+                title = "אודות המתאמנים",
                 onOpenDrawer = onOpenDrawer,
                 showRoleStatus = false,
                 lockSearch = true,
-                showBottomActions = true
+                showBottomActions = true,
+                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                            AppLanguage.ENGLISH
+                        } else {
+                            AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLang)
+                    (contextLang as? Activity)?.recreate()
+                }
             )
         },
         containerColor = Color.Transparent,
-        contentWindowInsets = WindowInsets(0)
+        contentWindowInsets = WindowInsets(left = 0)
     ) { padding ->
 
         Box(
@@ -438,18 +500,6 @@ fun CoachTraineesScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-
-                // שורת דיבאג – שתראה איזה סניף/קבוצה המסך מצא בפועל
-                val branchLabel = if (effectiveBranch.isBlank()) "(לא ידוע)" else effectiveBranch
-                val groupLabel = if (effectiveGroupKey.isBlank()) "(לא ידוע)" else effectiveGroupKey
-
-                val branchPrimaryLabel = if (effectiveBranchPrimary.isBlank()) "(לא ידוע)" else effectiveBranchPrimary
-
-                Text(
-                    text = "סניף: $branchLabel | בפועל: $branchPrimaryLabel | קבוצה: $groupLabel",
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodySmall
-                )
 
                 // כרטיס רשימת מתאמנים
                 Surface(
@@ -492,30 +542,45 @@ fun CoachTraineesScreen(
                                     .fillMaxWidth()
                                     .heightIn(max = 210.dp)
                             ) {
-                                items(traineeProfiles, key = { it.id }) { trainee ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { selectedId = trainee.id }
-                                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                items(uiProfiles, key = { it.id }) { trainee ->
+                                    val isSelected = selectedId == trainee.id
+
+                                    Surface(
+                                        color = if (isSelected) Color(0xFFE0F2FE) else Color.Transparent,
+                                        tonalElevation = 0.dp,
+                                        shape = RoundedCornerShape(14.dp),
+                                        border = if (isSelected) BorderStroke(1.dp, Color(0xFF7DD3FC)) else null,
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Column {
-                                            Text(
-                                                trainee.fullName,
-                                                style = MaterialTheme.typography.bodyLarge
-                                            )
-                                            if (trainee.belt.isNotBlank()) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { selectedId = trainee.id }
+                                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column {
                                                 Text(
-                                                    trainee.belt,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = Color(0xFF616161)
+                                                    text = trainee.fullName,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = if (isSelected) Color(0xFF0C4A6E) else Color.Unspecified
                                                 )
+
+                                                val metaLine = buildList {
+                                                    if (trainee.belt.isNotBlank()) add(trainee.belt)
+                                                    if (trainee.branch.isNotBlank()) add("סניף: ${trainee.branch}")
+                                                    if (trainee.groupKey.isNotBlank()) add("קבוצה: ${trainee.groupKey}")
+                                                }.joinToString(" • ")
+
+                                                if (metaLine.isNotBlank()) {
+                                                    Text(
+                                                        text = metaLine,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = if (isSelected) Color(0xFF0369A1) else Color(0xFF616161)
+                                                    )
+                                                }
                                             }
-                                        }
-                                        if (selectedId == trainee.id) {
-                                            Text("נבחר", color = MaterialTheme.colorScheme.primary)
                                         }
                                     }
                                     Divider()
@@ -569,6 +634,14 @@ fun CoachTraineesScreen(
                             LabeledField(
                                 "דרגה",
                                 selected.belt.ifBlank { "—" }
+                            )
+                            LabeledField(
+                                "סניף",
+                                selected.branch.ifBlank { "—" }
+                            )
+                            LabeledField(
+                                "קבוצה",
+                                selected.groupKey.ifBlank { "—" }
                             )
                             LabeledField(
                                 "אחוז נוכחות (60 ימים אחרונים)",

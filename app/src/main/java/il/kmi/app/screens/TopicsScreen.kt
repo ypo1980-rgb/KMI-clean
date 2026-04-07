@@ -43,19 +43,16 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import il.kmi.app.subscription.KmiAccess   // 👈 מצב גישה + ניסיון/מנוי
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Summarize
-import androidx.compose.material.icons.filled.Mic
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.app.ui.rememberClickSound
 import il.kmi.app.ui.assistant.AiAssistantDialog      // 👈 העוזר הקולי
 import androidx.compose.foundation.shape.CircleShape
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
-import androidx.compose.material.icons.filled.FitnessCenter
 import il.kmi.app.ui.ext.color
-import il.kmi.app.ui.KmiSpeedDialFab
-import il.kmi.app.ui.KmiFabAction
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
 //==================================================================
 
@@ -564,6 +561,9 @@ fun TopicsScreen(
 
         Scaffold(
             topBar = {
+                val contextLang = LocalContext.current
+                val langManager = remember { AppLanguageManager(contextLang) }
+
                 il.kmi.app.ui.KmiTopBar(
                     title = effectiveBelt.heb,
                     onHome = onOpenHome,
@@ -573,7 +573,19 @@ fun TopicsScreen(
                     lockSearch = false,
                     showTopSearch = false,
                     onPickSearchResult = { key -> pickedKey = key },
-                    extraActions = {}
+                    extraActions = {},
+                    currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                    onToggleLanguage = {
+                        val newLang =
+                            if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                                AppLanguage.ENGLISH
+                            } else {
+                                AppLanguage.HEBREW
+                            }
+
+                        langManager.setLanguage(newLang)
+                        (contextLang as? Activity)?.recreate()
+                    }
                 )
             },
             contentWindowInsets = WindowInsets(0)

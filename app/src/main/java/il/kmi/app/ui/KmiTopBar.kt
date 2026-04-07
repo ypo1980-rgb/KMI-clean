@@ -31,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -55,6 +54,11 @@ import shareCurrentScreen
 import androidx.compose.runtime.saveable.rememberSaveable
 import il.kmi.app.ui.assistant.AiAssistantDialog
 import il.kmi.app.search.KmiSearchBridge
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
+//===============================================================================
+
 
 // ====== Colors & Theme ======
 private val White        = Color(0xFFFFFFFF)
@@ -111,6 +115,7 @@ fun KmiTopBar(
     onBack: (() -> Unit)? = null,
     onHome: (() -> Unit)? = null,
     onSearch: (() -> Unit)? = null,
+    onSettings: (() -> Unit)? = null,
     onToggleLanguage: (() -> Unit)? = null,
     currentLang: String = "he",
     showMenu: Boolean = true,
@@ -155,6 +160,8 @@ fun KmiTopBar(
     // כדי שלא תהיה כותרת כפולה. משלב זה והלאה נשאר הכול כמו אצלך.
 
     val ctx = LocalContext.current
+    val languageManager = remember { AppLanguageManager(ctx) }
+    val currentLangResolved = languageManager.getCurrentLanguage().code
     val rootView = LocalView.current
     var hideBottomForShare by remember { mutableStateOf(false) }
 
@@ -246,8 +253,8 @@ fun KmiTopBar(
     // האם להראות אייקון “שידור”
     val canShowBroadcastIcon = showCoachBroadcastFab && userIsCoach
 
-    // ←←← הוספה: אייקון הגדרות זמין רק לאחר רישום מלא
-    val showSettingsAllowed = showSettings && isRegistered
+    // הגדרות זמינות תמיד
+    val showSettingsAllowed = showSettings
 
     // האם לאפשר פתיחה
     val canBroadcast = userIsCoach &&
@@ -416,7 +423,7 @@ fun KmiTopBar(
                             Spacer(Modifier.width(8.dp))
                         }
 
-                        // ⬅️ בית + חיפוש (אייקון בית נעול במסך הבית)
+                        // ⬅️ בית + חיפוש + שפה
                         if (showTopHome && onHome != null) {
 
                             // צבע אייקון בית – אפור כשהמסך נעול
@@ -429,7 +436,6 @@ fun KmiTopBar(
                             IconButton(
                                 onClick = {
                                     if (lockHome) {
-                                        // טוסט "אתה כבר במסך הבית 🙂" כשהבית נעול
                                         android.widget.Toast
                                             .makeText(
                                                 ctx,
@@ -539,6 +545,7 @@ fun KmiTopBar(
                         }
                     } else null,
                     homeEnabled = homeEnabledForBar,
+
                     // כדי שלא ינעל חיפוש/שאר האייקונים – תמיד true
                     isRegistered = true,
                     homeDisabledToast = homeToastForBar,
@@ -546,9 +553,28 @@ fun KmiTopBar(
                     // חיפוש – נעול רק אם lockSearch = true
                     onSearch = if (lockSearch) null else { { onSearch?.invoke() } },
 
-                    onToggleLanguage = onToggleLanguage,
-                    onSettings = if (showSettings) ({ DrawerBridge.openSettings() }) else null,
-                    currentLang = currentLang,
+                    onSettings = if (showSettingsAllowed) {
+                        {
+                            focusManager.clearFocus(force = true)
+                            android.widget.Toast
+                                .makeText(ctx, "settings click", android.widget.Toast.LENGTH_SHORT)
+                                .show()
+                            DrawerBridge.openSettings()
+                        }
+                    } else null,
+                    currentLang = currentLangResolved,
+
+                    onToggleLanguage = {
+                        val newLang =
+                            if (languageManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                                AppLanguage.ENGLISH
+                            } else {
+                                AppLanguage.HEBREW
+                            }
+
+                        languageManager.setLanguage(newLang)
+                        (ctx as? Activity)?.recreate()
+                    },
 
                     onShare = {
                         if (onShare != null) {
@@ -567,7 +593,7 @@ fun KmiTopBar(
                         }
                     },
 
-                    onTts  = ttsHandler,
+                    onTts = ttsHandler,
                     onFont = fontHandler,
                     onNext = onNext,
                     whatsAppIconRes = whatsAppIconRes,
@@ -575,7 +601,7 @@ fun KmiTopBar(
 
                     // אייקון שידור מאמן – רק למאמנים
                     showCoachBroadcastAction = canShowBroadcastIcon,
-                    onCoachBroadcastClick   = { triggerCoachBroadcast() },
+                    onCoachBroadcastClick = { triggerCoachBroadcast() },
 
                     // חיפוש תרגילים + בחירת תוצאה
                     searchProvider = { q -> KmiSearchBridge.searchExercises(q) },
@@ -714,7 +740,7 @@ fun KmiTopBar(
                 if (showAiDialog) {
                     AiAssistantDialog(
                         onDismiss = { showAiDialog = false },
-                        contextLabel = title          // לדוגמה: "פורום הסניף", "כרטיסיות תרגילים" וכו' לפי הכותרת
+                        contextLabel = title
                     )
                 }
             }
@@ -749,13 +775,10 @@ fun KmiTopBar(
             ) {
                 Button(
                     onClick = {
-                        // שמירת הודעה להיסטוריה
                         spUser.pushRecentBroadcast(broadcastText.trim())
-                        // רענון רשימת ההיסטוריה בזיכרון
                         recentMessages.clear()
                         recentMessages.addAll(spUser.getRecentBroadcasts())
 
-                        // סגירת הסדין ואיפוס
                         scope.launch {
                             runCatching { broadcastSheetState.hide() }
                             showBroadcastSheet = false

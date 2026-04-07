@@ -5,16 +5,17 @@ package il.kmi.shared.domain
 enum class Belt(
     val id: String,
     val heb: String,
+    val en: String,
     val colorArgb: Long,
     val lightColorArgb: Long
 ) {
-    WHITE ("white",  "חגורה לבנה",  0xFFFFFFFF, 0xFFF5F5F5),
-    YELLOW("yellow", "חגורה צהובה", 0xFFFFD54F, 0xFFFFFDE7),
-    ORANGE("orange", "חגורה כתומה", 0xFFFFA726, 0xFFFFF3E0),
-    GREEN ("green",  "חגורה ירוקה", 0xFF66BB6A, 0xFFE8F5E9),
-    BLUE  ("blue",   "חגורה כחולה", 0xFF42A5F5, 0xFFE3F2FD),
-    BROWN ("brown",  "חגורה חומה",  0xFF8D6E63, 0xFFEFEBE9),
-    BLACK ("black",  "חגורה שחורה", 0xFF212121, 0xFFBDBDBD);
+    WHITE ("white",  "חגורה לבנה",  "White Belt",  0xFFFFFFFF, 0xFFF5F5F5),
+    YELLOW("yellow", "חגורה צהובה", "Yellow Belt", 0xFFFFD54F, 0xFFFFFDE7),
+    ORANGE("orange", "חגורה כתומה", "Orange Belt", 0xFFFFA726, 0xFFFFF3E0),
+    GREEN ("green",  "חגורה ירוקה", "Green Belt",  0xFF66BB6A, 0xFFE8F5E9),
+    BLUE  ("blue",   "חגורה כחולה", "Blue Belt",   0xFF42A5F5, 0xFFE3F2FD),
+    BROWN ("brown",  "חגורה חומה",  "Brown Belt",  0xFF8D6E63, 0xFFEFEBE9),
+    BLACK ("black",  "חגורה שחורה", "Black Belt",  0xFF212121, 0xFFBDBDBD);
 
     companion object {
         val order: List<Belt> = listOf(WHITE, YELLOW, ORANGE, GREEN, BLUE, BROWN, BLACK)

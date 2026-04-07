@@ -74,13 +74,13 @@ private fun ModernGlowFab(
     )
 
     Box(
-        modifier = Modifier.size(66.dp),
+        modifier = Modifier.size(58.dp),
         contentAlignment = Alignment.Center
     ) {
         // ✅ הילה “נושמת” (מבדיל מהעיגולים)
         Box(
             modifier = Modifier
-                .size(88.dp)
+                .size(76.dp)
                 .clip(shape)
                 .graphicsLayer {
                     scaleX = pulseScale
@@ -97,7 +97,7 @@ private fun ModernGlowFab(
         // ✅ מסגרת לבנה חיצונית
         Box(
             modifier = Modifier
-                .size(62.dp)
+                .size(54.dp)
                 .clip(shape)
                 .border(BorderStroke(3.dp, Color.White.copy(alpha = 0.92f)), shape)
         )
@@ -113,7 +113,7 @@ private fun ModernGlowFab(
         ) {
             Box(
                 modifier = Modifier
-                    .size(58.dp)
+                    .size(50.dp)
                     .background(
                         Brush.linearGradient(
                             listOf(
@@ -129,7 +129,7 @@ private fun ModernGlowFab(
                     imageVector = if (expanded) Icons.Filled.Close else Icons.Filled.Menu,
                     contentDescription = if (expanded) "סגור" else "תפריט מהיר",
                     tint = Color.White,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
         }

@@ -62,6 +62,23 @@ fun MainNavHost(
 ) {
     val ctx = LocalContext.current
 
+    LaunchedEffect(nav) {
+        DrawerBridge.register(
+            onOpenDrawer = { /* handled elsewhere */ },
+            onOpenSettings = {
+                nav.navigate(Route.Settings.route) {
+                    launchSingleTop = true
+                }
+            },
+            onOpenHome = {
+                nav.navigate(Route.Home.route) {
+                    popUpTo(nav.graph.startDestinationId)
+                    launchSingleTop = true
+                }
+            }
+        )
+    }
+
     // ✅ Training Summary VM + exercises list (מחשבים Role מ־SharedPreferences כדי לא להיות תלויים ב־Flow)
     val isCoach = remember {
         val role = (sp.getString("user_role", "") ?: "").lowercase()

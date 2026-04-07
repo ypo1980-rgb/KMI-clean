@@ -6,6 +6,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.navigation.compose.composable
 import il.kmi.app.Route
 import il.kmi.app.DataStoreManager
@@ -24,7 +28,34 @@ fun NavGraphBuilder.settingsNavGraph(
     themeMode: String,
     onThemeChange: (String) -> Unit
 ) {
-    composable(Route.Settings.route) {
+    composable(
+        route = Route.Settings.route,
+        enterTransition = {
+            slideIntoContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                animationSpec = tween(280)
+            ) + fadeIn(animationSpec = tween(280))
+        },
+        exitTransition = {
+            slideOutOfContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                animationSpec = tween(220)
+            ) + fadeOut(animationSpec = tween(220))
+        },
+        popEnterTransition = {
+            slideIntoContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.End,
+                animationSpec = tween(280)
+            ) + fadeIn(animationSpec = tween(280))
+        },
+        popExitTransition = {
+            slideOutOfContainer(
+                towards = AnimatedContentTransitionScope.SlideDirection.End,
+                animationSpec = tween(220)
+            ) + fadeOut(animationSpec = tween(220))
+        }
+    ) {
+
         val ctx = LocalContext.current
 
         val spTrainingSummary = remember {

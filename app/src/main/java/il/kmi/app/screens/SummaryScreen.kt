@@ -2,7 +2,6 @@ package il.kmi.app.screens
 
 import android.graphics.pdf.PdfDocument
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -11,24 +10,30 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import il.kmi.app.KmiViewModel
+import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.color
 import il.kmi.app.ui.lightColor
 import il.kmi.shared.domain.Belt
@@ -38,6 +43,14 @@ import java.io.FileOutputStream
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.app.Activity
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
 /* ------------------------------ MarkState (3 states) ------------------------------ */
 
@@ -246,9 +259,25 @@ fun SummaryScreen(
 
     val scroll = rememberScrollState()
     val focusManager = LocalFocusManager.current
+    val notesSp = remember { ctx.getSharedPreferences("kmi_notes", android.content.Context.MODE_PRIVATE) }
+
+    val favorites: Set<String> by FavoritesStore
+        .favoritesFlow
+        .collectAsState(initial = emptySet())
 
     var showProgress by rememberSaveable { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
+
+    fun noteKeyFor(raw: String): String = "note_${belt.id}_${cleanItem("", raw)}"
+
+    fun loadNote(raw: String): String =
+        notesSp.getString(noteKeyFor(raw), "")?.trim().orEmpty()
+
+    fun saveNote(raw: String, value: String) {
+        notesSp.edit().putString(noteKeyFor(raw), value.trim()).apply()
+    }
+
+    fun hasNote(raw: String): Boolean = loadNote(raw).isNotBlank()
 
     // ✅ במקום scope.launch מתוך onClick (שמייצר את השגיאה), עושים את זה כאן
     LaunchedEffect(showProgress) {
@@ -345,6 +374,8 @@ fun SummaryScreen(
 
     // === חיפוש/הסבר ===
     var explainFromSearch: Triple<Belt, String, String>? by rememberSaveable { mutableStateOf(null) }
+    var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteDraft by rememberSaveable { mutableStateOf("") }
 
     val handlePickFromTopBar: (String) -> Unit = { key ->
         fun dec(s: String) = try { java.net.URLDecoder.decode(s, "UTF-8") } catch (_: Exception) { s }
@@ -404,6 +435,9 @@ fun SummaryScreen(
                 if (h.startsWith("חגורה")) h else "חגורה $h"
             }
 
+            val contextLang = LocalContext.current
+            val langManager = remember { AppLanguageManager(contextLang) }
+
             il.kmi.app.ui.KmiTopBar(
                 title = "סיכום $beltLabel - ${overallPct}%",
                 onShare = { sharePdf(null) },
@@ -413,49 +447,129 @@ fun SummaryScreen(
                 showBottomActions = true,
                 extraActions = { },
                 centerTitle = false,
-                showTopHome = false
+                showTopHome = false,
+                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                            AppLanguage.ENGLISH
+                        } else {
+                            AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLang)
+                    (contextLang as? Activity)?.recreate()
+                }
             )
         },
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
+            val shineAnim = rememberInfiniteTransition(label = "summaryButtonShine")
+            val shineOffset by shineAnim.animateFloat(
+                initialValue = -140f,
+                targetValue = 900f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(3200)
+                ),
+                label = "summaryButtonShineOffset"
+            )
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 10.dp)
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
                     .navigationBarsPadding()
                     .imePadding()
             ) {
-                ElevatedButton(
+                Surface(
                     onClick = onBack,
+                    shape = RoundedCornerShape(18.dp),
+                    shadowElevation = 5.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    elevation = ButtonDefaults.elevatedButtonElevation(
-                        defaultElevation = 6.dp,
-                        pressedElevation = 8.dp
-                    ),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF6A2BEA),
-                        contentColor = Color.White
-                    ),
-                    contentPadding = PaddingValues(vertical = 14.dp)
-                ) {
-                    Text(
-                        text = "חזרה למסך הנושאים",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.ExtraBold
+                        .height(58.dp)
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.85f),
+                                    Color.White.copy(alpha = 0.25f),
+                                    Color.White.copy(alpha = 0.85f)
+                                )
+                            ),
+                            shape = RoundedCornerShape(18.dp)
                         )
-                    )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFF7F00FF),
+                                        Color(0xFF3F51B5),
+                                        Color(0xFF03A9F4)
+                                    )
+                                )
+                            )
+                            .graphicsLayer { clip = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .graphicsLayer { clip = true }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = shineOffset.dp)
+                                    .width(52.dp)
+                                    .fillMaxHeight(0.70f)
+                                    .align(Alignment.CenterStart)
+                                    .background(
+                                        brush = Brush.linearGradient(
+                                            colors = listOf(
+                                                Color.Transparent,
+                                                Color.White.copy(alpha = 0.14f),
+                                                Color.White.copy(alpha = 0.30f),
+                                                Color.White.copy(alpha = 0.14f),
+                                                Color.Transparent
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(999.dp)
+                                    )
+                            )
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Star,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+
+                            Spacer(Modifier.width(8.dp))
+
+                            Text(
+                                text = "חזרה למסך הנושאים",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                        }
+                    }
                 }
             }
         }
     ) { innerPadding ->
 
-        // ===== דיאלוג הסבר + מועדפים =====
+        // ===== דיאלוג הסבר + מועדפים + הערה =====
         explainFromSearch?.let { (b, t, iRaw) ->
-            // ✅ כאן כן משתמשים ב-canonical עבור Explanations בלבד
             val canonical = resolveCanonicalIdForExplanation(b, t, iRaw)
 
             val explanation = il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
@@ -463,90 +577,76 @@ fun SummaryScreen(
                 il.kmi.app.domain.Explanations.get(b, alt)
             }.ifBlank { "לא נמצא הסבר עבור \"$canonical\"." }
 
-            val spFav = remember(ctx) {
-                ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE)
-            }
-            val favKey = remember(b.id, t) { "fav_${b.id}_$t" }
-            val favState = remember(favKey) {
-                mutableStateOf(
-                    spFav.getStringSet(favKey, emptySet())?.toMutableSet() ?: mutableSetOf()
-                )
-            }
-            val isFav = favState.value.contains(canonical)
-            fun toggleFavorite() {
-                val s = favState.value.toMutableSet()
-                if (!s.add(canonical)) s.remove(canonical)
-                favState.value = s
-                spFav.edit().putStringSet(favKey, s).apply()
-            }
+            val cleanFavId = cleanItem(t, canonical)
+            val isFav = favorites.contains(cleanFavId)
+            val noteText = loadNote(cleanFavId)
 
-            AlertDialog(
-                onDismissRequest = { /* לא סוגרים בלחיצה בחוץ */ },
-                properties = androidx.compose.ui.window.DialogProperties(
-                    dismissOnClickOutside = false,
-                    dismissOnBackPress = true
-                ),
-                title = {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        IconButton(
-                            onClick = { toggleFavorite() },
-                            modifier = Modifier.align(AbsoluteAlignment.CenterLeft)
-                        ) {
-                            if (isFav) {
-                                Icon(
-                                    imageVector = Icons.Filled.Star,
-                                    contentDescription = "הסר ממועדפים",
-                                    tint = Color(0xFFFFC107)
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Outlined.StarBorder,
-                                    contentDescription = "הוסף למועדפים"
-                                )
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .align(AbsoluteAlignment.CenterRight)
-                                .fillMaxWidth(),
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            Text(
-                                text = canonical,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                text = "(${b.heb})",
-                                style = MaterialTheme.typography.labelMedium,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
+            il.kmi.app.ui.dialogs.ExerciseExplanationDialog(
+                title = canonical,
+                beltLabel = "(${b.heb})",
+                explanation = explanation,
+                noteText = noteText,
+                isFavorite = isFav,
+                accentColor = b.color,
+                onDismiss = {
+                    explainFromSearch = null
+                    focusManager.clearFocus()
                 },
-                text = {
-                    Text(
-                        text = explanation,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Right
-                    )
+                onEditNote = {
+                    noteEditorFor = cleanFavId
+                    noteDraft = loadNote(cleanFavId)
                 },
-                confirmButton = {
-                    TextButton(onClick = {
-                        explainFromSearch = null
-                        focusManager.clearFocus()
-                    }) { Text("סגור") }
+                onToggleFavorite = {
+                    FavoritesStore.toggle(cleanFavId)
                 }
             )
+        }
 
-            androidx.activity.compose.BackHandler(enabled = true) {
-                explainFromSearch = null
-                focusManager.clearFocus()
-            }
+        noteEditorFor?.let { item ->
+            AlertDialog(
+                onDismissRequest = { noteEditorFor = null },
+                title = {
+                    Text(
+                        text = "עריכת הערה",
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = ExerciseTitleFormatter.displayName(item).ifBlank { item },
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = noteDraft,
+                            onValueChange = { noteDraft = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 4,
+                            maxLines = 8,
+                            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right)
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            saveNote(item, noteDraft)
+                            noteEditorFor = null
+                        }
+                    ) { Text("שמור") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { noteEditorFor = null }
+                    ) { Text("ביטול") }
+                }
+            )
         }
 
         Surface(
@@ -560,28 +660,78 @@ fun SummaryScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
-                    .padding(top = 4.dp)
-                    .padding(horizontal = 16.dp),
+                    .padding(top = 2.dp)
+                    .padding(horizontal = 14.dp),
                 horizontalAlignment = Alignment.End
             ) {
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 0.dp, bottom = 8.dp),
+                        .padding(top = 0.dp, bottom = 6.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilledTonalButton(
-                        onClick = {
-                            showProgress = !showProgress
-                        },
-                        shape = RoundedCornerShape(20.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    val beltRes = when (belt) {
+                        Belt.WHITE  -> il.kmi.app.R.drawable.belt_white
+                        Belt.YELLOW -> il.kmi.app.R.drawable.belt_yellow
+                        Belt.ORANGE -> il.kmi.app.R.drawable.belt_orange
+                        Belt.GREEN  -> il.kmi.app.R.drawable.belt_green
+                        Belt.BLUE   -> il.kmi.app.R.drawable.belt_blue
+                        Belt.BROWN  -> il.kmi.app.R.drawable.belt_brown
+                        Belt.BLACK  -> il.kmi.app.R.drawable.belt_black
+                    }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.88f),
+                        shadowElevation = 4.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            belt.color.copy(alpha = 0.16f)
+                        ),
+                        modifier = Modifier.size(42.dp)
                     ) {
-                        Icon(imageVector = Icons.Filled.Insights, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("התקדמות", style = MaterialTheme.typography.labelLarge)
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                painter = painterResource(id = beltRes),
+                                contentDescription = belt.heb,
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(30.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.width(10.dp))
+
+                    Surface(
+                        onClick = { showProgress = !showProgress },
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color.White.copy(alpha = 0.88f),
+                        shadowElevation = 4.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            belt.color.copy(alpha = 0.16f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Insights,
+                                contentDescription = null,
+                                tint = belt.color,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "התקדמות",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF263238)
+                            )
+                        }
                     }
                 }
 
@@ -627,6 +777,7 @@ fun SummaryScreen(
                             meterSize = 200.dp,
                             stroke = 16.dp
                         )
+
                         IconButton(
                             onClick = { showProgress = false },
                             modifier = Modifier
@@ -649,18 +800,29 @@ fun SummaryScreen(
                         .weight(1f)
                         .verticalScroll(scroll)
                         .padding(bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (itemsByTopic.isEmpty()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF9F9F9)),
-                            shape = RoundedCornerShape(12.dp)
+                            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                            shape = RoundedCornerShape(18.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                         ) {
                             Text(
                                 text = "לא נמצאו פריטים להצגה.\nבדוק שהחגורה/נושא קיימים ב-ContentRepo.",
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.White.copy(alpha = 0.98f),
+                                                belt.color.copy(alpha = 0.06f),
+                                                Color.White.copy(alpha = 0.95f)
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(18.dp)
+                                    )
                                     .padding(16.dp),
                                 textAlign = TextAlign.Right
                             )
@@ -672,22 +834,60 @@ fun SummaryScreen(
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF9F9F9)),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                                shape = RoundedCornerShape(12.dp)
+                                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                shape = RoundedCornerShape(18.dp)
                             ) {
                                 Column(
-                                    modifier = Modifier.padding(12.dp),
+                                    modifier = Modifier
+                                        .background(
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color.White.copy(alpha = 0.98f),
+                                                    belt.color.copy(alpha = 0.08f),
+                                                    Color.White.copy(alpha = 0.95f)
+                                                )
+                                            ),
+                                            shape = RoundedCornerShape(18.dp)
+                                        )
+                                        .border(
+                                            width = 1.dp,
+                                            color = belt.color.copy(alpha = 0.14f),
+                                            shape = RoundedCornerShape(18.dp)
+                                        )
+                                        .padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Text(
-                                        text = "$topicTitle – $pct%",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Right,
+                                    Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        color = Color(0xFF333333)
-                                    )
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(3.dp)
+                                                .height(28.dp)
+                                                .background(
+                                                    brush = Brush.verticalGradient(
+                                                        colors = listOf(
+                                                            belt.color,
+                                                            belt.color.copy(alpha = 0.60f)
+                                                        )
+                                                    ),
+                                                    shape = RoundedCornerShape(999.dp)
+                                                )
+                                        )
+
+                                        Spacer(Modifier.width(8.dp))
+
+                                        Text(
+                                            text = "$topicTitle – $pct%",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Right,
+                                            modifier = Modifier.weight(1f),
+                                            color = Color(0xFF263238)
+                                        )
+                                    }
 
                                     if (items.isEmpty()) {
                                         Text(
@@ -708,23 +908,40 @@ fun SummaryScreen(
                                                 MarkState.NONE -> Triple(Color(0xFFE0E0E0), Color(0xFF616161), "○")
                                             }
 
+                                            val cleanFavId = cleanItem(topicTitle, canonicalId)
+                                            val isFav = favorites.contains(cleanFavId)
+                                            val itemHasNote = hasNote(cleanFavId)
+
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .clickable {
-                                                        // בהסבר נשתמש ב-canonical (לא ב-key)
-                                                        explainFromSearch = Triple(belt, topicTitle, itemRaw)
-                                                    }
-                                                    .padding(vertical = 8.dp, horizontal = 6.dp),
+                                                    .background(
+                                                        color = if (state == MarkState.YES) {
+                                                            belt.color.copy(alpha = 0.08f)
+                                                        } else {
+                                                            Color.Transparent
+                                                        },
+                                                        shape = RoundedCornerShape(14.dp)
+                                                    )
+                                                    .border(
+                                                        width = if (state == MarkState.YES) 1.dp else 0.dp,
+                                                        color = if (state == MarkState.YES) {
+                                                            belt.color.copy(alpha = 0.12f)
+                                                        } else {
+                                                            Color.Transparent
+                                                        },
+                                                        shape = RoundedCornerShape(14.dp)
+                                                    )
+                                                    .padding(vertical = 6.dp, horizontal = 8.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.End
                                             ) {
                                                 Surface(
-                                                    modifier = Modifier.size(28.dp),
+                                                    modifier = Modifier.size(24.dp),
                                                     shape = CircleShape,
                                                     color = bg,
-                                                    shadowElevation = 3.dp,
-                                                    tonalElevation = 1.dp
+                                                    shadowElevation = 2.dp,
+                                                    tonalElevation = 0.dp
                                                 ) {
                                                     Box(contentAlignment = Alignment.Center) {
                                                         Text(
@@ -735,15 +952,146 @@ fun SummaryScreen(
                                                     }
                                                 }
 
-                                                Spacer(Modifier.width(10.dp))
+                                                Spacer(Modifier.width(8.dp))
 
-                                                Text(
-                                                    // ✅ תצוגה נקייה כמו במסך התרגילים
-                                                    text = uiDisplayName(topicTitle, itemRaw),
-                                                    textAlign = TextAlign.Right,
+                                                Column(
                                                     modifier = Modifier.weight(1f),
-                                                    color = Color.Black
+                                                    horizontalAlignment = Alignment.End
+                                                ) {
+                                                    Text(
+                                                        text = uiDisplayName(topicTitle, itemRaw),
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        textAlign = TextAlign.Right,
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        color = Color(0xFF1B1B1B)
+                                                    )
+
+                                                    if (itemHasNote) {
+                                                        Text(
+                                                            text = "יש הערה שמורה",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            textAlign = TextAlign.Right,
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        )
+                                                    }
+                                                }
+
+                                                Spacer(Modifier.width(8.dp))
+
+                                                var menuExpanded by remember { mutableStateOf(false) }
+                                                val infoScale by animateFloatAsState(
+                                                    targetValue = if (menuExpanded) 1.08f else 1f,
+                                                    animationSpec = tween(180),
+                                                    label = "summaryInfoScale"
                                                 )
+                                                val infoRotation by animateFloatAsState(
+                                                    targetValue = if (menuExpanded) 12f else 0f,
+                                                    animationSpec = tween(180),
+                                                    label = "summaryInfoRotation"
+                                                )
+
+                                                Box {
+
+                                                    Surface(
+                                                        onClick = { menuExpanded = true },
+                                                        shape = CircleShape,
+                                                        color = Color.White.copy(alpha = 0.94f),
+                                                        shadowElevation = 6.dp,
+                                                        border = BorderStroke(
+                                                            1.dp,
+                                                            belt.color.copy(alpha = 0.16f)
+                                                        ),
+                                                        modifier = Modifier
+                                                            .size(38.dp)
+                                                            .graphicsLayer {
+                                                                scaleX = infoScale
+                                                                scaleY = infoScale
+                                                            }
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxSize()
+                                                                .background(
+                                                                    brush = Brush.verticalGradient(
+                                                                        colors = listOf(
+                                                                            Color.White.copy(alpha = 0.98f),
+                                                                            belt.color.copy(alpha = 0.06f),
+                                                                            Color.White.copy(alpha = 0.94f)
+                                                                        )
+                                                                    ),
+                                                                    shape = CircleShape
+                                                                ),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Filled.Info,
+                                                                contentDescription = "אפשרויות",
+                                                                tint = Color(0xFF455A64),
+                                                                modifier = Modifier
+                                                                    .size(18.dp)
+                                                                    .graphicsLayer {
+                                                                        rotationZ = infoRotation
+                                                                    }
+                                                            )
+                                                        }
+                                                    }
+
+                                                    DropdownMenu(
+                                                        expanded = menuExpanded,
+                                                        onDismissRequest = { menuExpanded = false },
+                                                        modifier = Modifier
+                                                            .background(
+                                                                brush = Brush.verticalGradient(
+                                                                    colors = listOf(
+                                                                        Color.White.copy(alpha = 0.99f),
+                                                                        belt.color.copy(alpha = 0.05f),
+                                                                        Color.White.copy(alpha = 0.97f)
+                                                                    )
+                                                                ),
+                                                                shape = RoundedCornerShape(18.dp)
+                                                            )
+                                                            .border(
+                                                                1.dp,
+                                                                belt.color.copy(alpha = 0.12f),
+                                                                RoundedCornerShape(18.dp)
+                                                            )
+                                                    ) {
+
+                                                        DropdownMenuItem(
+                                                            text = { Text("מידע") },
+                                                            onClick = {
+                                                                menuExpanded = false
+                                                                explainFromSearch = Triple(belt, topicTitle, itemRaw)
+                                                            }
+                                                        )
+
+                                                        DropdownMenuItem(
+                                                            text = {
+                                                                Text(
+                                                                    if (isFav)
+                                                                        "הסר ממועדפים"
+                                                                    else
+                                                                        "הוסף למועדפים"
+                                                                )
+                                                            },
+                                                            onClick = {
+                                                                menuExpanded = false
+                                                                FavoritesStore.toggle(cleanFavId)
+                                                            }
+                                                        )
+
+                                                        DropdownMenuItem(
+                                                            text = { Text("הוסף הערה למתרגל") },
+                                                            onClick = {
+                                                                menuExpanded = false
+                                                                noteEditorFor = cleanFavId
+                                                                noteDraft = loadNote(cleanFavId)
+                                                            }
+                                                        )
+
+                                                    }
+                                                }
                                             }
                                         }
                                     }

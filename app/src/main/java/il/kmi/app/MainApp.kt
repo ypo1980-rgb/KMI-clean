@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -122,11 +123,15 @@ fun MainApp(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    // רישום הגשר של המגירה
     LaunchedEffect(Unit) {
         DrawerBridge.register(
             onOpenDrawer = { scope.launch { drawerState.open() } },
-            onOpenSettings = { nav.navigate(Route.Settings.route) },
+            onOpenSettings = {
+                android.util.Log.d("KMI_SETTINGS", "DrawerBridge -> settings")
+                nav.navigate(Route.Settings.route) {
+                    launchSingleTop = true
+                }
+            },
             onOpenHome = {
                 nav.navigate(Route.Home.route) {
                     popUpTo(nav.graph.findStartDestination().id) {
@@ -150,17 +155,19 @@ fun MainApp(
         typography = typography,
         colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
     ) {
-    // ❌ הוסר AccessibilityPanelHost (הוסר קוד נגישות + state)
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            gesturesEnabled = true,
-            scrimColor = Color.Black.copy(alpha = 0.35f),
-            drawerContent = {
-                ModalDrawerSheet(
-                    drawerContainerColor = Color.Transparent,
-                    drawerContentColor = Color.White,
-                    modifier = Modifier.fillMaxWidth(0.82f)
-                ) {
+        CompositionLocalProvider(
+            il.kmi.app.ui.LocalAppDrawerState provides drawerState
+        ) {
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                gesturesEnabled = true,
+                scrimColor = Color.Black.copy(alpha = 0.35f),
+                drawerContent = {
+                    ModalDrawerSheet(
+                        drawerContainerColor = Color.Transparent,
+                        drawerContentColor = Color.White,
+                        modifier = Modifier.fillMaxWidth(0.82f)
+                    ) {
                     val ctxInner = LocalContext.current
                     val spUser = remember {
                         ctxInner.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
@@ -249,20 +256,22 @@ fun MainApp(
                 scope.launch { drawerState.close() }
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-            ) {
-                il.kmi.app.navigation.MainNavHost(
-                    nav = nav,
-                    vm = vm,
-                    sp = sp,
-                    kmiPrefs = kmiPrefs,
-                    themeMode = themeMode,
-                    onThemeChange = onThemeChange,
-                    startDestination = Route.Intro.route
-                )
-            }        }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                ) {
+                    il.kmi.app.navigation.MainNavHost(
+                        nav = nav,
+                        vm = vm,
+                        sp = sp,
+                        kmiPrefs = kmiPrefs,
+                        themeMode = themeMode,
+                        onThemeChange = onThemeChange,
+                        startDestination = Route.Intro.route
+                    )
+                }
+            }
+        }
     }
 }

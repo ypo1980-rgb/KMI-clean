@@ -836,7 +836,6 @@ private fun FreeSessionDetailsSheet(
                 onClick = {
                     scope.launch {
                         repo.setParticipantState(branch, groupKey, session.id, currentUid, currentName, ParticipantState.GOING)
-                        // TODO: תזמון תזכורות 30/10 דק׳ (נחבר אחרי שהכל מתקמפל)
                     }
                 }
             )
@@ -870,7 +869,6 @@ private fun FreeSessionDetailsSheet(
                 onClick = {
                     scope.launch {
                         repo.setParticipantState(branch, groupKey, session.id, currentUid, currentName, ParticipantState.CANT)
-                        // TODO: ביטול תזכורות לאימון הזה
                     }
                 }
             )

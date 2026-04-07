@@ -6,14 +6,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -22,24 +20,20 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
-import il.kmi.app.domain.Explanations
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.background
 import androidx.compose.material3.Divider
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.zIndex
-import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
@@ -52,6 +46,15 @@ import androidx.compose.ui.res.painterResource
 import il.kmi.app.R
 import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.highlightItem
+import android.app.Activity
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import il.kmi.app.ui.color
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
+//=================================================================================
 
 @Composable
 private fun BeltPill(
@@ -93,6 +96,22 @@ private fun BeltPill(
     }
 }
 
+@Composable
+private fun premiumSurfaceGradientForBelt(belt: Belt): Brush {
+    return Brush.verticalGradient(
+        colors = listOf(
+            Color.White.copy(alpha = 0.98f),
+            belt.color.copy(alpha = 0.10f),
+            Color.White.copy(alpha = 0.94f)
+        )
+    )
+}
+
+@Composable
+private fun premiumOutlineForBelt(belt: Belt): Color {
+    return belt.color.copy(alpha = 0.18f)
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MaterialsScreen(
@@ -115,6 +134,9 @@ fun MaterialsScreen(
     val itemStates = remember(belt.id, topic, subTopicFilter) { mutableStateMapOf<String, Boolean?>() }
 
     var explainTriple by remember { mutableStateOf<Triple<Belt, String, String>?>(null) }
+    var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteDraft by rememberSaveable { mutableStateOf("") }
+
     val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val explanationTextColor = if (isDarkSurface) Color.White else Color.Black
 
@@ -329,76 +351,102 @@ fun MaterialsScreen(
     Scaffold(
         topBar = {
             val headerTitle =
-                if (subTopicFilter.isNullOrBlank()) topic else "$topic – $subTopicFilter"
+                if (subTopicFilter.isNullOrBlank()) topic else "$topic - $subTopicFilter"
+
+            val contextLang = LocalContext.current
+            val langManager = remember { AppLanguageManager(contextLang) }
 
             il.kmi.app.ui.KmiTopBar(
                 title = headerTitle,
                 onHome = onOpenHome,
-                // לא רוצים אייקונים מיותרים למעלה – רק טקסט
-                showTopHome = false,          // מבטל אייקון הבית בכותרת העליונה
-                showRoleStatus = false,       // מבטל את תג "מאמן" בצד
+                // לא רוצים אייקון בית עליון כי הוא כבר קיים
+                showTopHome = false,
+                showRoleStatus = false,      // מבטל את תג "מאמן" בצד
                 centerTitle = true,
                 alignTitleEnd = false,
-                showBottomActions = true,     // שומר על שורת האייקונים התחתונה (שידור/שיתוף/בית/הגדרות/חיפוש)
-                onPickSearchResult = { key -> handlePickFromTopBar(key) }
+                showBottomActions = true,
+                onPickSearchResult = { key -> handlePickFromTopBar(key) },
+                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                            AppLanguage.ENGLISH
+                        } else {
+                            AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLang)
+                    (contextLang as? Activity)?.recreate()
+                }
             )
         },
         bottomBar = {
             Surface(
-                color = Color(0xFFE0E0E0),
-                shadowElevation = 8.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 100.dp)
+                color = Color.Transparent,
+                shadowElevation = 0.dp,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.96f),
+                                    belt.color.copy(alpha = 0.10f),
+                                    Color.White.copy(alpha = 0.94f)
+                                )
+                            )
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = belt.color.copy(alpha = 0.14f)
+                        )
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        AnimatedButton(
-                            text = "תרגול",
-                            modifier = Modifier.weight(1f),
-                            containerColor = Color(0xFF6F64FF),
-                            onClick = { onPractice(belt, topicUi) }
-                        )
-                        AnimatedButton(
-                            text = "איפוס",
-                            modifier = Modifier.weight(1f),
-                            containerColor = Color(0xFFD32F2F),
-                            onClick = {
-                                scope.launch {
-                                    vm.clearTopic(belt, vmTopic)
-                                    itemList.forEach { item -> itemStates[item] = null }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AnimatedButton(
+                                text = "תרגול",
+                                modifier = Modifier.weight(1f),
+                                containerColor = belt.color.copy(alpha = 0.92f),
+                                onClick = { onPractice(belt, topicUi) }
+                            )
 
-                                    excludedItems.clear()
-                                    sp.edit()
-                                        .remove("excluded_${belt.id}_$excludedKeySuffix")
-                                        .remove("fav_${belt.id}_$excludedKeySuffix")
-                                        .apply()
+                            AnimatedButton(
+                                text = "איפוס",
+                                modifier = Modifier.weight(1f),
+                                containerColor = Color(0xFFB3261E),
+                                onClick = {
+                                    scope.launch {
+                                        vm.clearTopic(belt, vmTopic)
+                                        itemList.forEach { item -> itemStates[item] = null }
 
-                                    favorites = mutableSetOf()
+                                        excludedItems.clear()
+                                        sp.edit()
+                                            .remove("excluded_${belt.id}_$excludedKeySuffix")
+                                            .remove("fav_${belt.id}_$excludedKeySuffix")
+                                            .apply()
+
+                                        favorites = mutableSetOf()
+                                    }
                                 }
-                            }
-                        )
-                    }
+                            )
+                        }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
                         AnimatedButton(
                             text = "מסך סיכום",
-                            modifier = Modifier.weight(1f),
-                            containerColor = Color(0xFF6F64FF),
+                            modifier = Modifier.fillMaxWidth(),
+                            containerColor = Color(0xFF1F2937),
                             onClick = { onSummary(belt, topicUi, subTopicFilter) }
                         )
                     }
@@ -470,137 +518,163 @@ fun MaterialsScreen(
                     }
                 }.ifBlank { "לא נמצא הסבר עבור \"$canonical\"." }
 
-            AlertDialog(
-                    onDismissRequest = { explainTriple = null },
-                    title = {
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            IconButton(
-                                onClick = { toggleFavorite(canonical) },
-                                modifier = Modifier.align(AbsoluteAlignment.CenterLeft)
-                            ) {
-                                if (favorites.contains(canonical)) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Star,
-                                        contentDescription = "הסר ממועדפים",
-                                        tint = Color(0xFFFFC107)
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = "הוסף למועדפים"
-                                    )
-                                }
-                            }
-                            Text(
-                                "מידע על התרגיל",
-                                style = MaterialTheme.typography.titleSmall,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .align(Alignment.Center),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                ExerciseExplanationDialog(
+                    title = canonical,
+                    beltLabel = "(${b.heb})",
+                    explanation = explanation,
+                    noteText = loadNote(canonical),
+                    isFavorite = favorites.contains(canonical),
+                    accentColor = b.color,
+                    onDismiss = { explainTriple = null },
+                    onEditNote = {
+                        noteEditorFor = canonical
+                        noteDraft = loadNote(canonical)
                     },
-                    text = {
-                        Text(
-                            text = explanation,
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Right,
-                            color = explanationTextColor
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { explainTriple = null }) {
-                            Text("סגור")
-                        }
-                    }
+                    onToggleFavorite = { toggleFavorite(canonical) }
                 )
             }
-            // ===== סוף הדיאלוג =====
+        // ===== סוף הדיאלוג =====
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize(),
-                horizontalAlignment = Alignment.End
-            ) {
+        noteEditorFor?.let { itemId ->
+            AlertDialog(
+                onDismissRequest = { noteEditorFor = null },
+                title = {
+                    Text(
+                        "הערה על התרגיל",
+                        style = MaterialTheme.typography.titleSmall,
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth(),
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        OutlinedTextField(
+                            value = noteDraft,
+                            onValueChange = { noteDraft = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("הקלד הערה חופשית") },
+                            minLines = 3,
+                            maxLines = 5
+                        )
+                        if (noteDraft.isNotBlank()) {
+                            TextButton(
+                                onClick = {
+                                    noteDraft = ""
+                                    saveNote(itemId, "")
+                                    noteEditorFor = null
+                                }
+                            ) {
+                                Text("מחק הערה")
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            saveNote(itemId, noteDraft)
+                            noteEditorFor = null
+                        }
+                    ) {
+                        Text("שמור")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { noteEditorFor = null }
+                    ) {
+                        Text("בטל")
+                    }
+                }
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize(),
+            horizontalAlignment = Alignment.End
+        ) {
                 val header = if (subTopicFilter.isNullOrBlank())
                     "חומר: $topicUi"
                 else
                     "חומר: $topicUi – $subTopicFilter"
 
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    Surface(
+                    Row(
                         modifier = Modifier
-                            .fillMaxWidth()       // מגיע עד הקצוות (ימין/שמאל)
-                            .height(64.dp)        // גובה קבוע: לא מתנפח בגלל החגורה
-                            .zIndex(1f),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            // RIGHT: כותרת (צד ימין)
-                            Text(
-                                text = header,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Start,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            Spacer(Modifier.width(12.dp))
-
-                            // LEFT: חגורה גדולה ב-50% וממורכזת אנכית בתוך הפס האפור
-                            val beltRes: Int = when (belt) {
-                                Belt.WHITE  -> R.drawable.belt_white
-                                Belt.YELLOW -> R.drawable.belt_yellow
-                                Belt.ORANGE -> R.drawable.belt_orange
-                                Belt.GREEN  -> R.drawable.belt_green
-                                Belt.BLUE   -> R.drawable.belt_blue
-                                Belt.BROWN  -> R.drawable.belt_brown
-                                Belt.BLACK  -> R.drawable.belt_black
-                                else        -> R.drawable.belt_white
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .height(64.dp)   // זהה לגובה ה-Surface
-                                    .width(84.dp),   // “תא” קבוע לתמונה
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    painter = painterResource(id = beltRes),
-                                    contentDescription = "חגורה ${belt.heb}",
-                                    modifier = Modifier.size(84.dp),
-                                    contentScale = ContentScale.Fit
-                                )
-                            }
+                        val beltRes: Int = when (belt) {
+                            Belt.WHITE  -> R.drawable.belt_white
+                            Belt.YELLOW -> R.drawable.belt_yellow
+                            Belt.ORANGE -> R.drawable.belt_orange
+                            Belt.GREEN  -> R.drawable.belt_green
+                            Belt.BLUE   -> R.drawable.belt_blue
+                            Belt.BROWN  -> R.drawable.belt_brown
+                            Belt.BLACK  -> R.drawable.belt_black
                         }
+
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(
+                                    color = Color.White.copy(alpha = 0.70f),
+                                    shape = CircleShape
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = belt.color.copy(alpha = 0.18f),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(id = beltRes),
+                                contentDescription = "חגורה ${belt.heb}",
+                                modifier = Modifier.size(26.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Text(
+                            text = header,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Right,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color(0xFF334155),
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
 
-                Divider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
+                Divider(
+                    color = belt.color.copy(alpha = 0.14f),
+                    thickness = 1.dp
+                )
 
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                         .background(belt.lightColor)
-                        .padding(top = 12.dp, start = 16.dp, end = 16.dp)
+                        .padding(top = 4.dp, start = 12.dp, end = 12.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scroll),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                         horizontalAlignment = Alignment.End
                     ) {
 
@@ -611,7 +685,6 @@ fun MaterialsScreen(
 
                         val filtered = itemList
                         filtered.forEach { item ->
-                            var showInfoDialog by remember { mutableStateOf(false) }
                             var showNoteDialog by remember { mutableStateOf(false) }
 
                             // ✅ מזהה אחיד לכל פעולה/שמירה
@@ -644,131 +717,106 @@ fun MaterialsScreen(
                                 label = "scaleAnim"
                             )
 
-                            Row(
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .scale(scale)
-                                    .then(
-                                        if (isHighlighted)
-                                            Modifier.background(
-                                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                                                shape = RoundedCornerShape(12.dp)
-                                            )
-                                        else Modifier
-                                    )
-                                    .padding(vertical = 4.dp)
+                                    .padding(vertical = 2.dp)
                                     .bringIntoViewRequester(bringer),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                shape = RoundedCornerShape(18.dp),
+                                color = Color.Transparent,
+                                shadowElevation = if (isHighlighted) 8.dp else 5.dp,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = if (isHighlighted) {
+                                        belt.color.copy(alpha = 0.26f)
+                                    } else {
+                                        belt.color.copy(alpha = 0.12f)
+                                    }
+                                )
                             ) {
-                                ItemFloatingActions(
-                                    excluded = isExcluded,
-                                    isFav = favorites.contains(canonicalId),
-                                    hasNote = noteText.isNotBlank(),
-                                    onToggleExclude = { toggleExclude(canonicalId) },
-                                    onInfo = {
-                                        pressed = true
-                                        showInfoDialog = true
-                                        scope.launch {
-                                            kotlinx.coroutines.delay(150)
-                                            pressed = false
-                                        }
-                                    },
-                                    onToggleFavorite = { toggleFavorite(canonicalId) },
-                                    onEditNote = { showNoteDialog = true }
-                                )
-
-                                Text(
-                                    text = displayName, // ✅ FIX: מציגים רק שם נקי
-                                     textAlign = TextAlign.Right,
+                                Row(
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .padding(horizontal = 8.dp),
-                                    color = when {
-                                        isExcluded    -> Color.Gray
-                                        isHighlighted -> MaterialTheme.colorScheme.primary
-                                        else          -> Color.Black
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal
-                                )
-
-                                MasterToggle(
-                                    mastered = mastered,
-                                    onSelect = { newVal ->
-                                        itemStates[item] = newVal
-                                        vm.setItemStatusNullable(belt, vmTopic, canonicalId, newVal)
-                                    }
-                                )
-                            }
-
-                            if (showInfoDialog) {
-                                // ✅ FIX: הסבר לפי canonicalId (ולא לפי טקסט תצוגה/קוד)
-                                val explanation2 = Explanations.get(belt, canonicalId)
-                                val ctx = LocalContext.current
-
-                                // ✅ במקום TextToSpeech מקומי — נשתמש במנהל הגלובלי
-                                LaunchedEffect(showInfoDialog) {
-                                    if (showInfoDialog) {
-                                        KmiTtsManager.init(ctx)
-                                    }
-                                }
-                                DisposableEffect(showInfoDialog) {
-                                    onDispose {
-                                        // לא עושים shutdown כדי לא לשבור מסכים אחרים; רק עוצרים
-                                        KmiTtsManager.stop()
-                                    }
-                                }
-
-                                AlertDialog(
-                                    onDismissRequest = {
-                                        KmiTtsManager.stop()
-                                        showInfoDialog = false
-                                    },
-                                    title = {
-                                        Text(
-                                            "מידע על התרגיל",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            textAlign = TextAlign.Right,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    },
-                                    text = {
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Text(
-                                                explanation2,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                textAlign = TextAlign.Right,
-                                                color = explanationTextColor
-                                            )
-                                            IconButton(
-                                                onClick = {
-                                                    KmiTtsManager.speak(explanation2)
-                                                }
-                                            ) {
-                                                Icon(
-                                                    Icons.Filled.VolumeUp,
-                                                    contentDescription = "השמע הסבר"
+                                        .fillMaxWidth()
+                                        .background(
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color.White.copy(alpha = 0.98f),
+                                                    belt.color.copy(alpha = if (isHighlighted) 0.13f else 0.06f),
+                                                    Color.White.copy(alpha = 0.95f)
                                                 )
-                                            }
+                                            )
+                                        )
+                                        .padding(horizontal = 10.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(3.dp)
+                                            .height(30.dp)
+                                            .background(
+                                                brush = Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        belt.color.copy(alpha = 1f),
+                                                        belt.color.copy(alpha = 0.65f)
+                                                    )
+                                                ),
+                                                shape = RoundedCornerShape(999.dp)
+                                            )
+                                    )
+
+                                    Spacer(Modifier.width(8.dp))
+
+                                    Text(
+                                        text = displayName,
+                                        textAlign = TextAlign.Right,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 6.dp),
+                                        color = when {
+                                            isExcluded -> Color.Gray
+                                            isHighlighted -> belt.color.copy(alpha = 0.95f)
+                                            else -> Color(0xFF111827)
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+
+                                    Spacer(Modifier.width(6.dp))
+
+                                    MasterToggle(
+                                        mastered = mastered,
+                                        onSelect = { newVal ->
+                                            itemStates[item] = newVal
+                                            vm.setItemStatusNullable(belt, vmTopic, canonicalId, newVal)
                                         }
-                                    },
-                                    confirmButton = {
-                                        TextButton(
-                                            onClick = {
-                                                KmiTtsManager.stop()
-                                                showInfoDialog = false
+                                    )
+
+                                    Spacer(Modifier.width(6.dp))
+
+                                    ItemFloatingActions(
+                                        excluded = isExcluded,
+                                        isFav = favorites.contains(canonicalId),
+                                        hasNote = noteText.isNotBlank(),
+                                        onToggleExclude = { toggleExclude(canonicalId) },
+                                        onInfo = {
+                                            pressed = true
+                                            explainTriple = Triple(belt, topicUi, canonicalId)
+                                            scope.launch {
+                                                kotlinx.coroutines.delay(150)
+                                                pressed = false
                                             }
-                                        ) {
-                                            Text("סגור", style = MaterialTheme.typography.labelLarge)
-                                        }
-                                    }
-                                )
+                                        },
+                                        onToggleFavorite = { toggleFavorite(canonicalId) },
+                                        onEditNote = { showNoteDialog = true }
+                                    )
+                                }
                             }
+
+
 
                             // דיאלוג הערה
                             if (showNoteDialog) {
@@ -825,7 +873,7 @@ fun MaterialsScreen(
                                 )
                             }
 
-                            Divider()
+                            Spacer(Modifier.height(2.dp))
                         }
                     }
                 }
@@ -843,35 +891,48 @@ fun AnimatedButton(
     onClick: () -> Unit
 ) {
     var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(targetValue = if (pressed) 0.95f else 1f, label = "buttonScaleAnim")
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.96f else 1f,
+        label = "buttonScaleAnim"
+    )
     val scope = rememberCoroutineScope()
 
-    val contentOnContainer = if (containerColor.luminance() < 0.5f) Color.White else Color.Black
+    val contentOnContainer =
+        if (containerColor.luminance() < 0.5f) Color.White else Color.Black
 
     Button(
         onClick = {
             pressed = true
             onClick()
             scope.launch {
-                kotlinx.coroutines.delay(150)
+                kotlinx.coroutines.delay(140)
                 pressed = false
             }
         },
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(22.dp),
         modifier = modifier
             .scale(scale)
             .height(56.dp)
             .defaultMinSize(minWidth = 90.dp),
+        border = BorderStroke(
+            1.dp,
+            Color.White.copy(alpha = 0.24f)
+        ),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
             contentColor = contentOnContainer
+        ),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 6.dp,
+            pressedElevation = 2.dp
         )
     ) {
         Text(
-            text,
+            text = text,
             color = contentOnContainer,
             fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            maxLines = 1
         )
     }
 }
@@ -891,6 +952,18 @@ private fun ItemFloatingActions(
     var expanded by remember { mutableStateOf(false) }
     var helpSeen by remember { mutableStateOf(sp.getBoolean("exclude_help_seen", false)) }
 
+    val infoScale by animateFloatAsState(
+        targetValue = if (expanded) 1.08f else 1f,
+        animationSpec = tween(180),
+        label = "materialsInfoScale"
+    )
+
+    val infoRotation by animateFloatAsState(
+        targetValue = if (expanded) 12f else 0f,
+        animationSpec = tween(180),
+        label = "materialsInfoRotation"
+    )
+
     LaunchedEffect(expanded) {
         if (expanded && !helpSeen) {
             helpSeen = true
@@ -899,17 +972,70 @@ private fun ItemFloatingActions(
     }
 
     Box {
-        SmallFloatingActionButton(
+        Surface(
             onClick = { expanded = true },
             shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+            color = Color.White.copy(alpha = 0.94f),
+            shadowElevation = 6.dp,
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+            ),
+            modifier = Modifier
+                .size(38.dp)
+                .graphicsLayer {
+                    scaleX = infoScale
+                    scaleY = infoScale
+                }
         ) {
-            Icon(imageVector = Icons.Filled.Info, contentDescription = "פעולות לתרגיל")
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.98f),
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                                Color.White.copy(alpha = 0.94f)
+                            )
+                        ),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = "פעולות לתרגיל",
+                    tint = Color(0xFF455A64),
+                    modifier = Modifier
+                        .size(18.dp)
+                        .graphicsLayer {
+                            rotationZ = infoRotation
+                        }
+                )
+            }
         }
 
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.99f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
+                            Color.White.copy(alpha = 0.97f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    RoundedCornerShape(18.dp)
+                )
+        ) {
 
             if (!helpSeen) {
                 DropdownMenuItem(
@@ -928,11 +1054,19 @@ private fun ItemFloatingActions(
 
             DropdownMenuItem(
                 text = { Text("מידע", style = MaterialTheme.typography.labelLarge) },
-                onClick = { expanded = false; onInfo() }
+                onClick = {
+                    expanded = false
+                    onInfo()
+                }
             )
 
             DropdownMenuItem(
-                text = { Text(if (isFav) "הסר ממועדפים" else "הוסף למועדפים", style = MaterialTheme.typography.labelLarge) },
+                text = {
+                    Text(
+                        if (isFav) "הסר ממועדפים" else "הוסף למועדפים",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                },
                 onClick = {
                     expanded = false
                     onToggleFavorite()
@@ -947,7 +1081,12 @@ private fun ItemFloatingActions(
             )
 
             DropdownMenuItem(
-                text = { Text(if (excluded) "בטל החרגה" else "החרג (מנטרל מהתרגול)", style = MaterialTheme.typography.labelLarge) },
+                text = {
+                    Text(
+                        if (excluded) "בטל החרגה" else "החרג (מנטרל מהתרגול)",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                },
                 onClick = {
                     expanded = false
                     onToggleExclude()

@@ -139,14 +139,14 @@ object TopicsBySubjectRegistry {
 
         // ================== קאוולר ==================
         SubjectTopic(
-            id = "topic_kawalr",
-            titleHeb = "קאוולר",
-            description = "תרגילי קאוולר",
+            id = "topic_kavaler",
+            titleHeb = "קוואלר",
+            description = "תרגילי קוואלר",
             belts = listOf(
                 Belt.GREEN
             ),
             topicsByBelt = mapOf(
-                Belt.GREEN to listOf("קאוולר")
+                Belt.GREEN to listOf("קוואלר")
             )
         ),
 

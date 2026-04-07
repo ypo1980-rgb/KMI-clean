@@ -17,6 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.app.Activity
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
+//====================================================================
 
 @Composable
 fun Bullet(text: String) {
@@ -38,6 +45,9 @@ fun AboutNetworkScreen(
 
     Scaffold(
         topBar = {
+            val contextLang = LocalContext.current
+            val langManager = remember { AppLanguageManager(contextLang) }
+
             il.kmi.app.ui.KmiTopBar(
                 title = "אודות הרשת",
                 centerTitle = true,
@@ -46,7 +56,19 @@ fun AboutNetworkScreen(
                 showRoleBadge = false,
                 showBottomActions = true,
                 lockSearch = true,
-                showCoachBroadcastFab = false
+                showCoachBroadcastFab = false,
+                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                            AppLanguage.ENGLISH
+                        } else {
+                            AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLang)
+                    (contextLang as? Activity)?.recreate()
+                }
             )
         },
         containerColor = pageBg,

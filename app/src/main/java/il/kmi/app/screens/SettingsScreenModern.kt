@@ -70,6 +70,11 @@ import androidx.core.content.pm.PackageInfoCompat
 import il.kmi.app.ui.ext.color
 import il.kmi.app.reminders.ReminderPrefs
 import il.kmi.app.reminders.DailyReminderScheduler
+import androidx.compose.material.icons.filled.Language
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
+//======================================================================================
 
 typealias StatsVm = AppStatsVm
 
@@ -344,6 +349,74 @@ fun SettingsScreenModern(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+
+            // --- שפה מועדפת ---
+            SettingsCard(
+                title = "שפה",
+                subtitle = "בחר שפת ממשק האפליקציה",
+                icon = Icons.Filled.Language,
+                iconTint = sectionIconTint
+            ) {
+
+                val context = LocalContext.current
+                val languageManager = remember { AppLanguageManager(context) }
+
+                var currentLanguage by remember {
+                    mutableStateOf(languageManager.getCurrentLanguage())
+                }
+
+                val selectedIndex = if (currentLanguage == AppLanguage.HEBREW) 0 else 1
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+
+                    Text(
+                        text = if (currentLanguage == AppLanguage.ENGLISH)
+                            "Choose interface language"
+                        else
+                            "בחר שפת ממשק",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    TabRow(selectedTabIndex = selectedIndex) {
+
+                        Tab(
+                            selected = selectedIndex == 0,
+                            onClick = {
+                                languageManager.setLanguage(AppLanguage.HEBREW)
+                                currentLanguage = AppLanguage.HEBREW
+                                (context as? android.app.Activity)?.recreate()
+                            },
+                            text = {
+                                Text(
+                                    text = "עברית",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        )
+
+                        Tab(
+                            selected = selectedIndex == 1,
+                            onClick = {
+                                languageManager.setLanguage(AppLanguage.ENGLISH)
+                                currentLanguage = AppLanguage.ENGLISH
+                                (context as? android.app.Activity)?.recreate()
+                            },
+                            text = {
+                                Text(
+                                    text = "English",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        )
+                    }
+                }
+            }
 
 // --- תזכורות אימון ---
             SettingsCard(

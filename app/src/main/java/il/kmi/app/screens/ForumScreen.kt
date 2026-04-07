@@ -14,14 +14,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -29,7 +32,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -50,6 +52,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -134,7 +138,7 @@ fun ForumScreen(
 
     // 🔒 גישת אקסטרות לפורום:
     // רק מנוי מלא או מנהל (trial לא פותח פורום)
-    val canUseExtras = hasFull || isManagerOverride
+    val canUseExtras = true
 
     // סניף + קבוצה של המשתמש (הקבוצה = "חדר" הפורום)
     val branch = remember { userSp.getString("branch", "") ?: "" }
@@ -162,6 +166,8 @@ fun ForumScreen(
 
     var input by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf(listOf<ForumUiMessage>()) }
+
+    val listState = rememberLazyListState()
 
     // רשימת משתתפים לפי משתמשים ב־Firestore (בסניף)
     var participantsByUsers by remember { mutableStateOf<List<ForumParticipantUi>>(emptyList()) }
@@ -236,6 +242,10 @@ fun ForumScreen(
                     ?: emptyList()
 
                 messages = uiList
+
+                scope.launch {
+                    listState.animateScrollToItem(0)
+                }
             }
     }
 
@@ -383,9 +393,9 @@ fun ForumScreen(
     val gradientBackground = remember {
         Brush.verticalGradient(
             listOf(
-                Color(0xFF020617),
-                Color(0xFF0F172A),
-                Color(0xFF0EA5E9)
+                Color(0xFF0B141A),
+                Color(0xFF0F1B22),
+                Color(0xFF111B21)
             )
         )
     }
@@ -512,21 +522,21 @@ fun ForumScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    tonalElevation = 4.dp,
-                    shadowElevation = 4.dp,
-                    color = Color(0xFF020617).copy(alpha = 0.95f),
-                    border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.75f))
+                    shape = RoundedCornerShape(16.dp),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    color = Color(0xFF182229),
+                    border = BorderStroke(1.dp, Color(0xFF22303A))
                 ) {
                     Text(
                         text = roomLabel,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFECFEFF),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFD1D7DB),
                         textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Medium,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
                     )
                 }
 
@@ -562,21 +572,21 @@ fun ForumScreen(
                             .fillMaxWidth()
                             .padding(bottom = 8.dp)
                             .clickable { showParticipantsDialog = true },
-                        shape = RoundedCornerShape(18.dp),
-                        tonalElevation = 2.dp,
-                        shadowElevation = 2.dp,
-                        color = Color(0xFF020617).copy(alpha = 0.9f),
-                        border = BorderStroke(1.dp, Color(0xFF1E293B))
+                        shape = RoundedCornerShape(16.dp),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        color = Color(0xFF111B21),
+                        border = BorderStroke(1.dp, Color(0xFF22303A))
                     ) {
                         Text(
                             text = "משתתפים בפורום (${participants.size})",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Color(0xFFECFEFF),
-                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFBFC8CD),
+                            fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 10.dp, horizontal = 12.dp)
+                                .padding(vertical = 9.dp, horizontal = 12.dp)
                         )
                     }
                 }
@@ -625,71 +635,141 @@ fun ForumScreen(
 
                 // ================= רשימת הודעות =================
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
                     reverseLayout = true,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     items(
                         items = messages,
                         key = { it.id }
                     ) { msg ->
                         val bubbleColor =
-                            if (msg.isMine) Color(0xFF0EA5E9) else Color(0xFF020617).copy(alpha = 0.92f)
+                            if (msg.isMine) Color(0xFF144D37) else Color(0xFF202C33)
                         val textColor =
-                            if (msg.isMine) Color.White else Color(0xFFE5E7EB)
+                            if (msg.isMine) Color(0xFFF7F8F8) else Color(0xFFE9EDEF)
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 2.dp),
                             horizontalArrangement = if (msg.isMine) Arrangement.End else Arrangement.Start
                         ) {
-                            Surface(
-                                color = bubbleColor,
-                                shape = RoundedCornerShape(
-                                    topStart = 18.dp,
-                                    topEnd = 18.dp,
-                                    bottomStart = if (msg.isMine) 18.dp else 4.dp,
-                                    bottomEnd = if (msg.isMine) 4.dp else 18.dp
-                                ),
-                                tonalElevation = 3.dp,
-                                shadowElevation = 3.dp
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .widthIn(max = 290.dp)
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                            Box {
+                                Surface(
+                                    color = bubbleColor,
+                                    shape = RoundedCornerShape(
+                                        topStart = 18.dp,
+                                        topEnd = 18.dp,
+                                        bottomStart = if (msg.isMine) 18.dp else 6.dp,
+                                        bottomEnd = if (msg.isMine) 6.dp else 18.dp
+                                    ),
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 1.dp
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        modifier = Modifier.fillMaxWidth()
+                                    Column(
+                                        modifier = Modifier
+                                            .widthIn(max = 240.dp)
+                                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Column(
-                                            modifier = Modifier.weight(1f),
-                                            horizontalAlignment = Alignment.End
-                                        ) {
+                                        if (msg.text.isNotBlank()) {
                                             Text(
-                                                text = msg.authorName.ifBlank { msg.authorEmail },
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = textColor.copy(alpha = 0.9f),
-                                                fontWeight = FontWeight.SemiBold,
-                                                textAlign = TextAlign.Right
-                                            )
-                                            Text(
-                                                text = formatInstant(msg.createdAt),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = textColor.copy(alpha = 0.7f),
-                                                textAlign = TextAlign.Right
+                                                text = msg.text,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = textColor,
+                                                textAlign = TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
                                             )
                                         }
 
-                                        if (msg.isMine) {
-                                            Row(
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
+                                        msg.mediaUrl?.let { url ->
+                                            Spacer(Modifier.height(4.dp))
+                                            when (msg.mediaType) {
+                                                "image" -> {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(14.dp),
+                                                        color = Color.Black.copy(alpha = 0.16f)
+                                                    ) {
+                                                        AsyncImage(
+                                                            model = url,
+                                                            contentDescription = "תמונה מצורפת",
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .heightIn(min = 120.dp, max = 220.dp)
+                                                        )
+                                                    }
+                                                }
+
+                                                "video" -> {
+                                                    val context = LocalContext.current
+                                                    Surface(
+                                                        shape = RoundedCornerShape(14.dp),
+                                                        color = Color.Black.copy(alpha = 0.28f),
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .height(108.dp)
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxSize()
+                                                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.SpaceBetween
+                                                        ) {
+                                                            Column(
+                                                                modifier = Modifier.weight(1f),
+                                                                horizontalAlignment = Alignment.End
+                                                            ) {
+                                                                Text(
+                                                                    "סרטון מצורף",
+                                                                    color = Color.White,
+                                                                    fontWeight = FontWeight.SemiBold
+                                                                )
+                                                                Text(
+                                                                    "לחיצה לפתיחה בנגן",
+                                                                    color = Color.White.copy(alpha = 0.78f),
+                                                                    style = MaterialTheme.typography.labelSmall
+                                                                )
+                                                            }
+                                                            FilledTonalButton(
+                                                                onClick = {
+                                                                    val intent = Intent(
+                                                                        Intent.ACTION_VIEW,
+                                                                        Uri.parse(url)
+                                                                    ).apply {
+                                                                        setDataAndType(
+                                                                            Uri.parse(url),
+                                                                            "video/*"
+                                                                        )
+                                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                                    }
+                                                                    context.startActivity(intent)
+                                                                }
+                                                            ) {
+                                                                Icon(
+                                                                    Icons.Filled.VideoLibrary,
+                                                                    contentDescription = null
+                                                                )
+                                                                Spacer(Modifier.width(6.dp))
+                                                                Text("פתח")
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                else -> {}
+                                            }
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (msg.isMine) {
                                                 IconButton(
                                                     onClick = {
                                                         editingMessage = msg
@@ -698,17 +778,17 @@ fun ForumScreen(
                                                         attachedUri = null
                                                         attachedMediaType = null
                                                     },
-                                                    modifier = Modifier.size(22.dp)
+                                                    modifier = Modifier.size(18.dp)
                                                 ) {
                                                     Icon(
                                                         Icons.Filled.Edit,
                                                         contentDescription = "עריכת הודעה",
-                                                        tint = textColor,
+                                                        tint = textColor.copy(alpha = 0.72f)
                                                     )
                                                 }
+                                                Spacer(Modifier.width(2.dp))
                                                 IconButton(
                                                     onClick = {
-                                                        // מחיקה
                                                         scope.launch {
                                                             db.collection("branches")
                                                                 .document(msg.branch)
@@ -718,108 +798,51 @@ fun ForumScreen(
                                                                 .await()
                                                         }
                                                     },
-                                                    modifier = Modifier.size(22.dp)
+                                                    modifier = Modifier.size(18.dp)
                                                 ) {
                                                     Icon(
                                                         Icons.Filled.Delete,
                                                         contentDescription = "מחיקת הודעה",
-                                                        tint = textColor.copy(alpha = 0.9f),
+                                                        tint = textColor.copy(alpha = 0.72f)
                                                     )
                                                 }
+                                                Spacer(Modifier.width(4.dp))
                                             }
+
+                                            Text(
+                                                text = formatInstant(msg.createdAt),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = textColor.copy(alpha = 0.62f),
+                                                textAlign = TextAlign.Right
+                                            )
                                         }
                                     }
+                                }
 
-                                    if (msg.text.isNotBlank()) {
-                                        Text(
-                                            text = msg.text,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = textColor,
-                                            textAlign = TextAlign.Right,
-                                            modifier = Modifier.fillMaxWidth()
+                                Canvas(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .align(
+                                            if (msg.isMine) Alignment.BottomEnd else Alignment.BottomStart
                                         )
+                                ) {
+                                    val path = Path()
+
+                                    if (msg.isMine) {
+                                        path.moveTo(size.width, size.height)
+                                        path.lineTo(0f, size.height)
+                                        path.lineTo(size.width, 0f)
+                                    } else {
+                                        path.moveTo(0f, size.height)
+                                        path.lineTo(size.width, size.height)
+                                        path.lineTo(0f, 0f)
                                     }
 
-                                    // מדיה – אם יש
-                                    msg.mediaUrl?.let { url ->
-                                        Spacer(Modifier.height(6.dp))
-                                        when (msg.mediaType) {
-                                            "image" -> {
-                                                Surface(
-                                                    shape = RoundedCornerShape(16.dp),
-                                                    color = Color.Black.copy(alpha = 0.15f)
-                                                ) {
-                                                    AsyncImage(
-                                                        model = url,
-                                                        contentDescription = "תמונה מצורפת",
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .heightIn(min = 120.dp, max = 220.dp)
-                                                    )
-                                                }
-                                            }
-
-                                            "video" -> {
-                                                val context = LocalContext.current
-                                                Surface(
-                                                    shape = RoundedCornerShape(16.dp),
-                                                    color = Color.Black.copy(alpha = 0.3f),
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(120.dp)
-                                                        .padding(top = 2.dp)
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .fillMaxSize()
-                                                            .padding(10.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.SpaceBetween
-                                                    ) {
-                                                        Column(
-                                                            modifier = Modifier.weight(1f),
-                                                            horizontalAlignment = Alignment.End
-                                                        ) {
-                                                            Text(
-                                                                "סרטון מצורף",
-                                                                color = Color.White,
-                                                                fontWeight = FontWeight.SemiBold
-                                                            )
-                                                            Text(
-                                                                "לחיצה לפתיחה בנגן",
-                                                                color = Color.White.copy(alpha = 0.8f),
-                                                                style = MaterialTheme.typography.labelSmall
-                                                            )
-                                                        }
-                                                        FilledTonalButton(
-                                                            onClick = {
-                                                                val intent = Intent(
-                                                                    Intent.ACTION_VIEW,
-                                                                    Uri.parse(url)
-                                                                ).apply {
-                                                                    setDataAndType(
-                                                                        Uri.parse(url),
-                                                                        "video/*"
-                                                                    )
-                                                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                                }
-                                                                context.startActivity(intent)
-                                                            }
-                                                        ) {
-                                                            Icon(
-                                                                Icons.Filled.VideoLibrary,
-                                                                contentDescription = null
-                                                            )
-                                                            Spacer(Modifier.width(6.dp))
-                                                            Text("פתח")
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            else -> {}
-                                        }
-                                    }
+                                    drawPath(
+                                        path = path,
+                                        color = bubbleColor,
+                                        style = Fill
+                                    )
                                 }
                             }
                         }
@@ -831,15 +854,16 @@ fun ForumScreen(
                 // צ'יפ למדיה מצורפת (אם יש)
                 if (attachedUri != null && attachedMediaType != null) {
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF0EA5E9).copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(18.dp),
+                        color = Color(0xFF1B2A33),
+                        border = BorderStroke(1.dp, Color(0xFF22303A)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 4.dp)
+                            .padding(bottom = 6.dp)
                     ) {
                         Row(
                             modifier = Modifier
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -849,7 +873,7 @@ fun ForumScreen(
                                     "video" -> "סרטון מצורף לשליחה"
                                     else -> "קובץ מצורף"
                                 },
-                                color = Color(0xFFBAE6FD),
+                                color = Color(0xFFD8E1E6),
                                 style = MaterialTheme.typography.labelMedium
                             )
                             TextButton(onClick = {
@@ -864,94 +888,110 @@ fun ForumScreen(
 
                 // ================= שורת שליחה =================
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 56.dp)
-                        // ⬅️ גם ניווט כשאין מקלדת, וגם IME כשיש מקלדת
+                        .padding(top = 4.dp)
                         .windowInsetsPadding(
                             WindowInsets.navigationBars
                                 .only(WindowInsetsSides.Bottom)
                                 .union(
                                     WindowInsets.ime.only(WindowInsetsSides.Bottom)
                                 )
-                        )
+                        ),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedTextField(
-                        value = if (editingMessage != null) editText else input,
-                        onValueChange = {
-                            if (editingMessage != null) editText = it else input = it
-                        },
-                        modifier = Modifier
-                            .weight(1f),
-                        placeholder = {
-                            Text(
-                                if (editingMessage != null) "עריכת הודעה..." else "כתוב הודעה...",
-                                textAlign = TextAlign.Right
-                            )
-                        },
-                        singleLine = false,
-                        maxLines = 4,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color(0xFF020617),
-                            unfocusedContainerColor = Color(0xFF020617),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            focusedBorderColor = Color(0xFF38BDF8),
-                            unfocusedBorderColor = Color(0xFF1E293B)
-                        )
-                    )
-
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(28.dp),
+                        color = Color(0xFF202C33),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 1.dp
                     ) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.Bottom
                         ) {
                             IconButton(
                                 onClick = { imagePicker.launch("image/*") },
-                                modifier = Modifier.size(32.dp),
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    containerColor = Color(0xFF0369A1)
-                                )
+                                modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
-                                    Icons.Filled.Image,
+                                    Icons.Outlined.Add,
                                     contentDescription = "צרף תמונה",
-                                    tint = Color.White
+                                    tint = Color(0xFF8696A0)
                                 )
                             }
+
+                            OutlinedTextField(
+                                value = if (editingMessage != null) editText else input,
+                                onValueChange = {
+                                    if (editingMessage != null) editText = it else input = it
+                                },
+                                modifier = Modifier.weight(1f),
+                                placeholder = {
+                                    Text(
+                                        if (editingMessage != null) "עריכת הודעה..." else "הודעה",
+                                        textAlign = TextAlign.Right,
+                                        color = Color(0xFF8696A0)
+                                    )
+                                },
+                                singleLine = false,
+                                maxLines = 4,
+                                shape = RoundedCornerShape(24.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
+                                    focusedBorderColor = Color.Transparent,
+                                    unfocusedBorderColor = Color.Transparent,
+                                    disabledBorderColor = Color.Transparent,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    cursorColor = Color(0xFF25D366)
+                                )
+                            )
+
                             IconButton(
                                 onClick = { videoPicker.launch("video/*") },
-                                modifier = Modifier.size(32.dp),
-                                colors = IconButtonDefaults.iconButtonColors(
-                                    containerColor = Color(0xFF0F766E)
-                                )
+                                modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
                                     Icons.Filled.VideoLibrary,
                                     contentDescription = "צרף וידאו",
-                                    tint = Color.White
+                                    tint = Color(0xFF8696A0)
                                 )
                             }
                         }
+                    }
 
-                        Button(
-                            onClick = {
+                    val canSend = (if (editingMessage != null) editText else input).trim().isNotEmpty() || attachedUri != null
+
+                    Surface(
+                        onClick = {
+                            if (canSend) {
                                 scope.launch { sendMessageInternal() }
-                            },
-                            enabled = (if (editingMessage != null) editText else input).trim()
-                                .isNotEmpty() || attachedUri != null,
-                            modifier = Modifier
-                                .size(width = 72.dp, height = 40.dp),
-                            contentPadding = PaddingValues(0.dp),
-                            shape = RoundedCornerShape(999.dp)
+                            }
+                        },
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (canSend) Color(0xFF25D366) else Color(0xFF1F3C33),
+                        modifier = Modifier.size(54.dp),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 2.dp
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize()
                         ) {
                             Icon(
-                                Icons.Filled.Send,
-                                contentDescription = if (editingMessage != null) "עדכן הודעה" else "שלח",
+                                imageVector = if (canSend) Icons.Filled.Send else Icons.Outlined.Mic,
+                                contentDescription = if (canSend) {
+                                    if (editingMessage != null) "עדכן הודעה" else "שלח"
+                                } else {
+                                    "הקלטה"
+                                },
                                 tint = Color.White
                             )
                         }

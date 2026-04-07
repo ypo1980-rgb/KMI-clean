@@ -1,17 +1,26 @@
 package il.kmi.app.screens.BeltQuestions
 
 import android.content.Context
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Summarize
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -21,12 +30,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import il.kmi.app.localization.rememberIsEnglish
 import androidx.compose.ui.zIndex
 import androidx.compose.material3.LocalTextStyle
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.domain.SubjectTopic
 import il.kmi.app.favorites.FavoritesStore
-import il.kmi.app.ui.FloatingBeltQuickMenu
 import il.kmi.app.screens.parseSearchKey
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
@@ -34,7 +43,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import il.kmi.app.domain.ExerciseCountsRegistry
-
 
 
 // ✅ FIX: פונקציית נרמול אחת בלבד, ברמת קובץ (נראית לכולם, אין forward-ref ואין אמביגיוטי)
@@ -74,10 +82,98 @@ private fun handsSectionIdFor(raw: String): String? {
     }
 }
 
+private fun subTopicTitleForUi(title: String, isEnglish: Boolean): String {
+    if (!isEnglish) return title
+
+    return when (normText(title)) {
+        // עבודת ידיים
+        "מכות יד" -> "Hand Strikes"
+        "מכות מרפק" -> "Elbow Strikes"
+        "מכות במקל / רובה" -> "Stick / Rifle Strikes"
+        "מכות במקל קצר" -> "Short Stick Strikes"
+        "מרפק" -> "Elbow Strikes"
+        "מרפקים" -> "Elbow Strikes"
+        "פיסת יד" -> "Knife Hand Strikes"
+        "אגרופים ישרים" -> "Straight Punches"
+        "מגל + סנוקרת" -> "Hook and Uppercut"
+
+        // הגנות
+        "הגנות פנימיות" -> "Internal Defenses"
+        "הגנות חיצוניות" -> "External Defenses"
+        "הגנות נגד בעיטות" -> "Defenses Against Kicks"
+        "הגנה נגד בעיטות" -> "Defenses Against Kicks"
+        "הגנות נגד מכות אגרוף" -> "Defenses Against Punches"
+        "הגנה נגד מכות אגרוף" -> "Defenses Against Punches"
+        "הגנות מאיום סכין" -> "Knife Threat Defenses"
+        "הגנה מאיום סכין" -> "Knife Threat Defenses"
+        "הגנת מאיום סכין" -> "Knife Threat Defenses"
+        "הגנות נגד מקל" -> "Stick Defenses"
+        "הגנה נגד מקל" -> "Stick Defenses"
+
+        // שחרורים
+        "שחרור מתפיסות ידיים / שיער / חולצה" -> "Release from Hand / Hair / Shirt Grabs"
+        "שחרור מחניקות" -> "Choke Releases"
+        "שחרור מחביקות" -> "Bear Hug Releases"
+        "חביקות גוף" -> "Body Hugs"
+        "חביקות צוואר" -> "Neck Hugs"
+        "חביקות זרוע" -> "Arm Hugs"
+
+        "שחרורים מתפיסות ידיים" -> "Release from Hand Grabs"
+        "שחרורים מתפיסות חולצה" -> "Release from Shirt Grabs"
+        "שחרורים מתפיסות שיער" -> "Release from Hair Grabs"
+        "שחרורים מתפיסות צוואר וגוף" -> "Releases from Neck and Body Grabs"
+        "שחרורים מחניקות" -> "Choke Releases"
+
+        else -> title
+    }
+}
+
+private fun subjectTitleForUi(
+    subjectId: String,
+    fallbackHeb: String,
+    isEnglish: Boolean
+): String {
+    if (!isEnglish) return fallbackHeb
+
+    return when (subjectId) {
+        "general" -> "General"
+        "hands_all" -> "Hand Techniques"
+        "hands_root" -> "Hand Techniques"
+        "kicks" -> "Kicks"
+        "releases" -> "Releases"
+        "releases_hugs" -> "Hugs"
+        "defense_root" -> "Defenses"
+        "knife_defense" -> "Knife Defense"
+        "gun_threat_defense" -> "Gun Threat Defense"
+        "stick_defense" -> "Stick Defense"
+        "hands_strikes" -> "Hand Strikes"
+        "hands_elbows" -> "Elbow Strikes"
+        "hands_stick_rifle" -> "Stick / Rifle Strikes"
+
+        "rolls_breakfalls" -> "Breakfalls and Rolls"
+        "topic_ready_stance" -> "Ready Stance"
+        "topic_ground_prep" -> "Groundwork Preparation"
+        "topic_kavaler" -> "Kavaler"
+
+        "def_internal_punches" -> "Internal Defenses - Punches"
+        "def_internal_kicks" -> "Internal Defenses - Kicks"
+        "def_external_punches" -> "External Defenses - Punches"
+        "def_external_kicks" -> "External Defenses - Kicks"
+
+        "releases_hands_hair_shirt" -> "Releases from Hand / Hair / Shirt Grabs"
+        "releases_chokes" -> "Choke Releases"
+
+        else -> fallbackHeb
+    }
+}
+
 private fun normalizeFavoriteId(raw: String): String =
     raw.substringAfter("::", raw)
         .substringAfter(":", raw)
         .trim()
+
+private fun beltTitleForUi(belt: Belt, isEnglish: Boolean): String =
+    if (isEnglish) belt.en else belt.heb
 
 private fun findExplanationForHitLocal(
     belt: Belt,
@@ -144,6 +240,8 @@ fun BeltQuestionsByTopicScreen(
 ) {
     rememberEnsureContentRepoInitialized()
 
+    val isEnglish = rememberIsEnglish()
+
     val ctx = LocalContext.current
     val notePrefs = remember(ctx) {
         ctx.getSharedPreferences("kmi_exercise_notes", Context.MODE_PRIVATE)
@@ -157,7 +255,7 @@ fun BeltQuestionsByTopicScreen(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             il.kmi.app.ui.KmiTopBar(
-                title = "נושאים",
+                title = beltTitleForUi(effectiveBelt, isEnglish),
                 onHome = { },
                 lockHome = false,
                 showTopHome = false,
@@ -179,14 +277,14 @@ fun BeltQuestionsByTopicScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 10.dp)
+                    .padding(top = 6.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 TopicsBySubjectCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp),
+                        .padding(horizontal = 8.dp),
                     currentBelt = effectiveBelt,
                     onSubjectClick = { belt, subject ->
                         effectiveBelt = belt
@@ -228,22 +326,122 @@ fun BeltQuestionsByTopicScreen(
                 )
             }
 
-            FloatingBeltQuickMenu(
-                belt = effectiveBelt,
+            androidx.compose.animation.AnimatedVisibility(
+                visible = quickMenuExpanded,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .navigationBarsPadding()
-                    .padding(start = 14.dp, bottom = 22.dp)
+                    .padding(start = 18.dp, bottom = 98.dp)
                     .zIndex(999f),
-                expanded = quickMenuExpanded,
-                onExpandedChange = { quickMenuExpanded = it },
-                onWeakPoints = { onOpenWeakPoints(effectiveBelt) },
-                onAllLists = { onOpenAllLists(effectiveBelt) },
-                onPractice = { },
-                onSummary = { onOpenSummaryScreen(effectiveBelt) },
-                onVoice = { onOpenVoiceAssistant(effectiveBelt) },
-                onPdf = { onOpenPdfMaterials(effectiveBelt) }
-            )
+                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(),
+                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut()
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    QuickMenuActionRow(
+                        text = if (isEnglish) "Weak Points" else "נקודות תורפה",
+                        icon = Icons.Filled.WarningAmber,
+                        iconColor = Color(0xFFE53935),
+                        onClick = {
+                            quickMenuExpanded = false
+                            onOpenWeakPoints(effectiveBelt)
+                        }
+                    )
+
+                    QuickMenuActionRow(
+                        text = if (isEnglish) "All Lists" else "כל הרשימות",
+                        icon = Icons.Filled.List,
+                        iconColor = Color(0xFF5E35B1),
+                        onClick = {
+                            quickMenuExpanded = false
+                            onOpenAllLists(effectiveBelt)
+                        }
+                    )
+
+                    QuickMenuActionRow(
+                        text = if (isEnglish) "Summary" else "סיכום",
+                        icon = Icons.Filled.Summarize,
+                        iconColor = Color(0xFF1E88E5),
+                        onClick = {
+                            quickMenuExpanded = false
+                            onOpenSummaryScreen(effectiveBelt)
+                        }
+                    )
+
+                    QuickMenuActionRow(
+                        text = if (isEnglish) "Voice Assistant" else "עוזר קולי",
+                        icon = Icons.Filled.RecordVoiceOver,
+                        iconColor = Color(0xFF00897B),
+                        onClick = {
+                            quickMenuExpanded = false
+                            onOpenVoiceAssistant(effectiveBelt)
+                        }
+                    )
+
+                    QuickMenuActionRow(
+                        text = if (isEnglish) "PDF Materials" else "חומרי PDF",
+                        icon = Icons.Filled.PictureAsPdf,
+                        iconColor = Color(0xFFFB8C00),
+                        onClick = {
+                            quickMenuExpanded = false
+                            onOpenPdfMaterials(effectiveBelt)
+                        }
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .zIndex(1000f)
+            ) {
+                Button(
+                    onClick = { quickMenuExpanded = !quickMenuExpanded },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .border(
+                            width = 2.dp,
+                            color = Color.White.copy(alpha = 0.90f),
+                            shape = RoundedCornerShape(16.dp)
+                        ),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 0.dp,
+                        pressedElevation = 0.dp,
+                        focusedElevation = 0.dp,
+                        hoveredElevation = 0.dp,
+                        disabledElevation = 0.dp
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.List,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Text(
+                            text = if (isEnglish) "TOPIC SCREEN BUTTON" else "כפתור מסך לפי נושא",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
 
             pickedKey?.let { key ->
                 val (belt, topic, item) = parseSearchKey(key)
@@ -310,7 +508,7 @@ fun BeltQuestionsByTopicScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
-                                    contentDescription = "הערה",
+                                    contentDescription = if (isEnglish) "Note" else "הערה",
                                     tint = Color(0xFF42A5F5)
                                 )
                             }
@@ -322,7 +520,7 @@ fun BeltQuestionsByTopicScreen(
                             ) {
                                 Icon(
                                     imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                                    contentDescription = "מועדפים",
+                                    contentDescription = if (isEnglish) "Favorites" else "מועדפים",
                                     tint = if (isFavorite) Color(0xFFFFC107) else Color.Gray
                                 )
                             }
@@ -351,7 +549,7 @@ fun BeltQuestionsByTopicScreen(
                                 Spacer(Modifier.height(10.dp))
 
                                 Text(
-                                    text = "הערה של המתאמן:",
+                                    text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Right,
@@ -371,7 +569,7 @@ fun BeltQuestionsByTopicScreen(
                     },
                     confirmButton = {
                         TextButton(onClick = { pickedKey = null }) {
-                            Text("סגור")
+                            Text(if (isEnglish) "Close" else "סגור")
                         }
                     }
                 )
@@ -381,7 +579,7 @@ fun BeltQuestionsByTopicScreen(
                         onDismissRequest = { showNoteEditor = false },
                         title = {
                             Text(
-                                text = "הערה לתרגיל",
+                                text = if (isEnglish) "Exercise note" else "הערה לתרגיל",
                                 textAlign = TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -393,7 +591,7 @@ fun BeltQuestionsByTopicScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
                                 label = {
-                                    Text("כתוב הערה")
+                                    Text(if (isEnglish) "Write a note" else "כתוב הערה")
                                 }
                             )
                         },
@@ -406,19 +604,75 @@ fun BeltQuestionsByTopicScreen(
                                     showNoteEditor = false
                                 }
                             ) {
-                                Text("שמור")
+                                Text(if (isEnglish) "Save" else "שמור")
                             }
                         },
                         dismissButton = {
                             TextButton(
                                 onClick = { showNoteEditor = false }
                             ) {
-                                Text("ביטול")
+                                Text(if (isEnglish) "Cancel" else "ביטול")
                             }
                         }
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun QuickMenuActionRow(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconColor: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(999.dp),
+        color = Color.White.copy(alpha = 0.96f),
+        shadowElevation = 6.dp,
+        border = BorderStroke(
+            1.dp,
+            Color.Black.copy(alpha = 0.06f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .width(180.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Surface(
+                shape = CircleShape,
+                color = iconColor.copy(alpha = 0.12f),
+                modifier = Modifier.size(28.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Text(
+                text = text,
+                modifier = Modifier.weight(1f),
+                color = Color(0xFF0B1220),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
         }
     }
 }
@@ -432,6 +686,9 @@ internal fun TopicsBySubjectCard(
     onOpenDefenseList: (belt: Belt, kind: String, pick: String) -> Unit = { _, _, _ -> },
     onOpenHardSubjectRoute: (belt: Belt, subjectId: String) -> Unit = { _, _ -> },
 ) {
+
+    val isEnglish = rememberIsEnglish()
+
     val subjects = il.kmi.app.domain.TopicsBySubjectRegistry.allSubjects()
 
 // ✅ DEFENSE counts – source of truth מ-ExerciseCountsRegistry
@@ -495,7 +752,8 @@ internal fun TopicsBySubjectCard(
 
     // ----------------- UI -----------------
 
-    fun formatCount(n: Int): String = "$n תרגילים"
+    fun formatCount(n: Int): String =
+        if (isEnglish) "$n exercises" else "$n תרגילים"
 
     fun openSubjectSmart(subject: SubjectTopic) {
         val action = SubjectTopicsUiLogic.buildOpenSubjectUiAction(
@@ -518,72 +776,108 @@ internal fun TopicsBySubjectCard(
     val subjectsWithSubTopicsCards = remember(
         visibleSubjectsSplit,
         uiSectionCounts,
-        subjectCounts
+        subjectCounts,
+        isEnglish
     ) {
         SubjectTopicsUiLogic.buildSubjectCardModels(
             subjects = visibleSubjectsSplit.withSubTopics,
             sectionCounts = uiSectionCounts,
             subjectCounts = subjectCounts,
             formatCount = ::formatCount
-        )
+        ).map { card ->
+            card.copy(
+                title = subjectTitleForUi(
+                    subjectId = card.id,
+                    fallbackHeb = card.title,
+                    isEnglish = isEnglish
+                )
+            )
+        }
     }
 
     val subjectsWithoutSubTopicsCards = remember(
         visibleSubjectsSplit,
         uiSectionCounts,
-        subjectCounts
+        subjectCounts,
+        isEnglish
     ) {
         SubjectTopicsUiLogic.buildSubjectCardModels(
             subjects = visibleSubjectsSplit.withoutSubTopics,
             sectionCounts = uiSectionCounts,
             subjectCounts = subjectCounts,
             formatCount = ::formatCount
-        )
+        ).map { card ->
+            card.copy(
+                title = subjectTitleForUi(
+                    subjectId = card.id,
+                    fallbackHeb = card.title,
+                    isEnglish = isEnglish
+                )
+            )
+        }
     }
 
-    val defenseRootCard = remember(totalDefense) {
+    val defenseRootCard = remember(totalDefense, isEnglish) {
         SubjectTopicsUiLogic.buildDefenseRootCard(
             totalDefense = totalDefense,
             formatCount = ::formatCount
+        ).copy(
+            title = subjectTitleForUi(
+                subjectId = "defense_root",
+                fallbackHeb = SubjectTopicsUiLogic.buildDefenseRootCard(
+                    totalDefense = totalDefense,
+                    formatCount = ::formatCount
+                ).title,
+                isEnglish = isEnglish
+            )
         )
     }
 
-    val handsRootCard = remember(handsRootCount) {
+    val handsRootCard = remember(handsRootCount, isEnglish) {
         SubjectTopicsUiLogic.buildHandsRootCard(
             handsRootCount = handsRootCount,
             formatCount = ::formatCount
+        ).copy(
+            title = subjectTitleForUi(
+                subjectId = "hands_root",
+                fallbackHeb = SubjectTopicsUiLogic.buildHandsRootCard(
+                    handsRootCount = handsRootCount,
+                    formatCount = ::formatCount
+                ).title,
+                isEnglish = isEnglish
+            )
         )
     }
 
     Surface(
-        tonalElevation = 2.dp,
-        shadowElevation = 8.dp,
-        shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-        modifier = modifier
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 1.dp,
+        shadowElevation = 6.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp)
-            .padding(bottom = 24.dp)
+            .padding(horizontal = 4.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp, horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(vertical = 4.dp, horizontal = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-
             Text(
-                text = "נושאים (קטגוריות)",
-                style = MaterialTheme.typography.titleLarge,
+                text = if (isEnglish) "Subjects (Categories)" else "נושאים (קטגוריות)",
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 2.dp),
                 color = Color(0xFF263238)
             )
 
             if (!countsReady) {
                 Text(
-                    text = "טוען נתונים…",
+                    text = if (isEnglish) "Loading data..." else "טוען נתונים…",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -593,7 +887,8 @@ internal fun TopicsBySubjectCard(
 
             SubjectRootCard(
                 title = defenseRootCard.title,
-                subtitle = defenseRootCard.subtitle,
+                subtitle = "",
+                subjectId = "defense_root",
                 countText = defenseRootCard.countText,
                 showLeftBadge = true,
                 onClick = { askDefense = true }
@@ -601,7 +896,8 @@ internal fun TopicsBySubjectCard(
 
             SubjectRootCard(
                 title = handsRootCard.title,
-                subtitle = handsRootCard.subtitle,
+                subtitle = "",
+                subjectId = "hands_root",
                 countText = handsRootCard.countText,
                 showLeftBadge = true,
                 onClick = { askHands = true }
@@ -611,7 +907,8 @@ internal fun TopicsBySubjectCard(
             subjectsWithSubTopicsCards.forEach { card ->
                 SubjectRootCard(
                     title = card.title,
-                    subtitle = card.subtitle,
+                    subtitle = "",
+                    subjectId = card.id,
                     countText = card.countText,
                     onClick = {
                         if (card.id == "releases_hugs") {
@@ -623,13 +920,14 @@ internal fun TopicsBySubjectCard(
                 )
             }
 
-            // ✅ מציגים נושאים בלי תתי־נושאים (באותו סטייל של שאר הנושאים)
+            // ✅ מציגים נושאים בלי תתי־נושאים
             subjectsWithoutSubTopicsCards.forEach { card ->
                 val subject = subjects.firstOrNull { it.id == card.id } ?: return@forEach
 
                 SubjectRootCard(
                     title = card.title,
-                    subtitle = card.subtitle,
+                    subtitle = "",
+                    subjectId = card.id,
                     countText = card.countText,
                     onClick = { openSubjectSmart(subject) }
                 )
@@ -703,13 +1001,20 @@ internal fun TopicsBySubjectCard(
                 val handsPicks = remember(handsBase) {
                     SubjectTopicsUiLogic.handsPicks(handsBase)
                 }
+                val handsDisplayPicks = remember(handsPicks, isEnglish) {
+                    handsPicks.map { subTopicTitleForUi(it, isEnglish) }
+                }
 
                 HandsPickModeDialogModern(
-                    picks = handsPicks,
+                    picks = handsDisplayPicks,
                     counts = handsPickCounts,
                     onDismiss = { askHands = false },
-                    onPick = { picked ->
+                    onPick = { pickedDisplay: String ->
                         askHands = false
+
+                        val picked = handsPicks.firstOrNull {
+                            subTopicTitleForUi(it, isEnglish) == pickedDisplay
+                        } ?: pickedDisplay
 
                         val hardSubjectId = handsSectionIdFor(picked)
 
@@ -752,14 +1057,21 @@ internal fun TopicsBySubjectCard(
                 }
 
                 val counts = subTopicsPickCountsBySubjectId[id].orEmpty()
+                val displayPicks = remember(dialogData.picks, isEnglish) {
+                    dialogData.picks.map { subTopicTitleForUi(it, isEnglish) }
+                }
 
                 SubTopicsPickModeDialogModern(
-                    title = dialogData.base?.titleHeb ?: "תתי נושאים",
-                    picks = dialogData.picks,
+                    title = dialogData.base?.titleHeb ?: if (isEnglish) "Sub topics" else "תתי נושאים",
+                    picks = displayPicks,
                     counts = counts,
                     onDismiss = { askSubTopicsForId = null },
-                    onPick = { picked ->
+                    onPick = { pickedDisplay: String ->
                         askSubTopicsForId = null
+
+                        val picked = dialogData.picks.firstOrNull {
+                            subTopicTitleForUi(it, isEnglish) == pickedDisplay
+                        } ?: pickedDisplay
 
                         val decision = SubjectTopicsUiLogic.resolveSubTopicPick(
                             base = dialogData.base,

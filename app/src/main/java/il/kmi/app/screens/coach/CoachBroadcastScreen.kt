@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -37,6 +37,16 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.tasks.await
+import il.kmi.app.privacy.DemoPrivacy
+import il.kmi.app.privacy.DemoTrainees
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.BorderStroke
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
+//======================================================================
 
 fun persistCoachBroadcast(
     region: String,
@@ -239,6 +249,25 @@ fun CoachBroadcastScreen(
         }
     }
 
+    val uiRecipients = remember(recipients, region, branch) {
+        if (!DemoPrivacy.ENABLED) {
+            recipients
+        } else {
+            recipients.mapIndexed { index, r ->
+                val demo = DemoTrainees.trainees.getOrNull(index)
+                r.copy(
+                    name = demo?.name ?: "מתאמן ${index + 1}",
+                    phone = buildString {
+                        append("אזור: ")
+                        append(region.ifBlank { "—" })
+                        append(" • סניף: ")
+                        append(branch.ifBlank { "—" })
+                    }
+                )
+            }
+        }
+    }
+
     // נמענים שנבחרו (גם טלפונים וגם UIDs)
     val selectedRecipients = recipients.filter { it.selected }
     val selectedNumbers = selectedRecipients.map { it.phone }
@@ -269,30 +298,45 @@ fun CoachBroadcastScreen(
 
     // 🎨 צבעים אחידים לכל ה־TextField: טקסט לבן, רקע כהה, מסגרת כחולה
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedContainerColor = Color(0xFF020617),
-        unfocusedContainerColor = Color(0xFF020617),
+        focusedContainerColor = Color(0xFF0F172A),
+        unfocusedContainerColor = Color(0xFF0B1220),
         focusedTextColor = Color.White,
-        unfocusedTextColor = Color.White,
-        focusedLabelColor = Color(0xFFBAE6FD),
-        unfocusedLabelColor = Color(0xFF94A3B8),
-        focusedBorderColor = Color(0xFF38BDF8),
-        unfocusedBorderColor = Color(0xFF1E293B),
-        cursorColor = Color(0xFF38BDF8)
+        unfocusedTextColor = Color(0xFFF8FAFC),
+        focusedLabelColor = Color(0xFFE0F2FE),
+        unfocusedLabelColor = Color(0xFFCBD5E1),
+        focusedBorderColor = Color(0xFF67E8F9),
+        unfocusedBorderColor = Color(0xFF38BDF8),
+        cursorColor = Color(0xFF67E8F9)
     )
 
     Scaffold(
         topBar = {
+            val contextLang = LocalContext.current
+            val langManager = remember { AppLanguageManager(contextLang) }
+
             il.kmi.app.ui.KmiTopBar(
-                title = "שליחת הודעה לקבוצה",
+                title = "שידור הודעה לקבוצה",
                 onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
                 showRoleStatus = false,
                 lockSearch = true,
-                showBottomActions = true
+                showBottomActions = true,
+                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                            AppLanguage.ENGLISH
+                        } else {
+                            AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLang)
+                    (contextLang as? Activity)?.recreate()
+                }
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Transparent,
-        contentWindowInsets = WindowInsets(0)
+        contentWindowInsets = WindowInsets(left = 0)
     ) { pad ->
         Box(
             modifier = Modifier
@@ -310,100 +354,132 @@ fun CoachBroadcastScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
 
-                // ===== אזור =====
-                ExposedDropdownMenuBox(
-                    expanded = expandedRegion,
-                    onExpandedChange = { expandedRegion = !expandedRegion }
-                ) {
-                    OutlinedTextField(
-                        value = region,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("אזור") },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth(),
-                        colors = fieldColors
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+                    color = Color.Black.copy(alpha = 0.18f),
+                    tonalElevation = 0.dp,
+                    border = BorderStroke(
+                        1.dp,
+                        Color.White.copy(alpha = 0.10f)
                     )
-                    DropdownMenu(
-                        expanded = expandedRegion,
-                        onDismissRequest = { expandedRegion = false }
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        branchesByRegion.keys.forEach { r ->
-                            DropdownMenuItem(
-                                text = { Text(r) },
-                                onClick = {
-                                    region = r
-                                    branch = ""
-                                    recipients = emptyList()
-                                    expandedRegion = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // ===== סניף =====
-                if (region.isNotBlank()) {
-                    ExposedDropdownMenuBox(
-                        expanded = expandedBranch,
-                        onExpandedChange = { expandedBranch = !expandedBranch }
-                    ) {
-                        OutlinedTextField(
-                            value = branch,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("סניף") },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth(),
-                            colors = fieldColors
-                        )
-                        DropdownMenu(
-                            expanded = expandedBranch,
-                            onDismissRequest = { expandedBranch = false }
+                        // ===== אזור =====
+                        ExposedDropdownMenuBox(
+                            expanded = expandedRegion,
+                            onExpandedChange = { expandedRegion = !expandedRegion }
                         ) {
-                            (branchesByRegion[region] ?: emptyList()).forEach { b ->
-                                DropdownMenuItem(
-                                    text = { Text(b) },
-                                    onClick = {
-                                        branch = b
-                                        expandedBranch = false
-                                    }
-                                )
+                            OutlinedTextField(
+                                value = region,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("אזור") },
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth(),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                colors = fieldColors
+                            )
+                            DropdownMenu(
+                                expanded = expandedRegion,
+                                onDismissRequest = { expandedRegion = false }
+                            ) {
+                                branchesByRegion.keys.forEach { r ->
+                                    DropdownMenuItem(
+                                        text = { Text(r) },
+                                        onClick = {
+                                            region = r
+                                            branch = ""
+                                            recipients = emptyList()
+                                            expandedRegion = false
+                                        }
+                                    )
+                                }
                             }
                         }
+
+                        // ===== סניף =====
+                        if (region.isNotBlank()) {
+                            ExposedDropdownMenuBox(
+                                expanded = expandedBranch,
+                                onExpandedChange = { expandedBranch = !expandedBranch }
+                            ) {
+                                OutlinedTextField(
+                                    value = branch,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("סניף") },
+                                    modifier = Modifier
+                                        .menuAnchor()
+                                        .fillMaxWidth(),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                    colors = fieldColors
+                                )
+                                DropdownMenu(
+                                    expanded = expandedBranch,
+                                    onDismissRequest = { expandedBranch = false }
+                                ) {
+                                    (branchesByRegion[region] ?: emptyList()).forEach { b ->
+                                        DropdownMenuItem(
+                                            text = { Text(b) },
+                                            onClick = {
+                                                branch = b
+                                                expandedBranch = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // ===== טקסט ההודעה =====
+                        OutlinedTextField(
+                            value = message,
+                            onValueChange = { message = it },
+                            label = { Text("טקסט ההודעה") },
+                            minLines = 3,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            colors = fieldColors
+                        )
                     }
                 }
-
-                // ===== טקסט ההודעה =====
-                OutlinedTextField(
-                    value = message,
-                    onValueChange = { message = it },
-                    label = { Text("טקסט ההודעה") },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = fieldColors
-                )
 
                 // ===== רשימת נמענים מהקבוצה =====
                 if (recipients.isNotEmpty()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.Start
                     ) {
-                        Text("נמענים בקבוצה: ${recipients.size}")
                         OutlinedButton(
                             onClick = {
                                 val newValue = !allSelected
                                 recipients = recipients.map { it.copy(selected = newValue) }
-                            }
+                            },
+                            modifier = Modifier.width(200.dp),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, Color(0xFF67E8F9)),
+                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                                containerColor = Color(0xFF0B1220),
+                                contentColor = Color(0xFFE0F2FE)
+                            )
                         ) {
-                            Text(if (allSelected) "בטל סימון לכולם" else "סמן את כל חברי הקבוצה")
+                            Text(
+                                text = if (allSelected) "בטל סימון לכולם" else "סמן את כל חברי הקבוצה",
+                                style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                letterSpacing = 0.4.sp
+                            )
                         }
                     }
 
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(2.dp))
 
                     Column(
                         modifier = Modifier
@@ -411,29 +487,49 @@ fun CoachBroadcastScreen(
                             .background(Color.White.copy(alpha = 0.95f))
                             .padding(8.dp)
                     ) {
-                        recipients.forEach { r ->
-                            Row(
+                        uiRecipients.forEach { r ->
+                            val isSelected = r.selected
+
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .padding(vertical = 3.dp),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                                color = if (isSelected) Color(0xFFE0F2FE) else Color.Transparent,
+                                tonalElevation = 0.dp,
+                                border = if (isSelected) {
+                                    BorderStroke(
+                                        1.dp,
+                                        Color(0xFF7DD3FC)
+                                    )
+                                } else null
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(r.name)
-                                    Text(
-                                        text = r.phone,
-                                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                        color = Color.Gray
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = r.name,
+                                            color = if (isSelected) Color(0xFF0C4A6E) else Color.Black
+                                        )
+                                        Text(
+                                            text = r.phone,
+                                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                            color = if (isSelected) Color(0xFF0369A1) else Color.Gray
+                                        )
+                                    }
+                                    Checkbox(
+                                        checked = r.selected,
+                                        onCheckedChange = { checked ->
+                                            recipients = recipients.map {
+                                                if (it.uid == r.uid) it.copy(selected = checked) else it
+                                            }
+                                        }
                                     )
                                 }
-                                Checkbox(
-                                    checked = r.selected,
-                                    onCheckedChange = { checked ->
-                                        recipients = recipients.map {
-                                            if (it.phone == r.phone) it.copy(selected = checked) else it
-                                        }
-                                    }
-                                )
                             }
                         }
                     }
@@ -441,9 +537,26 @@ fun CoachBroadcastScreen(
                     Text("לא נמצאו מתאמנים פעילים לסניף שנבחר.")
                 }
 
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(10.dp))
 
-                Text("נמענים נבחרים: ${selectedNumbers.size}")
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "מתאמנים בקבוצה: ${recipients.size}",
+                        color = Color.White,
+                        style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
+
+                    Text(
+                        text = "מתאמנים נבחרים: ${selectedNumbers.size}",
+                        color = Color(0xFFE0F2FE),
+                        style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
+                }
 
                 // שליחה דרך SMS + שמירה + פידבק
                 androidx.compose.material3.Button(
@@ -454,15 +567,18 @@ fun CoachBroadcastScreen(
                                     snackbarHostState.showSnackbar("נא לכתוב טקסט להודעה")
                                 }
                                 selectedNumbers.isEmpty() -> {
-                                    snackbarHostState.showSnackbar("לא נבחרו נמענים – סמן לפחות נמען אחד")
+                                    snackbarHostState.showSnackbar("לא נבחרו נמענים – סמן לפחות מתאמן אחד")
+                                }
+                                DemoPrivacy.ENABLED -> {
+                                    snackbarHostState.showSnackbar(
+                                        "מצב דמו פעיל – לא נשלחה הודעת SMS אמיתית"
+                                    )
                                 }
                                 else -> {
-                                    // נשמור לשימוש Cloud Function (כולל ה-UIDs שנבחרו)
                                     saveBroadcast()
-                                    // פתיחת אפליקציית SMS עם הנמענים המסומנים
                                     onOpenSms(selectedNumbers, message)
                                     snackbarHostState.showSnackbar(
-                                        "נפתחה אפליקציית ההודעות עם ${selectedNumbers.size} נמענים"
+                                        "נפתחה אפליקציית ההודעות עם ${selectedNumbers.size} מתאמנים"
                                     )
                                 }
                             }
@@ -471,46 +587,28 @@ fun CoachBroadcastScreen(
                     enabled = message.isNotBlank() && selectedNumbers.isNotEmpty(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp),
+                        .height(56.dp),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                     colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF0EA5E9),
                         contentColor = Color.White,
                         disabledContainerColor = Color(0xFF1E293B),
                         disabledContentColor = Color(0xFF64748B)
-                    )
-                ) {
-                    Text("שליחת הודעה לכל הנמענים המסומנים")
-                }
-
-                // שיתוף כללי + שמירה
-                androidx.compose.material3.OutlinedButton(
-                    onClick = {
-                        if (message.isBlank()) return@OutlinedButton
-                        saveBroadcast()
-                        onShareText(message)
-                        scope.launch {
-                            snackbarHostState.showSnackbar("נוסח ההודעה שותף לאפליקציה שבחרת")
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        width = 1.dp,
-                        color = Color(0xFFBAE6FD)
                     ),
-                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color.Transparent,
-                        contentColor = Color(0xFFECFEFF),
-                        disabledContentColor = Color(0xFF64748B)
-                    )
+                    elevation = androidx.compose.material3.ButtonDefaults.buttonElevation(
+                        defaultElevation = 6.dp,
+                        pressedElevation = 2.dp
+                    ),
+                    border = BorderStroke(1.dp, Color(0xFF67E8F9))
                 ) {
-                    Text("שיתוף נוסח ההודעה (אפליקציות אחרות)")
+                    Text(
+                        text = "שליחת הודעה לכל המתאמנים המסומנים",
+                        color = Color(0xFFE0F2FE),
+                        style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    )
                 }
-
-                Spacer(Modifier.height(8.dp))
             }
         }
     }

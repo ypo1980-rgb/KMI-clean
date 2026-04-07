@@ -10,6 +10,7 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VolumeUp
@@ -45,6 +46,12 @@ import androidx.compose.runtime.collectAsState
 import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.domain.ContentRepo
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
+//==============================================================================
 
 @Composable
 fun ExercisesTabsScreen(
@@ -60,7 +67,7 @@ fun ExercisesTabsScreen(
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
     val sp = remember { ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
-
+    val notesSp = remember { ctx.getSharedPreferences("kmi_notes", android.content.Context.MODE_PRIVATE) }
 // ⭐ Favorites גלובלי – source of truth אחד לכל האפליקציה
     val favorites: Set<String> by FavoritesStore
         .favoritesFlow
@@ -157,7 +164,8 @@ fun ExercisesTabsScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var explainFromSearch by remember { mutableStateOf<String?>(null) }
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }   // ← תרגיל שנבחר מחיפוש כללי
-
+    var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteDraft by rememberSaveable { mutableStateOf("") }
     // --- מצב טאבים (0=הכל, 1=לא יודע, 2=מועדפים) — חייב להיות לפני ה-Scaffold ---
     var selectedTab by rememberSaveable { mutableStateOf(0) }
 
@@ -180,9 +188,19 @@ fun ExercisesTabsScreen(
             .substringAfter(":", raw)
             .trim()
 
+    fun noteKeyFor(raw: String): String = "note_${belt.id}_${normalizeItemId(raw)}"
+
+    fun loadNote(raw: String): String =
+        notesSp.getString(noteKeyFor(raw), "")?.trim().orEmpty()
+
+    fun saveNote(raw: String, value: String) {
+        notesSp.edit().putString(noteKeyFor(raw), value.trim()).apply()
+    }
+
+    fun hasNote(raw: String): Boolean = loadNote(raw).isNotBlank()
+
     // סטטוסים מה-VM
     val itemStates = remember(belt.id, topic, subTopicFilter) { mutableStateMapOf<String, Boolean?>() }
-
     // ✅ אם זה __ALL__ צריך לדעת לאיזה נושא שייך כל item כדי לקרוא סטטוס נכון מה-VM
     fun topicForRawItem(raw: String): String {
         if (topic != "__ALL__") return topic
@@ -266,14 +284,29 @@ fun ExercisesTabsScreen(
 
     Scaffold(
         topBar = {
+            val contextLang = LocalContext.current
+            val langManager = remember { AppLanguageManager(contextLang) }
+
             il.kmi.app.ui.KmiTopBar(
-                title = "כרטיסיות תרגילים",
-                onHome = onHome,                       // ✅ אייקון בית עובד
+                title = "כרטיסיות התרגילים",
+                onHome = onHome,                      // חזרה לבית שעובד ✅
                 centerTitle = true,
                 showTopHome = false,
-                lockSearch = false,                    // ✅ חיפוש פעיל
-                onPickSearchResult = { key -> pickedKey = key }, // תרגיל מהחיפוש
-                extraActions = { }                     // אם אין אקשנים נוספים
+                lockSearch = false,                  // חיפוש פעיל ✅
+                onPickSearchResult = { key -> pickedKey = key }, // חיבור חיפוש מדויק
+                extraActions = { },                  // אם אין אקשנים נוספים
+                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                            AppLanguage.ENGLISH
+                        } else {
+                            AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLang)
+                    (contextLang as? Activity)?.recreate()
+                }
             )
         },
 
@@ -532,11 +565,10 @@ fun ExercisesTabsScreen(
                     val scale by animateFloatAsState(if (pressed) 1.15f else 1f, label = "scale")
 
                     val tpForUi = topicForRawItem(item)
-
-// ✅ שם לתצוגה בלבד, נקי ועקבי (גם ב"כללי")
                     val displayName = CanonicalIds.uiDisplayName(tpForUi, item)
+                    val isFav = favorites.contains(normalizeItemId(item))
+                    val itemHasNote = hasNote(item)
 
-                    // ✅ LTR רק לשורה כדי שהאייקון תמיד יהיה בשמאל
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                         Row(
                             modifier = Modifier
@@ -546,7 +578,6 @@ fun ExercisesTabsScreen(
                                 .clickable { explainFromSearch = item },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // ✅ אייקון מודרני/צבעוני בצד שמאל
                             FilledTonalIconButton(
                                 onClick = {
                                     pressed = true
@@ -567,16 +598,58 @@ fun ExercisesTabsScreen(
                                 )
                             }
 
+                            IconButton(
+                                onClick = {
+                                    noteEditorFor = item
+                                    noteDraft = loadNote(item)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = "עריכת הערה",
+                                    tint = if (itemHasNote) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { toggleFavorite(item) }
+                            ) {
+                                if (isFav) {
+                                    Icon(
+                                        Icons.Filled.Star,
+                                        contentDescription = "הסר ממועדפים",
+                                        tint = Color(0xFFFFC107)
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Outlined.StarBorder,
+                                        contentDescription = "הוסף למועדפים"
+                                    )
+                                }
+                            }
+
                             Spacer(Modifier.width(10.dp))
 
-                            // ✅ הטקסט נשאר RTL
                             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                                Text(
-                                    text = displayName,
+                                Column(
                                     modifier = Modifier.weight(1f),
-                                    textAlign = TextAlign.Right,
-                                    color = MaterialTheme.colorScheme.onBackground
-                                )
+                                    horizontalAlignment = Alignment.End
+                                ) {
+                                    Text(
+                                        text = displayName,
+                                        textAlign = TextAlign.Right,
+                                        color = MaterialTheme.colorScheme.onBackground
+                                    )
+
+                                    if (itemHasNote) {
+                                        Text(
+                                            text = "יש הערה שמורה",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            textAlign = TextAlign.Right
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -594,13 +667,13 @@ fun ExercisesTabsScreen(
                 findExplanationForHit(hitBelt, hitItem, hitTopic)
             }
             val isFav = favorites.contains(normalizeItemId(hitItem))
+            val noteText = loadNote(hitItem)
 
             AlertDialog(
                 onDismissRequest = { pickedKey = null },
                 title = {
                     Box(modifier = Modifier.fillMaxWidth()) {
 
-                        // ✅ הטקסט בצד ימין – עם אותו סטייל כמו במסך הקודם
                         Column(
                             modifier = Modifier
                                 .align(androidx.compose.ui.AbsoluteAlignment.CenterRight)
@@ -609,96 +682,38 @@ fun ExercisesTabsScreen(
                         ) {
                             Text(
                                 text = displayName,
-                                style = MaterialTheme.typography.titleSmall,   // ← כותרת קטנה
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Text(
                                 text = "(${hitBelt.heb})",
-                                style = MaterialTheme.typography.labelSmall,   // ← כמו במסך הקודם
+                                style = MaterialTheme.typography.labelSmall,
                                 textAlign = TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
 
-                        // ⭐ הכוכבית בצד שמאל
-                        IconButton(
-                            onClick = { toggleFavorite(hitItem) },
-                            modifier = Modifier
-                                .align(androidx.compose.ui.AbsoluteAlignment.CenterLeft)
+                        Row(
+                            modifier = Modifier.align(androidx.compose.ui.AbsoluteAlignment.CenterLeft),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (isFav) {
+                            IconButton(
+                                onClick = {
+                                    noteEditorFor = hitItem
+                                    noteDraft = loadNote(hitItem)
+                                }
+                            ) {
                                 Icon(
-                                    Icons.Filled.Star,
-                                    contentDescription = "הסר ממועדפים",
-                                    tint = Color(0xFFFFC107)
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Outlined.StarBorder,
-                                    contentDescription = "הוסף למועדפים"
+                                    Icons.Filled.Edit,
+                                    contentDescription = "עריכת הערה",
+                                    tint = if (noteText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                        }
-                    }
-                },
-                text = {
-                    // טקסט עם הדגשה של "עמידת מוצא ..." עד פסיק/נקודה
-                    val annotated = buildExplanationWithStanceHighlight(
-                        source = explanation,
-                        stanceColor = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = annotated,
-                        textAlign = TextAlign.Right,
-                        // צבע טקסט מותאם לדיאלוג (בהיר/כהה)
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = { pickedKey = null }) { Text("סגור") }
-                }
-            )
-        }
 
-        // ===== דיאלוג הסבר (לחיצה על שורה או אייקון info ברשימה) =====
-        explainFromSearch?.let { item ->
-
-            val displayName = ExerciseTitleFormatter.displayName(item)
-
-            // ✅ TTS גלובלי אחיד
-            LaunchedEffect(item) {
-                KmiTtsManager.init(ctx)
-            }
-            DisposableEffect(item) {
-                onDispose { KmiTtsManager.stop() }
-            }
-
-            // ✅ קודם לפי שם תצוגה (לרוב ככה שמור ב-Explanations), ואז fallback ל-raw
-            val explanation = Explanations.get(belt, displayName)
-                .ifBlank { Explanations.get(belt, item) }
-                .ifBlank { "לא נמצא הסבר עבור \"$displayName\"." }
-
-            val isFav = favorites.contains(normalizeItemId(item))
-
-            AlertDialog(
-                onDismissRequest = {
-                    KmiTtsManager.stop()
-                    explainFromSearch = null
-                },
-                title = {
-                    // ✅ LTR רק לכותרת כדי שהכוכבית תהיה פיזית בצד שמאל
-                    androidx.compose.runtime.CompositionLocalProvider(
-                        androidx.compose.ui.platform.LocalLayoutDirection provides
-                                androidx.compose.ui.unit.LayoutDirection.Ltr
-                    ) {
-                        Box(modifier = Modifier.fillMaxWidth()) {
-
-                            // ⭐ שמאל פיזי
                             IconButton(
-                                onClick = { toggleFavorite(item) },
-                                modifier = Modifier.align(Alignment.CenterStart)
+                                onClick = { toggleFavorite(hitItem) }
                             ) {
                                 if (isFav) {
                                     Icon(
@@ -713,8 +728,113 @@ fun ExercisesTabsScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        val annotated = buildExplanationWithStanceHighlight(
+                            source = explanation,
+                            stanceColor = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = annotated,
+                            textAlign = TextAlign.Right,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
 
-                            // טקסט ימין (מחזירים RTL רק לטקסט)
+                        if (noteText.isNotBlank()) {
+                            HorizontalDivider()
+                            Text(
+                                text = "הערה של המתאמן:",
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Right,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = noteText,
+                                textAlign = TextAlign.Right,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { pickedKey = null }) { Text("סגור") }
+                }
+            )
+        }
+
+        // ===== דיאלוג הסבר (לחיצה על שורה או אייקון info ברשימה) =====
+        explainFromSearch?.let { item ->
+
+            val displayName = ExerciseTitleFormatter.displayName(item)
+
+            LaunchedEffect(item) {
+                KmiTtsManager.init(ctx)
+            }
+            DisposableEffect(item) {
+                onDispose { KmiTtsManager.stop() }
+            }
+
+            val explanation = Explanations.get(belt, displayName)
+                .ifBlank { Explanations.get(belt, item) }
+                .ifBlank { "לא נמצא הסבר עבור \"$displayName\"." }
+
+            val isFav = favorites.contains(normalizeItemId(item))
+            val noteText = loadNote(item)
+
+            AlertDialog(
+                onDismissRequest = {
+                    KmiTtsManager.stop()
+                    explainFromSearch = null
+                },
+                title = {
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalLayoutDirection provides
+                                androidx.compose.ui.unit.LayoutDirection.Ltr
+                    ) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
+
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterStart),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        noteEditorFor = item
+                                        noteDraft = loadNote(item)
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Edit,
+                                        contentDescription = "עריכת הערה",
+                                        tint = if (noteText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { toggleFavorite(item) }
+                                ) {
+                                    if (isFav) {
+                                        Icon(
+                                            Icons.Filled.Star,
+                                            contentDescription = "הסר ממועדפים",
+                                            tint = Color(0xFFFFC107)
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Outlined.StarBorder,
+                                            contentDescription = "הוסף למועדפים"
+                                        )
+                                    }
+                                }
+                            }
+
                             androidx.compose.runtime.CompositionLocalProvider(
                                 androidx.compose.ui.platform.LocalLayoutDirection provides
                                         androidx.compose.ui.unit.LayoutDirection.Rtl
@@ -757,6 +877,24 @@ fun ExercisesTabsScreen(
                             textAlign = TextAlign.Right,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+
+                        if (noteText.isNotBlank()) {
+                            HorizontalDivider()
+                            Text(
+                                text = "הערה של המתאמן:",
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Right,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                text = noteText,
+                                textAlign = TextAlign.Right,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
                         IconButton(onClick = { KmiTtsManager.speak(explanation) }) {
                             Icon(Icons.Filled.VolumeUp, contentDescription = "השמע הסבר")
                         }
@@ -767,6 +905,55 @@ fun ExercisesTabsScreen(
                         KmiTtsManager.stop()
                         explainFromSearch = null
                     }) { Text("סגור") }
+                }
+            )
+        }
+
+        noteEditorFor?.let { item ->
+            AlertDialog(
+                onDismissRequest = { noteEditorFor = null },
+                title = {
+                    Text(
+                        text = "עריכת הערה",
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = ExerciseTitleFormatter.displayName(item),
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = noteDraft,
+                            onValueChange = { noteDraft = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 4,
+                            maxLines = 8,
+                            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right)
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            saveNote(item, noteDraft)
+                            noteEditorFor = null
+                        }
+                    ) { Text("שמור") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            noteEditorFor = null
+                        }
+                    ) { Text("ביטול") }
                 }
             )
         }

@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -517,29 +518,29 @@ internal fun BaseTopicCard(
     }
 
     Surface(
-        shape = RoundedCornerShape(22.dp),
-        tonalElevation = 1.dp,
-        shadowElevation = 6.dp,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, Color(0x14000000)),
+        shape = RoundedCornerShape(26.dp),
+        tonalElevation = 3.dp,
+        shadowElevation = 12.dp,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        border = BorderStroke(1.dp, Color(0x10000000)),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(24.dp))
             .clickable { onClick() }
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .width(6.dp)
-                        .heightIn(min = 52.dp)
+                        .width(4.dp)
+                        .heightIn(min = 44.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(accent.copy(alpha = 0.9f))
+                        .background(accent.copy(alpha = 0.92f))
                 )
 
                 Spacer(Modifier.width(12.dp))
@@ -547,7 +548,7 @@ internal fun BaseTopicCard(
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     Text(
                         text = title,
@@ -568,7 +569,7 @@ internal fun BaseTopicCard(
                     )
                 }
 
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
 
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -580,7 +581,7 @@ internal fun BaseTopicCard(
                             textBottom = badgeBottom,
                             accent = accent
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(6.dp))
                     }
 
                     Icon(
@@ -603,8 +604,9 @@ internal fun CountBadge(
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = accent.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.25f))
+        color = accent.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.22f)),
+        shadowElevation = 0.dp
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -638,49 +640,75 @@ internal fun CountTextBadge(
 ) {
     Text(
         text = text,
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold,
         color = color,
         textAlign = TextAlign.Center,
         maxLines = 2,
-        lineHeight = 16.sp
+        lineHeight = 14.sp
     )
+}
+
+@Composable
+private fun subjectAccentFor(subjectId: String?): Color {
+    return when (subjectId?.trim()) {
+
+        // ROOT
+        "defense_root" -> Color(0xFF7C4DFF)
+        "hands_root" -> Color(0xFFAB47BC)
+
+        // SUBJECTS
+        "releases" -> Color(0xFF42A5F5)
+        "releases_hugs" -> Color(0xFF5C6BC0)
+
+        "rolls_and_falls" -> Color(0xFFBA68C8)
+
+        "starting_position" -> Color(0xFFEF5350)
+
+        "katerol" -> Color(0xFF43A047)
+
+        "kicks" -> Color(0xFFFFA726)
+        "kicks_hard" -> Color(0xFFFF9800)
+
+        else -> MaterialTheme.colorScheme.primary
+    }
 }
 
 @Composable
 internal fun SubjectRootCard(
     title: String,
     subtitle: String,
+    subjectId: String? = null,
     countText: String? = null,
     showLeftBadge: Boolean = true,
     onClick: () -> Unit
 ) {
-    val accent = MaterialTheme.colorScheme.primary
+    val accent = subjectAccentFor(subjectId)
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
-        tonalElevation = 1.dp,
-        shadowElevation = 2.dp,
+        shape = RoundedCornerShape(22.dp),
+        tonalElevation = 2.dp,
+        shadowElevation = 6.dp,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
         border = BorderStroke(1.dp, Color(0x12000000))
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (showLeftBadge) {
                     Box(
                         modifier = Modifier
-                            .width(5.dp)
-                            .heightIn(min = 44.dp)
+                            .width(4.dp)
+                            .heightIn(min = 36.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(accent.copy(alpha = 0.55f))
+                            .background(accent)
                     )
                     Spacer(Modifier.width(12.dp))
                 } else {
@@ -689,45 +717,47 @@ internal fun SubjectRootCard(
 
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                     horizontalAlignment = Alignment.End
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Right,
                         modifier = Modifier.fillMaxWidth(),
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     Text(
                         text = subtitle.replace(Regex("^\\d+\\s+תרגילים\\s*•?\\s*"), ""),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Right,
                         modifier = Modifier.fillMaxWidth(),
-                        maxLines = 2
+                        maxLines = 1
                     )
                 }
 
-                Column(
+                Row(
                     modifier = Modifier
-                        .padding(end = 4.dp)
-                        .widthIn(min = 68.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                        .padding(end = 2.dp)
+                        .widthIn(min = 60.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
+
                     if (!countText.isNullOrBlank()) {
                         CountTextBadge(text = countText, color = accent)
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.width(6.dp))
                     }
 
                     Icon(
                         imageVector = Icons.Filled.ChevronLeft,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                        modifier = Modifier.size(18.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                        modifier = Modifier.size(17.dp)
                     )
                 }
             }
@@ -741,17 +771,26 @@ internal fun SubjectLeafCard(
     countText: String,
     onClick: () -> Unit
 ) {
-    val accent = MaterialTheme.colorScheme.primary
+    val accent = when (title.trim()) {
+        "הגנות" -> Color(0xFF6A5ACD)
+        "עבודת ידיים" -> Color(0xFF9C27B0)
+        "שחרורים" -> Color(0xFF2196F3)
+        "בלימות וגלגולים" -> Color(0xFF9C27B0)
+        "עמידת מוצא" -> Color(0xFFE53935)
+        "קאטרול" -> Color(0xFF4CAF50)
+        "בעיטות" -> Color(0xFFFF9800)
+        else -> MaterialTheme.colorScheme.primary
+    }
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
-        tonalElevation = 0.dp,
-        shadowElevation = 1.dp,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 1.dp,
+        shadowElevation = 3.dp,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f),
         border = BorderStroke(1.dp, Color(0x0F000000)),
         modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .fillMaxWidth(0.96f)
+            .clip(RoundedCornerShape(20.dp))
             .clickable { onClick() }
     ) {
         Row(
@@ -1051,7 +1090,6 @@ internal object SubjectTopicsUiLogic {
 
     data class RootCardModel(
         val title: String,
-        val subtitle: String,
         val countText: String
     )
 
@@ -1104,7 +1142,6 @@ internal object SubjectTopicsUiLogic {
     ): RootCardModel {
         return RootCardModel(
             title = "הגנות",
-            subtitle = "בעיטות / סכין / אקדח / מקל",
             countText = "6 תתי נושאים\n${formatCount(totalDefense)}"
         )
     }
@@ -1115,8 +1152,7 @@ internal object SubjectTopicsUiLogic {
     ): RootCardModel {
         return RootCardModel(
             title = "עבודת ידיים",
-            subtitle = "מכות יד / מכות מרפק",
-            countText = "2 תתי נושאים\n${formatCount(handsRootCount)}"
+            countText = "3 תתי נושאים\n${formatCount(handsRootCount)}"
         )
     }
 
@@ -1239,7 +1275,11 @@ internal object SubjectTopicsUiLogic {
 
     fun handsPicks(base: SubjectTopic?): List<String> {
         return base?.subTopics?.takeIf { it.isNotEmpty() }
-            ?: listOf("מכות יד", "מכות מרפק")
+            ?: listOf(
+                "מכות יד",
+                "מכות מרפק",
+                "מכות במקל / רובה"
+            )
     }
 
     fun resolveHandsPick(

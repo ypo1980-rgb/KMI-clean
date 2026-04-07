@@ -56,6 +56,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.WorkspacePremium
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
 
 @Composable
 fun DrawerMenuCard(
@@ -275,49 +283,128 @@ fun AppDrawerContent(
             }
         }
 
-@Composable
+        @Composable
         fun CoachOnlyItem(
             title: String,
             subtitle: String? = null,
+            icon: androidx.compose.ui.graphics.vector.ImageVector,
             onClick: () -> Unit
         ) {
-            // 👇 אותו גובה כמו DrawerItem
-            val itemHeight = 68.dp
+            val itemHeight = 76.dp
+            val shape = RoundedCornerShape(22.dp)
 
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
                     .height(itemHeight)
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(shape)
                     .clickable(onClick = onClick),
-                color = Color(0xFFFF7AB8),   // ורוד מאמן
+                color = Color.Transparent,
                 contentColor = Color.White,
                 tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.55f))
+                shadowElevation = 8.dp,
+                shape = shape,
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
             ) {
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            color = Color.White,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    )
-                    if (!subtitle.isNullOrBlank()) {
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = Color.White.copy(alpha = 0.9f)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFFB83280),
+                                    Color(0xFFD946EF),
+                                    Color(0xFFF472B6)
+                                )
                             )
                         )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(6.dp)
+                            .align(Alignment.CenterEnd)
+                            .clip(RoundedCornerShape(topEnd = 22.dp, bottomEnd = 22.dp))
+                            .background(Color.White.copy(alpha = 0.30f))
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color.White.copy(alpha = 0.14f),
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.10f)
+                                    )
+                                )
+                            )
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.18f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(14.dp))
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 0.2.sp
+                                ),
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            if (!subtitle.isNullOrBlank()) {
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = Color.White.copy(alpha = 0.92f),
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -378,6 +465,7 @@ fun AppDrawerContent(
                         // כפתור: דו״ח נוכחות (מאמן)
                         CoachOnlyItem(
                             title = "דו״ח נוכחות",
+                            icon = Icons.Filled.Assessment,
                             onClick = {
                                 onClose()
                                 onOpenCoachAttendance()
@@ -387,6 +475,7 @@ fun AppDrawerContent(
                         // כפתור: שליחת הודעה לקבוצה (מאמן)
                         CoachOnlyItem(
                             title = "שליחת הודעה",
+                            icon = Icons.Filled.Campaign,
                             onClick = {
                                 onClose()
                                 onOpenCoachBroadcast()
@@ -396,6 +485,7 @@ fun AppDrawerContent(
                         // כפתור: רשימת מתאמנים (מאמן)
                         CoachOnlyItem(
                             title = "רשימת מתאמנים",
+                            icon = Icons.Filled.Groups,
                             onClick = {
                                 onClose()
                                 onOpenCoachTrainees()
@@ -405,6 +495,7 @@ fun AppDrawerContent(
                         // 👇 חדש: כפתור מבחן פנימי לחגורה (רק למאמן)
                         CoachOnlyItem(
                             title = "מבחן פנימי לחגורה",
+                            icon = Icons.Filled.WorkspacePremium,
                             onClick = {
                                 onClose()
                                 onOpenCoachInternalExam()
@@ -522,24 +613,40 @@ fun AppDrawerContent(
                     }
                 )
 
-                // --- לוח אימונים חודשי (חדש) ---
-                // DrawerItem(
-                //     title = "לוח אימונים חודשי",
-                //     subtitle = "האימונים של החודש",
-                //     onClick = {
-                //         onClose()
-                //         onOpenMonthlyCalendar()
-                //     }
-                // )
-                //
-                // DrawerItem(
-                //     title = "סיכום אימון",
-                //     subtitle = "שמירה וצפייה בסיכומי אימון",
-                //     onClick = {
-                //         onClose()
-                //         onOpenTrainingSummary()
-                //     }
-                // )
+// --- שפה ---
+                val contextLang = LocalContext.current
+                DrawerItem(
+                    leading = {
+                        Icon(
+                            imageVector = Icons.Filled.Language,
+                            contentDescription = null,
+                            tint = Color.White
+                        )
+                    },
+                    title = "שפה / Language",
+                    onClick = {
+
+                        val manager = AppLanguageManager(contextLang)
+
+                        val newLang =
+                            if (manager.getCurrentLanguage() == AppLanguage.HEBREW)
+                                AppLanguage.ENGLISH
+                            else
+                                AppLanguage.HEBREW
+
+                        manager.setLanguage(newLang)
+
+                        Toast.makeText(
+                            contextLang,
+                            if (newLang == AppLanguage.ENGLISH) "Language: English" else "שפה: עברית",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        onClose()
+
+                        (contextLang as? android.app.Activity)?.recreate()
+                    }
+                )
 
                 // --- ניהול מנוי ---
                 DrawerItem(

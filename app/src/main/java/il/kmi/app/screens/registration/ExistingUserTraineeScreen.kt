@@ -175,15 +175,35 @@ fun ExistingUserTraineeScreen(
 
     Scaffold(
         topBar = {
+            val ctx = LocalContext.current
+            val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctx) }
+            val currentLang = langManager.getCurrentLanguage().code
+
             KmiTopBar(
-                title = "התחברות",
+                title = if (currentLang == "en") "Login" else "התחברות",
                 showRoleStatus = false,
                 showBottomActions = true,
                 onOpenDrawer = onOpenDrawer,
                 extraActions = { Spacer(Modifier.width(48.dp)) },
                 showRoleBadge = false,
                 lockSearch = true,
-                showCoachBroadcastFab = isCoach
+                showCoachBroadcastFab = isCoach,
+
+                currentLang = currentLang,
+
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() ==
+                            il.kmi.shared.localization.AppLanguage.HEBREW
+                        )
+                            il.kmi.shared.localization.AppLanguage.ENGLISH
+                        else
+                            il.kmi.shared.localization.AppLanguage.HEBREW
+
+                    langManager.setLanguage(newLang)
+
+                    (ctx as? android.app.Activity)?.recreate()
+                }
             )
         },
         containerColor = Color.Transparent,

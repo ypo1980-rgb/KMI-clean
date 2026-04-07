@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- ===== Permissions (global) ===== -->
-    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- תזמון מחדש לאחר אתחול -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -22,13 +22,15 @@
     <application
         android:name=".KmiApp"
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="ק.מ.י"
         android:supportsRtl="true"
         android:layoutDirection="rtl"
         android:theme="@style/Theme.KMI"
         android:enableOnBackInvokedCallback="true">
 
-    <!-- ===== FileProvider לשיתוף קבצים (PDF וכד') מתוך cache ===== -->
+        <!-- ===== FileProvider לשיתוף קבצים (PDF וכד') מתוך cache ===== -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -49,7 +51,7 @@
         </service>
 
         <!-- ===== Receiver לתזכורות אימון =====
-      חייב להיות exported=true כדי לקבל שידורי מערכת (BOOT_COMPLETED וכו'). -->
+             חייב להיות exported=true כדי לקבל שידורי מערכת (BOOT_COMPLETED וכו'). -->
         <receiver
             android:name=".training.TrainingAlarmReceiver"
             android:exported="true">
@@ -78,11 +80,11 @@
 
         <receiver
             android:name=".reminders.DailyReminderAnotherReceiver"
-            android:exported="false"/>
+            android:exported="false" />
 
         <receiver
             android:name=".reminders.DailyReminderFavoriteReceiver"
-            android:exported="false"/>
+            android:exported="false" />
 
         <!-- ===== Receiver לתרגיל יומי ===== -->
         <receiver

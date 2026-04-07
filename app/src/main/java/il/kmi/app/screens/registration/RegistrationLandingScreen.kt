@@ -7,16 +7,21 @@ import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -36,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -50,6 +56,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import il.kmi.app.R
 import il.kmi.app.ui.KmiTopBar
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+
+//======================================================================
 
 private fun whiteToTransparent(src: Bitmap, tolerance: Int = 245): Bitmap {
     val w = src.width; val h = src.height
@@ -140,8 +152,11 @@ fun RegistrationLandingScreen(
     Scaffold(
         topBar = {
             if (showTopBar) {
+                val contextLang = LocalContext.current
+                val langManager = remember { AppLanguageManager(contextLang) }
+
                 KmiTopBar(
-                    title = "רישום משתמש",
+                    title = "סיום ההרשמה",
                     showRoleStatus = false,
                     showBottomActions = true,
                     onOpenDrawer = { onOpenDrawer.invoke() },
@@ -149,12 +164,25 @@ fun RegistrationLandingScreen(
                     showRoleBadge = false,
                     lockSearch = true,
                     showCoachBroadcastFab = false,
+                    currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                    onToggleLanguage = {
+                        val newLang =
+                            if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                                AppLanguage.ENGLISH
+                            } else {
+                                AppLanguage.HEBREW
+                            }
+
+                        langManager.setLanguage(newLang)
+                        (contextLang as? Activity)?.recreate()
+                    }
                 )
             }
         },
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0)
     ) { padding ->
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -162,75 +190,138 @@ fun RegistrationLandingScreen(
                 .padding(padding),
             contentAlignment = Alignment.TopCenter
         ) {
-            // —— תוכן ראשי ——
+            val beltAlpha by animateFloatAsState(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 900),
+                label = "beltFade"
+            )
+
+            // חגורה דקורטיבית באלכסון – למעלה בצד
+            Image(
+                painter = androidx.compose.ui.res.painterResource(R.drawable.belt_black),
+                contentDescription = "חגורה שחורה",
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 10.dp, end = 12.dp)
+                    .fillMaxWidth(0.42f)
+                    .height(64.dp)
+                    .rotate(-18f)
+                    .shadow(
+                        elevation = 10.dp,
+                        shape = RoundedCornerShape(8.dp),
+                        clip = false
+                    )
+                    .alpha(0.9f),
+                contentScale = ContentScale.Fit
+            )
+
+            // תוכן ראשי
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .imePadding()
                     .navigationBarsPadding()
-                    .padding(16.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // באנר
+                Spacer(Modifier.height(40.dp))
+
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Image(
-                        painter = androidx.compose.ui.res.painterResource(R.drawable.nok_out_banner),
-                        contentDescription = "לוגו נוק אאוט",
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 96.dp),
-                        contentScale = ContentScale.FillWidth,
-                        alignment = Alignment.Center
-                    )
-                    androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+                            .shadow(
+                                elevation = 18.dp,
+                                shape = RoundedCornerShape(30.dp),
+                                clip = false
+                            ),
+                        shape = RoundedCornerShape(30.dp),
+                        color = Color(0xFF1A1440).copy(alpha = 0.42f),
+                        tonalElevation = 0.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 22.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "ברוכים הבאים ל־KMI",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+
+                            Spacer(Modifier.height(6.dp))
+
+                            Text(
+                                text = "בחרו איך תרצו להמשיך",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(alpha = 0.78f)
+                            )
+
+                            Spacer(Modifier.height(24.dp))
+
+                            Button(
+                                onClick = {
+                                    playStrongFeedback()
+                                    onNewUserTrainee()
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(60.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White,
+                                    contentColor = Color(0xFF171717)
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(
+                                    defaultElevation = 8.dp,
+                                    pressedElevation = 3.dp
+                                )
+                            ) {
+                                Text(
+                                    "משתמש חדש",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+
+                            Spacer(Modifier.height(14.dp))
+
+                            Button(
+                                onClick = {
+                                    playStrongFeedback()
+                                    if (isCoach) onExistingUserCoach() else onExistingUserTrainee()
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(60.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF4F56A8).copy(alpha = 0.92f),
+                                    contentColor = Color.White
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(
+                                    defaultElevation = 6.dp,
+                                    pressedElevation = 2.dp
+                                )
+                            ) {
+                                Text(
+                                    "משתמש קיים",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
+                    }
                 }
 
-                // כפתורים
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = true),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    val buttonsWidth = 0.94f
-
-                    Button(
-                        onClick = {
-                            playStrongFeedback()
-                            onNewUserTrainee()
-                        }, // הטאבים לטיפול במסך הרישום
-                        modifier = Modifier
-                            .fillMaxWidth(buttonsWidth)
-                            .height(56.dp),
-                        shape = MaterialTheme.shapes.medium,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White, contentColor = Color.Black
-                        )
-                    ) { Text("משתמש חדש", style = MaterialTheme.typography.titleMedium) }
-
-                    androidx.compose.foundation.layout.Spacer(Modifier.height(22.dp))
-
-                    Button(
-                        onClick = {
-                            playStrongFeedback()
-                            if (isCoach) onExistingUserCoach() else onExistingUserTrainee()
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth(buttonsWidth)
-                            .height(56.dp),
-                        shape = MaterialTheme.shapes.medium,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White, contentColor = Color.Black
-                        )
-                    ) { Text("משתמש קיים", style = MaterialTheme.typography.titleMedium) }
-                }
-
-                // —— תחתית —— (נשארת בתוך ה־Box/Scaffold)
+                // תחתית
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -244,46 +335,51 @@ fun RegistrationLandingScreen(
                     }.getOrNull()
 
                     if (kamiBitmap != null) {
-                        // מרווח דינמי בין הכפתורים ללוגו
                         val cfg = LocalConfiguration.current
-                        val topGap = when {
-                            cfg.screenHeightDp <= 640 -> 8.dp
-                            cfg.screenHeightDp <= 720 -> 14.dp
-                            cfg.screenHeightDp <= 800 -> 20.dp
-                            else -> 28.dp
-                        }
-                        val logoSize = if (cfg.screenWidthDp <= 360) 108.dp else 124.dp
+                        val logoSize = if (cfg.screenWidthDp <= 360) 88.dp else 100.dp
 
-                        androidx.compose.foundation.layout.Spacer(Modifier.height(topGap))
-
-                        Box(modifier = Modifier.size(logoSize)) {
+                        Box(modifier = Modifier.size(logoSize + 10.dp)) {
                             Surface(
                                 shape = androidx.compose.foundation.shape.CircleShape,
-                                color = Color.White.copy(alpha = 0.96f),
-                                tonalElevation = 2.dp,
-                                shadowElevation = 2.dp,
-                                modifier = Modifier.matchParentSize()
+                                color = Color.White.copy(alpha = 0.12f),
+                                modifier = Modifier
+                                    .size(logoSize + 10.dp)
+                                    .align(Alignment.Center)
                             ) {}
+
+                            Surface(
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                                color = Color.White.copy(alpha = 0.97f),
+                                tonalElevation = 4.dp,
+                                shadowElevation = 8.dp,
+                                modifier = Modifier
+                                    .size(logoSize)
+                                    .align(Alignment.Center)
+                            ) {}
+
                             Image(
                                 bitmap = kamiBitmap.asImageBitmap(),
                                 contentDescription = "KAMI",
                                 modifier = Modifier
-                                    .matchParentSize()
-                                    .padding(12.dp),
+                                    .size(logoSize)
+                                    .align(Alignment.Center)
+                                    .padding(10.dp),
                                 contentScale = ContentScale.Fit
                             )
                         }
 
-                        androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
-                        Divider()
-                        androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(10.dp))
+                        Divider(color = Color.White.copy(alpha = 0.45f))
+                        Spacer(Modifier.height(10.dp))
 
                         val creditSize =
                             if (LocalConfiguration.current.screenWidthDp <= 360) 14.sp else 16.sp
+
                         Text(
                             text = "❤️ פותח באהבה ע\"י יובל פולק ❤️",
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = creditSize),
                             fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0B1020),
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Center
                         )

@@ -319,7 +319,7 @@ fun IntroScreen(onContinue: () -> Unit) {
                     end = Offset(0f, gradientShift)
                 )
             )
-            .padding(32.dp),
+            .padding(horizontal = 24.dp, vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -329,7 +329,7 @@ fun IntroScreen(onContinue: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(8.dp))
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(

@@ -12,6 +12,7 @@ import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.screens.BeltQuestions.BeltQuestionsByBeltScreen
+import il.kmi.app.screens.BeltQuestions.BeltQuestionsByTopicScreen
 import il.kmi.app.screens.PracticeByTopicsSelection
 import il.kmi.shared.domain.Belt
 
@@ -287,6 +288,109 @@ fun NavGraphBuilder.trainingNavGraph(
                     launchSingleTop = true
                 }
             },
+        )
+    }
+
+    composable(Route.Topics.route) {
+
+        BeltQuestionsByTopicScreen(
+
+            onOpenSubject = { belt, subject ->
+                vm.setSelectedBelt(belt)
+                nav.navigate(
+                    il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
+                        belt = belt,
+                        topic = subject.id
+                    )
+                ) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenTopic = { belt, topic ->
+                vm.setSelectedBelt(belt)
+                nav.navigate(Route.Materials.make(belt = belt, topic = topic)) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenTopicWithSub = { belt, topic, sub ->
+                vm.setSelectedBelt(belt)
+                nav.navigate(
+                    Route.MaterialsSub.make(
+                        belt = belt,
+                        topic = topic,
+                        subTopic = sub
+                    )
+                ) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenDefenseList = { belt, kind, pick ->
+                vm.setSelectedBelt(belt)
+                nav.navigate(
+                    Route.MaterialsSub.make(
+                        belt = belt,
+                        topic = kind,
+                        subTopic = pick
+                    )
+                ) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenHardSubjectRoute = { belt, subjectId ->
+                vm.setSelectedBelt(belt)
+                nav.navigate(
+                    il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
+                        belt = belt,
+                        topic = subjectId
+                    )
+                ) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenWeakPoints = { belt ->
+                nav.navigate(Route.WeakPoints.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenAllLists = { belt ->
+                nav.navigate("ex_tabs_all/${belt.id}") {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenSummaryScreen = { belt ->
+                nav.navigate(Route.Summary.make(belt)) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenVoiceAssistant = { belt ->
+                nav.navigate(Route.VoiceAssistant.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenPdfMaterials = { belt ->
+                nav.navigate(Route.Materials.make(belt = belt, topic = "")) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
     }
 

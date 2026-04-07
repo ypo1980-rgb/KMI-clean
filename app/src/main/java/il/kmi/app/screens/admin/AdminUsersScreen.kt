@@ -39,6 +39,12 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.ext.color
 import kotlinx.coroutines.tasks.await
 import java.util.Calendar
+import il.kmi.app.privacy.DemoPrivacy
+import il.kmi.app.privacy.DemoTrainees
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
 // ======================================================
 //  מודל נתוני משתמש למנהל – ממולא מ-Firestore
@@ -392,7 +398,49 @@ fun AdminUsersScreen(
     val coachUsers = remember(filteredUsers) { filteredUsers.filter { it.isCoach } }
     val traineeUsers = remember(filteredUsers) { filteredUsers.filter { !it.isCoach } }
 
-      // -------- סטטיסטיקות כלליות --------
+    val traineeUiUsers = remember(traineeUsers) {
+        if (!DemoPrivacy.ENABLED) {
+            traineeUsers
+        } else {
+            traineeUsers.mapIndexed { index, user ->
+                val demo = DemoTrainees.trainees.getOrNull(index)
+
+                user.copy(
+                    fullName = demo?.name ?: "מתאמן ${index + 1}",
+                    birthYear = demo?.age?.let {
+                        Calendar.getInstance().get(Calendar.YEAR) - it
+                    } ?: user.birthYear,
+                    currentBeltId = demo?.belt?.id ?: user.currentBeltId,
+                    branch = demo?.branch ?: user.branch,
+                    groups = listOf(
+                        "וותק: ${demo?.yearsTraining ?: ((index % 6) + 1)} שנים"
+                    ),
+                    phone = null,
+                    email = null
+                )
+            }
+        }
+    }
+
+    val coachUiUsers = remember(coachUsers) {
+        if (!DemoPrivacy.ENABLED) {
+            coachUsers
+        } else {
+            coachUsers.mapIndexed { index, user ->
+                user.copy(
+                    fullName = "מאמן ${index + 1}",
+                    birthYear = user.birthYear ?: (Calendar.getInstance().get(Calendar.YEAR) - (32 + index)),
+                    currentBeltId = user.currentBeltId ?: Belt.BLACK.id,
+                    branch = user.branch ?: listOf("אופק", "סוקולוב", "נתניה").getOrElse(index % 3) { "אופק" },
+                    groups = listOf("קבוצת בוגרים"),
+                    phone = null,
+                    email = null
+                )
+            }
+        }
+    }
+
+    // -------- סטטיסטיקות כלליות --------
     val totalUsers = users.size
     val genderCounts = users.groupBy { (it.gender ?: "unknown").lowercase() }
         .mapValues { it.value.size }
@@ -417,12 +465,28 @@ fun AdminUsersScreen(
 
     Scaffold(
         topBar = {
+            val contextLang = LocalContext.current
+            val langManager = remember { AppLanguageManager(contextLang) }
+
             KmiTopBar(
                 title = "ניהול משתמשים",
-                onHome = onBack,       // ⬅️ כפתור הבית יחזיר לפי ה־callback שמגיע מה־NavGraph
-                showTopHome = false,    // ⬅️ להציג אייקון בית
-                lockSearch = true
-                // לא מעבירים onBack → בלי חץ חזור נוסף
+                onHome = onBack,        // NavGraph מההורה callback לפי הביתה
+                showTopHome = false,    // למנוע אייקון בית
+                lockSearch = true,
+                showBottomActions = true,
+                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                            AppLanguage.ENGLISH
+                        } else {
+                            AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLang)
+                    (contextLang as? Activity)?.recreate()
+                }
+                // אין צורך ב-onBack כי זה לא דיאלוג נוסף
             )
         }
     ) { padding ->
@@ -574,7 +638,7 @@ fun AdminUsersScreen(
                             .padding(12.dp)
                     ) {
                         Text(
-                            text = "משתמשים – מתאמנים (${traineeUsers.size})",
+                            text = "משתמשים – מתאמנים (${traineeUiUsers.size})",
                             style = MaterialTheme.typography.titleMedium,
                             color = Color(0xFFE2E8F0),
                             fontWeight = FontWeight.Bold
@@ -587,7 +651,7 @@ fun AdminUsersScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF9CA3AF)
                             )
-                        } else if (traineeUsers.isEmpty()) {
+                        } else if (traineeUiUsers.isEmpty()) {
                             Text(
                                 text = "אין מתאמנים מתאימים לפילטרים.",
                                 style = MaterialTheme.typography.bodySmall,
@@ -598,7 +662,7 @@ fun AdminUsersScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                traineeUsers.forEach { user ->
+                                traineeUiUsers.forEach { user ->
                                     UserRowCard(user = user)
                                 }
                             }
@@ -622,7 +686,7 @@ fun AdminUsersScreen(
                             .padding(12.dp)
                     ) {
                         Text(
-                            text = "משתמשים – מאמנים (${coachUsers.size})",
+                            text = "משתמשים – מאמנים (${coachUiUsers.size})",
                             style = MaterialTheme.typography.titleMedium,
                             color = Color(0xFFE2E8F0),
                             fontWeight = FontWeight.Bold
@@ -635,7 +699,7 @@ fun AdminUsersScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF9CA3AF)
                             )
-                        } else if (coachUsers.isEmpty()) {
+                        } else if (coachUiUsers.isEmpty()) {
                             Text(
                                 text = "אין מאמנים מתאימים לפילטרים.",
                                 style = MaterialTheme.typography.bodySmall,
@@ -646,7 +710,7 @@ fun AdminUsersScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                coachUsers.forEach { user ->
+                                coachUiUsers.forEach { user ->
                                     UserRowCard(user = user)
                                 }
                             }
@@ -738,7 +802,7 @@ private fun StatCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.height(80.dp),   // גובה אחיד לכל שלושת הכרטיסים
+        modifier = modifier.height(82.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF020617).copy(alpha = 0.9f)
@@ -749,18 +813,25 @@ private fun StatCard(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
+
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF9CA3AF)
+                color = Color(0xFF9CA3AF),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
+
             Text(
                 text = value,
                 style = MaterialTheme.typography.titleLarge,
                 color = Color(0xFFE5E7EB),
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -1005,13 +1076,16 @@ private fun FilterRow(
 private fun UserRowCard(
     user: AdminUserRecord
 ) {
+    val beltColor = user.belt?.color ?: Color(0xFF6B7280)
+    val roleLabel = if (user.isCoach) "מאמן" else "מתאמן"
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF020617)
         ),
-        border = BorderStroke(1.dp, Color(0xFF1E293B))
+        border = BorderStroke(1.dp, beltColor.copy(alpha = 0.35f))
     ) {
         Row(
             modifier = Modifier
@@ -1019,17 +1093,26 @@ private fun UserRowCard(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // "אבאטאר" עגול קטן עם שתי אותיות ראשונות
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .width(4.dp)
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(beltColor)
+            )
+
+            Spacer(Modifier.width(10.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
                             listOf(
-                                Color(0xFF38BDF8),
-                                Color(0xFF0EA5E9),
-                                Color(0xFF0369A1)
+                                beltColor.copy(alpha = 0.95f),
+                                beltColor.copy(alpha = 0.75f),
+                                Color(0xFF0F172A)
                             )
                         )
                     ),
@@ -1050,14 +1133,37 @@ private fun UserRowCard(
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                Text(
-                    text = user.fullName,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFFE5E7EB),
-                    fontWeight = FontWeight.SemiBold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = user.fullName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color(0xFFE5E7EB),
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(
+                                if (user.isCoach) Color(0xFF7C3AED).copy(alpha = 0.18f)
+                                else Color(0xFF0EA5E9).copy(alpha = 0.18f)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = roleLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (user.isCoach) Color(0xFFC4B5FD) else Color(0xFFBAE6FD),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
 
                 val beltText = user.belt?.heb ?: "ללא חגורה"
                 val ageText = user.age?.toString() ?: "לא ידוע"

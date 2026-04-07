@@ -121,7 +121,7 @@ object HardSectionsCatalog {
             t == "בלימות וגלגולים" -> "topic_breakfalls_rolls"
             t == "עמידת מוצא" -> "topic_ready_stance"
             t == "הכנה לעבודת קרקע" -> "topic_ground_prep"
-            t == "קאוולר" -> "topic_kawalr"
+            t == "קוואלר" -> "topic_Kavaler"
 
             else -> t
         }
@@ -147,7 +147,7 @@ object HardSectionsCatalog {
         "topic_breakfalls_rolls",
         "topic_ready_stance",
         "topic_ground_prep",
-        "topic_kawalr",
+        "topic_kavaler",
     )
 
     fun supportsSubject(subjectId: String): Boolean {
@@ -194,7 +194,7 @@ object HardSectionsCatalog {
             id == "topic_breakfalls_rolls" -> topicBreakfallsRolls
             id == "topic_ready_stance" -> topicReadyStance
             id == "topic_ground_prep" -> topicGroundPrep
-            id == "topic_kawalr" -> topicKawalr
+            id == "topic_kavaler" -> topicKavaler
 
             else -> null
         }
@@ -221,7 +221,7 @@ object HardSectionsCatalog {
             "topic_breakfalls_rolls" -> "בלימות וגלגולים"
             "topic_ready_stance" -> "עמידת מוצא"
             "topic_ground_prep" -> "הכנה לעבודת קרקע"
-            "topic_kawalr" -> "קאוולר"
+            "topic_kavaler" -> "קוואלר"
             else -> null
         }
     }
@@ -512,20 +512,20 @@ object HardSectionsCatalog {
         )
     )
 
-    val topicKawalr: List<Section> = listOf(
+    val topicKavaler: List<Section> = listOf(
         Section(
-            id = "topic_kawalr_main",
-            title = "קאוולר",
+            id = "topic_Kavaler_main",
+            title = "קוואלר",
             beltGroups = listOf(
                 BeltGroup(belt = Belt.YELLOW, items = emptyList()),
                 BeltGroup(belt = Belt.ORANGE, items = emptyList()),
                 BeltGroup(
                     belt = Belt.GREEN,
                     items = listOf(
-                        "קאוולר - הליכה לאחור",
-                        "קאוולר נגד התנגדות - הליכה לפנים",
-                        "קאוולר - אגודלים",
-                        "קאוולר – מרפק"
+                        "קוואלר - הליכה לאחור",
+                        "קוואלר נגד התנגדות - הליכה לפנים",
+                        "קוואלר - אגודלים",
+                        "קוואלר – מרפק"
                     )
                 ),
                 BeltGroup(belt = Belt.BLUE, items = emptyList()),

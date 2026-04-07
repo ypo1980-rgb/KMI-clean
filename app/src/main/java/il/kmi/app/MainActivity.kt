@@ -7,7 +7,6 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
@@ -16,7 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.*
-import il.kmi.app.data.training.TrainingSummaryLocalRepo
+import il.kmi.shared.localization.AppLanguageManager
 
 // Firebase
 import com.google.firebase.auth.FirebaseAuth
@@ -46,6 +45,10 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+// 🌍 Language Manager
+        val languageManager = AppLanguageManager(this)
+        val localizedContext = languageManager.applySavedLanguage(this)
 
         ensureNotificationPermission()
 

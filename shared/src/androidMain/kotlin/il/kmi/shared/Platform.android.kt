@@ -25,19 +25,19 @@ actual object Platform {
         get() = appCtx
 
     actual fun setClickSoundsEnabled(enabled: Boolean) {
-        // no-op / hook ל-Android (אם תרצה בעתיד)
+        // Android hook (currently no implementation required)
     }
 
     actual fun setHapticsEnabled(enabled: Boolean) {
-        // no-op / hook ל-Android (אם תרצה בעתיד)
+        // Android hook (currently no implementation required)
     }
 
     actual fun scheduleWeeklyTrainingAlarms(leadMinutes: Int) {
-        // TODO: חיבור עתידי ל-AlarmManager / WorkManager
+        // Placeholder for future AlarmManager / WorkManager integration
     }
 
     actual fun cancelWeeklyTrainingAlarms() {
-        // TODO
+        // Placeholder for future alarm cancellation logic
     }
 
     actual fun saveTextAsFile(
