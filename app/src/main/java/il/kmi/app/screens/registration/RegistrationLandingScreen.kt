@@ -9,6 +9,14 @@ import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -57,7 +66,6 @@ import androidx.compose.ui.unit.sp
 import il.kmi.app.R
 import il.kmi.app.ui.KmiTopBar
 import android.app.Activity
-import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -81,6 +89,78 @@ private fun whiteToTransparent(src: Bitmap, tolerance: Int = 245): Bitmap {
 }
 
 @Composable
+private fun PremiumShineButton(
+    text: String,
+    isPrimaryLight: Boolean,
+    onClick: () -> Unit
+) {
+    val shine = rememberInfiniteTransition(label = "shine")
+    val shineOffset by shine.animateFloat(
+        initialValue = -220f,
+        targetValue = 420f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shineOffset"
+    )
+
+    Button(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(60.dp)
+            .shadow(
+                elevation = 14.dp,
+                shape = RoundedCornerShape(20.dp),
+                clip = false
+            ),
+        shape = RoundedCornerShape(20.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isPrimaryLight) Color.White else Color(0xFF4F56A8).copy(alpha = 0.92f),
+            contentColor = if (isPrimaryLight) Color(0xFF171717) else Color.White
+        ),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(20.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.White.copy(alpha = 0.00f),
+                                Color.White.copy(alpha = 0.32f),
+                                Color.White.copy(alpha = 0.00f),
+                                Color.Transparent
+                            ),
+                            start = Offset(shineOffset, 0f),
+                            end = Offset(shineOffset + 160f, 220f)
+                        )
+                    )
+            )
+
+            Text(
+                text = text,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.2.sp,
+                color = if (isPrimaryLight) Color(0xFF171717) else Color.White
+            )
+        }
+    }
+}
+
+@Composable
 fun RegistrationLandingScreen(
     onNewUserTrainee: () -> Unit,
     onExistingUserTrainee: () -> Unit,
@@ -96,6 +176,10 @@ fun RegistrationLandingScreen(
 ) {
     val ctx = LocalContext.current
     val view = LocalView.current
+
+    val contextLang = LocalContext.current
+    val langManager = remember { AppLanguageManager(contextLang) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
     // 🔊+📳 קריאת ההעדפות מההגדרות (kmi_settings)
     val settingsSp = remember {
@@ -156,7 +240,7 @@ fun RegistrationLandingScreen(
                 val langManager = remember { AppLanguageManager(contextLang) }
 
                 KmiTopBar(
-                    title = "סיום ההרשמה",
+                    title = if (isEnglish) "Registration" else "סיום ההרשמה",
                     showRoleStatus = false,
                     showBottomActions = true,
                     onOpenDrawer = { onOpenDrawer.invoke() },
@@ -225,97 +309,98 @@ fun RegistrationLandingScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Spacer(Modifier.height(40.dp))
+                Spacer(Modifier.height(56.dp))
 
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .shadow(
-                                elevation = 18.dp,
-                                shape = RoundedCornerShape(30.dp),
-                                clip = false
-                            ),
-                        shape = RoundedCornerShape(30.dp),
-                        color = Color(0xFF1A1440).copy(alpha = 0.42f),
-                        tonalElevation = 0.dp
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(animationSpec = tween(450)) +
+                                scaleIn(
+                                    initialScale = 0.92f,
+                                    animationSpec = tween(450)
+                                )
                     ) {
-                        Column(
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 18.dp, vertical = 22.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                                .shadow(
+                                    elevation = 18.dp,
+                                    shape = RoundedCornerShape(30.dp),
+                                    clip = false
+                                ),
+                            shape = RoundedCornerShape(30.dp),
+                            color = Color(0xFF1A1440).copy(alpha = 0.42f),
+                            tonalElevation = 0.dp
                         ) {
-                            Text(
-                                text = "ברוכים הבאים ל־KMI",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
-                            )
-
-                            Spacer(Modifier.height(6.dp))
-
-                            Text(
-                                text = "בחרו איך תרצו להמשיך",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.78f)
-                            )
-
-                            Spacer(Modifier.height(24.dp))
-
-                            Button(
-                                onClick = {
-                                    playStrongFeedback()
-                                    onNewUserTrainee()
-                                },
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(60.dp),
-                                shape = RoundedCornerShape(20.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color.White,
-                                    contentColor = Color(0xFF171717)
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(
-                                    defaultElevation = 8.dp,
-                                    pressedElevation = 3.dp
-                                )
+                                    .padding(horizontal = 18.dp, vertical = 22.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    "משתמש חדש",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold
+                                    text = if (isEnglish) "Welcome to KMI" else "ברוכים הבאים ל־KMI",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center
                                 )
-                            }
 
-                            Spacer(Modifier.height(14.dp))
+                                Spacer(Modifier.height(6.dp))
 
-                            Button(
-                                onClick = {
-                                    playStrongFeedback()
-                                    if (isCoach) onExistingUserCoach() else onExistingUserTrainee()
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(60.dp),
-                                shape = RoundedCornerShape(20.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF4F56A8).copy(alpha = 0.92f),
-                                    contentColor = Color.White
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(
-                                    defaultElevation = 6.dp,
-                                    pressedElevation = 2.dp
-                                )
-                            ) {
                                 Text(
-                                    "משתמש קיים",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold
+                                    text = if (isEnglish) "Choose how you want to continue" else "בחרו איך תרצו להמשיך",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.78f),
+                                    textAlign = TextAlign.Center
                                 )
+
+                                Spacer(Modifier.height(24.dp))
+
+                                PremiumShineButton(
+                                    text = if (isEnglish) "New User" else "משתמש חדש",
+                                    isPrimaryLight = true,
+                                    onClick = {
+                                        playStrongFeedback()
+                                        onNewUserTrainee()
+                                    }
+                                )
+
+                                Spacer(Modifier.height(14.dp))
+
+                                Button(
+                                    onClick = {
+                                        playStrongFeedback()
+                                        if (isCoach) onExistingUserCoach() else onExistingUserTrainee()
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(60.dp)
+                                        .shadow(
+                                            elevation = 12.dp,
+                                            shape = RoundedCornerShape(20.dp),
+                                            clip = false
+                                        ),
+                                    shape = RoundedCornerShape(20.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF4F56A8).copy(alpha = 0.92f),
+                                        contentColor = Color.White
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(
+                                        defaultElevation = 0.dp,
+                                        pressedElevation = 0.dp
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (isEnglish) "Existing User" else "משתמש קיים",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 0.2.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -376,7 +461,10 @@ fun RegistrationLandingScreen(
                             if (LocalConfiguration.current.screenWidthDp <= 360) 14.sp else 16.sp
 
                         Text(
-                            text = "❤️ פותח באהבה ע\"י יובל פולק ❤️",
+                            text = if (isEnglish)
+                                "❤️ Developed with love by Yuval Polak ❤️"
+                            else
+                                "❤️ פותח באהבה ע\"י יובל פולק ❤️",
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = creditSize),
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF0B1020),

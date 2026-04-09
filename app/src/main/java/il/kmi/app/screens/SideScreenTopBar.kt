@@ -49,6 +49,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.input.ImeAction
 import shareCurrentScreen
 import il.kmi.shared.localization.AppLanguage
@@ -101,7 +102,6 @@ fun SideScreenTopBar(
 fun BottomActionsBarEdgeToEdge(
     onHome: (() -> Unit)?,
     onSearch: (() -> Unit)?,
-    onToggleLanguage: (() -> Unit)? = null,      // שמור לעתיד אם צריך
     onSettings: (() -> Unit)?,
     currentLang: String = "he",
     onShare: (() -> Unit)?,
@@ -214,193 +214,148 @@ fun BottomActionsBarEdgeToEdge(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 64.dp),
+            .heightIn(min = 72.dp),
         shape = RectangleShape,
-        color = barColor,
+        color = Color.Transparent,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
-        val iconSize = 24.dp
+        val canSearch = isRegistered
 
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp)
-                .height(64.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly
+                .padding(horizontal = 10.dp, vertical = 2.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.White.copy(alpha = 0.96f))
         ) {
-            // 1) חיפוש (נעול עד רישום)
-            val canSearch = isRegistered
-            BarAction(
-                label = tSearch,
-                onClick = {
-                    if (!canSearch) {
-                        android.widget.Toast
-                            .makeText(ctx, tSearchLocked, android.widget.Toast.LENGTH_SHORT)
-                            .show()
-                        return@BarAction
-                    }
-                    showSearch = true
-                    onSearch?.invoke()
-                },
-                enabled = true // משאיר פעיל כדי שיופיע טוסט גם כשהוא "נעול"
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                    .height(58.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = tSearch,
-                    tint = if (canSearch) contentColor else disabledContentColor,
-                    modifier = Modifier.size(iconSize)
-                )
-            }
 
-            // 2) בית
-            BarAction(
-                label = tHome,
-                onClick = {
-                    if (!homeEnabled) {
-                        val msg = tHomeLocked
-                        android.widget.Toast
-                            .makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT)
-                            .show()
-                        return@BarAction
-                    }
-                    onHome?.invoke()
-                },
-                enabled = true // טוסט גם כשהוא נעול
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Home,
-                    contentDescription = tHome,
-                    tint = if (homeEnabled) contentColor else disabledContentColor,
-                    modifier = Modifier.size(iconSize)
-                )
-            }
-
-            // 3) הגדרות
-            BarAction(
-                label = tSettings,
-                onClick = {
-                    if (onSettings != null) {
-                        onSettings()
-                    } else {
-                        android.widget.Toast
-                            .makeText(
-                                ctx,
-                                if (isEnglish) "Settings is not connected yet" else "מסך ההגדרות עדיין לא מחובר",
-                                android.widget.Toast.LENGTH_SHORT
-                            )
-                            .show()
-                    }
-                }
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = tSettings,
-                    tint = contentColor,
-                    modifier = Modifier.size(iconSize)
-                )
-            }
-
-            // 4) עוזר חכם (AI) ✅ חדש
-            if (onOpenAi != null) {
+                // 1) חיפוש
                 BarAction(
-                    label = tAssistant,
-                    onClick = { onOpenAi() }
+                    label = tSearch,
+                    enabled = true,
+                    onClick = {}
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Lightbulb,
-                        contentDescription = tAssistant,
-                        tint = contentColor,
-                        modifier = Modifier.size(iconSize)
+                    PremiumBarIcon(
+                        icon = Icons.Filled.Search,
+                        tint = if (canSearch) Color(0xFF10B981) else disabledContentColor,
+                        background = if (canSearch) Color(0x1A10B981) else Color(0x14000000),
+                        onClick = {
+                            if (!canSearch) {
+                                android.widget.Toast
+                                    .makeText(ctx, tSearchLocked, android.widget.Toast.LENGTH_SHORT)
+                                    .show()
+                            } else {
+                                showSearch = true
+                                onSearch?.invoke()
+                            }
+                        }
                     )
                 }
-            }
 
-            // 5) שתף (שיתוף צילום מסך או fallback לטקסט)
-            BarAction(tShare, {
-                if (onShare != null) {
-                    onShare()
-                } else {
-                    val activity = (ctx as? Activity)
-                    val root = activity?.window?.decorView?.rootView
-                    if (root != null) {
-                        runCatching {
-                            shareCurrentScreen(
-                                context = ctx,
-                                rootView = root,
-                                targetPackage = null,
-                                subject = "ק.מ.י – קרב מגן ישראלי"
-                            )
-                        }.onFailure { shareAppDefault(ctx) }
-                    } else {
-                        shareAppDefault(ctx)
-                    }
-                }
-            }) {
-                Icon(
-                    imageVector = Icons.Filled.Share,
-                    contentDescription = tShare,
-                    tint = contentColor,
-                    modifier = Modifier.size(iconSize)
-                )
-            }
-
-            // 6) שידור (מאמן בלבד)
-            if (showCoachBroadcastAction) {
-                val canBroadcast = isRegistered
+                // 2) בית
                 BarAction(
-                    label = tBroadcast,
-                    onClick = {
-                        if (!canBroadcast) {
-                            android.widget.Toast
-                                .makeText(ctx, "שידור יהיה זמין לאחר כניסה/רישום", android.widget.Toast.LENGTH_SHORT)
-                                .show()
-                            return@BarAction
+                    label = tHome,
+                    enabled = true,
+                    onClick = {}
+                ) {
+                    PremiumBarIcon(
+                        icon = Icons.Filled.Home,
+                        tint = if (homeEnabled) Color(0xFF2563EB) else disabledContentColor,
+                        background = if (homeEnabled) Color(0x1A2563EB) else Color(0x14000000),
+                        onClick = {
+                            if (!homeEnabled) {
+                                android.widget.Toast
+                                    .makeText(ctx, tHomeLocked, android.widget.Toast.LENGTH_SHORT)
+                                    .show()
+                            } else {
+                                onHome?.invoke()
+                            }
                         }
-                        onCoachBroadcastClick?.invoke()
-                    },
+                    )
+                }
+
+                // 3) הגדרות
+                BarAction(
+                    label = tSettings,
+                    onClick = {},
                     enabled = true
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Chat,
-                        contentDescription = tBroadcast,
-                        tint = if (canBroadcast) contentColor else disabledContentColor,
-                        modifier = Modifier.size(iconSize)
+                    PremiumBarIcon(
+                        icon = Icons.Filled.Settings,
+                        tint = Color(0xFFF59E0B),
+                        background = Color(0x1AF59E0B),
+                        onClick = {
+                            if (onSettings != null) {
+                                onSettings()
+                            } else {
+                                android.widget.Toast
+                                    .makeText(
+                                        ctx,
+                                        if (isEnglish) "Settings is not connected yet" else "מסך ההגדרות עדיין לא מחובר",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    )
+                                    .show()
+                            }
+                        }
                     )
                 }
-            }
 
-            // 7) החלפת שפה
-            if (onToggleLanguage != null) {
-
-                val nextLang = if (currentLang == "he") "EN" else "עב"
-
-                BarAction(
-                    label = "",
-                    onClick = { onToggleLanguage() }
-                ) {
-
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                        modifier = Modifier.size(32.dp)
+                // 4) עוזר חכם
+                if (onOpenAi != null) {
+                    BarAction(
+                        label = tAssistant,
+                        onClick = {},
+                        enabled = true
                     ) {
-
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-
-                            Text(
-                                text = nextLang,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-
-                        }
+                        PremiumBarIcon(
+                            icon = Icons.Filled.Lightbulb,
+                            tint = Color(0xFF8B5CF6),
+                            background = Color(0x1A8B5CF6),
+                            onClick = { onOpenAi() }
+                        )
                     }
+                }
+
+                // 5) שתף
+                BarAction(
+                    label = tShare,
+                    onClick = {},
+                    enabled = true
+                ) {
+                    PremiumBarIcon(
+                        icon = Icons.Filled.Share,
+                        tint = Color(0xFFEC4899),
+                        background = Color(0x1AEC4899),
+                        onClick = {
+                            if (onShare != null) {
+                                onShare()
+                            } else {
+                                val activity = (ctx as? Activity)
+                                val root = activity?.window?.decorView?.rootView
+                                if (root != null) {
+                                    runCatching {
+                                        shareCurrentScreen(
+                                            context = ctx,
+                                            rootView = root,
+                                            targetPackage = null,
+                                            subject = tShareSubject
+                                        )
+                                    }.onFailure { shareAppDefault(ctx) }
+                                } else {
+                                    shareAppDefault(ctx)
+                                }
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -598,6 +553,65 @@ fun BottomActionsBarEdgeToEdge(
 /* ----------------- Helpers ----------------- */
 
 @Composable
+fun PremiumBarIcon(
+    icon: ImageVector,
+    tint: Color,
+    background: Color,
+    onClick: () -> Unit
+) {
+    var pressed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(120)
+            pressed = false
+        }
+    }
+
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) 0.84f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = 0.42f,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMedium
+        ),
+        label = "barIconBounce"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .background(background)
+            .clickable {
+                pressed = true
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier.size(48.dp),
+            shape = CircleShape,
+            color = background,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun BarAction(
     label: String,
     onClick: () -> Unit,
@@ -605,19 +619,30 @@ fun BarAction(
     content: @Composable () -> Unit
 ) {
     Column(
-        modifier = Modifier.padding(horizontal = 0.dp),
+        modifier = Modifier
+            .widthIn(min = 60.dp)
+            .padding(horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(36.dp)) { content() }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 9.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.8f else 0.4f)
-        )
+        Box(
+            modifier = Modifier.height(46.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            content()
+        }
+
+        if (label.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.76f else 0.40f)
+            )
+        }
     }
 }
 

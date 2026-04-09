@@ -33,7 +33,13 @@ import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
 import il.kmi.shared.domain.content.HardSectionsCatalog.totalItemsCount
+import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.shared.localization.AppLanguage
+import androidx.compose.ui.platform.LocalContext
+import il.kmi.shared.domain.content.ExerciseExplanationsEn
 
+//===========================================================================
 
 private fun topicLookupAliases(topicTitle: String): List<String> {
     val raw = topicTitle.trim()
@@ -244,6 +250,12 @@ fun SubTopicsScreen(
     onOpenSubTopic: (String) -> Unit,
     onOpenExercise: (String) -> Unit
 ) {
+
+    val context = LocalContext.current
+    val langManager = remember(context) { AppLanguageManager(context) }
+    val currentLang = langManager.getCurrentLanguage()
+    val isEnglish = currentLang == AppLanguage.ENGLISH
+
     // ✅ מפענחים את שם הנושא (למקרה שעבר דרך ה-URL Encoded)
     val topicDecoded = remember(topic) { Uri.decode(topic).trim() }
 
@@ -311,12 +323,15 @@ fun SubTopicsScreen(
         }
     }
 
-    val hardItems: List<String> = remember(hardLeafSection, belt) {
+    val hardItems: List<String> = remember(hardLeafSection, belt, isEnglish) {
         hardLeafSection
             ?.itemsFor(belt)
             .orEmpty()
             .asSequence()
-            .map { ExerciseTitleFormatter.displayName(it).ifBlank { it }.trim() }
+            .map {
+                val display = ExerciseTitleFormatter.displayName(it).ifBlank { it }.trim()
+                if (isEnglish) ExerciseTitlesEn.getOrSame(display) else display
+            }
             .filter { it.isNotBlank() }
             .distinct()
             .toList()
@@ -402,7 +417,7 @@ fun SubTopicsScreen(
     Scaffold(
         topBar = {
             il.kmi.app.ui.KmiTopBar(
-                title = hardTitle,
+                title = if (isEnglish) ExerciseTitlesEn.getOrSame(hardTitle) else hardTitle,
                 onHome = onHome,
                 showTopHome = false,
                 showTopSearch = false,
@@ -443,7 +458,7 @@ fun SubTopicsScreen(
 
                         HardSubTopicCategoryCard(
                             belt = belt,
-                            title = section.title,
+                            title = if (isEnglish) ExerciseTitlesEn.getOrSame(section.title) else section.title,
                             count = totalCount,
                             onClick = { onOpenSubTopic(section.id) }
                         )
@@ -489,7 +504,8 @@ fun SubTopicsScreen(
                             findExplanationForHitLocal(
                                 belt = belt,
                                 rawItem = item,
-                                topic = hardTitle
+                                topic = hardTitle,
+                                isEnglish = isEnglish
                             )
                         }
 
@@ -551,7 +567,8 @@ fun SubTopicsScreen(
                             findExplanationForHitLocal(
                                 belt = belt,
                                 rawItem = item,
-                                topic = topicDecoded
+                                topic = topicDecoded,
+                                isEnglish = isEnglish
                             )
                         }
 
@@ -584,7 +601,7 @@ fun SubTopicsScreen(
 
                         HardSubTopicCategoryCard(
                             belt = belt,
-                            title = subTitle,
+                            title = if (isEnglish) ExerciseTitlesEn.getOrSame(subTitle) else subTitle,
                             count = itemCount,
                             onClick = { onOpenSubTopic(subTitle) }
                         )
@@ -600,7 +617,8 @@ fun SubTopicsScreen(
             findExplanationForHitLocal(
                 belt = req.belt,
                 rawItem = req.item,
-                topic = hardTitle.ifBlank { topicDecoded }
+                topic = hardTitle.ifBlank { topicDecoded },
+                isEnglish = isEnglish
             )
         }
 
@@ -620,7 +638,8 @@ fun SubTopicsScreen(
             findExplanationForHitLocal(
                 belt = beltHit,
                 rawItem = itemHit,
-                topic = topicHit
+                topic = topicHit,
+                isEnglish = isEnglish
             )
         }
 
@@ -657,13 +676,17 @@ private fun parseSearchKeyLocal(key: String): Triple<il.kmi.shared.domain.Belt, 
 private fun findExplanationForHitLocal(
     belt: il.kmi.shared.domain.Belt,
     rawItem: String,
-    topic: String
+    topic: String,
+    isEnglish: Boolean
 ): String {
     val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
-    fun String.clean() = replace('–', '-').replace('־', '-').replace("  ", " ").trim()
 
-    // ✅ Explanations עובדים מול ה-Belt של shared (אחרי האיחוד), אין יותר app.domain.Belt
-    val appBelt = belt
+    fun String.clean() = this
+        .replace('–', '-')
+        .replace('—', '-')
+        .replace('־', '-')
+        .replace("  ", " ")
+        .trim()
 
     val candidates = buildList {
         add(rawItem)
@@ -673,18 +696,31 @@ private fun findExplanationForHitLocal(
     }.distinct()
 
     for (c in candidates) {
-        val got = il.kmi.app.domain.Explanations.get(appBelt, c).trim()
-        if (got.isNotBlank()
-            && !got.startsWith("הסבר מפורט על")
-            && !got.startsWith("אין כרגע")
-        ) {
+        val got = if (isEnglish) {
+            ExerciseExplanationsEn.get(belt, c).trim()
+        } else {
+            il.kmi.app.domain.Explanations.get(belt, c).trim()
+        }
+
+        val isFallback = if (isEnglish) {
+            got.startsWith("Detailed explanation for:")
+        } else {
+            got.startsWith("הסבר מפורט על") || got.startsWith("אין כרגע")
+        }
+
+        if (got.isNotBlank() && !isFallback) {
             return got.split("::")
                 .map { it.trim() }
                 .lastOrNull { it.isNotBlank() }
                 ?: got.trim()
         }
     }
-    return "אין כרגע הסבר לתרגיל הזה."
+
+    return if (isEnglish) {
+        "There is currently no explanation for this exercise."
+    } else {
+        "אין כרגע הסבר לתרגיל הזה."
+    }
 }
 
 @Composable
@@ -873,8 +909,16 @@ private fun HardSubTopicCategoryCard(
 
                         Spacer(Modifier.height(4.dp))
 
+                        val context = LocalContext.current
+                        val langManager = remember(context) { AppLanguageManager(context) }
+                        val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
                         Text(
-                            text = "$count תרגילים",
+                            text = if (isEnglish) {
+                                if (count == 1) "1 exercise" else "$count exercises"
+                            } else {
+                                "$count תרגילים"
+                            },
                             style = MaterialTheme.typography.labelLarge,
                             color = subtitleColor,
                             fontWeight = FontWeight.Bold,
@@ -903,19 +947,36 @@ private fun HardBeltGroupCard(
     items: List<String>,
     onOpenExercise: (String) -> Unit
 ) {
-    val title = when (belt) {
-        Belt.YELLOW -> "חגורה צהובה"
-        Belt.ORANGE -> "חגורה כתומה"
-        Belt.GREEN -> "חגורה ירוקה"
-        Belt.BLUE -> "חגורה כחולה"
-        Belt.BROWN -> "חגורה חומה"
-        Belt.BLACK -> "חגורה שחורה"
-        else -> belt.heb
+    val context = LocalContext.current
+    val langManager = remember(context) { AppLanguageManager(context) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
+    val title = if (isEnglish) {
+        when (belt) {
+            Belt.YELLOW -> "Yellow Belt"
+            Belt.ORANGE -> "Orange Belt"
+            Belt.GREEN -> "Green Belt"
+            Belt.BLUE -> "Blue Belt"
+            Belt.BROWN -> "Brown Belt"
+            Belt.BLACK -> "Black Belt"
+            else -> belt.en
+        }
+    } else {
+        when (belt) {
+            Belt.YELLOW -> "חגורה צהובה"
+            Belt.ORANGE -> "חגורה כתומה"
+            Belt.GREEN -> "חגורה ירוקה"
+            Belt.BLUE -> "חגורה כחולה"
+            Belt.BROWN -> "חגורה חומה"
+            Belt.BLACK -> "חגורה שחורה"
+            else -> belt.heb
+        }
     }
 
-    val displayItems = remember(items) {
+    val displayItems = remember(items, isEnglish) {
         items.map { raw ->
-            ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim()
+            val display = ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim()
+            if (isEnglish) ExerciseTitlesEn.getOrSame(display) else display
         }.filter { it.isNotBlank() }
     }
 
@@ -937,7 +998,11 @@ private fun HardBeltGroupCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${displayItems.size} תרגילים",
+                    text = if (isEnglish) {
+                        if (displayItems.size == 1) "1 exercise" else "${displayItems.size} exercises"
+                    } else {
+                        "${displayItems.size} תרגילים"
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     color = belt.color,
                     fontWeight = FontWeight.Bold
@@ -978,6 +1043,10 @@ private fun HardExerciseLegacyRow(
     itemName: String,
     onOpenExercise: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val langManager = remember(context) { AppLanguageManager(context) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1011,7 +1080,7 @@ private fun HardExerciseLegacyRow(
                             androidx.compose.ui.unit.LayoutDirection.Rtl
                 ) {
                     Text(
-                        text = itemName,
+                        text = if (isEnglish) ExerciseTitlesEn.getOrSame(itemName) else itemName,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Right,
@@ -1042,6 +1111,10 @@ private fun ExerciseRowWithInfo(
     onExplain: (Belt, String) -> Unit,
     onOpenExercise: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val langManager = remember(context) { AppLanguageManager(context) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1077,7 +1150,7 @@ private fun ExerciseRowWithInfo(
                             androidx.compose.ui.unit.LayoutDirection.Rtl
                 ) {
                     Text(
-                        text = itemName,
+                        text = if (isEnglish) ExerciseTitlesEn.getOrSame(itemName) else itemName,
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Right,
                         modifier = Modifier

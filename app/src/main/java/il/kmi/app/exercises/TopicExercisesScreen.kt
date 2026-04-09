@@ -8,11 +8,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.ContentRepo
+import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,6 +27,10 @@ fun TopicExercisesScreen(
     onBack: () -> Unit,
     onOpenExercise: (String) -> Unit
 ) {
+    val ctx = LocalContext.current
+    val langManager = remember(ctx) { AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
     val topic = remember(topicTitle) { topicTitle.trim() }
 
     // ✅ מסנן "תת־נושא פייק" (שווה לנושא)
@@ -30,6 +38,14 @@ fun TopicExercisesScreen(
         subTopicTitle
             ?.trim()
             ?.takeIf { it.isNotBlank() && it != topic }
+    }
+
+    val topicDisplay = remember(topic, isEnglish) {
+        if (isEnglish) ExerciseTitlesEn.getOrSame(topic) else topic
+    }
+
+    val subDisplay = remember(subClean, isEnglish) {
+        subClean?.let { if (isEnglish) ExerciseTitlesEn.getOrSame(it) else it }
     }
 
     // ✅ שולף תרגילים ישירות מה-Shared ContentRepo
@@ -50,14 +66,14 @@ fun TopicExercisesScreen(
                 title = {
                     Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = topic,
+                            text = topicDisplay,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        if (!subClean.isNullOrBlank()) {
+                        if (!subDisplay.isNullOrBlank()) {
                             Text(
-                                text = subClean,
+                                text = subDisplay,
                                 style = MaterialTheme.typography.labelMedium,
                                 textAlign = TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
@@ -66,11 +82,14 @@ fun TopicExercisesScreen(
                     }
                 },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("חזרה") }
+                    TextButton(onClick = onBack) {
+                        Text(if (isEnglish) "Back" else "חזרה")
+                    }
                 }
             )
         }
     ) { padding ->
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -82,13 +101,24 @@ fun TopicExercisesScreen(
             if (items.isEmpty()) {
                 Text(
                     text = buildString {
-                        append("לא נמצאו תרגילים עבור \"")
-                        append(topic)
-                        append("\"")
-                        if (!subClean.isNullOrBlank()) {
-                            append(" / \"")
-                            append(subClean)
+                        if (isEnglish) {
+                            append("No exercises found for \"")
+                            append(topicDisplay)
                             append("\"")
+                            if (!subDisplay.isNullOrBlank()) {
+                                append(" / \"")
+                                append(subDisplay)
+                                append("\"")
+                            }
+                        } else {
+                            append("לא נמצאו תרגילים עבור \"")
+                            append(topic)
+                            append("\"")
+                            if (!subClean.isNullOrBlank()) {
+                                append(" / \"")
+                                append(subClean)
+                                append("\"")
+                            }
                         }
                     },
                     style = MaterialTheme.typography.titleMedium,
@@ -97,6 +127,12 @@ fun TopicExercisesScreen(
                 )
             } else {
                 items.forEach { item ->
+                    val itemDisplay = if (isEnglish) {
+                        ExerciseTitlesEn.getOrSame(item)
+                    } else {
+                        item
+                    }
+
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -105,7 +141,7 @@ fun TopicExercisesScreen(
                         tonalElevation = 1.dp
                     ) {
                         Text(
-                            text = item,
+                            text = itemDisplay,
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
                             textAlign = TextAlign.Right
                         )

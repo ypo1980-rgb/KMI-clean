@@ -29,6 +29,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.subscription.KmiAccess
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.Belt
 import android.content.SharedPreferences // ✅ ADD
 import android.util.Log // ✅ ADD
@@ -99,13 +101,20 @@ private fun loadBeltId(sp: SharedPreferences): String? {
 }
 
 @Composable
-private fun rememberGreetingAndBelt(userSp: SharedPreferences): Pair<String, Belt?> {
+private fun rememberGreetingAndBelt(
+    userSp: SharedPreferences,
+    lang: AppLanguage
+): Pair<String, Belt?> {
     val firstName = remember { loadFirstName(userSp) }
     val beltId = remember { loadBeltId(userSp) }
 
     val belt = remember(beltId) { beltId?.let { Belt.fromId(it) } }
-    val greeting = remember(firstName) {
-        if (firstName.isNullOrBlank()) "שלום" else "שלום $firstName"
+    val greeting = remember(firstName, lang) {
+        if (lang == AppLanguage.ENGLISH) {
+            if (firstName.isNullOrBlank()) "Hello" else "Hello $firstName"
+        } else {
+            if (firstName.isNullOrBlank()) "שלום" else "שלום $firstName"
+        }
     }
     return greeting to belt
 }
@@ -166,7 +175,11 @@ private fun dumpPrefs(tag: String, sp: SharedPreferences) {
 
 /** ✅ REPLACE: חגורה מצוירת על הרקע (בלי תמונה עם לבן) */
 @Composable
-private fun BeltBadge(belt: Belt, modifier: Modifier = Modifier) {
+private fun BeltBadge(
+    belt: Belt,
+    lang: AppLanguage,
+    modifier: Modifier = Modifier
+) {
     // ✅ טקסט "חגורה XXX" בצבע החגורה הרלוונטי
     val beltTextColor = when (belt) {
         Belt.WHITE -> Color(0xFFE0E0E0) // לבן-אפרפר, נראה על רקע בהיר
@@ -191,7 +204,7 @@ private fun BeltBadge(belt: Belt, modifier: Modifier = Modifier) {
     ) {
         // ✅ 1) מחליפים סדר: קודם "חגורה צהובה" ואז התמונה
         Text(
-            text = belt.heb,
+            text = if (lang == AppLanguage.ENGLISH) belt.en else belt.heb,
             color = beltTextColor,
             fontSize = 25.sp,
             fontWeight = FontWeight.Bold
@@ -204,7 +217,11 @@ private fun BeltBadge(belt: Belt, modifier: Modifier = Modifier) {
             // לבן ≈ נהיה רקע המסך; צבעים נשארים אבל יכולים להיות מעט "מושפעים" מהרקע.
             Image(
                 painter = painterResource(id = res),
-                contentDescription = "חגורה ${belt.heb}",
+                contentDescription = if (lang == AppLanguage.ENGLISH) {
+                    "Belt ${belt.en}"
+                } else {
+                    "חגורה ${belt.heb}"
+                },
                 modifier = Modifier
                     .size(64.dp)
                     .graphicsLayer {
@@ -249,6 +266,10 @@ fun IntroScreen(onContinue: () -> Unit) {
     var startAnim by remember { mutableStateOf(false) }
 
     val ctx = LocalContext.current
+    val langManager = remember(ctx) { AppLanguageManager(ctx) }
+    val currentLang = langManager.getCurrentLanguage()
+    val isEnglish = currentLang == AppLanguage.ENGLISH
+
     val userSp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
     var fetchedName by remember { mutableStateOf<String?>(null) }
     var didFetchName by remember { mutableStateOf(false) }
@@ -298,10 +319,18 @@ fun IntroScreen(onContinue: () -> Unit) {
     }
 
     // ✅ FIX: משתמשים באותו userSp שממנו אתה מתחיל Trial ושבו נשמר המשתמש
-    val (dynamicGreeting0, traineeBeltOrNull) = rememberGreetingAndBelt(userSp)
-    val dynamicGreeting = remember(dynamicGreeting0, fetchedName) {
-        if (!fetchedName.isNullOrBlank()) "שלום ${fetchedName!!.trim().split(' ', limit = 2).first()}"
-        else dynamicGreeting0
+    val (dynamicGreeting0, traineeBeltOrNull) = rememberGreetingAndBelt(
+        userSp = userSp,
+        lang = currentLang
+    )
+
+    val dynamicGreeting = remember(dynamicGreeting0, fetchedName, currentLang) {
+        if (!fetchedName.isNullOrBlank()) {
+            val first = fetchedName!!.trim().split(' ', limit = 2).first()
+            if (currentLang == AppLanguage.ENGLISH) "Hello $first" else "שלום $first"
+        } else {
+            dynamicGreeting0
+        }
     }
 
     Box(
@@ -340,7 +369,7 @@ fun IntroScreen(onContinue: () -> Unit) {
                     modifier = Modifier.alpha(alpha).scale(scale)
                 )
                 Text(
-                    "קרב מגן ישראלי",
+                    text = if (isEnglish) "Israeli Krav Magen" else "קרב מגן ישראלי",
                     fontSize = 34.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.9f),
@@ -362,6 +391,7 @@ fun IntroScreen(onContinue: () -> Unit) {
                     Spacer(Modifier.height(10.dp))
                     BeltBadge(
                         belt = traineeBeltOrNull,
+                        lang = currentLang,
                         modifier = Modifier
                             .alpha(alpha)
                             .scale(scale)
@@ -412,7 +442,11 @@ fun IntroScreen(onContinue: () -> Unit) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "מעבר למסך כניסה / רישום",
+                        text = if (isEnglish) {
+                            "Continue to Login / Sign Up"
+                        } else {
+                            "מעבר למסך כניסה / רישום"
+                        },
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White

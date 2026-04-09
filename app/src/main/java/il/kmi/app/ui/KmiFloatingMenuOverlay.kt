@@ -76,12 +76,6 @@ fun KmiFloatingMenuOverlay(
                         icon = Icons.Filled.Mic,
                         enabled = canUseExtras,
                         onClick = { onOpenAssistant() }
-                    ),
-                    KmiFabAction(
-                        text = "חומר סיכום (PDF)",
-                        icon = Icons.Filled.Summarize,
-                        enabled = (canUseExtras && effectiveBelt != Belt.WHITE),
-                        onClick = { onOpenPdf(effectiveBelt) }
                     )
                 ),
                 onHaptic = { onHaptic() },

@@ -1,26 +1,14 @@
 package il.kmi.app.screens.BeltQuestions
 
 import android.content.Context
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Summarize
-import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.RecordVoiceOver
-import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -29,20 +17,34 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import il.kmi.app.localization.rememberIsEnglish
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.zIndex
-import androidx.compose.material3.LocalTextStyle
 import il.kmi.app.domain.ContentRepo
+import il.kmi.app.domain.ExerciseCountsRegistry
 import il.kmi.app.domain.SubjectTopic
 import il.kmi.app.favorites.FavoritesStore
+import il.kmi.app.localization.rememberIsEnglish
 import il.kmi.app.screens.parseSearchKey
+import il.kmi.app.ui.FloatingQuickMenu
+import il.kmi.app.ui.QuickMenuTriggerMode
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import il.kmi.app.domain.ExerciseCountsRegistry
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.ui.graphics.vector.ImageVector
 
 
 // ✅ FIX: פונקציית נרמול אחת בלבד, ברמת קובץ (נראית לכולם, אין forward-ref ואין אמביגיוטי)
@@ -83,48 +85,10 @@ private fun handsSectionIdFor(raw: String): String? {
 }
 
 private fun subTopicTitleForUi(title: String, isEnglish: Boolean): String {
-    if (!isEnglish) return title
-
-    return when (normText(title)) {
-        // עבודת ידיים
-        "מכות יד" -> "Hand Strikes"
-        "מכות מרפק" -> "Elbow Strikes"
-        "מכות במקל / רובה" -> "Stick / Rifle Strikes"
-        "מכות במקל קצר" -> "Short Stick Strikes"
-        "מרפק" -> "Elbow Strikes"
-        "מרפקים" -> "Elbow Strikes"
-        "פיסת יד" -> "Knife Hand Strikes"
-        "אגרופים ישרים" -> "Straight Punches"
-        "מגל + סנוקרת" -> "Hook and Uppercut"
-
-        // הגנות
-        "הגנות פנימיות" -> "Internal Defenses"
-        "הגנות חיצוניות" -> "External Defenses"
-        "הגנות נגד בעיטות" -> "Defenses Against Kicks"
-        "הגנה נגד בעיטות" -> "Defenses Against Kicks"
-        "הגנות נגד מכות אגרוף" -> "Defenses Against Punches"
-        "הגנה נגד מכות אגרוף" -> "Defenses Against Punches"
-        "הגנות מאיום סכין" -> "Knife Threat Defenses"
-        "הגנה מאיום סכין" -> "Knife Threat Defenses"
-        "הגנת מאיום סכין" -> "Knife Threat Defenses"
-        "הגנות נגד מקל" -> "Stick Defenses"
-        "הגנה נגד מקל" -> "Stick Defenses"
-
-        // שחרורים
-        "שחרור מתפיסות ידיים / שיער / חולצה" -> "Release from Hand / Hair / Shirt Grabs"
-        "שחרור מחניקות" -> "Choke Releases"
-        "שחרור מחביקות" -> "Bear Hug Releases"
-        "חביקות גוף" -> "Body Hugs"
-        "חביקות צוואר" -> "Neck Hugs"
-        "חביקות זרוע" -> "Arm Hugs"
-
-        "שחרורים מתפיסות ידיים" -> "Release from Hand Grabs"
-        "שחרורים מתפיסות חולצה" -> "Release from Shirt Grabs"
-        "שחרורים מתפיסות שיער" -> "Release from Hair Grabs"
-        "שחרורים מתפיסות צוואר וגוף" -> "Releases from Neck and Body Grabs"
-        "שחרורים מחניקות" -> "Choke Releases"
-
-        else -> title
+    return if (isEnglish) {
+        ExerciseTitlesEn.getOrSame(title.trim())
+    } else {
+        title
     }
 }
 
@@ -134,6 +98,9 @@ private fun subjectTitleForUi(
     isEnglish: Boolean
 ): String {
     if (!isEnglish) return fallbackHeb
+
+    val sharedTranslated = ExerciseTitlesEn.get(fallbackHeb.trim())
+    if (!sharedTranslated.isNullOrBlank()) return sharedTranslated
 
     return when (subjectId) {
         "general" -> "General"
@@ -149,20 +116,16 @@ private fun subjectTitleForUi(
         "hands_strikes" -> "Hand Strikes"
         "hands_elbows" -> "Elbow Strikes"
         "hands_stick_rifle" -> "Stick / Rifle Strikes"
-
         "rolls_breakfalls" -> "Breakfalls and Rolls"
         "topic_ready_stance" -> "Ready Stance"
         "topic_ground_prep" -> "Groundwork Preparation"
         "topic_kavaler" -> "Kavaler"
-
         "def_internal_punches" -> "Internal Defenses - Punches"
         "def_internal_kicks" -> "Internal Defenses - Kicks"
         "def_external_punches" -> "External Defenses - Punches"
         "def_external_kicks" -> "External Defenses - Kicks"
-
         "releases_hands_hair_shirt" -> "Releases from Hand / Hair / Shirt Grabs"
         "releases_chokes" -> "Choke Releases"
-
         else -> fallbackHeb
     }
 }
@@ -211,6 +174,7 @@ private fun findExplanationForHitLocal(
 
 @Composable
 private fun rememberEnsureContentRepoInitialized() {
+    android.util.Log.e("KMI_TOPIC_SCREEN", "BeltQuestionsByTopicScreen LOADED")
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -239,14 +203,11 @@ fun BeltQuestionsByTopicScreen(
     onOpenPdfMaterials: (Belt) -> Unit = {}
 ) {
     rememberEnsureContentRepoInitialized()
-
     val isEnglish = rememberIsEnglish()
-
     val ctx = LocalContext.current
-    val notePrefs = remember(ctx) {
-        ctx.getSharedPreferences("kmi_exercise_notes", Context.MODE_PRIVATE)
-    }
+    val notePrefs = remember(ctx) { ctx.getSharedPreferences("kmi_exercise_notes", Context.MODE_PRIVATE) }
 
+    // State לניהול התפריט המהיר
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var effectiveBelt by rememberSaveable { mutableStateOf(Belt.GREEN) }
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -259,9 +220,7 @@ fun BeltQuestionsByTopicScreen(
                 onHome = { },
                 lockHome = false,
                 showTopHome = false,
-                onPickSearchResult = { key ->
-                    pickedKey = key
-                },
+                onPickSearchResult = { key -> pickedKey = key },
                 lockSearch = false,
                 showBottomActions = true,
                 centerTitle = true
@@ -273,406 +232,297 @@ fun BeltQuestionsByTopicScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-
+            // 1. תוכן המסך (נגלל)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 6.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 8.dp)
             ) {
                 TopicsBySubjectCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp),
                     currentBelt = effectiveBelt,
                     onSubjectClick = { belt, subject ->
                         effectiveBelt = belt
                         onOpenSubject(belt, subject)
                     },
-                    onOpenTopicWithSub = { belt, topic, sub ->
-                        android.util.Log.e(
-                            "KMI_NAV",
-                            "SCREEN onOpenTopicWithSub belt=${belt.id} topic='$topic' sub='$sub'"
-                        )
-                        effectiveBelt = belt
-                        onOpenTopicWithSub(belt, topic, sub)
-                    },
-                    onOpenDefenseList = { belt, kind, pick ->
-                        onOpenDefenseList(belt, kind, pick)
-                    },
-                    onOpenHardSubjectRoute = { belt, subjectId ->
-                        android.util.Log.e(
-                            "KMI_NAV",
-                            "SCREEN onOpenHardSubjectRoute belt=${belt.id} subjectId='$subjectId'"
-                        )
-                        effectiveBelt = belt
-                        onOpenHardSubjectRoute(belt, subjectId)
-                    }
+                    onOpenTopic = onOpenTopic,
+                    onOpenTopicWithSub = onOpenTopicWithSub,
+                    onOpenDefenseList = onOpenDefenseList,
+                    onOpenHardSubjectRoute = onOpenHardSubjectRoute
                 )
 
-                Spacer(Modifier.height(90.dp))
+                // רווח בתחתית כדי שהתפריט הצף לא יסתיר את הפריט האחרון
+                Spacer(modifier = Modifier.height(120.dp))
             }
 
-            if (quickMenuExpanded) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .zIndex(998f)
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) { quickMenuExpanded = false }
-                )
-            }
-
-            androidx.compose.animation.AnimatedVisibility(
-                visible = quickMenuExpanded,
+            FloatingQuickMenu(
+                belt = effectiveBelt,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .navigationBarsPadding()
-                    .padding(start = 18.dp, bottom = 98.dp)
+                    .padding(
+                        start = 18.dp,
+                        bottom = 72.dp
+                    )
+                    .size(64.dp)
                     .zIndex(999f),
-                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(),
-                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut()
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    QuickMenuActionRow(
-                        text = if (isEnglish) "Weak Points" else "נקודות תורפה",
-                        icon = Icons.Filled.WarningAmber,
-                        iconColor = Color(0xFFE53935),
-                        onClick = {
-                            quickMenuExpanded = false
-                            onOpenWeakPoints(effectiveBelt)
-                        }
-                    )
+                expanded = quickMenuExpanded,
+                onExpandedChange = { quickMenuExpanded = it },
+                triggerMode = QuickMenuTriggerMode.BottomBar,
+                includePractice = false,
+                onWeakPoints = { onOpenWeakPoints(effectiveBelt) },
+                onAllLists = { onOpenAllLists(effectiveBelt) },
+                onSummary = { onOpenSummaryScreen(effectiveBelt) },
+                onVoice = { onOpenVoiceAssistant(effectiveBelt) },
+                onPdf = { onOpenPdfMaterials(effectiveBelt) }
+            )
+        }
 
-                    QuickMenuActionRow(
-                        text = if (isEnglish) "All Lists" else "כל הרשימות",
-                        icon = Icons.Filled.List,
-                        iconColor = Color(0xFF5E35B1),
-                        onClick = {
-                            quickMenuExpanded = false
-                            onOpenAllLists(effectiveBelt)
-                        }
-                    )
-
-                    QuickMenuActionRow(
-                        text = if (isEnglish) "Summary" else "סיכום",
-                        icon = Icons.Filled.Summarize,
-                        iconColor = Color(0xFF1E88E5),
-                        onClick = {
-                            quickMenuExpanded = false
-                            onOpenSummaryScreen(effectiveBelt)
-                        }
-                    )
-
-                    QuickMenuActionRow(
-                        text = if (isEnglish) "Voice Assistant" else "עוזר קולי",
-                        icon = Icons.Filled.RecordVoiceOver,
-                        iconColor = Color(0xFF00897B),
-                        onClick = {
-                            quickMenuExpanded = false
-                            onOpenVoiceAssistant(effectiveBelt)
-                        }
-                    )
-
-                    QuickMenuActionRow(
-                        text = if (isEnglish) "PDF Materials" else "חומרי PDF",
-                        icon = Icons.Filled.PictureAsPdf,
-                        iconColor = Color(0xFFFB8C00),
-                        onClick = {
-                            quickMenuExpanded = false
-                            onOpenPdfMaterials(effectiveBelt)
-                        }
-                    )
-                }
+        // --- ניהול דיאלוגים (AlertDialog) ---
+        pickedKey?.let { key ->
+            val (belt, topic, item) = parseSearchKey(key)
+            val baseDisplayName = ExerciseTitleFormatter.displayName(item).ifBlank { item }
+            val displayName = if (isEnglish) {
+                ExerciseTitlesEn.getOrSame(baseDisplayName)
+            } else {
+                baseDisplayName
             }
+            val favoriteId = remember(item) { normalizeFavoriteId(item) }
+            val favorites by FavoritesStore.favoritesFlow.collectAsState(initial = emptySet())
+            val isFavorite = favorites.contains(favoriteId)
+            val noteKey = "note_${belt.id}_${topic.trim()}_${favoriteId}"
+            var noteText by remember { mutableStateOf(notePrefs.getString(noteKey, "").orEmpty()) }
+            var showNoteEditor by remember { mutableStateOf(false) }
+            val explanation = remember(belt, item) { findExplanationForHitLocal(belt, item, topic) }
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-                    .zIndex(1000f)
-            ) {
-                Button(
-                    onClick = { quickMenuExpanded = !quickMenuExpanded },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(60.dp)
-                        .border(
-                            width = 2.dp,
-                            color = Color.White.copy(alpha = 0.90f),
-                            shape = RoundedCornerShape(16.dp)
-                        ),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = Color.White
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = 0.dp,
-                        pressedElevation = 0.dp,
-                        focusedElevation = 0.dp,
-                        hoveredElevation = 0.dp,
-                        disabledElevation = 0.dp
-                    )
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.List,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-
-                        Spacer(Modifier.width(8.dp))
-
-                        Text(
-                            text = if (isEnglish) "TOPIC SCREEN BUTTON" else "כפתור מסך לפי נושא",
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            pickedKey?.let { key ->
-                val (belt, topic, item) = parseSearchKey(key)
-
-                val displayName = ExerciseTitleFormatter
-                    .displayName(item)
-                    .ifBlank { item }
-
-                val favoriteId = remember(item) { normalizeFavoriteId(item) }
-                val favorites: Set<String> by FavoritesStore
-                    .favoritesFlow
-                    .collectAsState(initial = emptySet())
-                val isFavorite = favorites.contains(favoriteId)
-
-                val noteKey = remember(belt, topic, favoriteId) {
-                    "note_${belt.id}_${topic.trim()}_${favoriteId}"
-                }
-
-                var noteText by remember(noteKey) {
-                    mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
-                }
-
-                var showNoteEditor by remember { mutableStateOf(false) }
-
-                val explanation = remember(belt, item) {
-                    findExplanationForHitLocal(
-                        belt = belt,
-                        rawItem = item,
-                        topic = topic
-                    )
-                }
-
-                AlertDialog(
-                    onDismissRequest = { pickedKey = null },
-                    title = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                horizontalAlignment = Alignment.End
-                            ) {
-                                Text(
-                                    text = displayName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Text(
-                                    text = "${topic} • ${belt.heb}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    showNoteEditor = true
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = if (isEnglish) "Note" else "הערה",
-                                    tint = Color(0xFF42A5F5)
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    FavoritesStore.toggle(favoriteId)
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                                    contentDescription = if (isEnglish) "Favorites" else "מועדפים",
-                                    tint = if (isFavorite) Color(0xFFFFC107) else Color.Gray
-                                )
-                            }
-                        }
-                    },
-                    text = {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.End
-                        ) {
+            AlertDialog(
+                onDismissRequest = { pickedKey = null },
+                title = {
+                    Row(modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                            Text(text = displayName, fontWeight = FontWeight.Bold, textAlign = TextAlign.Right)
                             Text(
-                                text = explanation,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
+                                text = if (isEnglish) {
+                                    "${ExerciseTitlesEn.getOrSame(topic)} • ${belt.en}"
+                                } else {
+                                    "$topic • ${belt.heb}"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                textAlign = TextAlign.Right
                             )
-
-                            if (noteText.isNotBlank()) {
-                                Spacer(Modifier.height(12.dp))
-
-                                HorizontalDivider(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = Color.LightGray.copy(alpha = 0.65f)
-                                )
-
-                                Spacer(Modifier.height(10.dp))
-
-                                Text(
-                                    text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Spacer(Modifier.height(6.dp))
-
-                                Text(
-                                    text = noteText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
                         }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { pickedKey = null }) {
-                            Text(if (isEnglish) "Close" else "סגור")
+                        IconButton(onClick = { showNoteEditor = true }) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF42A5F5))
+                        }
+                        IconButton(onClick = { FavoritesStore.toggle(favoriteId) }) {
+                            Icon(if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder, contentDescription = null, tint = if (isFavorite) Color(0xFFFFC107) else Color.Gray)
                         }
                     }
-                )
-
-                if (showNoteEditor) {
-                    AlertDialog(
-                        onDismissRequest = { showNoteEditor = false },
-                        title = {
-                            Text(
-                                text = if (isEnglish) "Exercise note" else "הערה לתרגיל",
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        },
-                        text = {
-                            OutlinedTextField(
-                                value = noteText,
-                                onValueChange = { noteText = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
-                                label = {
-                                    Text(if (isEnglish) "Write a note" else "כתוב הערה")
-                                }
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    notePrefs.edit()
-                                        .putString(noteKey, noteText.trim())
-                                        .apply()
-                                    showNoteEditor = false
-                                }
-                            ) {
-                                Text(if (isEnglish) "Save" else "שמור")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(
-                                onClick = { showNoteEditor = false }
-                            ) {
-                                Text(if (isEnglish) "Cancel" else "ביטול")
-                            }
-                        }
-                    )
+                },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+                        Text(text = explanation, textAlign = TextAlign.Right)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { pickedKey = null }) { Text(if (isEnglish) "Close" else "סגור") }
                 }
-            }
+            )
         }
     }
 }
 
+private fun subjectAccentColor(subjectId: String): Color =
+    when (subjectId) {
+        "defense_root" -> Color(0xFF5E35B1)      // סגול
+        "hands_root" -> Color(0xFF00897B)        // טורקיז
+        "releases" -> Color(0xFF1E88E5)          // כחול
+        "releases_hugs" -> Color(0xFF3949AB)     // אינדיגו
+        "rolls_breakfalls" -> Color(0xFF6D4C41)  // חום
+        "topic_ready_stance" -> Color(0xFF43A047)// ירוק
+        "topic_ground_prep" -> Color(0xFF8E24AA) // סגול בהיר
+        "topic_kavaler" -> Color(0xFFFB8C00)     // כתום
+        else -> Color(0xFF7E57C2)
+    }
+
+private fun subjectIconFor(subjectId: String): ImageVector =
+    when (subjectId) {
+        "defense_root" -> Icons.Filled.Security
+        "hands_root" -> Icons.Filled.PanTool
+        "releases" -> Icons.Filled.PanTool
+        "releases_hugs" -> Icons.Filled.PanTool
+        "rolls_breakfalls" -> Icons.Filled.Build
+        "topic_ready_stance" -> Icons.Filled.CheckCircle
+        "topic_ground_prep" -> Icons.Filled.Info
+        "topic_kavaler" -> Icons.Filled.Build
+        else -> Icons.Filled.Info
+    }
+
 @Composable
-private fun QuickMenuActionRow(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconColor: Color,
+private fun SubjectRootCardPremium(
+    title: String,
+    subtitle: String = "",
+    subjectId: String,
+    countText: String,
+    showLeftBadge: Boolean = false,
     onClick: () -> Unit
 ) {
+    val isEnglish = rememberIsEnglish()
+    val accent = remember(subjectId) { subjectAccentColor(subjectId) }
+    val icon = remember(subjectId) { subjectIconFor(subjectId) }
+
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(999.dp),
-        color = Color.White.copy(alpha = 0.96f),
-        shadowElevation = 6.dp,
-        border = BorderStroke(
-            1.dp,
-            Color.Black.copy(alpha = 0.06f)
-        )
+        shape = RoundedCornerShape(14.dp),
+        color = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .width(180.dp)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            Surface(
-                shape = CircleShape,
-                color = iconColor.copy(alpha = 0.12f),
-                modifier = Modifier.size(28.dp)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconColor,
-                        modifier = Modifier.size(16.dp)
-                    )
+                if (isEnglish) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(if (showLeftBadge) 34.dp else 26.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = accent,
+                            modifier = Modifier.fillMaxSize()
+                        ) {}
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Box(
+                        modifier = Modifier.size(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Start,
+                            color = Color(0xFF111827),
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1
+                        )
+
+                        if (subtitle.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Start,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 1
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = countText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Start,
+                            color = accent,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Right,
+                            color = Color(0xFF111827),
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1
+                        )
+
+                        if (subtitle.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Right,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 1
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = countText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Right,
+                            color = accent,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Box(
+                        modifier = Modifier.size(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(if (showLeftBadge) 34.dp else 26.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = accent,
+                            modifier = Modifier.fillMaxSize()
+                        ) {}
+                    }
                 }
             }
-
-            Spacer(Modifier.width(10.dp))
-
-            Text(
-                text = text,
-                modifier = Modifier.weight(1f),
-                color = Color(0xFF0B1220),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1
-            )
         }
     }
 }
@@ -682,6 +532,7 @@ internal fun TopicsBySubjectCard(
     modifier: Modifier = Modifier,
     currentBelt: Belt,
     onSubjectClick: (Belt, SubjectTopic) -> Unit = { _, _ -> },
+    onOpenTopic: (Belt, String) -> Unit = { _, _ -> },
     onOpenTopicWithSub: (belt: Belt, topic: String, subTopic: String) -> Unit = { _, _, _ -> },
     onOpenDefenseList: (belt: Belt, kind: String, pick: String) -> Unit = { _, _, _ -> },
     onOpenHardSubjectRoute: (belt: Belt, subjectId: String) -> Unit = { _, _ -> },
@@ -753,7 +604,15 @@ internal fun TopicsBySubjectCard(
     // ----------------- UI -----------------
 
     fun formatCount(n: Int): String =
-        if (isEnglish) "$n exercises" else "$n תרגילים"
+        if (isEnglish) "exercises $n" else "$n תרגילים"
+
+    fun translateCardCountText(raw: String): String {
+        if (!isEnglish) return raw
+
+        return raw
+            .replace(Regex("""(\d+)\s+תתי\s+נושאים"""), "sub-topics $1")
+            .replace(Regex("""(\d+)\s+תרגילים"""), "exercises $1")
+    }
 
     fun openSubjectSmart(subject: SubjectTopic) {
         val action = SubjectTopicsUiLogic.buildOpenSubjectUiAction(
@@ -790,7 +649,8 @@ internal fun TopicsBySubjectCard(
                     subjectId = card.id,
                     fallbackHeb = card.title,
                     isEnglish = isEnglish
-                )
+                ),
+                countText = translateCardCountText(card.countText)
             )
         }
     }
@@ -812,7 +672,8 @@ internal fun TopicsBySubjectCard(
                     subjectId = card.id,
                     fallbackHeb = card.title,
                     isEnglish = isEnglish
-                )
+                ),
+                countText = translateCardCountText(card.countText)
             )
         }
     }
@@ -849,22 +710,24 @@ internal fun TopicsBySubjectCard(
         )
     }
 
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        tonalElevation = 1.dp,
-        shadowElevation = 6.dp,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp)
+    CompositionLocalProvider(
+        LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
     ) {
-        Column(
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 1.dp,
+            shadowElevation = 6.dp,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp, horizontal = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+                .padding(horizontal = 4.dp)
         ) {
-            Text(
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp, horizontal = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {            Text(
                 text = if (isEnglish) "Subjects (Categories)" else "נושאים (קטגוריות)",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
@@ -875,252 +738,311 @@ internal fun TopicsBySubjectCard(
                 color = Color(0xFF263238)
             )
 
-            if (!countsReady) {
-                Text(
-                    text = if (isEnglish) "Loading data..." else "טוען נתונים…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            SubjectRootCard(
-                title = defenseRootCard.title,
-                subtitle = "",
-                subjectId = "defense_root",
-                countText = defenseRootCard.countText,
-                showLeftBadge = true,
-                onClick = { askDefense = true }
-            )
-
-            SubjectRootCard(
-                title = handsRootCard.title,
-                subtitle = "",
-                subjectId = "hands_root",
-                countText = handsRootCard.countText,
-                showLeftBadge = true,
-                onClick = { askHands = true }
-            )
-
-            // ✅ מציגים נושאים עם תתי־נושאים
-            subjectsWithSubTopicsCards.forEach { card ->
-                SubjectRootCard(
-                    title = card.title,
-                    subtitle = "",
-                    subjectId = card.id,
-                    countText = card.countText,
-                    onClick = {
-                        if (card.id == "releases_hugs") {
-                            onOpenHardSubjectRoute(currentBelt, "releases_hugs")
-                        } else {
-                            askSubTopicsForId = card.id
-                        }
-                    }
-                )
-            }
-
-            // ✅ מציגים נושאים בלי תתי־נושאים
-            subjectsWithoutSubTopicsCards.forEach { card ->
-                val subject = subjects.firstOrNull { it.id == card.id } ?: return@forEach
-
-                SubjectRootCard(
-                    title = card.title,
-                    subtitle = "",
-                    subjectId = card.id,
-                    countText = card.countText,
-                    onClick = { openSubjectSmart(subject) }
-                )
-            }
-
-            // ----------------- דיאלוגים -----------------
-
-            if (askDefense) {
-                DefenseCategoryPickDialogModern(
-                    counts = defenseDialogCountsMap,
-                    onDismiss = { askDefense = false },
-                    onPick = { picked ->
-                        askDefense = false
-
-                        when (val decision = SubjectTopicsUiLogic.resolveDefenseDialogPick(picked)) {
-                            is SubjectTopicsUiLogic.DefenseDialogDecision.AskKind -> {
-                                askKind = decision.kind
-                            }
-
-                            is SubjectTopicsUiLogic.DefenseDialogDecision.OpenHardSubject -> {
-                                android.util.Log.e(
-                                    "KMI_NAV",
-                                    "Defense dialog -> hard subject '${decision.subjectId}'"
-                                )
-                                android.util.Log.e(
-                                    "KMI_NAV",
-                                    "TOPICS_CARD before onOpenHardSubjectRoute belt=${currentBelt.id} subjectId='${decision.subjectId}'"
-                                )
-                                onOpenHardSubjectRoute(currentBelt, decision.subjectId)
-                            }
-
-                            SubjectTopicsUiLogic.DefenseDialogDecision.None -> Unit
-                        }
-                    }
-                )
-            }
-
-            // ✅ FIX: זה היה חסר ולכן לחיצה על "הגנות פנימיות/חיצוניות" לא הובילה לשום מקום
-            askKind?.let { kind ->
-                DefensePickModeDialogModern(
-                    kind = kind,
-                    counts = defensePickCountsMap,
-                    onDismiss = { askKind = null },
-                    onPick = { picked ->
-                        askKind = null
-
-                        when (val decision = SubjectTopicsUiLogic.resolveDefenseKindPick(kind, picked)) {
-                            is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenLegacyDefenses -> {
-                                onOpenDefenseList(
-                                    currentBelt,
-                                    decision.kind,
-                                    decision.pick
-                                )
-                            }
-
-                            is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenHardSubject -> {
-                                android.util.Log.e(
-                                    "KMI_NAV",
-                                    "TOPICS_CARD kind before onOpenHardSubjectRoute belt=${currentBelt.id} subjectId='${decision.subjectId}'"
-                                )
-                                onOpenHardSubjectRoute(currentBelt, decision.subjectId)
-                            }
-
-                            SubjectTopicsUiLogic.DefenseKindPickDecision.None -> Unit
-                        }
-                    }
-                )
-            }
-
-            if (askHands) {
-                val handsPicks = remember(handsBase) {
-                    SubjectTopicsUiLogic.handsPicks(handsBase)
-                }
-                val handsDisplayPicks = remember(handsPicks, isEnglish) {
-                    handsPicks.map { subTopicTitleForUi(it, isEnglish) }
-                }
-
-                HandsPickModeDialogModern(
-                    picks = handsDisplayPicks,
-                    counts = handsPickCounts,
-                    onDismiss = { askHands = false },
-                    onPick = { pickedDisplay: String ->
-                        askHands = false
-
-                        val picked = handsPicks.firstOrNull {
-                            subTopicTitleForUi(it, isEnglish) == pickedDisplay
-                        } ?: pickedDisplay
-
-                        val hardSubjectId = handsSectionIdFor(picked)
-
-                        if (hardSubjectId != null) {
-                            android.util.Log.e(
-                                "KMI_NAV",
-                                "Hands dialog -> hard subject '$hardSubjectId' picked='$picked'"
-                            )
-
-                            onOpenHardSubjectRoute(currentBelt, hardSubjectId)
-                        } else {
-                            val subject = SubjectTopicsUiLogic.resolveHandsPick(
-                                base = handsBase,
-                                picked = picked
-                            )
-
-                            if (subject != null) {
-                                android.util.Log.e(
-                                    "KMI_NAV",
-                                    "Hands tmp subject: id='${subject.id}' title='${subject.titleHeb}' hint='${subject.subTopicHint}' topicsByBelt=${subject.topicsByBelt}"
-                                )
-
-                                openSubjectSmart(subject)
-                            } else {
-                                android.util.Log.e("KMI_NAV", "Hands base is NULL -> cannot navigate")
-                            }
-                        }
-                    }
-                )
-            }
-
-            // ✅ SubTopics dialog for regular subjects (חייב להיות בתוך ה-Column כאן)
-            askSubTopicsForId?.let { id ->
-
-                val dialogData = remember(subjects, id) {
-                    SubjectTopicsUiLogic.buildSubTopicsDialogData(
-                        subjects = subjects,
-                        id = id
+                if (!countsReady) {
+                    Text(
+                        text = if (isEnglish) "Loading data..." else "טוען נתונים…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 
-                val counts = subTopicsPickCountsBySubjectId[id].orEmpty()
-                val displayPicks = remember(dialogData.picks, isEnglish) {
-                    dialogData.picks.map { subTopicTitleForUi(it, isEnglish) }
-                }
+                Spacer(Modifier.height(4.dp))
 
-                SubTopicsPickModeDialogModern(
-                    title = dialogData.base?.titleHeb ?: if (isEnglish) "Sub topics" else "תתי נושאים",
-                    picks = displayPicks,
-                    counts = counts,
-                    onDismiss = { askSubTopicsForId = null },
-                    onPick = { pickedDisplay: String ->
-                        askSubTopicsForId = null
-
-                        val picked = dialogData.picks.firstOrNull {
-                            subTopicTitleForUi(it, isEnglish) == pickedDisplay
-                        } ?: pickedDisplay
-
-                        val decision = SubjectTopicsUiLogic.resolveSubTopicPick(
-                            base = dialogData.base,
-                            bodyHugsChild = dialogData.bodyHugsChild,
-                            picked = picked,
-                            norm = ::normText
+                SubjectRootCardPremium(
+                    title = defenseRootCard.title,
+                    subtitle = "",
+                    subjectId = "defense_root",
+                    countText = defenseRootCard.countText,
+                    showLeftBadge = true,
+                    onClick = {
+                        android.util.Log.e(
+                            "KMI_NAV",
+                            "TOPICS_CARD defense root -> open defense picker belt=${currentBelt.id}"
                         )
-
-                        when (decision) {
-                            is SubjectTopicsUiLogic.SubTopicPickDecision.OpenTopicWithSub -> {
-                                android.util.Log.e(
-                                    "KMI_NAV",
-                                    "SubTopic decision -> onOpenTopicWithSub(${decision.topic}, ${decision.subTopic})"
-                                )
-
-                                onOpenTopicWithSub(
-                                    currentBelt,
-                                    decision.topic,
-                                    decision.subTopic
-                                )
-                            }
-
-                            is SubjectTopicsUiLogic.SubTopicPickDecision.OpenSubject -> {
-                                val hardSubjectId = when (decision.subject.id) {
-                                    "releases" -> releasesSectionIdFor(picked)
-                                    else -> null
-                                }
-
-                                if (hardSubjectId != null) {
-                                    android.util.Log.e(
-                                        "KMI_NAV",
-                                        "SubTopic decision DIRECT_HARD_SUBJECT -> subjectId='$hardSubjectId' picked='$picked'"
-                                    )
-
-                                    onOpenHardSubjectRoute(currentBelt, hardSubjectId)
-                                } else {
-                                    android.util.Log.e(
-                                        "KMI_NAV",
-                                        "SubTopic decision -> openSubjectSmart id='${decision.subject.id}' title='${decision.subject.titleHeb}'"
-                                    )
-
-                                    openSubjectSmart(decision.subject)
-                                }
-                            }
-
-                            SubjectTopicsUiLogic.SubTopicPickDecision.None -> Unit
-                        }
+                        askDefense = true
                     }
                 )
+
+                HorizontalDivider(
+                    thickness = 0.8.dp,
+                    color = Color(0x14000000),
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                )
+
+                SubjectRootCardPremium(
+                    title = handsRootCard.title,
+                    subtitle = "",
+                    subjectId = "hands_root",
+                    countText = handsRootCard.countText,
+                    showLeftBadge = true,
+                    onClick = { askHands = true }
+                )
+
+                HorizontalDivider(
+                    thickness = 0.8.dp,
+                    color = Color(0x14000000),
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                )
+
+                // ✅ מציגים נושאים עם תתי־נושאים
+                subjectsWithSubTopicsCards.forEachIndexed { index, card ->
+                    SubjectRootCardPremium(
+                        title = card.title,
+                        subtitle = "",
+                        subjectId = card.id,
+                        countText = card.countText,
+                        onClick = {
+                            if (card.id == "releases_hugs") {
+                                onOpenHardSubjectRoute(currentBelt, "releases_hugs")
+                            } else {
+                                askSubTopicsForId = card.id
+                            }
+                        }
+                    )
+
+                    HorizontalDivider(
+                        thickness = 0.8.dp,
+                        color = Color(0x14000000),
+                        modifier = Modifier.padding(horizontal = 6.dp)
+                    )
+                }
+
+                // ✅ מציגים נושאים בלי תתי־נושאים
+                subjectsWithoutSubTopicsCards.forEachIndexed { index, card ->
+                    val subject = subjects.firstOrNull { it.id == card.id } ?: return@forEachIndexed
+
+                    SubjectRootCardPremium(
+                        title = card.title,
+                        subtitle = "",
+                        subjectId = card.id,
+                        countText = card.countText,
+                        onClick = {
+                            when (card.id) {
+                                "topic_kavaler" -> {
+                                    val action = SubjectTopicsUiLogic.buildOpenSubjectUiAction(
+                                        subject = subject,
+                                        currentBelt = currentBelt
+                                    )
+
+                                    val chosenBelt = action.chosenBelt
+
+                                    android.util.Log.e(
+                                        "KMI_NAV",
+                                        "KAVALER HARD_ROUTE -> currentBelt=${currentBelt.id} chosenBelt=${chosenBelt.id} subjectId='topic_kavaler'"
+                                    )
+
+                                    onOpenHardSubjectRoute(chosenBelt, "topic_kavaler")
+                                }
+
+                                else -> {
+                                    android.util.Log.e(
+                                        "KMI_NAV",
+                                        "NO_SUBTOPIC click -> title='${subject.titleHeb}' id='${subject.id}' currentBelt=${currentBelt.id}"
+                                    )
+
+                                    openSubjectSmart(subject)
+                                }
+                            }
+                        }
+                    )
+
+                    if (index != subjectsWithoutSubTopicsCards.lastIndex) {
+                        HorizontalDivider(
+                            thickness = 0.8.dp,
+                            color = Color(0x14000000),
+                            modifier = Modifier.padding(horizontal = 6.dp)
+                        )
+                    }
+                }
+
+                if (askDefense) {
+                    DefenseCategoryPickDialogModern(
+                        counts = defenseDialogCountsMap,
+                        onDismiss = { askDefense = false },
+                        onPick = { picked ->
+                            askDefense = false
+
+                            when (val decision = SubjectTopicsUiLogic.resolveDefenseDialogPick(picked)) {
+                                is SubjectTopicsUiLogic.DefenseDialogDecision.AskKind -> {
+                                    askKind = decision.kind
+                                }
+
+                                is SubjectTopicsUiLogic.DefenseDialogDecision.OpenHardSubject -> {
+                                    android.util.Log.e(
+                                        "KMI_NAV",
+                                        "Defense dialog -> hard subject '${decision.subjectId}'"
+                                    )
+                                    android.util.Log.e(
+                                        "KMI_NAV",
+                                        "TOPICS_CARD before onOpenHardSubjectRoute belt=${currentBelt.id} subjectId='${decision.subjectId}'"
+                                    )
+                                    onOpenHardSubjectRoute(currentBelt, decision.subjectId)
+                                }
+
+                                SubjectTopicsUiLogic.DefenseDialogDecision.None -> Unit
+                            }
+                        }
+                    )
+                }
+
+                askKind?.let { kind ->
+                    DefensePickModeDialogModern(
+                        kind = kind,
+                        counts = defensePickCountsMap,
+                        onDismiss = { askKind = null },
+                        onPick = { picked ->
+                            askKind = null
+
+                            when (val decision = SubjectTopicsUiLogic.resolveDefenseKindPick(kind, picked)) {
+                                is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenLegacyDefenses -> {
+                                    onOpenDefenseList(
+                                        currentBelt,
+                                        decision.kind,
+                                        decision.pick
+                                    )
+                                }
+
+                                is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenHardSubject -> {
+                                    android.util.Log.e(
+                                        "KMI_NAV",
+                                        "TOPICS_CARD kind before onOpenHardSubjectRoute belt=${currentBelt.id} subjectId='${decision.subjectId}'"
+                                    )
+                                    onOpenHardSubjectRoute(currentBelt, decision.subjectId)
+                                }
+
+                                SubjectTopicsUiLogic.DefenseKindPickDecision.None -> Unit
+                            }
+                        }
+                    )
+                }
+
+                if (askHands) {
+                    val handsPicks = remember(handsBase) {
+                        SubjectTopicsUiLogic.handsPicks(handsBase)
+                    }
+                    val handsDisplayPicks = remember(handsPicks, isEnglish) {
+                        handsPicks.map { subTopicTitleForUi(it, isEnglish) }
+                    }
+
+                    HandsPickModeDialogModern(
+                        picks = handsDisplayPicks,
+                        counts = handsPickCounts,
+                        onDismiss = { askHands = false },
+                        onPick = { pickedDisplay: String ->
+                            askHands = false
+
+                            val picked = handsPicks.firstOrNull {
+                                subTopicTitleForUi(it, isEnglish) == pickedDisplay
+                            } ?: pickedDisplay
+
+                            val hardSubjectId = handsSectionIdFor(picked)
+
+                            if (hardSubjectId != null) {
+                                android.util.Log.e(
+                                    "KMI_NAV",
+                                    "Hands dialog -> hard subject '$hardSubjectId' picked='$picked'"
+                                )
+
+                                onOpenHardSubjectRoute(currentBelt, hardSubjectId)
+                            } else {
+                                val subject = SubjectTopicsUiLogic.resolveHandsPick(
+                                    base = handsBase,
+                                    picked = picked
+                                )
+
+                                if (subject != null) {
+                                    android.util.Log.e(
+                                        "KMI_NAV",
+                                        "Hands tmp subject: id='${subject.id}' title='${subject.titleHeb}' hint='${subject.subTopicHint}' topicsByBelt=${subject.topicsByBelt}"
+                                    )
+
+                                    openSubjectSmart(subject)
+                                } else {
+                                    android.util.Log.e("KMI_NAV", "Hands base is NULL -> cannot navigate")
+                                }
+                            }
+                        }
+                    )
+                }
+
+                askSubTopicsForId?.let { id ->
+
+                    val dialogData = remember(subjects, id) {
+                        SubjectTopicsUiLogic.buildSubTopicsDialogData(
+                            subjects = subjects,
+                            id = id
+                        )
+                    }
+
+                    val counts = subTopicsPickCountsBySubjectId[id].orEmpty()
+                    val displayPicks = remember(dialogData.picks, isEnglish) {
+                        dialogData.picks.map { subTopicTitleForUi(it.trim(), isEnglish) }
+                    }
+
+
+                    SubTopicsPickModeDialogModern(
+                        title = dialogData.base?.titleHeb ?: if (isEnglish) "Sub topics" else "תתי נושאים",
+                        picks = displayPicks,
+                        counts = counts,
+                        onDismiss = { askSubTopicsForId = null },
+                        onPick = { pickedDisplay: String ->
+                            askSubTopicsForId = null
+
+                            val picked = dialogData.picks.firstOrNull {
+                                subTopicTitleForUi(it, isEnglish) == pickedDisplay
+                            } ?: pickedDisplay
+
+                            val decision = SubjectTopicsUiLogic.resolveSubTopicPick(
+                                base = dialogData.base,
+                                bodyHugsChild = dialogData.bodyHugsChild,
+                                picked = picked,
+                                norm = ::normText
+                            )
+
+                            when (decision) {
+                                is SubjectTopicsUiLogic.SubTopicPickDecision.OpenTopicWithSub -> {
+                                    android.util.Log.e(
+                                        "KMI_NAV",
+                                        "SubTopic decision -> onOpenTopicWithSub(${decision.topic}, ${decision.subTopic})"
+                                    )
+
+                                    onOpenTopicWithSub(
+                                        currentBelt,
+                                        decision.topic,
+                                        decision.subTopic
+                                    )
+                                }
+
+                                is SubjectTopicsUiLogic.SubTopicPickDecision.OpenSubject -> {
+                                    val hardSubjectId = when (decision.subject.id) {
+                                        "releases" -> releasesSectionIdFor(picked)
+                                        else -> null
+                                    }
+
+                                    if (hardSubjectId != null) {
+                                        android.util.Log.e(
+                                            "KMI_NAV",
+                                            "SubTopic decision DIRECT_HARD_SUBJECT -> subjectId='$hardSubjectId' picked='$picked'"
+                                        )
+
+                                        onOpenHardSubjectRoute(currentBelt, hardSubjectId)
+                                    } else {
+                                        android.util.Log.e(
+                                            "KMI_NAV",
+                                            "SubTopic decision -> openSubjectSmart id='${decision.subject.id}' title='${decision.subject.titleHeb}'"
+                                        )
+
+                                        openSubjectSmart(decision.subject)
+                                    }
+                                }
+
+                                SubjectTopicsUiLogic.SubTopicPickDecision.None -> Unit
+                            }
+                        }
+                    )
+                }
             }
         }
     }

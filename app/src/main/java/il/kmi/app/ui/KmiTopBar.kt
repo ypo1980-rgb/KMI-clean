@@ -10,10 +10,14 @@ import android.content.ContextWrapper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -250,9 +256,6 @@ fun KmiTopBar(
     // 🔧 דגל עזר: לאפשר פתיחה גם בלי “רשום” (כדי שלא ייחסם במסכי מאמן חדש)
     val debugAllowCoachBroadcastWithoutRegistration = true
 
-    // האם להראות אייקון “שידור”
-    val canShowBroadcastIcon = showCoachBroadcastFab && userIsCoach
-
     // הגדרות זמינות תמיד
     val showSettingsAllowed = showSettings
 
@@ -279,7 +282,7 @@ fun KmiTopBar(
         }
 
     val topBarHeight = 56.dp
-    val bottomBarHeight = 56.dp
+    val bottomBarHeight = 44.dp
 
     // Back בטוח
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
@@ -344,37 +347,33 @@ fun KmiTopBar(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxHeight(),
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(start = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (showMenu) {
-                        IconButton(
-                            onClick = openDrawerClick,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .padding(start = 4.dp, end = 2.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Menu,
-                                contentDescription = "תפריט",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        PremiumActionIcon(
+                            icon = Icons.Filled.Menu,
+                            tint = Color(0xFF4F46E5),
+                            background = Color(0x1A4F46E5),
+                            contentDescription = "תפריט",
+                            onClick = openDrawerClick
+                        )
                     } else {
                         Spacer(Modifier.width(8.dp))
                     }
 
+                    Spacer(Modifier.width(8.dp))
+
                     if (onBack != null) {
-                        IconButton(
-                            onClick = { performBackSafe() },
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "חזור",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        PremiumActionIcon(
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            tint = Color(0xFF2563EB),
+                            background = Color(0x1A2563EB),
+                            contentDescription = "חזור",
+                            onClick = { performBackSafe() }
+                        )
                     } else {
                         Spacer(Modifier.width(4.dp))
                     }
@@ -425,15 +424,23 @@ fun KmiTopBar(
 
                         // ⬅️ בית + חיפוש + שפה
                         if (showTopHome && onHome != null) {
-
-                            // צבע אייקון בית – אפור כשהמסך נעול
                             val homeTint = if (lockHome) {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
                             } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                                Color(0xFF2563EB)
                             }
 
-                            IconButton(
+                            val homeBg = if (lockHome) {
+                                Color(0x14000000)
+                            } else {
+                                Color(0x1A2563EB)
+                            }
+
+                            PremiumActionIcon(
+                                icon = Icons.Filled.Home,
+                                tint = homeTint,
+                                background = homeBg,
+                                contentDescription = "בית",
                                 onClick = {
                                     if (lockHome) {
                                         android.widget.Toast
@@ -446,31 +453,21 @@ fun KmiTopBar(
                                     } else {
                                         onHome()
                                     }
-                                },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Home,
-                                    contentDescription = "בית",
-                                    tint = homeTint
-                                )
-                            }
-                            Spacer(Modifier.width(4.dp))
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
                         }
 
                         // 🔎 חיפוש — רק אם לא נעול וגם הותר בכותרת
                         if (showTopSearch && !lockSearch && onSearch != null) {
-                            IconButton(
-                                onClick = onSearch,
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Search,
-                                    contentDescription = "חיפוש",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(Modifier.width(4.dp))
+                            PremiumActionIcon(
+                                icon = Icons.Filled.Search,
+                                tint = Color(0xFF10B981),
+                                background = Color(0x1A10B981),
+                                contentDescription = "חיפוש",
+                                onClick = onSearch
+                            )
+                            Spacer(Modifier.width(8.dp))
                         }
 
                         // אקשנס נוספים מהמסכים
@@ -564,18 +561,6 @@ fun KmiTopBar(
                     } else null,
                     currentLang = currentLangResolved,
 
-                    onToggleLanguage = {
-                        val newLang =
-                            if (languageManager.getCurrentLanguage() == AppLanguage.HEBREW) {
-                                AppLanguage.ENGLISH
-                            } else {
-                                AppLanguage.HEBREW
-                            }
-
-                        languageManager.setLanguage(newLang)
-                        (ctx as? Activity)?.recreate()
-                    },
-
                     onShare = {
                         if (onShare != null) {
                             onShare()
@@ -598,10 +583,6 @@ fun KmiTopBar(
                     onNext = onNext,
                     whatsAppIconRes = whatsAppIconRes,
                     accessibilityIconRes = accessibilityIconRes,
-
-                    // אייקון שידור מאמן – רק למאמנים
-                    showCoachBroadcastAction = canShowBroadcastIcon,
-                    onCoachBroadcastClick = { triggerCoachBroadcast() },
 
                     // חיפוש תרגילים + בחירת תוצאה
                     searchProvider = { q -> KmiSearchBridge.searchExercises(q) },
@@ -798,6 +779,56 @@ fun KmiTopBar(
 
             Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+@Composable
+fun PremiumActionIcon(
+    icon: ImageVector,
+    tint: Color,
+    background: Color,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    var pressed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(110)
+            pressed = false
+        }
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.86f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.45f,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "iconBounce"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .background(background)
+            .clickable {
+                pressed = true
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 

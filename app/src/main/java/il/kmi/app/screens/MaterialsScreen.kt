@@ -53,6 +53,7 @@ import il.kmi.app.ui.color
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.shared.domain.content.ExerciseTitlesEn
 
 //=================================================================================
 
@@ -108,8 +109,22 @@ private fun premiumSurfaceGradientForBelt(belt: Belt): Brush {
 }
 
 @Composable
-private fun premiumOutlineForBelt(belt: Belt): Color {
-    return belt.color.copy(alpha = 0.18f)
+private fun topicTitleForUi(title: String, lang: AppLanguage): String {
+    val clean = title.trim()
+    return if (lang == AppLanguage.ENGLISH) {
+        ExerciseTitlesEn.getOrSame(clean)
+    } else {
+        clean
+    }
+}
+
+private fun itemTitleForUi(topic: String, rawItem: String, lang: AppLanguage): String {
+    val display = CanonicalIds.uiDisplayName(topic, rawItem).trim()
+    return if (lang == AppLanguage.ENGLISH) {
+        ExerciseTitlesEn.getOrSame(display)
+    } else {
+        display
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -128,6 +143,10 @@ fun MaterialsScreen(
 ) {
 
     val context = LocalContext.current
+    val langManager = remember { AppLanguageManager(context) }
+    val currentLang = langManager.getCurrentLanguage()
+    val isEnglish = currentLang == AppLanguage.ENGLISH
+
     val sp = remember { context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
@@ -351,7 +370,11 @@ fun MaterialsScreen(
     Scaffold(
         topBar = {
             val headerTitle =
-                if (subTopicFilter.isNullOrBlank()) topic else "$topic - $subTopicFilter"
+                if (subTopicFilter.isNullOrBlank()) {
+                    topicTitleForUi(topic, currentLang)
+                } else {
+                    "${topicTitleForUi(topic, currentLang)} - ${topicTitleForUi(subTopicFilter, currentLang)}"
+                }
 
             val contextLang = LocalContext.current
             val langManager = remember { AppLanguageManager(contextLang) }
@@ -416,14 +439,14 @@ fun MaterialsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             AnimatedButton(
-                                text = "תרגול",
+                                text = if (isEnglish) "Practice" else "תרגול",
                                 modifier = Modifier.weight(1f),
                                 containerColor = belt.color.copy(alpha = 0.92f),
                                 onClick = { onPractice(belt, topicUi) }
                             )
 
                             AnimatedButton(
-                                text = "איפוס",
+                                text = if (isEnglish) "Reset" else "איפוס",
                                 modifier = Modifier.weight(1f),
                                 containerColor = Color(0xFFB3261E),
                                 onClick = {
@@ -444,7 +467,7 @@ fun MaterialsScreen(
                         }
 
                         AnimatedButton(
-                            text = "מסך סיכום",
+                            text = if (isEnglish) "Summary Screen" else "מסך סיכום",
                             modifier = Modifier.fillMaxWidth(),
                             containerColor = Color(0xFF1F2937),
                             onClick = { onSummary(belt, topicUi, subTopicFilter) }
@@ -540,7 +563,7 @@ fun MaterialsScreen(
                 onDismissRequest = { noteEditorFor = null },
                 title = {
                     Text(
-                        "הערה על התרגיל",
+                        if (isEnglish) "Exercise Note" else "הערה על התרגיל",
                         style = MaterialTheme.typography.titleSmall,
                         textAlign = TextAlign.Right,
                         modifier = Modifier.fillMaxWidth(),
@@ -556,7 +579,7 @@ fun MaterialsScreen(
                             value = noteDraft,
                             onValueChange = { noteDraft = it },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("הקלד הערה חופשית") },
+                            label = { Text(if (isEnglish) "Write a free note" else "הקלד הערה חופשית") },
                             minLines = 3,
                             maxLines = 5
                         )
@@ -568,7 +591,7 @@ fun MaterialsScreen(
                                     noteEditorFor = null
                                 }
                             ) {
-                                Text("מחק הערה")
+                                Text(if (isEnglish) "Delete note" else "מחק הערה")
                             }
                         }
                     }
@@ -580,14 +603,14 @@ fun MaterialsScreen(
                             noteEditorFor = null
                         }
                     ) {
-                        Text("שמור")
+                        Text(if (isEnglish) "Save" else "שמור")
                     }
                 },
                 dismissButton = {
                     TextButton(
                         onClick = { noteEditorFor = null }
                     ) {
-                        Text("בטל")
+                        Text(if (isEnglish) "Cancel" else "בטל")
                     }
                 }
             )
@@ -598,10 +621,19 @@ fun MaterialsScreen(
                 .fillMaxSize(),
             horizontalAlignment = Alignment.End
         ) {
-                val header = if (subTopicFilter.isNullOrBlank())
+            val header = if (subTopicFilter.isNullOrBlank()) {
+                if (isEnglish) {
+                    "Material: ${topicTitleForUi(topicUi, currentLang)}"
+                } else {
                     "חומר: $topicUi"
-                else
+                }
+            } else {
+                if (isEnglish) {
+                    "Material: ${topicTitleForUi(topicUi, currentLang)} – ${topicTitleForUi(subTopicFilter, currentLang)}"
+                } else {
                     "חומר: $topicUi – $subTopicFilter"
+                }
+            }
 
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     Row(
@@ -621,9 +653,22 @@ fun MaterialsScreen(
                             Belt.BLACK  -> R.drawable.belt_black
                         }
 
+                        Text(
+                            text = header,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Right,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color(0xFF334155),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(Modifier.width(10.dp))
+
                         Box(
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(42.dp)
                                 .background(
                                     color = Color.White.copy(alpha = 0.70f),
                                     shape = CircleShape
@@ -638,23 +683,10 @@ fun MaterialsScreen(
                             Image(
                                 painter = painterResource(id = beltRes),
                                 contentDescription = "חגורה ${belt.heb}",
-                                modifier = Modifier.size(26.dp),
+                                modifier = Modifier.size(32.dp),
                                 contentScale = ContentScale.Fit
                             )
                         }
-
-                        Spacer(Modifier.width(8.dp))
-
-                        Text(
-                            text = header,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Right,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = Color(0xFF334155),
-                            modifier = Modifier.weight(1f)
-                        )
                     }
                 }
 
@@ -691,8 +723,8 @@ fun MaterialsScreen(
                             val canonicalId = remember(item, belt.id, topicUi) { canonicalFor(item) }
 
                             // ✅ טקסט לתצוגה בלבד
-                            val displayName = remember(item, topicUi) {
-                                CanonicalIds.uiDisplayName(topicUi, item)
+                            val displayName = remember(item, topicUi, currentLang) {
+                                itemTitleForUi(topicUi, item, currentLang)
                             }
 
                             var noteText by remember(item, belt.id, excludedKeySuffix) {
@@ -717,86 +749,18 @@ fun MaterialsScreen(
                                 label = "scaleAnim"
                             )
 
-                            Surface(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .scale(scale)
-                                    .padding(vertical = 2.dp)
-                                    .bringIntoViewRequester(bringer),
-                                shape = RoundedCornerShape(18.dp),
-                                color = Color.Transparent,
-                                shadowElevation = if (isHighlighted) 8.dp else 5.dp,
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = if (isHighlighted) {
-                                        belt.color.copy(alpha = 0.26f)
-                                    } else {
-                                        belt.color.copy(alpha = 0.12f)
-                                    }
-                                )
+                                    .bringIntoViewRequester(bringer)
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(
-                                            brush = Brush.verticalGradient(
-                                                colors = listOf(
-                                                    Color.White.copy(alpha = 0.98f),
-                                                    belt.color.copy(alpha = if (isHighlighted) 0.13f else 0.06f),
-                                                    Color.White.copy(alpha = 0.95f)
-                                                )
-                                            )
-                                        )
-                                        .padding(horizontal = 10.dp, vertical = 9.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(3.dp)
-                                            .height(30.dp)
-                                            .background(
-                                                brush = Brush.verticalGradient(
-                                                    colors = listOf(
-                                                        belt.color.copy(alpha = 1f),
-                                                        belt.color.copy(alpha = 0.65f)
-                                                    )
-                                                ),
-                                                shape = RoundedCornerShape(999.dp)
-                                            )
-                                    )
-
-                                    Spacer(Modifier.width(8.dp))
-
-                                    Text(
-                                        text = displayName,
-                                        textAlign = TextAlign.Right,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .padding(horizontal = 6.dp),
-                                        color = when {
-                                            isExcluded -> Color.Gray
-                                            isHighlighted -> belt.color.copy(alpha = 0.95f)
-                                            else -> Color(0xFF111827)
-                                        },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-
-                                    Spacer(Modifier.width(6.dp))
-
-                                    MasterToggle(
-                                        mastered = mastered,
-                                        onSelect = { newVal ->
-                                            itemStates[item] = newVal
-                                            vm.setItemStatusNullable(belt, vmTopic, canonicalId, newVal)
-                                        }
-                                    )
-
-                                    Spacer(Modifier.width(6.dp))
-
                                     ItemFloatingActions(
                                         excluded = isExcluded,
                                         isFav = favorites.contains(canonicalId),
@@ -813,10 +777,45 @@ fun MaterialsScreen(
                                         onToggleFavorite = { toggleFavorite(canonicalId) },
                                         onEditNote = { showNoteDialog = true }
                                     )
+
+                                    Spacer(Modifier.width(8.dp))
+
+                                    Text(
+                                        text = displayName,
+                                        textAlign = TextAlign.Right,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 4.dp),
+                                        color = when {
+                                            isExcluded -> Color.Gray
+                                            isHighlighted -> belt.color.copy(alpha = 0.95f)
+                                            else -> Color(0xFF111827)
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+
+                                    Spacer(Modifier.width(8.dp))
+
+                                    MasterToggle(
+                                        mastered = mastered,
+                                        onSelect = { newVal ->
+                                            itemStates[item] = newVal
+                                            vm.setItemStatusNullable(belt, vmTopic, canonicalId, newVal)
+                                        }
+                                    )
                                 }
+
+                                Divider(
+                                    color = belt.color.copy(alpha = 0.30f),
+                                    thickness = 1.dp,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 8.dp, end = 8.dp)
+                                )
                             }
-
-
 
                             // דיאלוג הערה
                             if (showNoteDialog) {
@@ -824,7 +823,7 @@ fun MaterialsScreen(
                                     onDismissRequest = { showNoteDialog = false },
                                     title = {
                                         Text(
-                                            "הערה על התרגיל",
+                                            if (isEnglish) "Exercise Note" else "הערה על התרגיל",
                                             style = MaterialTheme.typography.titleSmall,
                                             textAlign = TextAlign.Right,
                                             modifier = Modifier.fillMaxWidth(),
@@ -840,7 +839,7 @@ fun MaterialsScreen(
                                                 value = noteText,
                                                 onValueChange = { noteText = it },
                                                 modifier = Modifier.fillMaxWidth(),
-                                                label = { Text("הקלד הערה חופשית") },
+                                                label = { Text(if (isEnglish) "Write a free note" else "הקלד הערה חופשית") },
                                                 minLines = 3,
                                                 maxLines = 5
                                             )
@@ -852,7 +851,7 @@ fun MaterialsScreen(
                                                         showNoteDialog = false
                                                     }
                                                 ) {
-                                                    Text("מחק הערה")
+                                                    Text(if (isEnglish) "Delete note" else "מחק הערה")
                                                 }
                                             }
                                         }
@@ -862,12 +861,12 @@ fun MaterialsScreen(
                                             saveNote(canonicalId, noteText)
                                             showNoteDialog = false
                                         }) {
-                                            Text("שמור")
+                                            Text(if (isEnglish) "Save" else "שמור")
                                         }
                                     },
                                     dismissButton = {
                                         TextButton(onClick = { showNoteDialog = false }) {
-                                            Text("בטל")
+                                            Text(if (isEnglish) "Cancel" else "בטל")
                                         }
                                     }
                                 )

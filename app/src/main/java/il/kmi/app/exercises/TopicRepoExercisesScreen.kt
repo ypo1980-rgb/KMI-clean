@@ -20,6 +20,10 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.shared.domain.content.HardSectionsCatalog
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
 import il.kmi.shared.domain.content.HardSectionsCatalog.totalItemsCount
+import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+import androidx.compose.ui.platform.LocalContext
 
 private fun isPunchSubTopic(sub: String?): Boolean {
     val s = sub?.trim().orEmpty()
@@ -70,6 +74,9 @@ fun TopicRepoExercisesScreen(
     onOpenExercise: (String) -> Unit = {},
     onOpenSubTopic: (topicId: String, subTopicId: String) -> Unit = { _, _ -> } // ✅ NEW
 ) {
+    val ctx = LocalContext.current
+    val langManager = remember(ctx) { AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     android.util.Log.e("DEF_DEBUG", "ENTER SCREEN belt=${belt.id} topicId='$topicId' subTopicId='$subTopicId'")
     println("DEF_DEBUG ENTER SCREEN belt=${belt.id} topicId='$topicId' subTopicId='$subTopicId'")
 
@@ -425,20 +432,28 @@ fun TopicRepoExercisesScreen(
                 title = {
                     Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = topic,
+                            text = if (isEnglish) ExerciseTitlesEn.getOrSame(topic) else topic,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
                         Text(
-                            text = subTopicOrNull ?: "כללי",
+                            text = if (isEnglish) {
+                                subTopicOrNull?.let { ExerciseTitlesEn.getOrSame(it) } ?: "General"
+                            } else {
+                                subTopicOrNull ?: "כללי"
+                            },
                             style = MaterialTheme.typography.labelMedium,
                             textAlign = TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
                 },
-                navigationIcon = { TextButton(onClick = onBack) { Text("חזרה") } }
+                navigationIcon = {
+                    TextButton(onClick = onBack) {
+                        Text(if (isEnglish) "Back" else "חזרה")
+                    }
+                }
             )
         }
     ) { padding ->
@@ -461,7 +476,7 @@ fun TopicRepoExercisesScreen(
                 println("DEF_DEBUG SHOW HARD_SUB_SECTIONS belt=${belt.id} topicId='$topicId' topic='$topic' subTopicId='$subTopicId' sections=${hardSubSections.map { "${it.id}:${it.title}" }}")
 
                 Text(
-                    text = "בחר תת־נושא",
+                    text = if (isEnglish) "Select sub-topic" else "בחר תת־נושא",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Right,
@@ -488,7 +503,7 @@ fun TopicRepoExercisesScreen(
                         tonalElevation = 1.dp
                     ) {
                         Text(
-                            text = sec.title,
+                            text = if (isEnglish) ExerciseTitlesEn.getOrSame(sec.title) else sec.title,
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
                             textAlign = TextAlign.Right,
                             fontWeight = FontWeight.SemiBold
@@ -499,7 +514,10 @@ fun TopicRepoExercisesScreen(
             } else if (items.isEmpty()) {
 
                 Text(
-                    text = "לא נמצאו תרגילים עבור \"$topic\"",
+                    text = if (isEnglish)
+                        "No exercises found for \"${ExerciseTitlesEn.getOrSame(topic)}\""
+                    else
+                        "לא נמצאו תרגילים עבור \"$topic\"",
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
@@ -516,7 +534,7 @@ fun TopicRepoExercisesScreen(
                         tonalElevation = 1.dp
                     ) {
                         Text(
-                            text = item,
+                            text = if (isEnglish) ExerciseTitlesEn.getOrSame(item) else item,
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
                             textAlign = TextAlign.Right
                         )

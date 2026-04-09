@@ -48,10 +48,25 @@ import il.kmi.shared.prefs.KmiPrefs
 import kotlinx.coroutines.launch
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import il.kmi.app.FcmTokenManager
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+import java.util.UUID
+
+//======================================================================
 
 // מנרמל קוד: מוריד רווחים/מקפים וממיר ל-UPPERCASE
 private fun String?.normalizeCoachCode(): String =
     this?.trim()?.replace(" ", "")?.replace("-", "")?.uppercase() ?: ""
+
+private fun generateCoachCode(): String =
+    UUID.randomUUID()
+        .toString()
+        .replace("-", "")
+        .take(8)
+        .uppercase()
 
 @Composable
 fun ExistingUserTraineeScreen(
@@ -69,6 +84,10 @@ fun ExistingUserTraineeScreen(
     val scroll = rememberScrollState()
     val appCtx = LocalContext.current
     val view = LocalView.current
+
+    val langManager = remember { AppLanguageManager(appCtx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
 
     // 🔊+📳 טעינת ההעדפות ממסך ההגדרות (kmi_settings)
     val settingsSp = remember {
@@ -101,9 +120,37 @@ fun ExistingUserTraineeScreen(
         }
     }
 
-    // מצב נבחר: מתאמן/מאמן
+// מצב נבחר: מתאמן/מאמן
     var isCoach by rememberSaveable {
         mutableStateOf(sp.getString("user_role", null)?.equals("coach", ignoreCase = true) == true)
+    }
+
+    // מאמן בלבד
+    var coachCode by rememberSaveable { mutableStateOf(sp.getString("coach_code", "") ?: "") }
+    var coachCodeError by remember { mutableStateOf(false) }
+    var serverCoachCode by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(isCoach) {
+        if (!isCoach) return@LaunchedEffect
+
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@LaunchedEffect
+
+        runCatching {
+            FirebaseFirestore.getInstance()
+                .collection("users")
+                .document(uid)
+                .get()
+                .await()
+        }.onSuccess { doc ->
+
+            val fetchedCode = doc.getString("coach_code") ?: ""
+            serverCoachCode = fetchedCode
+
+            if (fetchedCode.isNotBlank()) {
+                coachCode = fetchedCode
+            }
+
+        }
     }
 
     // שדות
@@ -117,10 +164,6 @@ fun ExistingUserTraineeScreen(
     var rememberMe by rememberSaveable { mutableStateOf(sp.getBoolean("remember_me_login", false)) }
     var loginError by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
-
-    // מאמן בלבד
-    var coachCode by rememberSaveable { mutableStateOf(sp.getString("coach_code", "") ?: "") }
-    var coachCodeError by remember { mutableStateOf(false) }
 
     // אם rememberMe דלוק – טוענים קרדנציאלס מראש
     LaunchedEffect(Unit) {
@@ -173,14 +216,17 @@ fun ExistingUserTraineeScreen(
     // דיאלוג שחזור פרטים
     var showRecoveryDialog by rememberSaveable { mutableStateOf(false) }
 
+    var coachCodeResetError by rememberSaveable { mutableStateOf<String?>(null) }
+    var coachCodeResetSuccess by rememberSaveable { mutableStateOf<String?>(null) }
+    var resettingCoachCode by rememberSaveable { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             val ctx = LocalContext.current
-            val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctx) }
             val currentLang = langManager.getCurrentLanguage().code
 
             KmiTopBar(
-                title = if (currentLang == "en") "Login" else "התחברות",
+                title = tr("התחברות", "Login"),
                 showRoleStatus = false,
                 showBottomActions = true,
                 onOpenDrawer = onOpenDrawer,
@@ -193,15 +239,12 @@ fun ExistingUserTraineeScreen(
 
                 onToggleLanguage = {
                     val newLang =
-                        if (langManager.getCurrentLanguage() ==
-                            il.kmi.shared.localization.AppLanguage.HEBREW
-                        )
-                            il.kmi.shared.localization.AppLanguage.ENGLISH
+                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW)
+                            AppLanguage.ENGLISH
                         else
-                            il.kmi.shared.localization.AppLanguage.HEBREW
+                            AppLanguage.HEBREW
 
                     langManager.setLanguage(newLang)
-
                     (ctx as? android.app.Activity)?.recreate()
                 }
             )
@@ -285,7 +328,7 @@ fun ExistingUserTraineeScreen(
                                             .edit().putString("user_role", "trainee").apply()
                                     }
                                 },
-                                text = { Text("מתאמן", fontWeight = FontWeight.Bold) },
+                                text = { Text(tr("מתאמן", "Trainee"), fontWeight = FontWeight.Bold) },
                                 selectedContentColor = Color.White,
                                 unselectedContentColor = Color.White.copy(alpha = 0.7f)
                             )
@@ -301,7 +344,7 @@ fun ExistingUserTraineeScreen(
                                             .edit().putString("user_role", "coach").apply()
                                     }
                                 },
-                                text = { Text("מאמן", fontWeight = FontWeight.Bold) },
+                                text = { Text(tr("מאמן", "Coach"), fontWeight = FontWeight.Bold) },
                                 selectedContentColor = Color.White,
                                 unselectedContentColor = Color.White.copy(alpha = 0.7f)
                             )
@@ -314,7 +357,7 @@ fun ExistingUserTraineeScreen(
                     OutlinedTextField(
                         value = coachCode,
                         onValueChange = { coachCode = it; coachCodeError = false },
-                        label = { Text("קוד מאמן", color = Color.Black) },
+                        label = { Text(tr("קוד מאמן", "Coach Code"), color = Color.Black) },
                         modifier = Modifier
                             .fillMaxWidth(fieldWidth)
                             .defaultMinSize(minHeight = fieldHeight)
@@ -328,15 +371,93 @@ fun ExistingUserTraineeScreen(
                             errorBorderColor = MaterialTheme.colorScheme.error
                         )
                     )
-                    if (coachCodeError) {
-                        Text("קוד מאמן שגוי", color = MaterialTheme.colorScheme.error)
+                    TextButton(
+                        onClick = {
+                            val uid = FirebaseAuth.getInstance().currentUser?.uid
+                            if (uid.isNullOrBlank()) {
+                                coachCodeResetError = tr(
+                                    "צריך להיות מחובר כמאמן כדי לאפס קוד.",
+                                    "You must be signed in as a coach to reset the code."
+                                )
+                                coachCodeResetSuccess = null
+                                return@TextButton
+                            }
+
+                            resettingCoachCode = true
+                            coachCodeResetError = null
+                            coachCodeResetSuccess = null
+
+                            val newCode = generateCoachCode()
+                            val userSp = appCtx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+
+                            FirebaseFirestore.getInstance()
+                                .collection("users")
+                                .document(uid)
+                                .set(
+                                    mapOf(
+                                        "coach_code" to newCode,
+                                        "user_role" to "coach"
+                                    ),
+                                    com.google.firebase.firestore.SetOptions.merge()
+                                )
+                                .addOnSuccessListener {
+                                    coachCode = newCode
+                                    serverCoachCode = newCode
+                                    coachCodeError = false
+
+                                    sp.edit().putString("coach_code", newCode).apply()
+                                    userSp.edit().putString("coach_code", newCode).apply()
+
+                                    coachCodeResetSuccess = tr(
+                                        "נוצר קוד מאמן חדש: $newCode",
+                                        "A new coach code was created: $newCode"
+                                    )
+                                    resettingCoachCode = false
+                                }
+                                .addOnFailureListener {
+                                    coachCodeResetError = tr(
+                                        "לא הצלחנו ליצור קוד מאמן חדש.",
+                                        "Failed to create a new coach code."
+                                    )
+                                    resettingCoachCode = false
+                                }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth(fieldWidth),
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                    ) {
+                        Text(
+                            text = if (resettingCoachCode)
+                                tr("יוצר קוד חדש...", "Creating new code...")
+                            else
+                                tr("שכחתי קוד מאמן", "Forgot coach code"),
+                            textDecoration = TextDecoration.Underline
+                        )
+                    }
+
+                    coachCodeResetError?.let {
+                        Text(
+                            text = it,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.fillMaxWidth(fieldWidth),
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                        )
+                    }
+
+                    coachCodeResetSuccess?.let {
+                        Text(
+                            text = it,
+                            color = Color.White,
+                            modifier = Modifier.fillMaxWidth(fieldWidth),
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                        )
                     }
                 }
 
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("שם משתמש", color = Color.Black) },
+                    label = { Text(tr("שם משתמש", "Username"), color = Color.Black) },
                     modifier = Modifier
                         .fillMaxWidth(fieldWidth)
                         .defaultMinSize(minHeight = fieldHeight)
@@ -357,7 +478,7 @@ fun ExistingUserTraineeScreen(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("סיסמה", color = Color.Black) },
+                    label = { Text(tr("סיסמה", "Password"), color = Color.Black) },
                     modifier = Modifier
                         .fillMaxWidth(fieldWidth)
                         .defaultMinSize(minHeight = fieldHeight)
@@ -374,7 +495,11 @@ fun ExistingUserTraineeScreen(
                     ),
                     trailingIcon = {
                         val icon = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility
-                        val desc = if (passwordVisible) "הסתר סיסמה" else "הצג סיסמה"
+                        val desc = if (passwordVisible) {
+                            tr("הסתר סיסמה", "Hide password")
+                        } else {
+                            tr("הצג סיסמה", "Show password")
+                        }
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
                             Icon(icon, contentDescription = desc, tint = Color.Black)
                         }
@@ -403,7 +528,7 @@ fun ExistingUserTraineeScreen(
                     Spacer(Modifier.width(10.dp))
 
                     Text(
-                        "שמירה לכניסה הבאה",
+                        tr("שמירה לכניסה הבאה", "Remember me"),
                         maxLines = 1,
                         softWrap = false,
                         modifier = Modifier.padding(end = 6.dp),
@@ -412,7 +537,7 @@ fun ExistingUserTraineeScreen(
                 }
 
                 if (loginError) {
-                    Text("פרטי ההתחברות שגויים", color = MaterialTheme.colorScheme.error)
+                    Text(tr("פרטי ההתחברות שגויים", "Invalid login details"), color = MaterialTheme.colorScheme.error)
                 }
 
                 Button(
@@ -435,7 +560,10 @@ fun ExistingUserTraineeScreen(
                             // מאפשר גם קוד מ- CoachRegistry אם יש לך כאלה קבועים
                             val registryOk = runCatching { CoachRegistry.isValid(cc) }.getOrDefault(false)
 
-                            val valid = cc.isNotBlank() && (cc == spCode || cc == userCode || registryOk)
+                            val serverCode = serverCoachCode?.normalizeCoachCode().orEmpty()
+
+                            val valid = cc.isNotBlank() &&
+                                    (cc == serverCode || cc == spCode || cc == userCode || registryOk)
                             coachCodeError = !valid
 
                             if (valid) {
@@ -497,7 +625,7 @@ fun ExistingUserTraineeScreen(
                         contentColor = Color.Black
                     )
                 ) {
-                    Text("התחבר")
+                    Text(tr("התחבר", "Login"))
                 }
 
                 TextButton(
@@ -507,7 +635,10 @@ fun ExistingUserTraineeScreen(
                         .padding(end = ((1 - fieldWidth) / 2f * 100).dp),
                     colors = ButtonDefaults.textButtonColors(contentColor = Color.Black)
                 ) {
-                    Text("שכחתי סיסמה / שם משתמש", textDecoration = TextDecoration.Underline)
+                    Text(
+                        tr("שכחתי סיסמה / שם משתמש", "Forgot password / username"),
+                        textDecoration = TextDecoration.Underline
+                    )
                 }
 
                 Spacer(Modifier.weight(1f))
@@ -519,7 +650,10 @@ fun ExistingUserTraineeScreen(
                 )
 
                 Text(
-                    text = "❤️ פותח באהבה ע\"י יובל פולק ❤️",
+                    text = tr(
+                        "❤️ פותח באהבה ע\"י יובל פולק ❤️",
+                        "❤️ Developed with love by Yuval Polak ❤️"
+                    ),
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = if (LocalConfiguration.current.screenWidthDp <= 360) 14.sp else 16.sp,
                         fontWeight = FontWeight.Bold
@@ -546,6 +680,10 @@ fun ExistingUserTraineeScreen(
 private fun RecoveryDialog(
     onDismiss: () -> Unit
 ) {
+    val ctx = LocalContext.current
+    val langManager = remember { AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
     var emailOrUser by rememberSaveable { mutableStateOf("") }
     var extraInfo by rememberSaveable { mutableStateOf("") }
 
@@ -553,7 +691,7 @@ private fun RecoveryDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "שחזור סיסמה / שם משתמש",
+                text = tr("שחזור סיסמה / שם משתמש", "Password / Username Recovery"),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Right,
@@ -566,7 +704,10 @@ private fun RecoveryDialog(
                 horizontalAlignment = Alignment.End
             ) {
                 Text(
-                    text = "מלא את הפרטים הבאים כדי שנוכל לאתר את המשתמש שלך:",
+                    text = tr(
+                        "מלא את הפרטים הבאים כדי שנוכל לאתר את המשתמש שלך:",
+                        "Fill in the following details so we can locate your user account:"
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Right,
                     modifier = Modifier.fillMaxWidth()
@@ -577,7 +718,7 @@ private fun RecoveryDialog(
                 OutlinedTextField(
                     value = emailOrUser,
                     onValueChange = { emailOrUser = it },
-                    label = { Text("אימייל או שם משתמש") },
+                    label = { Text(tr("אימייל או שם משתמש", "Email or username")) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 48.dp),
@@ -589,7 +730,7 @@ private fun RecoveryDialog(
                 OutlinedTextField(
                     value = extraInfo,
                     onValueChange = { extraInfo = it },
-                    label = { Text("טלפון") },
+                    label = { Text(tr("טלפון", "Phone")) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 48.dp),
@@ -600,7 +741,10 @@ private fun RecoveryDialog(
                 Spacer(Modifier.height(8.dp))
 
                 Text(
-                    text = "בהמשך תוכל לחבר את זה לשליחת מייל / וואטסאפ למאמן או למנהל המערכת.",
+                    text = tr(
+                        "בהמשך תוכל לחבר את זה לשליחת מייל / וואטסאפ למאמן או למנהל המערכת.",
+                        "Later you can connect this to send an email / WhatsApp to the coach or system admin."
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Right,
                     modifier = Modifier.fillMaxWidth()
@@ -614,12 +758,12 @@ private fun RecoveryDialog(
                     onDismiss()
                 }
             ) {
-                Text("שלח בקשה")
+                Text(tr("שלח בקשה", "Send Request"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("סגור")
+                Text(tr("סגור", "Close"))
             }
         }
     )

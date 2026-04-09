@@ -19,10 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.geometry.Size
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,7 +51,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
-import il.kmi.app.ui.FloatingBeltQuickMenu
+import il.kmi.app.ui.FloatingQuickMenu
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -70,6 +67,7 @@ import androidx.compose.ui.unit.Dp
 import il.kmi.shared.domain.TopicsEngine
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.screens.parseSearchKey
+import il.kmi.shared.domain.content.ExerciseTitlesEn
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.ui.platform.LocalContext
@@ -77,16 +75,7 @@ import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.material.icons.rounded.Star
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.graphicsLayer
+import il.kmi.app.ui.QuickMenuTriggerMode
 
 /* ------------------------------ Helpers מקומיים למסך ------------------------------ */
 
@@ -121,7 +110,8 @@ internal fun KmiPrefs.getStringCompat(key: String): String? = try {
 internal fun findExplanationForHit(
     belt: Belt,
     rawItem: String,
-    topic: String
+    topic: String,
+    lang: AppLanguage
 ): String {
     val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
 
@@ -149,7 +139,11 @@ internal fun findExplanationForHit(
         }
     }
 
-    return "אין כרגע הסבר לתרגיל הזה."
+    return if (lang == AppLanguage.ENGLISH) {
+        "There is currently no explanation for this exercise."
+    } else {
+        "אין כרגע הסבר לתרגיל הזה."
+    }
 }
 
 internal fun Modifier.circleGlow(
@@ -241,73 +235,10 @@ internal fun beltShortNameForUi(belt: Belt, lang: AppLanguage): String =
     }
 
 internal fun topicTitleForUi(title: String, lang: AppLanguage): String {
-    if (lang != AppLanguage.ENGLISH) return title
-
-    return when (title.trim()) {
-        "כללי" -> "General"
-        "עבודת ידיים" -> "Hand Techniques"
-        "מכות יד" -> "Hand Strikes"
-        "מכות ידיים" -> "Hand Strikes"
-        "מכות מרפק" -> "Elbow Strikes"
-        "מכות במקל / רובה" -> "Stick / Rifle Strikes"
-        "מכות במקל קצר" -> "Short Stick Strikes"
-
-        "בעיטות" -> "Kicks"
-        "בעיטת מגל" -> "Roundhouse Kick"
-        "בעיטה צידית" -> "Side Kick"
-        "בעיטת צד" -> "Side Kick"
-        "בעיטת דחיפה" -> "Push Kick"
-        "בעיטה אחורית" -> "Back Kick"
-        "בעיטת ניתור" -> "Jump Kick"
-
-        "שחרורים" -> "Releases"
-        "שחרור מתפיסות ידיים / שיער / חולצה" -> "Releases from Hand / Hair / Shirt Grabs"
-        "שחרור מחניקות" -> "Choke Releases"
-        "שחרור מחביקות" -> "Bear Hug Releases"
-        "חביקות גוף" -> "Body Hugs"
-        "חביקות צוואר" -> "Neck Hugs"
-        "חביקות זרוע" -> "Arm Hugs"
-
-        "הגנות" -> "Defenses"
-        "הגנות פנימיות" -> "Internal Defenses"
-        "הגנות חיצוניות" -> "External Defenses"
-        "הגנות סכין" -> "Knife Defense"
-        "הגנות מאיום אקדח" -> "Gun Threat Defense"
-        "הגנות נגד מקל" -> "Stick Defense"
-        "בעיטות בניתור" -> "Jump Kicks"
-        "בלימות וגלגולים" -> "Breakfalls and Rolls"
-        "עמידת מוצא" -> "Ready Stance"
-        "הכנה לעבודת קרקע" -> "Groundwork Preparation"
-        "קאוולר" -> "Kavaler"
-        "קוואלר" -> "Kavaler"
-        "גלגולים" -> "Rolls"
-        "קרקע" -> "Ground"
-        "אגרופים" -> "Punches"
-        "מרפקים" -> "Elbows"
-        "ברכיים" -> "Knees"
-        "שחרור מתפיסות ידיים" -> "Release from Hand Grabs"
-        "שחרור מתפיסות חולצה" -> "Release from Shirt Grabs"
-        "שחרור מתפיסות שיער" -> "Release from Hair Grabs"
-        "שחרורים מתפיסות צוואר וגוף" -> "Releases from Neck and Body Grabs"
-        "שחרורים מחניקות" -> "Choke Releases"
-        "שחרורים מתפיסות ידיים" -> "Release from Hand Grabs"
-        "שחרורים מתפיסות חולצה" -> "Release from Shirt Grabs"
-        "שחרורים מתפיסות שיער" -> "Release from Hair Grabs"
-
-        "מרפק" -> "Elbow Strikes"
-        "פיסת יד" -> "Knife Hand Strikes"
-        "אגרופים ישרים" -> "Straight Punches"
-        "מגל + סנוקרת" -> "Hook and Uppercut"
-
-        "הגנה נגד מכות אגרוף" -> "Defense Against Punches"
-        "הגנות נגד מכות אגרוף" -> "Defense Against Punches"
-        "הגנות מאיום סכין" -> "Defense Against Knife Threat"
-        "הגנה נגד בעיטות" -> "Defense Against Kicks"
-        "הגנת מאיום סכין" -> "Defense Against Knife Threat"
-        "הגנה מאיום סכין" -> "Defense Against Knife Threat"
-        "מכות במקל / רובה" -> "Stick / Rifle Strikes"
-
-        else -> title
+    return if (lang == AppLanguage.ENGLISH) {
+        ExerciseTitlesEn.getOrSame(title.trim())
+    } else {
+        title
     }
 }
 
@@ -645,75 +576,8 @@ internal fun BeltPangoLayout(
                 }
             }
 
-            // ✅ לחיצה מחוץ לתפריט סוגרת אותו (שכבה מעל המסך ומתחת לתפריט)
-            AnimatedVisibility(
-                visible = quickMenuExpanded && topicsViewMode == TopicsViewMode.BY_TOPIC,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .navigationBarsPadding()
-                    .padding(start = 18.dp, bottom = 92.dp)
-                    .zIndex(999f),
-                enter = fadeIn() + scaleIn(),
-                exit = fadeOut() + scaleOut()
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.Start
-                ) {
-                    TopicQuickMenuActionRow(
-                        text = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "Weak Points" else "נקודות תורפה",
-                        icon = Icons.Filled.Warning,
-                        onClick = {
-                            quickMenuExpanded = false
-                            clickSound(); haptic(true)
-                            onOpenWeakPoints(currentBelt)
-                        }
-                    )
-
-                    TopicQuickMenuActionRow(
-                        text = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "All Lists" else "כל הרשימות",
-                        icon = Icons.Filled.FormatListBulleted,
-                        onClick = {
-                            quickMenuExpanded = false
-                            clickSound(); haptic(true)
-                            onOpenAllLists(currentBelt)
-                        }
-                    )
-
-                    TopicQuickMenuActionRow(
-                        text = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "Summary" else "סיכום",
-                        icon = Icons.Filled.ReceiptLong,
-                        onClick = {
-                            quickMenuExpanded = false
-                            clickSound(); haptic(true)
-                            onOpenSummaryScreen(currentBelt)
-                        }
-                    )
-
-                    TopicQuickMenuActionRow(
-                        text = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "Voice Assistant" else "עוזר קולי",
-                        icon = Icons.Filled.Mic,
-                        onClick = {
-                            quickMenuExpanded = false
-                            clickSound(); haptic(true)
-                            onOpenVoiceAssistant(currentBelt)
-                        }
-                    )
-
-                    TopicQuickMenuActionRow(
-                        text = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "PDF Materials" else "חומרי PDF",
-                        icon = Icons.Filled.PictureAsPdf,
-                        onClick = {
-                            quickMenuExpanded = false
-                            clickSound(); haptic(true)
-                            onOpenPdfMaterials(currentBelt)
-                        }
-                    )
-                }
-            }
-
             if (topicsViewMode == TopicsViewMode.BY_BELT) {
-                FloatingBeltQuickMenu(
+                FloatingQuickMenu(
                     belt = currentBelt,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -725,6 +589,8 @@ internal fun BeltPangoLayout(
                         .zIndex(999f),
                     expanded = quickMenuExpanded,
                     onExpandedChange = { quickMenuExpanded = it },
+                    triggerMode = QuickMenuTriggerMode.Fab,
+                    includePractice = true,
                     onWeakPoints = {
                         clickSound(); haptic(true)
                         onOpenWeakPoints(currentBelt)
@@ -752,29 +618,17 @@ internal fun BeltPangoLayout(
                 )
             }
 
-            if (topicsViewMode == TopicsViewMode.BY_TOPIC) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                        .zIndex(1000f)
-                ) {
-                    BottomMoreActionsButton(
-                        isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH,
-                        onClick = { quickMenuExpanded = !quickMenuExpanded }
-                    )
-                }
-            }
-
-            pickedKey?.let { key ->
+                pickedKey?.let { key ->
                 val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
                 val (belt, topic, item) = parseSearchKey(key)
 
-                val displayName = ExerciseTitleFormatter
-                    .displayName(item)
-                    .ifBlank { item }
+                    val displayName = if (isEnglish) {
+                        ExerciseTitlesEn.getOrSame(
+                            ExerciseTitleFormatter.displayName(item).ifBlank { item }.trim()
+                        )
+                    } else {
+                        ExerciseTitleFormatter.displayName(item).ifBlank { item }
+                    }
 
                 val favoriteId = remember(item) { normalizeFavoriteId(item) }
                 val favorites: Set<String> by FavoritesStore
@@ -791,13 +645,14 @@ internal fun BeltPangoLayout(
                 }
                 var showNoteEditor by remember { mutableStateOf(false) }
 
-                val explanation = remember(belt, item) {
-                    findExplanationForHit(
-                        belt = belt,
-                        rawItem = item,
-                        topic = topic
-                    )
-                }
+                    val explanation = remember(belt, item, isEnglish) {
+                        findExplanationForHit(
+                            belt = belt,
+                            rawItem = item,
+                            topic = topic,
+                            lang = if (isEnglish) AppLanguage.ENGLISH else AppLanguage.HEBREW
+                        )
+                    }
 
                 AlertDialog(
                     onDismissRequest = { pickedKey = null },
@@ -821,7 +676,11 @@ internal fun BeltPangoLayout(
                                 )
 
                                 Text(
-                                    text = "${topic} • ${belt.heb}",
+                                    text = if (isEnglish) {
+                                        "${ExerciseTitlesEn.getOrSame(topic.trim())} • ${belt.en}"
+                                    } else {
+                                        "${topic.trim()} • ${belt.heb}"
+                                    },
                                     style = MaterialTheme.typography.labelMedium,
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
@@ -950,207 +809,7 @@ internal fun BeltPangoLayout(
 
 /* ----------------------------- מתג "לפי חגורה / לפי נושא" ----------------------------- */
 
-@Composable
-private fun TopicQuickMenuActionRow(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(999.dp),
-        color = Color.White.copy(alpha = 0.96f),
-        shadowElevation = 6.dp,
-        border = BorderStroke(
-            1.dp,
-            Color.Black.copy(alpha = 0.06f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .width(180.dp)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                modifier = Modifier.size(28.dp)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
 
-            Spacer(Modifier.width(10.dp))
-
-            Text(
-                text = text,
-                modifier = Modifier.weight(1f),
-                color = Color(0xFF0B1220),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1
-            )
-        }
-    }
-}
-
-@Composable
-private fun BottomMoreActionsButton(
-    isEnglish: Boolean,
-    onClick: () -> Unit
-) {
-
-    val pulse = rememberInfiniteTransition(label = "buttonPulse")
-
-    val shineAnim = rememberInfiniteTransition(label = "shine")
-
-    val shineOffset by shineAnim.animateFloat(
-        initialValue = -140f,
-        targetValue = 700f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3200, easing = LinearEasing)
-        ),
-        label = "shineOffset"
-    )
-
-    val glowStrength by pulse.animateFloat(
-        initialValue = 0.12f,
-        targetValue = 0.22f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = LinearEasing)
-        ),
-        label = "glow"
-    )
-
-    val premiumGradient = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFF7F00FF),
-            Color(0xFF3F51B5),
-            Color(0xFF03A9F4)
-        )
-    )
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
-        shadowElevation = 5.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(60.dp)
-            .circleGlow(
-                color = Color(0xFF7F00FF),
-                radius = 60.dp,
-                intensity = glowStrength
-            )
-            .border(
-                width = 1.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.85f),
-                        Color.White.copy(alpha = 0.25f),
-                        Color.White.copy(alpha = 0.85f)
-                    )
-                ),
-                shape = RoundedCornerShape(18.dp)
-            )
-    ) {
-        Box(
-            modifier = Modifier
-                .background(premiumGradient)
-                .fillMaxSize()
-                .drawWithContent {
-                    drawContent()
-
-                    val shineWidth = size.width * 0.14f
-                    val shineHeight = size.height * 0.58f
-                    val top = (size.height - shineHeight) / 2f
-
-                    drawRoundRect(
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.White.copy(alpha = 0.14f),
-                                Color.White.copy(alpha = 0.32f),
-                                Color.White.copy(alpha = 0.14f),
-                                Color.Transparent
-                            )
-                        ),
-                        topLeft = Offset(shineOffset, top),
-                        size = Size(shineWidth, shineHeight),
-                        cornerRadius = CornerRadius(
-                            x = shineHeight / 2f,
-                            y = shineHeight / 2f
-                        ),
-                        blendMode = BlendMode.Screen
-                    )
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-
-                val starPulse = rememberInfiniteTransition(label = "starPulse")
-
-                val starScale by starPulse.animateFloat(
-                    initialValue = 0.92f,
-                    targetValue = 1.08f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(1600, easing = FastOutSlowInEasing)
-                    ),
-                    label = "starScale"
-                )
-
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .graphicsLayer {
-                            scaleX = starScale
-                            scaleY = starScale
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-
-                    Icon(
-                        imageVector = Icons.Rounded.Star,
-                        contentDescription = null,
-                        tint = Color(0xFFE1F5FE).copy(alpha = 0.95f),
-                        modifier = Modifier
-                            .size(9.dp)
-                            .align(Alignment.TopEnd)
-                            .offset(x = 1.dp, y = (-1).dp)
-                    )
-                }
-
-                Spacer(Modifier.width(10.dp))
-
-                Text(
-                    text = if (isEnglish) "More Actions" else "פעולות נוספות",
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-        }
-    }
-}
 
 @Composable
 internal fun TopicsViewModeToggle(

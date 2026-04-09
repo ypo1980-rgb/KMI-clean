@@ -3,11 +3,20 @@
 package il.kmi.app.screens
 
 import android.content.Context
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.graphics.Brush
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +39,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.ui.rememberHapticsGlobal
@@ -90,7 +100,15 @@ fun MonthlyCalendarScreen(
     onBack: () -> Unit,
     onDateClick: (LocalDate) -> Unit
 ) {
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    val ctx = LocalContext.current
+    val langManager = remember(ctx) { AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val screenLayoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val screenLocale = if (isEnglish) Locale.ENGLISH else Locale("he")
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    CompositionLocalProvider(LocalLayoutDirection provides screenLayoutDirection) {
 
         val today = remember { LocalDate.now() }
         var ym by rememberSaveable { mutableStateOf(YearMonth.from(today)) }
@@ -199,49 +217,155 @@ fun MonthlyCalendarScreen(
         }
 
         Scaffold(
+            containerColor = Color(0xFF08142C),
             topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        val monthTitle = ym.month.getDisplayName(
-                            java.time.format.TextStyle.FULL,
-                            Locale("he")
-                        )
-                        Text(text = "$monthTitle ${ym.year}", fontWeight = FontWeight.Bold)
-                    },
-                    navigationIcon = {
-                        Box(
-                            modifier = Modifier
-                                .padding(start = 12.dp)
-                                .size(22.dp)
-                                .background(
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
-                                    shape = CircleShape
+                val monthTitle = ym.month.getDisplayName(
+                    java.time.format.TextStyle.FULL,
+                    screenLocale
+                ).replaceFirstChar { ch ->
+                    if (ch.isLowerCase()) ch.titlecase(screenLocale) else ch.toString()
+                }
+
+                Surface(
+                    color = Color.Transparent,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0xFF09152F),
+                                        Color(0xFF0D1D40),
+                                        Color(0xFF122856)
+                                    )
                                 )
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                                    shape = CircleShape
-                                )
-                                .clickable(onClick = onBack),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = "סגור",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(14.dp)
                             )
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { ym = ym.minusMonths(1) }) {
-                            Icon(Icons.Filled.ChevronRight, contentDescription = "חודש קודם")
-                        }
-                        IconButton(onClick = { ym = ym.plusMonths(1) }) {
-                            Icon(Icons.Filled.ChevronLeft, contentDescription = "חודש הבא")
+                            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 16.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(28.dp),
+                            color = Color.White.copy(alpha = 0.08f),
+                            shadowElevation = 14.dp,
+                            border = BorderStroke(
+                                1.dp,
+                                Color.White.copy(alpha = 0.10f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.White.copy(alpha = 0.08f),
+                                                Color.White.copy(alpha = 0.03f)
+                                            )
+                                        )
+                                    )
+                                    .padding(horizontal = 10.dp, vertical = 12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .size(28.dp)
+                                        .clickable { onBack() },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = tr("סגור", "Close"),
+                                        tint = Color.White.copy(alpha = 0.92f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = tr("לוח אימונים חודשי", "Monthly calendar"),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color(0xFFC7BAFF),
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1
+                                    )
+
+                                    Spacer(Modifier.height(8.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Surface(
+                                            onClick = { ym = ym.minusMonths(1) },
+                                            shape = CircleShape,
+                                            color = Color.White.copy(alpha = 0.09f),
+                                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.size(36.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isEnglish) Icons.Filled.ChevronLeft else Icons.Filled.ChevronRight,
+                                                    contentDescription = tr("חודש קודם", "Previous month"),
+                                                    tint = Color.White
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(Modifier.width(10.dp))
+
+                                        Surface(
+                                            shape = RoundedCornerShape(24.dp),
+                                            color = Color(0xFF8C74FF).copy(alpha = 0.18f),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                Color.White.copy(alpha = 0.10f)
+                                            ),
+                                            shadowElevation = 2.dp
+                                        ) {
+                                            Text(
+                                                text = "$monthTitle ${ym.year}",
+                                                modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color.White,
+                                                maxLines = 1
+                                            )
+                                        }
+
+                                        Spacer(Modifier.width(10.dp))
+
+                                        Surface(
+                                            onClick = { ym = ym.plusMonths(1) },
+                                            shape = CircleShape,
+                                            color = Color.White.copy(alpha = 0.09f),
+                                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.size(36.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isEnglish) Icons.Filled.ChevronRight else Icons.Filled.ChevronLeft,
+                                                    contentDescription = tr("חודש הבא", "Next month"),
+                                                    tint = Color.White
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
-                )
+                }
             }
         ) { padding ->
 
@@ -250,6 +374,16 @@ fun MonthlyCalendarScreen(
                 modifier = Modifier
                     .padding(padding)
                     .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFF071126),
+                                Color(0xFF0D1E43),
+                                Color(0xFF183A7A),
+                                Color(0xFF3F78F2)
+                            )
+                        )
+                    )
                     .pointerInput(ym) {
                         val threshold = 48f
                         detectHorizontalDragGestures { _, dragAmount ->
@@ -261,195 +395,277 @@ fun MonthlyCalendarScreen(
                     }
             ) {
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 12.dp, vertical = 12.dp)
-                ) {
+                AnimatedContent(
+                    targetState = ym,
+                    transitionSpec = {
+                        slideInHorizontally { width -> width } togetherWith
+                                slideOutHorizontally { width -> -width }
+                    },
+                    label = "month-transition"
+                ) { animatedYm ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                    ) {
 
-                    // כותרות ימי השבוע
-                    val days = listOf(
-                        DayOfWeek.SUNDAY, DayOfWeek.MONDAY, DayOfWeek.TUESDAY,
-                        DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY
-                    )
-                    Row(Modifier.fillMaxWidth()) {
-                        days.forEach { dow ->
-                            Text(
-                                text = dow.getDisplayName(
-                                    java.time.format.TextStyle.SHORT,
-                                    Locale("he")
-                                ),
-                                modifier = Modifier.weight(1f),
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-
-                    // דיאגנוסטיקה
-                    DebugBanner(
-                        region = region,
-                        normBranchKey = primaryBranch,
-                        normGroupKey = primaryGroup,
-                        ym = ym,
-                        holidaysByDate = holidaysByDate,
-                        trainingsCountByDate = trainingsCountByDate,
-                        missingReason = missingReason
-                    )
-
-                    if (missingReason != null) {
-                        Text(
-                            text = missingReason,
-                            color = Color.Red,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp),
-                            textAlign = TextAlign.Center
+                        // כותרות ימי השבוע
+                        val days = listOf(
+                            DayOfWeek.SUNDAY, DayOfWeek.MONDAY, DayOfWeek.TUESDAY,
+                            DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY
                         )
-                    }
 
-                    // גריד החודש
-                    val firstOfMonth = ym.atDay(1)
-                    val firstWeekdayIndex = (firstOfMonth.dayOfWeek.value % 7)
-                    val daysInMonth = ym.lengthOfMonth()
-                    val totalCells = firstWeekdayIndex + daysInMonth
-                    val rows = (totalCells + 6) / 7
-
-                    Column(Modifier.fillMaxWidth()) {
-                        var day = 1
-                        repeat(rows) { rowIdx ->
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                repeat(7) { col ->
-                                    val idx = rowIdx * 7 + col
-                                    if (idx < firstWeekdayIndex || day > daysInMonth) {
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .aspectRatio(1f)
-                                        )
-                                    } else {
-                                        val date = ym.atDay(day)
-                                        val trainingCount = trainingsCountByDate[date] ?: 0
-                                        val holidayName = holidaysByDate[date]
-
-                                        DayCell(
-                                            date = date,
-                                            isToday = date == today,
-                                            isSelected = (selectedDate == date),
-                                            trainingCount = trainingCount,
-                                            holidayName = holidayName,
-                                            modifier = Modifier.weight(1f),
-                                            onClick = {
-                                                selectedDate = date
-                                            }
-                                        )
-                                        day++
-                                    }
-                                }                            }
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        // אינדיקציה ל"יום הנבחר"
-                        selectedDate?.let { sel ->
-                            val selTrainings = trainingsCountByDate[sel] ?: 0
-                            val selHoliday = holidaysByDate[sel]
-                            val dowName = sel.dayOfWeek.getDisplayName(
-                                java.time.format.TextStyle.FULL,
-                                Locale("he")
-                            )
-                            val monthName = sel.month.getDisplayName(
-                                java.time.format.TextStyle.FULL,
-                                Locale("he")
-                            )
-
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                                tonalElevation = 2.dp
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                                ) {
-                                    Text(
-                                        text = "יום נבחר: $dowName ${sel.dayOfMonth} $monthName ${sel.year}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-
-                                    val infoParts = buildList {
-                                        if (selTrainings > 0) add("$selTrainings אימון/ים")
-                                        if (!selHoliday.isNullOrBlank()) add(selHoliday!!)
-                                    }
-
-                                    Text(
-                                        text = if (infoParts.isEmpty())
-                                            "אין אירועים ביום זה."
-                                        else
-                                            infoParts.joinToString(" • "),
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-
-                                    Spacer(Modifier.height(10.dp))
-
-                                    OutlinedButton(
-                                        onClick = { onDateClick(sel) },
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Text("+ סיכום")
-                                    }
+                        fun shortWeekdayLabel(dow: DayOfWeek): String {
+                            return if (isEnglish) {
+                                when (dow) {
+                                    DayOfWeek.SUNDAY -> "Sun"
+                                    DayOfWeek.MONDAY -> "Mon"
+                                    DayOfWeek.TUESDAY -> "Tue"
+                                    DayOfWeek.WEDNESDAY -> "Wed"
+                                    DayOfWeek.THURSDAY -> "Thu"
+                                    DayOfWeek.FRIDAY -> "Fri"
+                                    DayOfWeek.SATURDAY -> "Sat"
+                                }
+                            } else {
+                                when (dow) {
+                                    DayOfWeek.SUNDAY -> "א׳"
+                                    DayOfWeek.MONDAY -> "ב׳"
+                                    DayOfWeek.TUESDAY -> "ג׳"
+                                    DayOfWeek.WEDNESDAY -> "ד׳"
+                                    DayOfWeek.THURSDAY -> "ה׳"
+                                    DayOfWeek.FRIDAY -> "ו׳"
+                                    DayOfWeek.SATURDAY -> "שבת"
                                 }
                             }
                         }
 
-                        Spacer(Modifier.height(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color.White.copy(alpha = 0.10f),
+                            shadowElevation = 8.dp,
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            colors = listOf(
+                                                Color.White.copy(alpha = 0.06f),
+                                                Color.White.copy(alpha = 0.12f),
+                                                Color.White.copy(alpha = 0.06f)
+                                            )
+                                        )
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 10.dp)
+                            ) {
+                                days.forEach { dow ->
+                                    Text(
+                                        text = shortWeekdayLabel(dow),
+                                        modifier = Modifier.weight(1f),
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            fontWeight = FontWeight.ExtraBold
+                                        ),
+                                        color = Color.White.copy(alpha = 0.92f)
+                                    )
+                                }
+                            }
+                        }
 
-                        // מקרא
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        ) {                            Dot(color = Color(0xFF1565C0), size = 10.dp)
-                            Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.height(10.dp))
+
+                        // דיאגנוסטיקה
+                        DebugBanner(
+                            region = region,
+                            normBranchKey = primaryBranch,
+                            normGroupKey = primaryGroup,
+                            ym = animatedYm,
+                            holidaysByDate = holidaysByDate,
+                            trainingsCountByDate = trainingsCountByDate,
+                            missingReason = missingReason
+                        )
+
+                        if (missingReason != null) {
                             Text(
-                                "אימון",
+                                text = missingReason,
+                                color = Color.Red,
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(Modifier.width(24.dp))
-                            Dot(color = Color(0xFF7B1FA2), size = 10.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "חג",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                textAlign = TextAlign.Center
                             )
                         }
-                    }
 
-                    // ❌ הוסר:
-                    // הדיאלוג הישן של "אימונים ביום זה"
+                        // גריד החודש
+                        val firstOfMonth = animatedYm.atDay(1)
+                        val firstWeekdayIndex = (firstOfMonth.dayOfWeek.value % 7)
+                        val daysInMonth = animatedYm.lengthOfMonth()
+                        val totalCells = firstWeekdayIndex + daysInMonth
+                        val rows = (totalCells + 6) / 7
+
+                        Column(Modifier.fillMaxWidth()) {
+                            var day = 1
+                            repeat(rows) { rowIdx ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    repeat(7) { col ->
+                                        val idx = rowIdx * 7 + col
+                                        if (idx < firstWeekdayIndex || day > daysInMonth) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .aspectRatio(1f)
+                                            )
+                                        } else {
+                                            val date = animatedYm.atDay(day)
+                                            val trainingCount = trainingsCountByDate[date] ?: 0
+                                            val holidayName = holidaysByDate[date]
+
+                                            DayCell(
+                                                date = date,
+                                                isToday = date == today,
+                                                isSelected = (selectedDate == date),
+                                                trainingCount = trainingCount,
+                                                holidayName = holidayName,
+                                                modifier = Modifier.weight(1f),
+                                                onClick = {
+                                                    selectedDate = date
+                                                }
+                                            )
+                                            day++
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(8.dp))
+
+                            // אינדיקציה ל"יום הנבחר"
+                            selectedDate?.let { sel ->
+                                val selTrainings = trainingsCountByDate[sel] ?: 0
+                                val selHoliday = holidaysByDate[sel]
+                                val dowName = sel.dayOfWeek.getDisplayName(
+                                    java.time.format.TextStyle.FULL,
+                                    screenLocale
+                                )
+                                val monthName = sel.month.getDisplayName(
+                                    java.time.format.TextStyle.FULL,
+                                    screenLocale
+                                )
+
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 2.dp, vertical = 8.dp),
+                                    shape = RoundedCornerShape(26.dp),
+                                    color = Color.White.copy(alpha = 0.10f),
+                                    shadowElevation = 14.dp,
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        Color.White.copy(alpha = 0.12f)
+                                    )
+                                ) {
+                                    val infoParts = buildList {
+                                        if (selTrainings > 0) {
+                                            add(tr("$selTrainings אימון/ים", "$selTrainings training(s)"))
+                                        }
+                                        if (!selHoliday.isNullOrBlank()) {
+                                            add(selHoliday)
+                                        }
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(160.dp)
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        Color(0xFF6A8FE8).copy(alpha = 0.78f),
+                                                        Color(0xFF5D84E4).copy(alpha = 0.72f)
+                                                    )
+                                                )
+                                            )
+                                            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .align(Alignment.TopStart)
+                                        ) {
+                                            Text(
+                                                text = tr(
+                                                    "יום נבחר: $dowName ${sel.dayOfMonth} $monthName ${sel.year}",
+                                                    "Selected day: $dowName ${sel.dayOfMonth} $monthName ${sel.year}"
+                                                ),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color.White,
+                                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+
+                                            Spacer(Modifier.height(10.dp))
+
+                                            Text(
+                                                text = if (infoParts.isEmpty()) {
+                                                    tr("אין אירועים ביום זה.", "No events on this day.")
+                                                } else {
+                                                    infoParts.joinToString(" • ")
+                                                },
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = Color.White.copy(alpha = 0.90f),
+                                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .align(if (isEnglish) Alignment.BottomStart else Alignment.BottomEnd),
+                                            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
+                                        ) {
+                                            Button(
+                                                onClick = { onDateClick(sel) },
+                                                shape = RoundedCornerShape(16.dp),
+                                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = Color(0xFF7C4DFF),
+                                                    contentColor = Color.White
+                                                ),
+                                                elevation = ButtonDefaults.buttonElevation(
+                                                    defaultElevation = 6.dp,
+                                                    pressedElevation = 10.dp
+                                                )
+                                            ) {
+                                                Text(
+                                                    text = tr("+ סיכום", "+ Summary"),
+                                                    fontWeight = FontWeight.ExtraBold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(2.dp))
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-
-
 /* -------------------------------------------------------------------------- */
 /*                             helpers                                         */
 /* -------------------------------------------------------------------------- */
-
 /** יוצר מיפוי לכל המופעים החודשיים לפי לו״ז שבועי */
 private fun buildMonthlyTrainingCount(
     ym: YearMonth,
@@ -577,79 +793,183 @@ private fun DayCell(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null
 ) {
-    val trainingColor = Color(0xFF1565C0)
-    val holidayColor = Color(0xFF7B1FA2)
-    val todayRingColor = MaterialTheme.colorScheme.primary
+    val trainingColor = Color(0xFF3FA7FF)
+    val holidayColor = Color(0xFFFF4D6D)
+    val todayRingColor = Color(0xFF9A7BFF)
 
-    // ⭐ רטט גלובלי
     val haptics = rememberHapticsGlobal()
     val interactionSource = remember { MutableInteractionSource() }
 
-    // רקע התא – גם כשהיום הנוכחי, הריבוע נשאר צבוע
-    val cellBg: Color = when {
-        holidayName != null -> holidayColor.copy(alpha = 0.18f)
-        trainingCount > 0   -> trainingColor.copy(alpha = 0.18f)
-        else                -> Color.Transparent
+    val cellBgTop: Color
+    val cellBgBottom: Color
+    when {
+        holidayName != null && trainingCount > 0 -> {
+            cellBgTop = Color(0xFF6D63D9).copy(alpha = 0.96f)
+            cellBgBottom = Color(0xFF4B7EF6).copy(alpha = 0.96f)
+        }
+        holidayName != null -> {
+            cellBgTop = Color(0xFF5B5FCF).copy(alpha = 0.94f)
+            cellBgBottom = Color(0xFF415FC4).copy(alpha = 0.94f)
+        }
+        trainingCount > 0 -> {
+            cellBgTop = Color(0xFF5E96FF)
+            cellBgBottom = Color(0xFF3F6EE8)
+        }
+        else -> {
+            cellBgTop = Color.White.copy(alpha = 0.14f)
+            cellBgBottom = Color.White.copy(alpha = 0.06f)
+        }
     }
 
-    // ⭐ אנימציית scale ליום הנבחר
-    val targetScale = if (isSelected) 0.96f else 1f
+    val borderColor = when {
+        isSelected -> Color.White.copy(alpha = 0.90f)
+        holidayName != null || trainingCount > 0 -> Color.White.copy(alpha = 0.14f)
+        else -> Color.White.copy(alpha = 0.08f)
+    }
+
+    val dayTextColor = Color.White
+    val targetScale = when {
+        isSelected -> 0.92f
+        else -> 1f
+    }
     val scale by animateFloatAsState(
         targetValue = targetScale,
+        animationSpec = spring(
+            dampingRatio = 0.6f,
+            stiffness = 300f
+        ),
         label = "day-scale"
     )
 
     Box(
         modifier = modifier
-            .aspectRatio(1f)
-            .padding(2.dp)
+            .aspectRatio(0.82f)
+            .padding(3.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
+            .shadow(
+                elevation = when {
+                    isSelected -> 12.dp
+                    trainingCount > 0 -> 8.dp
+                    else -> 4.dp
+                },
+                shape = RoundedCornerShape(14.dp),
+                clip = false
+            )
             .background(
-                color = cellBg,
-                shape = RoundedCornerShape(12.dp)
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        cellBgTop,
+                        cellBgBottom,
+                        Color.White.copy(alpha = 0.05f)
+                    )
+                ),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.10f),
+                        Color.Transparent
+                    )
+                ),
+                shape = RoundedCornerShape(14.dp)
+            )
+            .border(
+                width = if (isSelected) 1.4.dp else 0.8.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(14.dp)
             )
             .let { base ->
                 if (onClick != null) {
                     base.clickable(
-                        interactionSource = interactionSource
+                        interactionSource = interactionSource,
+                        indication = null
                     ) {
-                        haptics(false)   // רטט קצר
+                        haptics(false)
                         onClick()
                     }
                 } else base
             }
     ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.10f),
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.08f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(14.dp)
+                )
+        )
+
         if (isToday) {
-            // ✅ רק היום הנוכחי מקבל עיגול – אין עיגול נוסף ליום שנבחר
             Box(
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(30.dp)
-                    .border(
-                        width = 2.dp,
+                    .align(Alignment.TopEnd)
+                    .padding(5.dp)
+                    .size(18.dp)
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = CircleShape,
+                        clip = false
+                    )
+                    .background(
                         color = todayRingColor,
                         shape = CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = date.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .background(Color.White, CircleShape)
                 )
             }
-        } else {
-            Text(
-                text = date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.align(Alignment.Center)
-            )
         }
 
+        Text(
+            text = date.dayOfMonth.toString(),
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+            color = dayTextColor,
+            modifier = Modifier.align(Alignment.Center)
+        )
+
+        if (holidayName != null || trainingCount > 0) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (trainingCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(trainingColor, CircleShape)
+                    )
+                }
+
+                if (trainingCount > 0 && holidayName != null) {
+                    Spacer(Modifier.width(4.dp))
+                }
+
+                if (holidayName != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(holidayColor, CircleShape)
+                    )
+                }
+            }
+        }
     }
 }
 

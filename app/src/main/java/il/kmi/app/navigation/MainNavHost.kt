@@ -62,6 +62,24 @@ fun MainNavHost(
 ) {
     val ctx = LocalContext.current
 
+// ✅ PRELOAD רשימת מתאמנים כבר בהפעלת האפליקציה
+    LaunchedEffect(Unit) {
+        try {
+            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+
+            val uid = com.google.firebase.auth.FirebaseAuth.getInstance()
+                .currentUser?.uid ?: return@LaunchedEffect
+
+            // טוען מראש את המתאמנים של המאמן
+            db.collection("users")
+                .whereEqualTo("coachUid", uid)
+                .limit(200)
+                .get()
+        } catch (_: Exception) {
+            // preload בלבד – לא מפריע אם נכשל
+        }
+    }
+
     LaunchedEffect(nav) {
         DrawerBridge.register(
             onOpenDrawer = { /* handled elsewhere */ },

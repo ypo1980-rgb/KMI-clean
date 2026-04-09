@@ -155,23 +155,35 @@ fun MainApp(
         typography = typography,
         colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
     ) {
+
+        val ctxLang = LocalContext.current
+        val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctxLang) }
+        val isEnglish =
+            langManager.getCurrentLanguage() == il.kmi.shared.localization.AppLanguage.ENGLISH
+        val layoutDirection =
+            if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
+            else androidx.compose.ui.unit.LayoutDirection.Rtl
+
         CompositionLocalProvider(
-            il.kmi.app.ui.LocalAppDrawerState provides drawerState
+            androidx.compose.ui.platform.LocalLayoutDirection provides layoutDirection
         ) {
-            ModalNavigationDrawer(
-                drawerState = drawerState,
-                gesturesEnabled = true,
-                scrimColor = Color.Black.copy(alpha = 0.35f),
-                drawerContent = {
-                    ModalDrawerSheet(
-                        drawerContainerColor = Color.Transparent,
-                        drawerContentColor = Color.White,
-                        modifier = Modifier.fillMaxWidth(0.82f)
-                    ) {
-                    val ctxInner = LocalContext.current
-                    val spUser = remember {
-                        ctxInner.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-                    }
+            CompositionLocalProvider(
+                il.kmi.app.ui.LocalAppDrawerState provides drawerState
+            ) {
+                ModalNavigationDrawer(
+                    drawerState = drawerState,
+                    gesturesEnabled = true,
+                    scrimColor = Color.Black.copy(alpha = 0.35f),
+                    drawerContent = {
+                        ModalDrawerSheet(
+                            drawerContainerColor = Color.Transparent,
+                            drawerContentColor = Color.White,
+                            modifier = Modifier.fillMaxWidth(0.86f)
+                        ) {
+                            val ctxInner = LocalContext.current
+                            val spUser = remember {
+                                ctxInner.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+                            }
 
                     // נעקוב אחרי תפקיד המשתמש כדי להציג פריטי מאמן
                     val roleState = remember {
@@ -248,28 +260,29 @@ fun MainApp(
                             }
                         }
                     )
-                }
-            }
-        ) {
-            // קודם סוגרים מגירה לפני Back
-            BackHandler(enabled = drawerState.isOpen) {
-                scope.launch { drawerState.close() }
-            }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        }
+                    }
                 ) {
-                    il.kmi.app.navigation.MainNavHost(
-                        nav = nav,
-                        vm = vm,
-                        sp = sp,
-                        kmiPrefs = kmiPrefs,
-                        themeMode = themeMode,
-                        onThemeChange = onThemeChange,
-                        startDestination = Route.Intro.route
-                    )
+                    // קודם סוגרים מגירה לפני Back
+                    BackHandler(enabled = drawerState.isOpen) {
+                        scope.launch { drawerState.close() }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                    ) {
+                        il.kmi.app.navigation.MainNavHost(
+                            nav = nav,
+                            vm = vm,
+                            sp = sp,
+                            kmiPrefs = kmiPrefs,
+                            themeMode = themeMode,
+                            onThemeChange = onThemeChange,
+                            startDestination = Route.Intro.route
+                        )
+                    }
                 }
             }
         }

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -31,6 +32,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -223,8 +225,6 @@ fun HomeScreen(
 ) {
     val haptic = rememberHapticsGlobal()
     val clickSound = rememberClickSound()
-    // ✅ רוחב אחיד לבועות הטקסט במסך הבית
-    val labelWidth = 150.dp
 
     // 🔵 מצב לדיאלוג העוזר האישי (AI)
     var showAiDialog by rememberSaveable { mutableStateOf(false) }
@@ -947,6 +947,7 @@ fun HomeScreen(
                                             Color(0xFF7F00FF),
                                             Color(0xFF3F51B5),
                                             Color(0xFF03A9F4)
+
                                         )
                                     )
                                 )
@@ -999,352 +1000,129 @@ fun HomeScreen(
                 Spacer(Modifier.height(2.dp))
             }
 
-            // ===============================
-// ✅ Speed-Dial FAB (עוזר קולי + אימונים חופשיים)
-// ===============================
-            val mainIcon = if (fabExpanded) Icons.Filled.Close else Icons.Filled.Add
-            val fabRotation by androidx.compose.animation.core.animateFloatAsState(
-                targetValue = if (fabExpanded) 45f else 0f,
-                label = "fabRotation"
+            val quickMenuItems = listOf(
+                Triple(
+                    if (isEnglish) "Voice Assistant" else "עוזר קולי",
+                    Icons.Filled.Mic
+                ) {
+                    clickSound()
+                    haptic(true)
+                    fabExpanded = false
+                    showAiDialog = true
+                },
+                Triple(
+                    if (isEnglish) "Monthly Calendar" else "לוח אימונים חודשי",
+                    Icons.Filled.DateRange
+                ) {
+                    clickSound()
+                    haptic(true)
+                    fabExpanded = false
+                    onOpenMonthlyCalendar()
+                },
+                Triple(
+                    if (isEnglish) "Training Summary" else "סיכום אימון",
+                    Icons.Filled.EditNote
+                ) {
+                    clickSound()
+                    haptic(true)
+                    fabExpanded = false
+                    onOpenTrainingSummary()
+                },
+                Triple(
+                    if (isEnglish) "Free Trainings" else "אימונים חופשיים",
+                    Icons.Filled.Add
+                ) {
+                    clickSound()
+                    haptic(true)
+                    fabExpanded = false
+                    onOpenFreeSessions(
+                        freeBranchUi,
+                        freeGroupKeyUi,
+                        freeUidUi,
+                        freeNameUi
+                    )
+                }
             )
 
-// (אופציונלי) שכבת לחיצה לסגירה כשפתוח
             if (fabExpanded) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.15f))
+                        .background(Color.Black.copy(alpha = 0.24f))
                         .clickable { fabExpanded = false }
                 )
             }
 
-// כפתורים קטנים שנפתחים מעל הכפתור הראשי
-            androidx.compose.animation.AnimatedVisibility(
+            AnimatedVisibility(
                 visible = fabExpanded,
                 modifier = Modifier
-                    // ✅ ב-RTL: Start = ימין, End = שמאל
-                    .align(Alignment.BottomStart)
-                    .padding(start = 20.dp, bottom = 140.dp),
-                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(),
-                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut()
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    // ✅ ב-RTL: Alignment.Start = ימין
-                    horizontalAlignment = Alignment.Start
-                ) {
-
-                    // =========================
-                    // 🎤 עוזר קולי
-                    // =========================
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        // ✅ ב-RTL: Arrangement.Start = ימין
-                        horizontalArrangement = Arrangement.Start,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-
-                        // ICON – צמוד לימין
-                        Surface(
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.92f),
-                            shadowElevation = 8.dp,
-                            modifier = Modifier.size(52.dp)
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    clickSound()
-                                    haptic(true)
-                                    fabExpanded = false
-                                    showAiDialog = true
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Mic,
-                                    contentDescription = "עוזר קולי",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.width(10.dp))
-
-                        // LABEL – משמאל לאייקון
-                        Surface(
-                            onClick = {
-                                clickSound()
-                                haptic(true)
-                                fabExpanded = false
-                                showAiDialog = true
-                            },
-                            shape = RoundedCornerShape(999.dp),
-                            color = Color.White.copy(alpha = 0.92f),
-                            shadowElevation = 6.dp,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                Color.Black.copy(alpha = 0.06f)
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = 138.dp),
+                enter =
+                    fadeIn(animationSpec = tween(180)) +
+                            scaleIn(
+                                initialScale = 0.92f,
+                                animationSpec = tween(220)
+                            ) +
+                            androidx.compose.animation.slideInVertically(
+                                initialOffsetY = { it / 8 },
+                                animationSpec = tween(220)
+                            ),
+                exit =
+                    fadeOut(animationSpec = tween(140)) +
+                            scaleOut(
+                                targetScale = 0.96f,
+                                animationSpec = tween(160)
+                            ) +
+                            androidx.compose.animation.slideOutVertically(
+                                targetOffsetY = { it / 10 },
+                                animationSpec = tween(160)
                             )
-                        ) {
-                            Text(
-                                text = "עוזר קולי",
-                                modifier = Modifier
-                                    .width(labelWidth)                 // ✅ NEW
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                color = Color(0xFF0B1220),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,                          // ✅ מומלץ
-                                overflow = TextOverflow.Ellipsis       // ✅ מומלץ
-                            )
-                        }
-                    }
-
-                    // =========================
-                    // 📅 לוח אימונים חודשי
-                    // =========================
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.92f),
-                            shadowElevation = 8.dp,
-                            modifier = Modifier.size(52.dp)
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    clickSound()
-                                    haptic(true)
-                                    fabExpanded = false
-                                    onOpenMonthlyCalendar()
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.DateRange,
-                                    contentDescription = "לוח אימונים חודשי",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.width(10.dp))
-
-                        Surface(
-                            onClick = {
-                                clickSound()
-                                haptic(true)
-                                fabExpanded = false
-                                onOpenMonthlyCalendar()
-                            },
-                            shape = RoundedCornerShape(999.dp),
-                            color = Color.White.copy(alpha = 0.92f),
-                            shadowElevation = 6.dp,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                Color.Black.copy(alpha = 0.06f)
-                            )
-                        ) {
-                            Text(
-                                text = "לוח אימונים חודשי",
-                                modifier = Modifier
-                                    .width(labelWidth)
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                color = Color(0xFF0B1220),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    // =========================
-                    // 📝 סיכום אימון
-                    // =========================
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.92f),
-                            shadowElevation = 8.dp,
-                            modifier = Modifier.size(52.dp)
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    clickSound()
-                                    haptic(true)
-                                    fabExpanded = false
-                                    onOpenTrainingSummary()
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.EditNote,
-                                    contentDescription = "סיכום אימון",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.width(10.dp))
-
-                        Surface(
-                            onClick = {
-                                clickSound()
-                                haptic(true)
-                                fabExpanded = false
-                                onOpenTrainingSummary()
-                            },
-                            shape = RoundedCornerShape(999.dp),
-                            color = Color.White.copy(alpha = 0.92f),
-                            shadowElevation = 6.dp,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                Color.Black.copy(alpha = 0.06f)
-                            )
-                        ) {
-                            Text(
-                                text = "סיכום אימון",
-                                modifier = Modifier
-                                    .width(labelWidth)
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                color = Color(0xFF0B1220),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    // =========================
-                    // ➕ אימונים חופשיים
-                    // =========================
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-
-                        // ICON – צמוד לימין
-                        Surface(
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.92f),
-                            shadowElevation = 8.dp,
-                            modifier = Modifier.size(52.dp)
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    clickSound()
-                                    haptic(true)
-                                    fabExpanded = false
-                                    onOpenFreeSessions(
-                                        freeBranchUi,
-                                        freeGroupKeyUi,
-                                        freeUidUi,
-                                        freeNameUi
-                                    )
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Add,
-                                    contentDescription = "אימונים חופשיים",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.width(10.dp))
-
-                        // LABEL – משמאל לאייקון
-                        Surface(
-                            onClick = {
-                                clickSound()
-                                haptic(true)
-                                fabExpanded = false
-                                onOpenFreeSessions(
-                                    freeBranchUi,
-                                    freeGroupKeyUi,
-                                    freeUidUi,
-                                    freeNameUi
-                                )
-                            },
-                            shape = RoundedCornerShape(999.dp),
-                            color = Color.White.copy(alpha = 0.92f),
-                            shadowElevation = 6.dp,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                Color.Black.copy(alpha = 0.06f)
-                            )
-                        ) {
-                            Text(
-                                text = "אימונים חופשיים",
-                                modifier = Modifier
-                                    .width(labelWidth)                 // ✅ NEW
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                color = Color(0xFF0B1220),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,                          // ✅ מומלץ
-                                overflow = TextOverflow.Ellipsis       // ✅ מומלץ
-                            )
-                        }
-                    }
-                }
-            }
-
-// הכפתור הראשי (הגדול) – תמיד מוצג
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showFab,
-                modifier = Modifier.align(Alignment.BottomEnd),
-                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(),
-                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut()
             ) {
                 Box(
                     modifier = Modifier
-                        .padding(end = 18.dp, bottom = 72.dp)
-                        .size(56.dp)
-                        .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
-                                    Color.Transparent
-                                )
-                            ),
-                            shape = CircleShape
-                        )
+                        .fillMaxWidth()
+                        .padding(
+                            start = if (isEnglish) 16.dp else 0.dp,
+                            end = if (isEnglish) 0.dp else 16.dp
+                        ),
+                    contentAlignment =
+                        if (isEnglish) BiasAbsoluteAlignment(-1f, 1f)
+                        else BiasAbsoluteAlignment(1f, 1f)
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary,
-                        shadowElevation = 10.dp,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .border(width = 2.dp, color = Color.White, shape = CircleShape)
-                    ) {
-                        IconButton(
-                            onClick = {
-                                clickSound()
-                                haptic(true)
-                                fabExpanded = !fabExpanded
-                            }
-                        ) {
-                            Icon(
-                                imageVector = mainIcon,
-                                contentDescription = "פעולות מהירות",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .graphicsLayer {
-                                        rotationZ = fabRotation
-                                    }
-                            )
+                    HomePremiumQuickMenuPanel(
+                        title = if (isEnglish) "Quick Menu" else "תפריט מהיר",
+                        isEnglish = isEnglish,
+                        items = quickMenuItems,
+                        onClose = { fabExpanded = false }
+                    )
+                }
+            }
+
+            AnimatedVisibility(
+                visible = showFab && !fabExpanded,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter),
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 18.dp, end = 18.dp, bottom = 72.dp),
+                    horizontalArrangement =
+                        if (isEnglish) Arrangement.Absolute.Right
+                        else Arrangement.Absolute.Left
+                ) {
+                    ModernHomeQuickFab(
+                        onClick = {
+                            clickSound()
+                            haptic(true)
+                            fabExpanded = true
                         }
-                    }
+                    )
                 }
             }
 
@@ -1553,8 +1331,237 @@ fun HomeScreen(
     }
 }
 
+@Composable
+private fun ModernHomeQuickFab(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(22.dp)
+
+    Box(
+        modifier = modifier.size(56.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(74.dp)
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF16A34A).copy(alpha = 0.28f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = shape
+                )
+        )
+
+        Surface(
+            onClick = onClick,
+            shape = shape,
+            color = Color(0xFF16A34A),
+            shadowElevation = 12.dp,
+            border = androidx.compose.foundation.BorderStroke(
+                2.dp,
+                Color.White.copy(alpha = 0.92f)
+            ),
+            modifier = Modifier.size(56.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Filled.Menu,
+                    contentDescription = "Quick Menu",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}
+
 
 /* ========= עזר: למצוא הסבר אמיתי מתוך Explanations ========= */
+@Composable
+private fun HomePremiumQuickMenuPanel(
+    title: String,
+    isEnglish: Boolean,
+    items: List<Triple<String, androidx.compose.ui.graphics.vector.ImageVector, () -> Unit>>,
+    onClose: () -> Unit
+) {
+    val panelShape = RoundedCornerShape(22.dp)
+
+    Surface(
+        shape = panelShape,
+        color = Color.White,
+        tonalElevation = 0.dp,
+        shadowElevation = 16.dp,
+        modifier = Modifier.width(210.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF16A34A).copy(alpha = 0.24f),
+                            Color(0xFFFDFDFE),
+                            Color(0xFFF7FAF8),
+                            Color(0xFF16A34A).copy(alpha = 0.14f)
+                        )
+                    ),
+                    shape = panelShape
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color(0xFF16A34A).copy(alpha = 0.34f),
+                    shape = panelShape
+                )
+                .padding(horizontal = 10.dp, vertical = 10.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isEnglish) {
+                        Text(
+                            text = title,
+                            color = Color(0xFF16A34A),
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = TextAlign.Start,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Close",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier
+                                .size(15.dp)
+                                .clickable { onClose() }
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "סגור",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier
+                                .size(15.dp)
+                                .clickable { onClose() }
+                        )
+
+                        Spacer(Modifier.width(6.dp))
+
+                        Text(
+                            text = title,
+                            color = Color(0xFF16A34A),
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = TextAlign.Right,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                items.forEachIndexed { index, item ->
+                    HomePremiumQuickMenuRow(
+                        text = item.first,
+                        icon = item.second,
+                        isEnglish = isEnglish,
+                        onClick = item.third
+                    )
+
+                    if (index != items.lastIndex) {
+                        HorizontalDivider(
+                            thickness = 0.8.dp,
+                            color = Color(0xFF16A34A).copy(alpha = 0.18f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomePremiumQuickMenuRow(
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isEnglish: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (isEnglish) {
+            HomePremiumQuickMenuIcon(icon)
+            Spacer(Modifier.width(10.dp))
+
+            Text(
+                text = text,
+                color = Color(0xFF0F172A),
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Start,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            Text(
+                text = text,
+                color = Color(0xFF0F172A),
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Right,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+
+            Spacer(Modifier.width(10.dp))
+            HomePremiumQuickMenuIcon(icon)
+        }
+    }
+}
+
+@Composable
+private fun HomePremiumQuickMenuIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(Color(0xFF16A34A).copy(alpha = 0.10f), CircleShape)
+            .border(
+                width = 1.dp,
+                color = Color(0xFF16A34A).copy(alpha = 0.24f),
+                shape = CircleShape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color(0xFF16A34A),
+            modifier = Modifier.size(14.dp)
+        )
+    }
+}
+
 private fun findExplanationForHit(
     belt: Belt,
     rawItem: String,

@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -44,7 +46,10 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
@@ -168,6 +173,12 @@ fun AppDrawerContent(
     onOpenAdminUsers: () -> Unit = {},
     onOpenAccessibility: () -> Unit = {}
 ) {
+    val contextLang = LocalContext.current
+    val langManager = remember { AppLanguageManager(contextLang) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val drawerLayoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
     // 🔐 בדיקת אדמין שקטה (לא "נתקעים" על false אם uid היה null בזמן הבנייה)
     val auth = remember { FirebaseAuth.getInstance() }
     var authUid by remember { mutableStateOf(auth.currentUser?.uid) }
@@ -202,203 +213,284 @@ fun AppDrawerContent(
     }
 
     // רקע גרדיאנט אטום (ללא שקיפות)
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF0E1630), // Navy
-                        Color(0xFF1F2A52),
-                        Color(0xFF2575BC)  // כחול מודרני
-                    )
-                )
-            )
-    ) {
+    CompositionLocalProvider(LocalLayoutDirection provides drawerLayoutDirection) {
         val scroll = rememberScrollState()
 
-        @Suppress("UNUSED_PARAMETER")
-        @Composable
-        fun DrawerItem(
-            leading: (@Composable (() -> Unit))? = null,
-            title: String,
-            subtitle: String? = null,
-            onClick: () -> Unit,
-            twoLineTitle: Boolean = false,
-            titleTextStyle: TextStyle = MaterialTheme.typography
-                .titleMedium.copy(color = Color.White, fontWeight = FontWeight.ExtraBold),
-            alignRight: Boolean = false
-        ) {
-            val itemHeight = 68.dp
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .height(itemHeight)
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable(onClick = onClick),
-                color = Color(0x1AFFFFFF),
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = if (alignRight) Arrangement.End else Arrangement.Start
-                ) {
-                    if (leading != null) {
-                        Box(Modifier.padding(end = 12.dp)) { leading() }
-                    }
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = if (alignRight) Alignment.End else Alignment.Start
-                    ) {
-                        Text(
-                            text = title,
-                            style = titleTextStyle,
-                            maxLines = if (twoLineTitle) 2 else 1,
-                            softWrap = twoLineTitle,
-                            textAlign = if (alignRight) TextAlign.Right
-                            else if (twoLineTitle) TextAlign.Center
-                            else TextAlign.Start,
-                            modifier = Modifier.fillMaxWidth()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF0E1630),
+                            Color(0xFF1F2A52),
+                            Color(0xFF2575BC)
                         )
-                        if (!subtitle.isNullOrBlank()) {
-                            Text(
-                                text = subtitle,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    color = Color.White.copy(alpha = 0.72f)
-                                ),
-                                textAlign = if (alignRight) TextAlign.Right else TextAlign.Start,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        @Composable
-        fun CoachOnlyItem(
-            title: String,
-            subtitle: String? = null,
-            icon: androidx.compose.ui.graphics.vector.ImageVector,
-            onClick: () -> Unit
+                    )
+                )
         ) {
-            val itemHeight = 76.dp
-            val shape = RoundedCornerShape(22.dp)
 
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .height(itemHeight)
-                    .clip(shape)
-                    .clickable(onClick = onClick),
-                color = Color.Transparent,
-                contentColor = Color.White,
-                tonalElevation = 0.dp,
-                shadowElevation = 8.dp,
-                shape = shape,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+            @Composable
+            fun DrawerLineItemHe(
+                leading: (@Composable (() -> Unit))? = null,
+                title: String,
+                subtitle: String? = null,
+                onClick: () -> Unit,
+                twoLineTitle: Boolean = false,
+                titleTextStyle: TextStyle = MaterialTheme.typography
+                    .titleMedium.copy(color = Color.White, fontWeight = FontWeight.ExtraBold)
             ) {
-                Box(
+                Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(
-                                    Color(0xFFB83280),
-                                    Color(0xFFD946EF),
-                                    Color(0xFFF472B6)
-                                )
-                            )
-                        )
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp) // שימוש ב-horizontal במקום start/end קשיח
+                        .clickable(onClick = onClick)
+                        .padding(vertical = 10.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .width(6.dp)
-                            .align(Alignment.CenterEnd)
-                            .clip(RoundedCornerShape(topEnd = 22.dp, bottomEnd = 22.dp))
-                            .background(Color.White.copy(alpha = 0.30f))
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color.White.copy(alpha = 0.14f),
-                                        Color.Transparent,
-                                        Color.Black.copy(alpha = 0.10f)
-                                    )
-                                )
-                            )
-                    )
-
                     Row(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.18f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.Start,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
+                            Text(
+                                text = title,
+                                style = titleTextStyle,
+                                maxLines = if (twoLineTitle) 2 else 1,
+                                softWrap = twoLineTitle,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            if (!subtitle.isNullOrBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = subtitle,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = Color.White.copy(alpha = 0.72f)
+                                    ),
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
 
-                        Spacer(Modifier.width(14.dp))
+                        if (leading != null) {
+                            Box(Modifier.padding(start = 10.dp)) { leading() }
+                        }
+                    }
+
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = Color.White.copy(alpha = 0.10f)
+                    )
+                }
+            }
+
+            @Composable
+            fun DrawerLineItemEn(
+                leading: (@Composable (() -> Unit))? = null,
+                title: String,
+                subtitle: String? = null,
+                onClick: () -> Unit,
+                twoLineTitle: Boolean = false,
+                titleTextStyle: TextStyle = MaterialTheme.typography
+                    .titleMedium.copy(color = Color.White, fontWeight = FontWeight.ExtraBold)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 42.dp)
+                        .clickable(onClick = onClick)
+                        .padding(vertical = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (leading != null) {
+                            Box(Modifier.padding(end = 10.dp)) { leading() }
+                        }
 
                         Column(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.End
+                            horizontalAlignment = Alignment.Start,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = title,
+                                style = titleTextStyle,
+                                maxLines = if (twoLineTitle) 2 else 1,
+                                softWrap = twoLineTitle,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            if (!subtitle.isNullOrBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = subtitle,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = Color.White.copy(alpha = 0.72f)
+                                    ),
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = Color.White.copy(alpha = 0.10f)
+                    )
+                }
+            }
+
+            @Composable
+            fun CoachLineItemHe(
+                title: String,
+                subtitle: String? = null,
+                icon: androidx.compose.ui.graphics.vector.ImageVector,
+                onClick: () -> Unit
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .clickable(onClick = onClick)
+                        .padding(vertical = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // שימוש ב-icon הקיים במקום leading שלא קיים
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = Color(0xFFFF8AD8),
+                            modifier = Modifier.size(20.dp).padding(end = 10.dp)
+                        )
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.Start, // יישור ל-Start (ימין ב-RTL)
+                            verticalArrangement = Arrangement.Center
                         ) {
                             Text(
                                 text = title,
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     color = Color.White,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 0.2.sp
+                                    fontWeight = FontWeight.ExtraBold
                                 ),
-                                textAlign = TextAlign.Right,
+                                textAlign = TextAlign.Start, // יישור לימין בעברית
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
 
                             if (!subtitle.isNullOrBlank()) {
-                                Spacer(Modifier.height(3.dp))
+                                Spacer(Modifier.height(2.dp))
                                 Text(
                                     text = subtitle,
                                     style = MaterialTheme.typography.bodySmall.copy(
-                                        color = Color.White.copy(alpha = 0.92f),
+                                        color = Color.White.copy(alpha = 0.82f),
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    textAlign = TextAlign.Right,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(10.dp))
+
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = Color(0xFFFF8AD8),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = Color.White.copy(alpha = 0.12f)
+                    )
+                }
+            }
+
+            @Composable
+            fun CoachLineItemEn(
+                title: String,
+                subtitle: String? = null,
+                icon: androidx.compose.ui.graphics.vector.ImageVector,
+                onClick: () -> Unit
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 42.dp)
+                        .clickable(onClick = onClick)
+                        .padding(vertical = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = Color(0xFFFF8AD8),
+                            modifier = Modifier.size(20.dp)
+                        )
+
+                        Spacer(Modifier.width(10.dp))
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.Start,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            if (!subtitle.isNullOrBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = Color.White.copy(alpha = 0.82f),
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth(),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -406,43 +498,70 @@ fun AppDrawerContent(
                             }
                         }
                     }
+
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = Color.White.copy(alpha = 0.12f)
+                    )
                 }
             }
-        }
 
-        // עטיפה ב־Box כדי שנוכל ליישר את החץ לתחתית מעל התוכן
-        Box(Modifier.fillMaxSize()) {
+            // עטיפה ב־Box כדי שנוכל ליישר את החץ לתחתית מעל התוכן
+            Box(Modifier.fillMaxSize()) {
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scroll)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                // ←—— כותרת + כפתור X באותה שורה, ממוקמים מעט נמוך מה-status bar ——→
-                val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = topInset + 12.dp, start = 0.dp, end = 8.dp)
-                        .height(48.dp)
+                AnimatedVisibility(
+                    visible = true,
+                    enter = fadeIn(animationSpec = tween(220)) +
+                            slideInHorizontally(
+                                initialOffsetX = { fullWidth ->
+                                    if (isEnglish) fullWidth else -fullWidth
+                                },
+                                animationSpec = tween(
+                                    durationMillis = 320,
+                                    easing = androidx.compose.animation.core.FastOutSlowInEasing
+                                )
+                            ),
+                    exit = fadeOut(animationSpec = tween(160)) +
+                            slideOutHorizontally(
+                                targetOffsetX = { fullWidth ->
+                                    if (isEnglish) fullWidth else -fullWidth
+                                },
+                                animationSpec = tween(
+                                    durationMillis = 240,
+                                    easing = androidx.compose.animation.core.FastOutSlowInEasing
+                                )
+                            )
                 ) {
-                    Text(
-                        "תפריט",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.align(Alignment.CenterStart)
-                    )
-                    IconButton(
-                        onClick = onClose,
+                    Column(
                         modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .size(40.dp)
+                            .fillMaxWidth()
+                            .verticalScroll(scroll)
+                            .padding(start = 6.dp, end = 18.dp, top = 12.dp, bottom = 12.dp),
+                        horizontalAlignment = Alignment.Start
                     ) {
+                        // ←—— כותרת + כפתור X באותה שורה, ממוקמים מעט נמוך מה-status bar ——→
+                        val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 8.dp, end = 8.dp, top = topInset + 12.dp)
+                                .height(48.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                tr("תפריט", "Menu"),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            IconButton(
+                                onClick = onClose,
+                                modifier = Modifier.size(40.dp)
+                            ) {
                         Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = "סגור תפריט",
+                            contentDescription = null,
                             tint = Color.White
                         )
                     }
@@ -452,56 +571,82 @@ fun AppDrawerContent(
 
                 //------------------------------------------------------------------------
                 // ===== כפתורי מאמן — ורק למאמן =====
-                if (isCoach) {
-                    // מפריד עליון של מקטע המאמן
-                    Spacer(Modifier.height(8.dp))
-                    Divider(color = Color.White.copy(alpha = 0.12f))
-                    Spacer(Modifier.height(8.dp))
+                        if (isCoach) {
+                            Spacer(Modifier.height(8.dp))
+                            Divider(color = Color.White.copy(alpha = 0.12f))
+                            Spacer(Modifier.height(8.dp))
 
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)   // ✅ מרווח קבוע בין הכפתורים
-                    ) {
-                        // כפתור: דו״ח נוכחות (מאמן)
-                        CoachOnlyItem(
-                            title = "דו״ח נוכחות",
-                            icon = Icons.Filled.Assessment,
-                            onClick = {
-                                onClose()
-                                onOpenCoachAttendance()
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (isEnglish) {
+                                    CoachLineItemEn(
+                                        title = "Attendance Report",
+                                        icon = Icons.Filled.Assessment,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachAttendance()
+                                        }
+                                    )
+                                    CoachLineItemEn(
+                                        title = "Send Message",
+                                        icon = Icons.Filled.Campaign,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachBroadcast()
+                                        }
+                                    )
+                                    CoachLineItemEn(
+                                        title = "Trainees List",
+                                        icon = Icons.Filled.Groups,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachTrainees()
+                                        }
+                                    )
+                                    CoachLineItemEn(
+                                        title = "Internal Belt Exam",
+                                        icon = Icons.Filled.WorkspacePremium,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachInternalExam()
+                                        }
+                                    )
+                                } else {
+                                    CoachLineItemHe(
+                                        title = "דו״ח נוכחות",
+                                        icon = Icons.Filled.Assessment,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachAttendance()
+                                        }
+                                    )
+                                    CoachLineItemHe(
+                                        title = "שליחת הודעה",
+                                        icon = Icons.Filled.Campaign,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachBroadcast()
+                                        }
+                                    )
+                                    CoachLineItemHe(
+                                        title = "רשימת מתאמנים",
+                                        icon = Icons.Filled.Groups,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachTrainees()
+                                        }
+                                    )
+                                    CoachLineItemHe(
+                                        title = "מבחן פנימי לחגורה",
+                                        icon = Icons.Filled.WorkspacePremium,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachInternalExam()
+                                        }
+                                    )
+                                }
                             }
-                        )
-
-                        // כפתור: שליחת הודעה לקבוצה (מאמן)
-                        CoachOnlyItem(
-                            title = "שליחת הודעה",
-                            icon = Icons.Filled.Campaign,
-                            onClick = {
-                                onClose()
-                                onOpenCoachBroadcast()
-                            }
-                        )
-
-                        // כפתור: רשימת מתאמנים (מאמן)
-                        CoachOnlyItem(
-                            title = "רשימת מתאמנים",
-                            icon = Icons.Filled.Groups,
-                            onClick = {
-                                onClose()
-                                onOpenCoachTrainees()
-                            }
-                        )
-
-                        // 👇 חדש: כפתור מבחן פנימי לחגורה (רק למאמן)
-                        CoachOnlyItem(
-                            title = "מבחן פנימי לחגורה",
-                            icon = Icons.Filled.WorkspacePremium,
-                            onClick = {
-                                onClose()
-                                onOpenCoachInternalExam()
-                            }
-                        )
-                    }
 
                     // מפריד קטן כמו בשאר הפריטים
                     Spacer(Modifier.height(16.dp))
@@ -510,15 +655,26 @@ fun AppDrawerContent(
                 }
 
                 // ===== אזור מנהל – רק למנהל =====
-                if (resolvedIsAdmin == true) {
-                    DrawerItem(
-                        title = "ניהול משתמשים",
-                        subtitle = "צפייה בכל המשתמשים באפליקציה",
-                        onClick = {
-                            onClose()
-                            onOpenAdminUsers()
-                        }
-                    )
+                        if (resolvedIsAdmin == true) {
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "Manage Users",
+                                    subtitle = "View all app users",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAdminUsers()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "ניהול משתמשים",
+                                    subtitle = "צפייה בכל המשתמשים באפליקציה",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAdminUsers()
+                                    }
+                                )
+                            }
 
                     Spacer(Modifier.height(16.dp))
                     Divider(color = Color.White.copy(alpha = 0.12f))
@@ -526,171 +682,330 @@ fun AppDrawerContent(
                 }
 
                 // ===== כפתור ראשון: אודות אבי אביסידון =====
-                DrawerItem(
-                    title = "אודות אבי אביסידון",
-                    subtitle = "ראש השיטה",
-                    titleTextStyle = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 15.sp,              // היה ברירת מחדל ~16.sp
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.2).sp      // מצופף טיפה – נכנס בשורה אחת
-                    ),
-                    onClick = {
-                        onClose()
-                        onOpenAboutAvi()
-                    }
-                )
-
-                // --- אודות איציק ביטון (חדש) ---
-                DrawerItem(
-                    title = "אודות איציק ביטון",
-                    subtitle = "מאמן בכיר",
-                    onClick = {
-                        onClose()
-                        onOpenAboutItzik()
-                    }
-                )
-
-                // --- אודות הרשת ---
-                DrawerItem(
-                    title = "אודות הרשת",
-                    subtitle = "נוקאאוט",
-                    onClick = {
-                        onClose()
-                        onOpenAboutNetwork()
-                    }
-                )
-
-                // --- אודות השיטה ---
-                DrawerItem(
-                    title = "אודות השיטה",
-                    subtitle = "ק.מ.י",
-                    onClick = {
-                        onClose()
-                        onOpenAboutMethod()
-                    }
-                )
-
-                // --- תרגילים – הדגמה (חדש) ---
-                DrawerItem(
-                    title = "תרגילים – הדגמה",
-                    subtitle = "סרטוני הסבר קצרים לתרגילים",
-                    onClick = { showDemoVideos = true }
-                )
-
-                // --- טופס הרשמה לעמותה (PDF) ---
-                val context = LocalContext.current
-                DrawerItem(
-                    title = "טופס הרשמה לעמותה",
-                    twoLineTitle = true,
-                    alignRight = true,                  // ← יישור לימין
-                    onClick = {
-                        val uri = Uri.parse("https://10nokout.com/files/Kami-Register.pdf")
-                        try {
-                            CustomTabsIntent.Builder()
-                                .setShowTitle(true)
-                                .setUrlBarHidingEnabled(true)
-                                .build()
-                                .launchUrl(context, uri)
-                        } catch (_: Exception) {
-                            try {
-                                val i = Intent(Intent.ACTION_VIEW, uri)
-                                    .addCategory(Intent.CATEGORY_BROWSABLE)
-                                context.startActivity(i)
-                            } catch (_: Exception) {
-                                Toast.makeText(context, "לא ניתן לפתוח את הקובץ", Toast.LENGTH_SHORT).show()
-                            }
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "About Avi Avisidon",
+                                subtitle = "Head of the method",
+                                titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = (-0.2).sp
+                                ),
+                                onClick = {
+                                    onClose()
+                                    onOpenAboutAvi()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "אודות אבי אביסידון",
+                                subtitle = "ראש השיטה",
+                                titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = (-0.2).sp
+                                ),
+                                onClick = {
+                                    onClose()
+                                    onOpenAboutAvi()
+                                }
+                            )
                         }
-                        onClose()
-                    }
-                )
 
-                // --- פורום הסניף ---
-                DrawerItem(
-                    title = "פורום הסניף",
-                    onClick = {
-                        onClose()
-                        onOpenForum()
-                    }
-                )
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "About Itzik Biton",
+                                subtitle = "Senior coach",
+                                onClick = {
+                                    onClose()
+                                    onOpenAboutItzik()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "אודות איציק ביטון",
+                                subtitle = "מאמן בכיר",
+                                onClick = {
+                                    onClose()
+                                    onOpenAboutItzik()
+                                }
+                            )
+                        }
 
-// --- שפה ---
-                val contextLang = LocalContext.current
-                DrawerItem(
-                    leading = {
-                        Icon(
-                            imageVector = Icons.Filled.Language,
-                            contentDescription = null,
-                            tint = Color.White
-                        )
-                    },
-                    title = "שפה / Language",
-                    onClick = {
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "About the Network",
+                                subtitle = "Knockout",
+                                onClick = {
+                                    onClose()
+                                    onOpenAboutNetwork()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "אודות הרשת",
+                                subtitle = "Knockout",
+                                onClick = {
+                                    onClose()
+                                    onOpenAboutNetwork()
+                                }
+                            )
+                        }
 
-                        val manager = AppLanguageManager(contextLang)
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "About the Method",
+                                subtitle = "K.M.I",
+                                onClick = {
+                                    onClose()
+                                    onOpenAboutMethod()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "אודות השיטה",
+                                subtitle = "K.M.I",
+                                onClick = {
+                                    onClose()
+                                    onOpenAboutMethod()
+                                }
+                            )
+                        }
 
-                        val newLang =
-                            if (manager.getCurrentLanguage() == AppLanguage.HEBREW)
-                                AppLanguage.ENGLISH
-                            else
-                                AppLanguage.HEBREW
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "Exercises – Demo",
+                                subtitle = "Short demo videos for exercises",
+                                onClick = { showDemoVideos = true }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "תרגילים – הדגמה",
+                                subtitle = "סרטוני הסבר קצרים לתרגילים",
+                                onClick = { showDemoVideos = true }
+                            )
+                        }
 
-                        manager.setLanguage(newLang)
+                        val context = LocalContext.current
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "Association Registration Form",
+                                twoLineTitle = true,
+                                onClick = {
+                                    val uri = Uri.parse("https://10nokout.com/files/Kami-Register.pdf")
+                                    try {
+                                        CustomTabsIntent.Builder()
+                                            .setShowTitle(true)
+                                            .setUrlBarHidingEnabled(true)
+                                            .build()
+                                            .launchUrl(context, uri)
+                                    } catch (_: Exception) {
+                                        try {
+                                            val i = Intent(Intent.ACTION_VIEW, uri)
+                                                .addCategory(Intent.CATEGORY_BROWSABLE)
+                                            context.startActivity(i)
+                                        } catch (_: Exception) {
+                                            Toast.makeText(
+                                                context,
+                                                "Unable to open the file",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                    onClose()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "טופס הרשמה לעמותה",
+                                twoLineTitle = true,
+                                onClick = {
+                                    val uri = Uri.parse("https://10nokout.com/files/Kami-Register.pdf")
+                                    try {
+                                        CustomTabsIntent.Builder()
+                                            .setShowTitle(true)
+                                            .setUrlBarHidingEnabled(true)
+                                            .build()
+                                            .launchUrl(context, uri)
+                                    } catch (_: Exception) {
+                                        try {
+                                            val i = Intent(Intent.ACTION_VIEW, uri)
+                                                .addCategory(Intent.CATEGORY_BROWSABLE)
+                                            context.startActivity(i)
+                                        } catch (_: Exception) {
+                                            Toast.makeText(
+                                                context,
+                                                "לא ניתן לפתוח את הקובץ",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                    onClose()
+                                }
+                            )
+                        }
 
-                        Toast.makeText(
-                            contextLang,
-                            if (newLang == AppLanguage.ENGLISH) "Language: English" else "שפה: עברית",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "Branch Forum",
+                                onClick = {
+                                    onClose()
+                                    onOpenForum()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "פורום הסניף",
+                                onClick = {
+                                    onClose()
+                                    onOpenForum()
+                                }
+                            )
+                        }
 
-                        onClose()
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                leading = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Language,
+                                        contentDescription = null,
+                                        tint = Color.White
+                                    )
+                                },
+                                title = "Language / שפה",
+                                onClick = {
+                                    val manager = AppLanguageManager(contextLang)
 
-                        (contextLang as? android.app.Activity)?.recreate()
-                    }
-                )
+                                    val newLang =
+                                        if (manager.getCurrentLanguage() == AppLanguage.HEBREW)
+                                            AppLanguage.ENGLISH
+                                        else
+                                            AppLanguage.HEBREW
 
-                // --- ניהול מנוי ---
-                DrawerItem(
-                    title = "ניהול מנוי",
-                    onClick = {
-                        onClose()
-                        onOpenSubscriptions()
-                    }
-                )
+                                    manager.setLanguage(newLang)
 
-                // ⭐ דרגו אותנו — אותו סגנון כמו הכפתורים האחרים
-                DrawerItem(
-                    title = "⭐ דרגו אותנו ⭐",
-                    onClick = {
-                        onClose()
-                        onOpenRateUs()
-                    }
-                )
+                                    Toast.makeText(
+                                        contextLang,
+                                        if (newLang == AppLanguage.ENGLISH) "Language: English" else "שפה: עברית",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
 
-                // --- התנתקות (אותו סגנון כמו כל הכפתורים) ---
-                DrawerItem(
-                    leading = {
-                        Icon(
-                            imageVector = Icons.Outlined.Logout,
-                            contentDescription = null,
-                            tint = Color.White
-                        )
-                    },
-                    title = "התנתקות",
-                    onClick = {
-                        onClose()
-                        onLogout()
-                    }
-                )
+                                    onClose()
+                                    (contextLang as? android.app.Activity)?.recreate()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                leading = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Language,
+                                        contentDescription = null,
+                                        tint = Color.White
+                                    )
+                                },
+                                title = "שפה / Language",
+                                onClick = {
+                                    val manager = AppLanguageManager(contextLang)
 
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "© K.M.I",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFB8C4DA),
-                    modifier = Modifier.align(Alignment.End)
-                )
-                Spacer(Modifier.height(8.dp))
-            } // end Column
+                                    val newLang =
+                                        if (manager.getCurrentLanguage() == AppLanguage.HEBREW)
+                                            AppLanguage.ENGLISH
+                                        else
+                                            AppLanguage.HEBREW
+
+                                    manager.setLanguage(newLang)
+
+                                    Toast.makeText(
+                                        contextLang,
+                                        if (newLang == AppLanguage.ENGLISH) "Language: English" else "שפה: עברית",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+
+                                    onClose()
+                                    (contextLang as? android.app.Activity)?.recreate()
+                                }
+                            )
+                        }
+
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "Manage Subscription",
+                                onClick = {
+                                    onClose()
+                                    onOpenSubscriptions()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "ניהול מנוי",
+                                onClick = {
+                                    onClose()
+                                    onOpenSubscriptions()
+                                }
+                            )
+                        }
+
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "⭐ Rate Us ⭐",
+                                onClick = {
+                                    onClose()
+                                    onOpenRateUs()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "⭐ דרגו אותנו ⭐",
+                                onClick = {
+                                    onClose()
+                                    onOpenRateUs()
+                                }
+                            )
+                        }
+
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                leading = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Logout,
+                                        contentDescription = null,
+                                        tint = Color.White
+                                    )
+                                },
+                                title = "Logout",
+                                onClick = {
+                                    onClose()
+                                    onLogout()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                leading = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Logout,
+                                        contentDescription = null,
+                                        tint = Color.White
+                                    )
+                                },
+                                title = "התנתקות",
+                                onClick = {
+                                    onClose()
+                                    onLogout()
+                                }
+                            )
+                        }
+
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "© K.M.I",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFB8C4DA),
+                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                } // end Column
+            } // end AnimatedVisibility
 
             // ─────────────────────────────────────────────
             // 🎬 דיאלוג: תרגילים – הדגמה
@@ -712,11 +1027,11 @@ fun AppDrawerContent(
                     onDismissRequest = { showDemoVideos = false },
                     title = {
                         Text(
-                            text = "תרגילים – הדגמה",
+                            text = tr("תרגילים – הדגמה", "Exercises – Demo"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White,
-                            textAlign = TextAlign.Right,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                             modifier = Modifier.fillMaxWidth()
                         )
                     },
@@ -729,7 +1044,7 @@ fun AppDrawerContent(
                                 value = query,
                                 onValueChange = { query = it },
                                 singleLine = true,
-                                placeholder = { Text("חיפוש…") },
+                                placeholder = { Text(tr("חיפוש…", "Search…")) },
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -756,7 +1071,11 @@ fun AppDrawerContent(
                                                             .addCategory(Intent.CATEGORY_BROWSABLE)
                                                     )
                                                 } catch (_: Exception) {
-                                                    Toast.makeText(ctx, "לא ניתן לפתוח את הסרטון", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(
+                                                        ctx,
+                                                        tr("לא ניתן לפתוח את הסרטון", "Unable to open the video"),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
                                                 }
                                             }
 
@@ -791,14 +1110,14 @@ fun AppDrawerContent(
                                                     fontWeight = FontWeight.ExtraBold,
                                                     maxLines = 2,
                                                     overflow = TextOverflow.Ellipsis,
-                                                    textAlign = TextAlign.Right,
+                                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
                                                 Text(
                                                     text = v.source,
                                                     color = Color.White.copy(alpha = 0.75f),
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    textAlign = TextAlign.Right,
+                                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
                                             }
@@ -817,7 +1136,7 @@ fun AppDrawerContent(
                     },
                     confirmButton = {
                         TextButton(onClick = { showDemoVideos = false }) {
-                            Text("סגור", color = Color.White)
+                            Text(tr("סגור", "Close"), color = Color.White)
                         }
                     },
                     containerColor = Color(0xFF0E1630), // מתאים לגרדיאנט שלך
@@ -830,10 +1149,11 @@ fun AppDrawerContent(
             DrawerScrollAffordance(
                 scroll = scroll,
                 modifier = Modifier.align(Alignment.BottomCenter)
-            )
-        } // end inner Box
-    }
-}
+                )
+            } // end inner Box
+        } // end Box
+    } // end CompositionLocalProvider
+} // end AppDrawerContent
 
 @Composable
 private fun DrawerScrollAffordance(
@@ -891,7 +1211,7 @@ private fun DrawerScrollAffordance(
             ) {
                 Icon(
                     imageVector = Icons.Filled.ExpandMore,
-                    contentDescription = "גלול למטה",
+                    contentDescription = null,
                     tint = Color(0xFF2E3A59).copy(alpha = alpha),
                     modifier = Modifier
                         .size(36.dp)
