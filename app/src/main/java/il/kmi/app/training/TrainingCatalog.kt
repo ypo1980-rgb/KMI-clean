@@ -13,6 +13,148 @@ import java.util.Locale
  * בתחתית הקובץ יש Shim תאימות ל-TrainingDirectory הישן.
  */
 object TrainingCatalog {
+
+    data class LocalizedText(
+        val he: String,
+        val en: String
+    ) {
+        fun value(isEnglish: Boolean): String = if (isEnglish) en else he
+    }
+
+    data class BranchInfo(
+        val region: LocalizedText,
+        val branch: LocalizedText,
+        val place: LocalizedText,
+        val address: LocalizedText
+    )
+
+    private val BRANCH_INFO: Map<String, BranchInfo> = mapOf(
+        "נתניה – מרכז קהילתי סוקולוב" to BranchInfo(
+            region = LocalizedText("השרון", "Sharon"),
+            branch = LocalizedText(
+                "נתניה – מרכז קהילתי סוקולוב",
+                "Netanya – Sokolov Community Center"
+            ),
+            place = LocalizedText(
+                "מרכז קהילתי סוקולוב",
+                "Sokolov Community Center"
+            ),
+            address = LocalizedText(
+                "רחוב נחום סוקולוב 25, נתניה",
+                "25 Nahum Sokolov St, Netanya"
+            )
+        ),
+        "נתניה – מרכז קהילתי אופק" to BranchInfo(
+            region = LocalizedText("השרון", "Sharon"),
+            branch = LocalizedText(
+                "נתניה – מרכז קהילתי אופק",
+                "Netanya – Ofek Community Center"
+            ),
+            place = LocalizedText(
+                "מרכז קהילתי אופק",
+                "Ofek Community Center"
+            ),
+            address = LocalizedText(
+                "רחוב אבא אחימאיר 6, נתניה",
+                "6 Aba Ahimeir St, Netanya"
+            )
+        ),
+        "נתניה – נורדאו" to BranchInfo(
+            region = LocalizedText("השרון", "Sharon"),
+            branch = LocalizedText(
+                "נתניה – נורדאו",
+                "Netanya – Nordau"
+            ),
+            place = LocalizedText(
+                "נורדאו",
+                "Nordau"
+            ),
+            address = LocalizedText(
+                "אריה לוין 3, נתניה",
+                "3 Arie Levin St, Netanya"
+            )
+        ),
+        "עזריאל – מושב עזריאל" to BranchInfo(
+            region = LocalizedText("השרון", "Sharon"),
+            branch = LocalizedText(
+                "עזריאל – מושב עזריאל",
+                "Azriel – Moshav Azriel"
+            ),
+            place = LocalizedText(
+                "מושב עזריאל",
+                "Moshav Azriel"
+            ),
+            address = LocalizedText(
+                "מושב עזריאל, מאחורי מכולת המושב",
+                "Moshav Azriel, behind the local grocery store"
+            )
+        )
+    )
+
+    fun branchDisplayName(branch: String, isEnglish: Boolean): String {
+        return BRANCH_INFO[branch]?.branch?.value(isEnglish) ?: branch
+    }
+
+    fun placeDisplayName(branchOrPlace: String, isEnglish: Boolean): String {
+        val normalized = branchOrPlace.trim()
+
+        BRANCH_INFO[normalized]?.let {
+            return it.place.value(isEnglish)
+        }
+
+        val place = placeFor(normalized).trim()
+
+        if (!isEnglish) return place
+
+        return when (place) {
+            "מרכז קהילתי סוקולוב" -> "Sokolov Community Center"
+            "מרכז קהילתי אופק" -> "Ofek Community Center"
+            "נורדאו" -> "Nordau"
+            "מושב עזריאל" -> "Moshav Azriel"
+            "מרכז קהילתי לב הפארק" -> "Lev HaPark Community Center"
+            "מרכז קהילתי נוף ים" -> "Nof Yam Community Center"
+            "היכל התרבות" -> "Cultural Hall"
+            "מרכז ספורט עירוני" -> "Municipal Sports Center"
+            else -> place
+        }
+    }
+
+
+    fun addressDisplayName(branchOrAddress: String, isEnglish: Boolean): String {
+
+        // אם קיבלנו שם סניף
+        BRANCH_INFO[branchOrAddress]?.let {
+            return it.address.value(isEnglish)
+        }
+
+        // אחרת זה כנראה כתובת מלאה
+        val heb = addressFor(branchOrAddress)
+
+        if (!isEnglish) return heb
+
+        return when (heb.trim()) {
+            "רחוב נחום סוקולוב 25, נתניה" -> "25 Nahum Sokolov St, Netanya"
+            "רחוב אבא אחימאיר 6, נתניה" -> "6 Aba Ahimeir St, Netanya"
+            "אריה לוין 3, נתניה",
+            "אריה לוין 3 נתניה" -> "3 Arie Levin St, Netanya"
+            else -> heb
+        }
+    }
+
+    fun regionDisplayName(region: String, isEnglish: Boolean): String {
+
+        val regionEn = when (region) {
+            "השרון" -> "Sharon"
+            "מרכז" -> "Center"
+            "ירושלים" -> "Jerusalem"
+            "צפון" -> "North"
+            "דרום" -> "South"
+            else -> region
+        }
+
+        return if (isEnglish) regionEn else region
+    }
+
     // קריאת משך אימון מ-TrainingData בצורה עמידה לאי-תאמויות
     private fun readDurationMinutes(td: TrainingData): Int {
         val cls = td::class.java
@@ -73,7 +215,13 @@ object TrainingCatalog {
         "מרכז" to listOf(
             "תל אביב – מרכז קהילתי דובנוב",
             "תל אביב – מרכז קהילתי יד אליהו",
-            "פתח תקווה – מתנ\"ס עמישב"
+            "פתח תקווה – מתנ\"ס עמישב",
+            "רמת גן – הרוא\"ה 2א/הרצל",
+            "בני ברק – גומל 6",
+            "תל אביב – סניף תל אביב",
+            "קריית אונו – סניף קריית אונו",
+            "נס ציונה – גוליס",
+            "מושב ישרש – ישרש"
         ),
         "ירושלים" to listOf(
             "ירושלים – מרכז קהילתי רמות ספיר",
@@ -99,25 +247,14 @@ object TrainingCatalog {
     // ─────────────────────────────────────────────────────────────
     // HOLD לאזורים ולסניפים
     // ─────────────────────────────────────────────────────────────
-    // אזורים על HOLD (לא מציגים בהם סניפים למשתמש):
-    // כרגע *רק* "השרון" פעיל; כל השאר לא פעילים.
-    private val INACTIVE_REGIONS: Set<String> = setOf(
-        "מרכז",
-        "ירושלים",
-        "צפון",
-        "דרום"
-    )
+    // כרגע אין אזורים על HOLD — מציגים את כל האזורים.
+    private val INACTIVE_REGIONS: Set<String> = emptySet()
 
-    // הודעה שתוצג באזורים הלא-פעילים
+    // כרגע אין הודעת HOLD פעילה כי כל האזורים פעילים.
     const val REGION_HOLD_MESSAGE: String = "אין סניפים זמינים באזור זה"
 
-    // סניפים על HOLD בתוך אזור השרון (מוסתרים אך לא נמחקים מהדאטה):
-    private val INACTIVE_BRANCHES: Set<String> = setOf(
-        "הרצליה – מרכז קהילתי נוף ים",
-        "כפר סבא – היכל התרבות",
-        "רעננה – מרכז קהילתי לב הפארק",
-        "הוד השרון – מרכז ספורט עירוני"
-    )
+    // כרגע אין סניפים על HOLD — מציגים את כל הסניפים.
+    private val INACTIVE_BRANCHES: Set<String> = emptySet()
 
     /** האם האזור פעיל (כלומר *לא* על HOLD) */
     fun isRegionActive(region: String): Boolean = !INACTIVE_REGIONS.contains(region)
@@ -127,32 +264,35 @@ object TrainingCatalog {
         if (isRegionActive(region)) null else REGION_HOLD_MESSAGE
 
     /**
-     * Map "חי" שמסתיר סניפים באזורים לא פעילים, וגם מסנן סניפים על HOLD בתוך אזור פעיל.
-     * הנתונים המקוריים נשמרים ב-BRANCHES_BY_REGION_RAW.
+     * Map "חי" שמחזיר את כל הסניפים.
+     * נשמר אותו API כדי לא לשבור את שאר המסכים.
      */
-    val branchesByRegion: Map<String, List<String>> = object : Map<String, List<String>> by BRANCHES_BY_REGION_RAW {
-        private fun filtered(list: List<String>, region: String): List<String> =
-            if (!isRegionActive(region)) emptyList() else list.filter { it !in INACTIVE_BRANCHES }
+    val branchesByRegion: Map<String, List<String>> =
+        BRANCHES_BY_REGION_RAW
 
-        override fun get(key: String): List<String>? {
-            val base = BRANCHES_BY_REGION_RAW[key] ?: return null
-            return filtered(base, key)
-        }
-        override val entries: Set<Map.Entry<String, List<String>>>
-            get() = BRANCHES_BY_REGION_RAW.entries.map { e ->
-                object : Map.Entry<String, List<String>> {
-                    override val key: String = e.key
-                    override val value: List<String> = filtered(e.value, e.key)
-                }
-            }.toSet()
-        override val values: Collection<List<String>>
-            get() = BRANCHES_BY_REGION_RAW.map { (k, v) -> filtered(v, k) }
-        // keys נשאר ללא שינוי
-    }
-
-    /** סניפים נראים למשתמש עבור אזור (מסוננים לפי HOLD אזורי/סניפי) */
+    /** סניפים נראים למשתמש עבור אזור */
     fun branchesFor(region: String): List<String> =
         branchesByRegion[region] ?: emptyList()
+
+    /** כל האזורים כפי שמוגדרים בקטלוג */
+    fun allRegions(): List<String> =
+        branchesByRegion.keys.toList()
+
+    /** כל האזורים הפעילים — כרגע כולם */
+    fun activeRegions(): List<String> =
+        branchesByRegion.keys.toList()
+
+    /** כל הסניפים הגלויים מכל האזורים */
+    fun allVisibleBranches(): List<String> =
+        branchesByRegion.values.flatten()
+
+    /** כל הסניפים לפי אזור, בפורמט נוח ל-UI */
+    fun visibleBranchesByRegion(): Map<String, List<String>> =
+        branchesByRegion
+
+    /** בדיקה האם סניף גלוי למשתמש */
+    fun isVisibleBranch(branch: String): Boolean =
+        allVisibleBranches().contains(branch)
 
     // ─────────────────────────────────────────────────────────────
     // כתובות סניפים + עזרי מיפוי (מחליף את TrainingAddresses הישן)
@@ -172,7 +312,15 @@ object TrainingCatalog {
         // ── מרכז ──
         "תל אביב – מרכז קהילתי דובנוב"   to "תל אביב – מרכז קהילתי דובנוב",
         "תל אביב – מרכז קהילתי יד אליהו" to "תל אביב – מרכז קהילתי יד אליהו",
-        "פתח תקווה – מתנ\"ס עמישב"        to "פתח תקווה – מתנ\"ס עמישב",
+        "פתח תקווה – מתנ\"ס עמישב"        to "מתנ\"ס עמישב, פתח תקווה",
+
+        "רמת גן – הרוא\"ה 2א/הרצל"       to "הרוא\"ה 2א/הרצל, רמת גן",
+        "בני ברק – גומל 6"               to "גומל 6, בני ברק",
+        "תל אביב – סניף תל אביב"         to "תל אביב",
+        "קריית אונו – סניף קריית אונו"   to "קריית אונו",
+        "נס ציונה – גוליס"               to "גוליס, נס ציונה",
+        "מושב ישרש – ישרש"               to "ישרש",
+
 
         // ── ירושלים ──
         "ירושלים – מרכז קהילתי רמות ספיר"  to "ירושלים – מרכז קהילתי רמות ספיר",
@@ -229,6 +377,20 @@ object TrainingCatalog {
         return addressForSingleBranch(src)
     }
 
+    fun addressFor(branchOrAddress: String, isEnglish: Boolean): String {
+        val heb = addressFor(branchOrAddress)
+
+        if (!isEnglish) return heb
+
+        return when (heb) {
+            "רחוב נחום סוקולוב 25, נתניה" -> "25 Nahum Sokolov St, Netanya"
+            "רחוב אבא אחימאיר 6, נתניה" -> "6 Aba Ahimeir St, Netanya"
+            "אריה לוין 3, נתניה" -> "3 Arie Levin St, Netanya"
+            "מושב עזריאל, מאחורי מכולת המושב" -> "Moshav Azriel (behind the grocery store)"
+            else -> heb
+        }
+    }
+
     // לוגיקה עבור סניף/ערך בודד (כמו קודם, עם נרמול מקפים ורווחים)
     private fun addressForSingleBranch(src: String): String {
         if (looksLikeFullAddress(src)) return src
@@ -274,6 +436,15 @@ object TrainingCatalog {
         "רעננה – מרכז קהילתי לב הפארק" to listOf("בוגרים"),
         "הרצליה – מרכז קהילתי נוף ים" to listOf("בוגרים"),
         "כפר סבא – היכל התרבות" to listOf("בוגרים"),
+        "פתח תקווה – מתנ\"ס עמישב" to listOf("בוגרים"),
+        "רמת גן – הרוא\"ה 2א/הרצל" to listOf("בוגרים"),
+        "בני ברק – גומל 6" to listOf("בוגרים"),
+        "תל אביב – סניף תל אביב" to listOf("בוגרים"),
+        "קריית אונו – סניף קריית אונו" to listOf("בוגרים"),
+        "נס ציונה – גוליס" to listOf("בוגרים"),
+        "תל אביב – מרכז קהילתי דובנוב" to listOf("בוגרים"),
+        "תל אביב – מרכז קהילתי יד אליהו" to listOf("בוגרים"),
+        "מושב ישרש – ישרש" to listOf("בוגרים"),
         "הוד השרון – מרכז ספורט עירוני" to listOf("בוגרים")
     )
 

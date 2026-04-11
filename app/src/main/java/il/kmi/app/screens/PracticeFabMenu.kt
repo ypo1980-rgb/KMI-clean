@@ -61,6 +61,8 @@ import il.kmi.app.ui.ext.color
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.ContentRepo
 import il.kmi.shared.domain.catalog.CatalogRepo
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 import java.util.LinkedHashSet
 
 @Immutable
@@ -80,12 +82,16 @@ fun PracticeMenuDialog(
     onFinalExam: (Belt) -> Unit,
     onPracticeByTopics: (PracticeByTopicsSelection) -> Unit
 ) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val langManager = remember { AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     var showTopicsPicker by rememberSaveable { mutableStateOf(false) }
 
     if (showTopicsPicker) {
         PracticeByTopicsPickerDialog(
             contentRepo = contentRepo,
             initialBelts = setOf(defaultBelt),
+            isEnglish = isEnglish,
             onDismiss = { showTopicsPicker = false },
             onConfirm = { selection ->
                 showTopicsPicker = false
@@ -97,10 +103,12 @@ fun PracticeMenuDialog(
 
     // ✅ accent לפי החגורה במסך הנוכחי
     val beltAccent = defaultBelt.color
-    val beltName = "(${defaultBelt.heb})"
+    val beltName = if (isEnglish) "(${defaultBelt.en})" else "(${defaultBelt.heb})"
 
     // ✅ הכל RTL בתוך הדיאלוג
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    CompositionLocalProvider(
+        LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    ) {
 
         @Composable
         fun GradientDivider(modifier: Modifier = Modifier) {
@@ -167,7 +175,7 @@ fun PracticeMenuDialog(
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start // RTL: Start=ימין
+                    horizontalArrangement = Arrangement.Start
                 ) {
                     Surface(
                         shape = RoundedCornerShape(999.dp),
@@ -196,14 +204,17 @@ fun PracticeMenuDialog(
                         fontWeight = FontWeight.SemiBold,
                         color = if (enabled) MaterialTheme.colorScheme.onSurface
                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-                        textAlign = TextAlign.Right
+                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
                     )
 
                     Icon(
-                        imageVector = Icons.Filled.ChevronLeft,
+                        imageVector = if (isEnglish) Icons.Filled.ChevronLeft else Icons.Filled.ChevronLeft,
                         contentDescription = null,
                         tint = if (enabled) beltAccent.copy(alpha = 0.55f)
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = if (isEnglish) -1f else 1f
+                        }
                     )
                 }
             }
@@ -243,21 +254,24 @@ fun PracticeMenuDialog(
 
                         Spacer(Modifier.width(12.dp))
 
-                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "תרגול",
+                                text = if (isEnglish) "Practice" else "תרגול",
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Spacer(Modifier.height(2.dp))
+
                             Text(
-                                text = "בחר פעולה כדי להתחיל",
+                                text = if (isEnglish) "Choose an action to begin" else "בחר פעולה כדי להתחיל",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -276,21 +290,21 @@ fun PracticeMenuDialog(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     ModernActionRow(
-                        title = "תרגול אקראי - $beltName",
+                        title = if (isEnglish) "Random Practice - $beltName" else "תרגול אקראי - $beltName",
                         icon = Icons.Filled.Casino,
                         enabled = canUseExtras,
                         onClick = { onRandomPractice(defaultBelt) }
                     )
 
                     ModernActionRow(
-                        title = "מבחן מסכם - $beltName",
+                        title = if (isEnglish) "Final Exam - $beltName" else "מבחן מסכם - $beltName",
                         icon = Icons.Filled.AssignmentTurnedIn,
                         enabled = canUseExtras,
                         onClick = { onFinalExam(defaultBelt) }
                     )
 
                     ModernActionRow(
-                        title = "תרגול לפי נושא",
+                        title = if (isEnglish) "Practice by Topic" else "תרגול לפי נושא",
                         icon = Icons.Filled.Topic,
                         enabled = canUseExtras,
                         onClick = { showTopicsPicker = true }
@@ -304,13 +318,17 @@ fun PracticeMenuDialog(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f))
                         ) {
                             Text(
-                                text = "אפשרויות התרגול זמינות רק בהרשאות Extras/מנוי.",
+                                text = if (isEnglish) {
+                                    "Practice options are available only with Extras / subscription access."
+                                } else {
+                                    "אפשרויות התרגול זמינות רק בהרשאות Extras/מנוי."
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 12.dp, vertical = 10.dp),
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodySmall,
-                                textAlign = TextAlign.Right
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
                             )
                         }
                     }
@@ -319,7 +337,10 @@ fun PracticeMenuDialog(
 
             confirmButton = {
                 TextButton(onClick = onDismiss) {
-                    Text("סגור", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isEnglish) "Close" else "סגור",
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         )
@@ -331,11 +352,15 @@ fun PracticeMenuDialog(
 private fun PracticeByTopicsPickerDialog(
     contentRepo: ContentRepo = ContentRepo,
     initialBelts: Set<Belt>,
+    isEnglish: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (PracticeByTopicsSelection) -> Unit
 ) {
+
     // ✅ RTL לכל הדיאלוג
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    CompositionLocalProvider(
+        LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    ) {
 
         @Suppress("UNUSED_PARAMETER")
         val _unused = contentRepo // כרגע אנחנו לא משתמשים בו כאן
@@ -450,7 +475,7 @@ private fun PracticeByTopicsPickerDialog(
                             text = title,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                             color = Color.Black,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -459,7 +484,7 @@ private fun PracticeByTopicsPickerDialog(
                             Text(
                                 text = subtitle,
                                 style = MaterialTheme.typography.bodySmall,
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -472,7 +497,10 @@ private fun PracticeByTopicsPickerDialog(
                         imageVector = Icons.Filled.ChevronLeft,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                        modifier = Modifier.graphicsLayer { rotationZ = rot }
+                        modifier = Modifier.graphicsLayer {
+                            rotationZ = rot
+                            scaleX = if (isEnglish) -1f else 1f
+                        }
                     )
                 }
             }
@@ -540,7 +568,7 @@ private fun PracticeByTopicsPickerDialog(
                             text = title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -548,7 +576,7 @@ private fun PracticeByTopicsPickerDialog(
                             text = subtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
-                            textAlign = TextAlign.Right,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                             maxLines = 1,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -589,14 +617,14 @@ private fun PracticeByTopicsPickerDialog(
 
             title = {
                 Text(
-                    text = "תרגול לפי נושא",
+                    text = if (isEnglish) "Practice by Topic" else "תרגול לפי נושא",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black,
                     textAlign = TextAlign.Center,
                     color = Color.Black,
                     modifier = Modifier.fillMaxWidth()
                 )
-            },
+                    },
 
             text = {
                 val scrollState = rememberScrollState()
@@ -612,16 +640,24 @@ private fun PracticeByTopicsPickerDialog(
                     // =========================
                     // 1) Accordion: חגורות
                     // =========================
-                    val beltsSubtitle = remember(selectedBelts) {
+                    val beltsSubtitle = remember(selectedBelts, isEnglish) {
                         when (selectedBelts.size) {
-                            0 -> "לא נבחרה חגורה"
-                            1 -> "נבחרה: ${selectedBelts.first().heb}"
-                            else -> "נבחרו ${selectedBelts.size} חגורות"
+                            0 -> if (isEnglish) "No belt selected" else "לא נבחרה חגורה"
+                            1 -> if (isEnglish) {
+                                "Selected: ${selectedBelts.first().en}"
+                            } else {
+                                "נבחרה: ${selectedBelts.first().heb}"
+                            }
+                            else -> if (isEnglish) {
+                                "${selectedBelts.size} belts selected"
+                            } else {
+                                "נבחרו ${selectedBelts.size} חגורות"
+                            }
                         }
                     }
 
                     AccordionHeader(
-                        title = "בחר חגורה/ות",
+                        title = if (isEnglish) "Choose Belt(s)" else "בחר חגורה/ות",
                         subtitle = beltsSubtitle,
                         expanded = beltsExpanded,
                         onClick = { toggleBelts() }
@@ -656,19 +692,22 @@ private fun PracticeByTopicsPickerDialog(
                                         horizontalAlignment = Alignment.End
                                     ) {
                                         Text(
-                                            text = "חגורות",
+                                            text = if (isEnglish) "Belts" else "חגורות",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.ExtraBold,
-                                            textAlign = TextAlign.Right,
+                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                             color = Color.Black,
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                         Spacer(Modifier.height(2.dp))
                                         Text(
-                                            text = if (pickedCount == 0) "לא נבחרו חגורות"
-                                            else "נבחרו $pickedCount מתוך $allCount",
+                                            text = if (pickedCount == 0) {
+                                                if (isEnglish) "No belts selected" else "לא נבחרו חגורות"
+                                            } else {
+                                                if (isEnglish) "$pickedCount of $allCount selected" else "נבחרו $pickedCount מתוך $allCount"
+                                            },
                                             style = MaterialTheme.typography.bodySmall,
-                                            textAlign = TextAlign.Right,
+                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
                                             modifier = Modifier.fillMaxWidth()
                                         )
@@ -680,7 +719,11 @@ private fun PracticeByTopicsPickerDialog(
                                             if (selectedBelts.isEmpty()) topicsByBelt = emptyMap()
                                         }
                                     ) {
-                                        Text(if (allPicked) "נקה" else "בחר הכל")
+                                        Text(if (allPicked) {
+                                            if (isEnglish) "Clear" else "נקה"
+                                        } else {
+                                            if (isEnglish) "Select All" else "בחר הכל"
+                                        })
                                     }
                                 }
 
@@ -706,7 +749,7 @@ private fun PracticeByTopicsPickerDialog(
                                             },
                                             label = {
                                                 Text(
-                                                    text = belt.heb,
+                                                    text = if (isEnglish) belt.en else belt.heb,
                                                     fontWeight = if (picked) FontWeight.Bold else FontWeight.Medium
                                                 )
                                             }
@@ -726,14 +769,14 @@ private fun PracticeByTopicsPickerDialog(
                         selectedBelts.sumOf { b -> topicsByBelt[b].orEmpty().size }
                     }
                     val topicsSubtitle = when {
-                        selectedBelts.isEmpty() -> "בחר קודם חגורה אחת לפחות"
-                        topicsCount == 0 -> "לא נבחרו נושאים"
-                        topicsCount == 1 -> "נבחר נושא אחד"
-                        else -> "נבחרו $topicsCount נושאים"
+                        selectedBelts.isEmpty() -> if (isEnglish) "Choose at least one belt first" else "בחר קודם חגורה אחת לפחות"
+                        topicsCount == 0 -> if (isEnglish) "No topics selected" else "לא נבחרו נושאים"
+                        topicsCount == 1 -> if (isEnglish) "One topic selected" else "נבחר נושא אחד"
+                        else -> if (isEnglish) "$topicsCount topics selected" else "נבחרו $topicsCount נושאים"
                     }
 
                     AccordionHeader(
-                        title = "בחר נושא",
+                        title = if (isEnglish) "Choose Topic" else "בחר נושא",
                         subtitle = topicsSubtitle,
                         expanded = topicsExpanded,
                         onClick = { toggleTopics() }
@@ -771,23 +814,23 @@ private fun PracticeByTopicsPickerDialog(
                                         horizontalAlignment = Alignment.End
                                     ) {
                                         Text(
-                                            text = "נושאים",
+                                            text = if (isEnglish) "Topics" else "נושאים",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.ExtraBold,
-                                            textAlign = TextAlign.Right,
+                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                             color = Color.Black,
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                         Spacer(Modifier.height(2.dp))
                                         Text(
                                             text = when {
-                                                selectedBelts.isEmpty() -> "בחר קודם חגורה אחת לפחות"
-                                                totalPickedTopics == 0 -> "לא נבחרו נושאים"
-                                                totalPickedTopics == 1 -> "נבחר נושא אחד"
-                                                else -> "נבחרו $totalPickedTopics נושאים"
+                                                selectedBelts.isEmpty() -> if (isEnglish) "Choose at least one belt first" else "בחר קודם חגורה אחת לפחות"
+                                                totalPickedTopics == 0 -> if (isEnglish) "No topics selected" else "לא נבחרו נושאים"
+                                                totalPickedTopics == 1 -> if (isEnglish) "One topic selected" else "נבחר נושא אחד"
+                                                else -> if (isEnglish) "$totalPickedTopics topics selected" else "נבחרו $totalPickedTopics נושאים"
                                             },
                                             style = MaterialTheme.typography.bodySmall,
-                                            textAlign = TextAlign.Right,
+                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
                                             modifier = Modifier.fillMaxWidth()
                                         )
@@ -800,7 +843,7 @@ private fun PracticeByTopicsPickerDialog(
                                                 selectedBelts.forEach { b -> remove(b) }
                                             }
                                         }
-                                    ) { Text("נקה הכל") }
+                                    ) { Text(if (isEnglish) "Clear All" else "נקה הכל") }
                                 }
                             }
 
@@ -839,19 +882,22 @@ private fun PracticeByTopicsPickerDialog(
                                                     horizontalAlignment = Alignment.End
                                                 ) {
                                                     Text(
-                                                        text = belt.heb,
+                                                        text = if (isEnglish) belt.en else belt.heb,
                                                         style = MaterialTheme.typography.titleMedium,
                                                         fontWeight = FontWeight.ExtraBold,
-                                                        textAlign = TextAlign.Right,
+                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                                         color = Color.Black,
                                                         modifier = Modifier.fillMaxWidth()
                                                     )
                                                     Spacer(Modifier.height(2.dp))
                                                     Text(
-                                                        text = if (topics.isEmpty()) "אין נושאים לחגורה הזו"
-                                                        else "נבחרו ${pickedSet.size} מתוך ${topics.size}",
+                                                        text = if (topics.isEmpty()) {
+                                                            if (isEnglish) "No topics for this belt" else "אין נושאים לחגורה הזו"
+                                                        } else {
+                                                            if (isEnglish) "${pickedSet.size} of ${topics.size} selected" else "נבחרו ${pickedSet.size} מתוך ${topics.size}"
+                                                        },
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        textAlign = TextAlign.Right,
+                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
                                                         modifier = Modifier.fillMaxWidth()
                                                     )
@@ -871,9 +917,9 @@ private fun PracticeByTopicsPickerDialog(
 
                                             if (topics.isEmpty()) {
                                                 Text(
-                                                    text = "אין נושאים להצגה",
+                                                    text = if (isEnglish) "No topics to display" else "אין נושאים להצגה",
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    textAlign = TextAlign.Right,
+                                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
@@ -888,8 +934,16 @@ private fun PracticeByTopicsPickerDialog(
 
                                                         PremiumTopicTile(
                                                             title = t,
-                                                            subtitle = if (checked) "נבחר" else "הקש כדי לבחור",
-                                                            badgeText = if (checked) "מסומן" else "נושא",
+                                                            subtitle = if (checked) {
+                                                                if (isEnglish) "Selected" else "נבחר"
+                                                            } else {
+                                                                if (isEnglish) "Tap to select" else "הקש כדי לבחור"
+                                                            },
+                                                            badgeText = if (checked) {
+                                                                if (isEnglish) "Checked" else "מסומן"
+                                                            } else {
+                                                                if (isEnglish) "Topic" else "נושא"
+                                                            },
                                                             accent = accent,
                                                             selected = checked,
                                                             onClick = {
@@ -909,10 +963,14 @@ private fun PracticeByTopicsPickerDialog(
 
                             if (!canConfirm) {
                                 Text(
-                                    text = "כדי להתחיל — בחר לפחות נושא אחד.",
+                                    text = if (isEnglish) {
+                                        "To begin, select at least one topic."
+                                    } else {
+                                        "כדי להתחיל — בחר לפחות נושא אחד."
+                                    },
                                     color = MaterialTheme.colorScheme.error,
                                     style = MaterialTheme.typography.bodySmall,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -947,11 +1005,11 @@ private fun PracticeByTopicsPickerDialog(
 
                         onDismiss()
                     }
-                ) { Text("התחל") }
+                ) { Text(if (isEnglish) "Start" else "התחל") }
             },
 
             dismissButton = {
-                TextButton(onClick = onDismiss) { Text("ביטול") }
+                TextButton(onClick = onDismiss) { Text(if (isEnglish) "Cancel" else "ביטול") }
             }
         )
     }

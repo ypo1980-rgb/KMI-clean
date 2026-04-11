@@ -68,7 +68,11 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.WorkspacePremium
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.rememberCoroutineScope
 
+
+//===========================================================================
 
 @Composable
 fun DrawerMenuCard(
@@ -169,11 +173,15 @@ fun AppDrawerContent(
     onOpenCoachBroadcast: () -> Unit = {},
     onOpenCoachTrainees: () -> Unit = {},
     onOpenCoachInternalExam: () -> Unit = {},
+    onOpenCoachPaymentsReport: () -> Unit = {},
     isAdmin: Boolean = false,
     onOpenAdminUsers: () -> Unit = {},
-    onOpenAccessibility: () -> Unit = {}
+    onOpenAccessibility: () -> Unit = {},
+    onOpenMembershipPayment: () -> Unit = {},
+    onOpenContactUs: () -> Unit = {}
 ) {
     val contextLang = LocalContext.current
+    val scope = rememberCoroutineScope()
     val langManager = remember { AppLanguageManager(contextLang) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val drawerLayoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
@@ -192,8 +200,14 @@ fun AppDrawerContent(
     }
 
     var resolvedIsAdmin by remember { mutableStateOf<Boolean?>(null) }
+
     // 🎬 דיאלוג סרטוני הדגמה
     var showDemoVideos by rememberSaveable { mutableStateOf(false) }
+
+    // 📄💳 טפסים ותשלומים
+    var showFormsPaymentsDialog by rememberSaveable { mutableStateOf(false) }
+    var showFormsListDialog by rememberSaveable { mutableStateOf(false) }
+    var showMembershipPaymentDialog by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(authUid) {
         if (authUid.isNullOrBlank()) {
@@ -605,6 +619,14 @@ fun AppDrawerContent(
                                         }
                                     )
                                     CoachLineItemEn(
+                                        title = "Payments Report",
+                                        icon = Icons.Filled.Assessment,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachPaymentsReport()
+                                        }
+                                    )
+                                    CoachLineItemEn(
                                         title = "Internal Belt Exam",
                                         icon = Icons.Filled.WorkspacePremium,
                                         onClick = {
@@ -635,6 +657,14 @@ fun AppDrawerContent(
                                         onClick = {
                                             onClose()
                                             onOpenCoachTrainees()
+                                        }
+                                    )
+                                    CoachLineItemHe(
+                                        title = "דו״ח תשלומים",
+                                        icon = Icons.Filled.Assessment,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachPaymentsReport()
                                         }
                                     )
                                     CoachLineItemHe(
@@ -789,58 +819,38 @@ fun AppDrawerContent(
                         val context = LocalContext.current
                         if (isEnglish) {
                             DrawerLineItemEn(
-                                title = "Association Registration Form",
+                                title = "Forms & Payments",
                                 twoLineTitle = true,
                                 onClick = {
-                                    val uri = Uri.parse("https://10nokout.com/files/Kami-Register.pdf")
-                                    try {
-                                        CustomTabsIntent.Builder()
-                                            .setShowTitle(true)
-                                            .setUrlBarHidingEnabled(true)
-                                            .build()
-                                            .launchUrl(context, uri)
-                                    } catch (_: Exception) {
-                                        try {
-                                            val i = Intent(Intent.ACTION_VIEW, uri)
-                                                .addCategory(Intent.CATEGORY_BROWSABLE)
-                                            context.startActivity(i)
-                                        } catch (_: Exception) {
-                                            Toast.makeText(
-                                                context,
-                                                "Unable to open the file",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-                                    onClose()
+                                    showFormsPaymentsDialog = true
                                 }
                             )
                         } else {
                             DrawerLineItemHe(
-                                title = "טופס הרשמה לעמותה",
+                                title = "טפסים ותשלומים",
                                 twoLineTitle = true,
                                 onClick = {
-                                    val uri = Uri.parse("https://10nokout.com/files/Kami-Register.pdf")
-                                    try {
-                                        CustomTabsIntent.Builder()
-                                            .setShowTitle(true)
-                                            .setUrlBarHidingEnabled(true)
-                                            .build()
-                                            .launchUrl(context, uri)
-                                    } catch (_: Exception) {
-                                        try {
-                                            val i = Intent(Intent.ACTION_VIEW, uri)
-                                                .addCategory(Intent.CATEGORY_BROWSABLE)
-                                            context.startActivity(i)
-                                        } catch (_: Exception) {
-                                            Toast.makeText(
-                                                context,
-                                                "לא ניתן לפתוח את הקובץ",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
+                                    showFormsPaymentsDialog = true
+                                }
+                            )
+                        }
+
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "Contact Us",
+                                subtitle = "Leave details and we will get back to you",
+                                onClick = {
                                     onClose()
+                                    onOpenContactUs()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "צור קשר",
+                                subtitle = "השאירו פרטים ונחזור אליכם",
+                                onClick = {
+                                    onClose()
+                                    onOpenContactUs()
                                 }
                             )
                         }
@@ -882,16 +892,22 @@ fun AppDrawerContent(
                                         else
                                             AppLanguage.HEBREW
 
-                                    manager.setLanguage(newLang)
-
-                                    Toast.makeText(
-                                        contextLang,
-                                        if (newLang == AppLanguage.ENGLISH) "Language: English" else "שפה: עברית",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-
                                     onClose()
-                                    (contextLang as? android.app.Activity)?.recreate()
+
+                                    scope.launch {
+                                        delay(180)
+
+                                        manager.setLanguage(newLang)
+
+                                        Toast.makeText(
+                                            contextLang,
+                                            if (newLang == AppLanguage.ENGLISH) "Language: English" else "שפה: עברית",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+
+                                        delay(120)
+                                        (contextLang as? android.app.Activity)?.recreate()
+                                    }
                                 }
                             )
                         } else {
@@ -913,16 +929,22 @@ fun AppDrawerContent(
                                         else
                                             AppLanguage.HEBREW
 
-                                    manager.setLanguage(newLang)
-
-                                    Toast.makeText(
-                                        contextLang,
-                                        if (newLang == AppLanguage.ENGLISH) "Language: English" else "שפה: עברית",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-
                                     onClose()
-                                    (contextLang as? android.app.Activity)?.recreate()
+
+                                    scope.launch {
+                                        delay(180)
+
+                                        manager.setLanguage(newLang)
+
+                                        Toast.makeText(
+                                            contextLang,
+                                            if (newLang == AppLanguage.ENGLISH) "Language: English" else "שפה: עברית",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+
+                                        delay(120)
+                                        (contextLang as? android.app.Activity)?.recreate()
+                                    }
                                 }
                             )
                         }
@@ -1006,6 +1028,334 @@ fun AppDrawerContent(
                     Spacer(Modifier.height(8.dp))
                 } // end Column
             } // end AnimatedVisibility
+
+                // ─────────────────────────────────────────────
+                // 📄💳 דיאלוג: טפסים ותשלומים
+                // ─────────────────────────────────────────────
+                if (showFormsPaymentsDialog) {
+                    val ctx = LocalContext.current
+
+                    AlertDialog(
+                        onDismissRequest = { showFormsPaymentsDialog = false },
+                        title = {
+                            Text(
+                                text = tr("טפסים ותשלומים", "Forms & Payments"),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Surface(
+                                    onClick = {
+                                        showFormsPaymentsDialog = false
+                                        showFormsListDialog = true
+                                    },
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = Color.White.copy(alpha = 0.10f),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                    ) {
+                                        Text(
+                                            text = tr("טפסים", "Forms"),
+                                            color = Color.White,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = tr(
+                                                "פתיחת טופס ההרשמה הקיים לעמותה",
+                                                "Open the existing association registration form"
+                                            ),
+                                            color = Color.White.copy(alpha = 0.78f),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    onClick = {
+                                        showFormsPaymentsDialog = false
+                                        onClose()
+                                        onOpenMembershipPayment()
+                                    },
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = Color.White.copy(alpha = 0.10f),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                    ) {
+                                        Text(
+                                            text = tr("תשלומים", "Payments"),
+                                            color = Color.White,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = tr(
+                                                "פתיחת טופס תשלום דמי חבר לעמותה",
+                                                "Open the membership fee payment form"
+                                            ),
+                                            color = Color.White.copy(alpha = 0.78f),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showFormsPaymentsDialog = false }) {
+                                Text(tr("סגור", "Close"), color = Color.White)
+                            }
+                        },
+                        containerColor = Color(0xFF0E1630),
+                        titleContentColor = Color.White,
+                        textContentColor = Color.White
+                    )
+                }
+
+                // ─────────────────────────────────────────────
+                // 📄 דיאלוג: רשימת טפסים
+                // ─────────────────────────────────────────────
+                if (showFormsListDialog) {
+                    val ctx = LocalContext.current
+
+                    @Composable
+                    fun FormCard(
+                        title: String,
+                        subtitle: String,
+                        enabled: Boolean,
+                        onClick: () -> Unit = {}
+                    ) {
+                        Surface(
+                            onClick = {
+                                if (enabled) onClick()
+                            },
+                            shape = RoundedCornerShape(18.dp),
+                            color = if (enabled) {
+                                Color.White.copy(alpha = 0.10f)
+                            } else {
+                                Color.White.copy(alpha = 0.06f)
+                            },
+                            border = BorderStroke(
+                                1.dp,
+                                if (enabled) Color.White.copy(alpha = 0.18f)
+                                else Color.White.copy(alpha = 0.10f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                            ) {
+                                Text(
+                                    text = title,
+                                    color = if (enabled) Color.White else Color.White.copy(alpha = 0.72f),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = subtitle,
+                                    color = if (enabled) {
+                                        Color.White.copy(alpha = 0.78f)
+                                    } else {
+                                        Color.White.copy(alpha = 0.55f)
+                                    },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+
+                    AlertDialog(
+                        onDismissRequest = { showFormsListDialog = false },
+                        title = {
+                            Text(
+                                text = tr("טפסים", "Forms"),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                FormCard(
+                                    title = tr("טופס רישום לעמותה", "Association Registration Form"),
+                                    subtitle = tr(
+                                        "פתיחת טופס הרישום הקיים לעמותה",
+                                        "Open the existing association registration form"
+                                    ),
+                                    enabled = true,
+                                    onClick = {
+                                        val uri = Uri.parse("https://10nokout.com/files/Kami-Register.pdf")
+                                        try {
+                                            CustomTabsIntent.Builder()
+                                                .setShowTitle(true)
+                                                .setUrlBarHidingEnabled(true)
+                                                .build()
+                                                .launchUrl(ctx, uri)
+                                        } catch (_: Exception) {
+                                            try {
+                                                val i = Intent(Intent.ACTION_VIEW, uri)
+                                                    .addCategory(Intent.CATEGORY_BROWSABLE)
+                                                ctx.startActivity(i)
+                                            } catch (_: Exception) {
+                                                Toast.makeText(
+                                                    ctx,
+                                                    tr("לא ניתן לפתוח את הקובץ", "Unable to open the file"),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+
+                                        showFormsListDialog = false
+                                        onClose()
+                                    }
+                                )
+
+                                FormCard(
+                                    title = tr("הצהרת בריאות", "Health Declaration"),
+                                    subtitle = tr(
+                                        "טופס יוצג כאן בהמשך",
+                                        "This form will be added here soon"
+                                    ),
+                                    enabled = false
+                                )
+
+                                FormCard(
+                                    title = tr("אישור הורים", "Parental Consent"),
+                                    subtitle = tr(
+                                        "טופס יוצג כאן בהמשך",
+                                        "This form will be added here soon"
+                                    ),
+                                    enabled = false
+                                )
+
+                                FormCard(
+                                    title = tr("כתב ויתור", "Waiver Form"),
+                                    subtitle = tr(
+                                        "טופס יוצג כאן בהמשך",
+                                        "This form will be added here soon"
+                                    ),
+                                    enabled = false
+                                )
+
+                                FormCard(
+                                    title = tr("טופס חידוש חברות", "Membership Renewal Form"),
+                                    subtitle = tr(
+                                        "טופס יוצג כאן בהמשך",
+                                        "This form will be added here soon"
+                                    ),
+                                    enabled = false
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showFormsListDialog = false }) {
+                                Text(tr("סגור", "Close"), color = Color.White)
+                            }
+                        },
+                        containerColor = Color(0xFF0E1630),
+                        titleContentColor = Color.White,
+                        textContentColor = Color.White
+                    )
+                }
+
+                // ─────────────────────────────────────────────
+                // 💳 דיאלוג: רישום דמי חבר
+                // ─────────────────────────────────────────────
+                if (showMembershipPaymentDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showMembershipPaymentDialog = false },
+                        title = {
+                            Text(
+                                text = tr("רישום דמי חבר", "Membership Fee Registration"),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = tr(
+                                        "כאן נבנה את שלב הרישום והתשלום לדמי החבר.",
+                                        "Here we will build the membership registration and payment flow."
+                                    ),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color.White.copy(alpha = 0.08f),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = tr("השלב הבא", "Next step"),
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = tr(
+                                                "נוסיף כאן טופס פרטים + כפתור המשך לתשלום.",
+                                                "We will add a details form here + a continue-to-payment button."
+                                            ),
+                                            color = Color.White.copy(alpha = 0.80f),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showMembershipPaymentDialog = false }) {
+                                Text(tr("סגור", "Close"), color = Color.White)
+                            }
+                        },
+                        containerColor = Color(0xFF0E1630),
+                        titleContentColor = Color.White,
+                        textContentColor = Color.White
+                    )
+                }
 
             // ─────────────────────────────────────────────
             // 🎬 דיאלוג: תרגילים – הדגמה

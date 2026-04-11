@@ -152,10 +152,13 @@ sealed class Route(val route: String) {
 
     object Settings : Route("settings")
     object Progress : Route("progress")
-
-    // 🧪 Debug: בדיקת KMP Catalog + HTML (לעזור ל-iOS)
+    object MembershipPayment : Route("membership_payment")
+    object Payment : Route("payment")
+    object ContactUs : Route("contact_us")
+    object PaymentsReport : Route("payments_report")
+    object CancellationPolicy : Route("cancellation_policy")
+    // 🧪 Debug: בדיקת KMP Catalog + HTML (שחזור iOS)
     object DebugCatalog : Route("debug_catalog")
-
     object Registration : Route("registration")
     object Favorites : Route("favorites")
     // ▼▼▼ מבחן פנימי – מסך המאמן

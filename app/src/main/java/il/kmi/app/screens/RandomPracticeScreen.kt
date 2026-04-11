@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.ui.AbsoluteAlignment
-import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.KmiTtsManager.speak
 import il.kmi.app.ui.ext.lightColor
@@ -88,7 +87,7 @@ private fun findExplanationForPractice(
         if (got.isNotBlank()) return got
     }
 
-    return "אין כרגע הסבר לתרגיל הזה."
+    return "No explanation is currently available for this exercise."
 }
 
 private fun normalizeFavoriteId(raw: String): String =
@@ -146,6 +145,9 @@ fun RandomPracticeScreen(
 ) {
 
     val context = LocalContext.current
+    val langManager = remember { AppLanguageManager(context) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
     val sp = remember { context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
     val notePrefs = remember(context) {
         context.getSharedPreferences("kmi_exercise_notes", android.content.Context.MODE_PRIVATE)
@@ -387,8 +389,12 @@ fun RandomPracticeScreen(
         }
 
     // ✅ לתצוגה קיימת: Strings
-    val weightedItems: List<String> = remember(weightedPracticeItems) {
-        weightedPracticeItems.map { it.displayTitle }
+    fun uiTitleFor(item: il.kmi.shared.practice.PracticeItem): String {
+        return item.displayTitle
+    }
+
+    val weightedItems: List<String> = remember(weightedPracticeItems, isEnglish) {
+        weightedPracticeItems.map { uiTitleFor(it) }
     }
 
     var currentIndex by remember { mutableStateOf(0) }
@@ -480,6 +486,7 @@ fun RandomPracticeScreen(
     if (showDurationDialog) {
         DurationPickerDialog(
             show = showDurationDialog,
+            isEnglish = isEnglish,
             initMinutes = durationMinutes,
             initHalfAlert = beepHalfTimeState,
             initLast10 = beepLast10State,
@@ -510,7 +517,9 @@ fun RandomPracticeScreen(
                     if (isExiting) return@playLetsGo
                     isRunning = true
                     if (currentIndex in weightedItems.indices) {
-                        speak(weightedItems[currentIndex])
+                        weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
+                            speak(uiTitleFor(currentItem))
+                        }
                         lastSpokenIndex = currentIndex
                     }
                 }
@@ -534,7 +543,9 @@ fun RandomPracticeScreen(
             timeLeft = durationMinutes * 60
 
             if (currentIndex != lastSpokenIndex && currentIndex in weightedItems.indices) {
-                speak(weightedItems[currentIndex])
+                weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
+                    speak(uiTitleFor(currentItem))
+                }
                 lastSpokenIndex = currentIndex
             }
 
@@ -548,7 +559,7 @@ fun RandomPracticeScreen(
 
                 if (!halfAnnouncementDone && beepHalfTimeState && timeLeft == halfTime) {
                     beep()
-                    if (!isMuted) speak("עבר חצי מזמן התרגול")
+                    if (!isMuted) speak(if (isEnglish) "Half of the practice time has passed" else "עבר חצי מזמן התרגול")
                     halfAnnouncementDone = true
                 }
 
@@ -584,10 +595,18 @@ fun RandomPracticeScreen(
             val langManager = remember { AppLanguageManager(contextLang) }
 
             il.kmi.app.ui.KmiTopBar(
-                title = if (!topicFilter.isNullOrBlank() && topicFilter.startsWith("תת")) {
-                    "תרגול לפי נושא"
+                title = if (!topicFilter.isNullOrBlank()) {
+                    if (isEnglish) {
+                        "Practice by Topic - ${belt.en}"
+                    } else {
+                        "תרגול לפי נושא - ${belt.heb}"
+                    }
                 } else {
-                    " - תרגול אקראי${belt.heb}"
+                    if (isEnglish) {
+                        "Random Practice - ${belt.en}"
+                    } else {
+                        "תרגול אקראי - ${belt.heb}"
+                    }
                 },
                 onBack = null,
                 showBottomActions = true,
@@ -624,13 +643,13 @@ fun RandomPracticeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("אין תרגילים זמינים לנושא זה")
+                        Text(if (isEnglish) "No exercises are available for this topic" else "אין תרגילים זמינים לנושא זה")
 
                         Spacer(Modifier.height(10.dp))
 
                         // ✅ דיבאג: עוזר לנו לוודא ש־topicFilter לא הגיע בטעות כחגורה/טקסט אחר
                         Text(
-                            text = "debug: beltId=${belt.id} | belt=${belt.heb} | topicFilter='${topicFilter ?: ""}'",
+                            text = "debug: beltId=${belt.id} | belt=${if (isEnglish) belt.en else belt.heb} | topicFilter='${topicFilter ?: ""}'",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -664,7 +683,9 @@ fun RandomPracticeScreen(
                             onClick = {
                                 isRunning = !isRunning
                                 if (isRunning && sessionStarted && currentIndex in weightedItems.indices) {
-                                    speak(weightedItems[currentIndex])
+                                    weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
+                                        speak(uiTitleFor(currentItem))
+                                    }
                                     lastSpokenIndex = currentIndex
                                 } else {
                                     KmiTtsManager.stop()
@@ -672,9 +693,13 @@ fun RandomPracticeScreen(
                             },
                             modifier = Modifier.size(36.dp)
                         ) {
-                        Icon(
+                            Icon(
                                 imageVector = if (isRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (isRunning) "השהה" else "המשך"
+                                contentDescription = if (isRunning) {
+                                    if (isEnglish) "Pause" else "השהה"
+                                } else {
+                                    if (isEnglish) "Resume" else "המשך"
+                                }
                             )
                         }
                     }
@@ -692,7 +717,7 @@ fun RandomPracticeScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = weightedItems[currentIndex],
+                                text = weightedPracticeItems.getOrNull(currentIndex)?.let { uiTitleFor(it) }.orEmpty(),
                                 style = MaterialTheme.typography.titleLarge.copy(
                                     fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold
@@ -706,6 +731,7 @@ fun RandomPracticeScreen(
                     Spacer(Modifier.height(24.dp))
 
                     ModernActionsRow(
+                        isEnglish = isEnglish,
                         onSkip = {
                             if (currentIndex < weightedItems.lastIndex) currentIndex++
                         },
@@ -725,22 +751,28 @@ fun RandomPracticeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         GlassHelpButton(
-                            label = "עזרה",
+                            label = if (isEnglish) "Help" else "עזרה",
                             onClick = { showHelp = true }
                         )
 
                         IconButton(onClick = {
                             isMuted = !isMuted
                             if (!isMuted && sessionStarted && currentIndex in weightedItems.indices) {
-                                speak(weightedItems[currentIndex])
+                                weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
+                                    speak(uiTitleFor(currentItem))
+                                }
                                 lastSpokenIndex = currentIndex
                             } else {
                                 KmiTtsManager.stop()
                             }
                         }) {
-                        Icon(
+                            Icon(
                                 if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                                contentDescription = if (isMuted) "המשך קול" else "השתק"
+                                contentDescription = if (isMuted) {
+                                    if (isEnglish) "Resume audio" else "המשך קול"
+                                } else {
+                                    if (isEnglish) "Mute" else "השתק"
+                                }
                             )
                         }
                     }
@@ -775,7 +807,7 @@ fun RandomPracticeScreen(
                                 colors = ButtonDefaults.textButtonColors(contentColor = Color.Black)
                             ) {
                                 Text(
-                                    "סיום וחזרה",
+                                    if (isEnglish) "Finish and Return" else "סיום וחזרה",
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center
                                 )
@@ -849,13 +881,13 @@ fun RandomPracticeScreen(
                                     if (isFav) {
                                         Icon(
                                             imageVector = Icons.Filled.Star,
-                                            contentDescription = "הסר ממועדפים",
+                                            contentDescription = if (isEnglish) "Remove from favorites" else "הסר ממועדפים",
                                             tint = Color(0xFFFFC107)
                                         )
                                     } else {
                                         Icon(
                                             imageVector = Icons.Outlined.StarBorder,
-                                            contentDescription = "הוסף למועדפים"
+                                            contentDescription = if (isEnglish) "Add to favorites" else "הוסף למועדפים"
                                         )
                                     }
                                 }
@@ -863,7 +895,7 @@ fun RandomPracticeScreen(
                                 IconButton(onClick = { showNoteEditor = true }) {
                                     Icon(
                                         imageVector = Icons.Filled.Edit,
-                                        contentDescription = "ערוך הערה",
+                                        contentDescription = if (isEnglish) "Edit note" else "ערוך הערה",
                                         tint = Color(0xFF42A5F5)
                                     )
                                 }
@@ -883,7 +915,7 @@ fun RandomPracticeScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Text(
-                                    text = "${t} • ${b.heb}",
+                                    text = "${t} • ${if (isEnglish) b.en else b.heb}",
                                     style = MaterialTheme.typography.labelMedium,
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
@@ -908,7 +940,7 @@ fun RandomPracticeScreen(
                                 Spacer(Modifier.height(10.dp))
 
                                 Text(
-                                    text = "הערה של המתאמן:",
+                                    text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Right,
@@ -938,7 +970,7 @@ fun RandomPracticeScreen(
                                 showSearch = false
                                 searchQuery = ""
                             }) {
-                                Text("סגור")
+                                Text(if (isEnglish) "Close" else "סגור")
                             }
                         }
 
@@ -951,8 +983,8 @@ fun RandomPracticeScreen(
                         onDismissRequest = { showNoteEditor = false },
                         title = {
                             Text(
-                                text = "הערה לתרגיל",
-                                textAlign = TextAlign.Right,
+                                text = if (isEnglish) "Exercise Note" else "הערה לתרגיל",
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         },
@@ -961,8 +993,8 @@ fun RandomPracticeScreen(
                                 value = noteText,
                                 onValueChange = { noteText = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
-                                label = { Text("כתוב הערה") }
+                                textStyle = LocalTextStyle.current.copy(textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right),
+                                label = { Text(if (isEnglish) "Write a note" else "כתוב הערה") }
                             )
                         },
                         confirmButton = {
@@ -974,12 +1006,12 @@ fun RandomPracticeScreen(
                                     showNoteEditor = false
                                 }
                             ) {
-                                Text("שמור")
+                                Text(if (isEnglish) "Save" else "שמור")
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showNoteEditor = false }) {
-                                Text("ביטול")
+                                Text(if (isEnglish) "Cancel" else "ביטול")
                             }
                         }
                     )
@@ -991,7 +1023,7 @@ fun RandomPracticeScreen(
 
                 val explanation = remember(belt, item) {
                     if (item.isNullOrBlank()) {
-                        "לא נבחר תרגיל להצגה."
+                        if (isEnglish) "No exercise selected to display." else "לא נבחר תרגיל להצגה."
                     } else {
                         findExplanationForPractice(belt, item)
                     }
@@ -1074,14 +1106,14 @@ fun RandomPracticeScreen(
                                 horizontalAlignment = Alignment.End
                             ) {
                                 Text(
-                                    text = item ?: "תרגיל",
+                                    text = item ?: if (isEnglish) "Exercise" else "תרגיל",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Text(
-                                    text = "(${belt.heb})",
+                                    text = "(${if (isEnglish) belt.en else belt.heb})",
                                     style = MaterialTheme.typography.labelMedium,
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
@@ -1106,7 +1138,7 @@ fun RandomPracticeScreen(
                                 Spacer(Modifier.height(10.dp))
 
                                 Text(
-                                    text = "הערה של המתאמן:",
+                                    text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Right,
@@ -1131,7 +1163,7 @@ fun RandomPracticeScreen(
                             horizontalArrangement = Arrangement.End
                         ) {
                             TextButton(onClick = { showHelp = false }) {
-                                Text("סגור")
+                                Text(if (isEnglish) "Close" else "סגור")
                             }
                         }
 
@@ -1200,7 +1232,11 @@ fun RandomPracticeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "חפש תרגיל (למשל: \"בעיטה\", \"הגנה\")",
+                            text = if (isEnglish) {
+                                "Search exercise (for example: \"kick\", \"defense\")"
+                            } else {
+                                "חפש תרגיל (למשל: \"בעיטה\", \"הגנה\")"
+                            },
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
                         )
 
@@ -1211,14 +1247,14 @@ fun RandomPracticeScreen(
                             onValueChange = { searchQuery = it },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            label = { Text("הקלד/י שם תרגיל") }
+                            label = { Text(if (isEnglish) "Type exercise name" else "הקלד/י שם תרגיל") }
                         )
 
                         Spacer(Modifier.height(8.dp))
 
                         if (searchQuery.isNotBlank() && searchResults.isEmpty()) {
                             Text(
-                                "לא נמצאו תרגילים תואמים.",
+                                if (isEnglish) "No matching exercises found." else "לא נמצאו תרגילים תואמים.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.fillMaxWidth(),
@@ -1256,7 +1292,7 @@ fun RandomPracticeScreen(
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                             Text(
-                                                text = "(${hitBelt.heb})",
+                                                text = "(${if (isEnglish) hitBelt.en else hitBelt.heb})",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 textAlign = TextAlign.Right,
                                                 modifier = Modifier.fillMaxWidth(),
@@ -1272,7 +1308,7 @@ fun RandomPracticeScreen(
                         TextButton(onClick = {
                             showSearch = false
                             searchQuery = ""
-                        }) { Text("סגור") }
+                        }) { Text(if (isEnglish) "Close" else "סגור") }
                         Spacer(Modifier.height(6.dp))
                     }
                 }
@@ -1286,12 +1322,14 @@ fun RandomPracticeScreen(
 @Composable
 private fun DurationPickerDialog(
     show: Boolean,
+    isEnglish: Boolean,
     initMinutes: Int,
     initHalfAlert: Boolean,
     initLast10: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (durationSeconds: Int, playHalf: Boolean, playCountdown: Boolean) -> Unit
 ) {
+
     if (!show) return
 
     var selectedMin by remember { mutableStateOf(initMinutes.coerceIn(1, 60)) }
@@ -1352,7 +1390,7 @@ private fun DurationPickerDialog(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            "בחר זמן תרגול",
+                            if (isEnglish) "Choose Practice Duration" else "בחר זמן תרגול",
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 0.2.sp
@@ -1389,6 +1427,7 @@ private fun DurationPickerDialog(
             SegmentedTimeChooser(
                 values = listOf(1, 3, 5),
                 selected = selectedMin,
+                isEnglish = isEnglish,
                 onSelect = { selectedMin = it }
             )
 
@@ -1396,15 +1435,13 @@ private fun DurationPickerDialog(
 
             // ===== מתגים עם תיאור משנה =====
             SettingRow(
-                title = "התראה באמצע הזמן",
-                subtitle = "צפצוף + הודעה קולית בחצי הזמן",
-                checked = playHalf,
+                title = if (isEnglish) "Mid-time alert" else "התראה באמצע הזמן",
+                subtitle = if (isEnglish) "Beep + voice announcement at halfway point" else "צפצוף + הודעה קולית בחצי הזמן",                checked = playHalf,
                 onCheckedChange = { playHalf = it }
             )
             SettingRow(
-                title = "צליל ב־10 השניות האחרונות",
-                subtitle = "צפצוף קצר כל שנייה עד לסיום",
-                checked = playCountdown,
+                title = if (isEnglish) "Sound in the last 10 seconds" else "צליל ב־10 השניות האחרונות",
+                subtitle = if (isEnglish) "Short beep every second until the end" else "צפצוף קצר כל שנייה עד לסיום",                checked = playCountdown,
                 onCheckedChange = { playCountdown = it }
             )
 
@@ -1424,7 +1461,7 @@ private fun DurationPickerDialog(
                     },
                     modifier = Modifier.height(52.dp)
                 ) {
-                    Text("בטל", fontWeight = FontWeight.SemiBold)
+                    Text(if (isEnglish) "Cancel" else "בטל", fontWeight = FontWeight.SemiBold)
                 }
 
                 Button(
@@ -1440,7 +1477,7 @@ private fun DurationPickerDialog(
                     shape = RoundedCornerShape(16.dp),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp, pressedElevation = 3.dp)
                 ) {
-                    Text("התחל", fontWeight = FontWeight.ExtraBold)
+                    Text(if (isEnglish) "Start" else "התחל", fontWeight = FontWeight.ExtraBold)
                 }
             }
 
@@ -1456,6 +1493,7 @@ private fun DurationPickerDialog(
 private fun SegmentedTimeChooser(
     values: List<Int>,
     selected: Int,
+    isEnglish: Boolean,
     onSelect: (Int) -> Unit
 ) {
     Row(
@@ -1485,7 +1523,7 @@ private fun SegmentedTimeChooser(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("$v", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.5.sp)
-                        Text("דק׳", modifier = Modifier.alpha(0.9f), fontSize = 12.sp)
+                        Text(if (isEnglish) "min" else "דק׳", modifier = Modifier.alpha(0.9f), fontSize = 12.sp)
                     }
                 }
             }
@@ -1497,6 +1535,7 @@ private fun SegmentedTimeChooser(
 
 @Composable
 private fun ModernActionsRow(
+    isEnglish: Boolean,
     onSkip: () -> Unit,
     onDontKnow: () -> Unit
 ) {
@@ -1506,14 +1545,14 @@ private fun ModernActionsRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         ModernPillButton(
-            text = "דלג",
+            text = if (isEnglish) "Skip" else "דלג",
             leading = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
             container = MaterialTheme.colorScheme.primary,
             onClick = onSkip,
             modifier = Modifier.weight(1f)      // ✅ ה-weight עובר להורה (RowScope)
         )
         ModernPillButton(
-            text = "לא יודע",
+            text = if (isEnglish) "Don't Know" else "לא יודע",
             leading = { Icon(Icons.Filled.Close, contentDescription = null) },
             container = Color(0xFF7F1D1D),
             overlayGradient = Brush.horizontalGradient(

@@ -111,7 +111,7 @@ private fun rememberGreetingAndBelt(
     val belt = remember(beltId) { beltId?.let { Belt.fromId(it) } }
     val greeting = remember(firstName, lang) {
         if (lang == AppLanguage.ENGLISH) {
-            if (firstName.isNullOrBlank()) "Hello" else "Hello $firstName"
+            if (firstName.isNullOrBlank()) "Hello" else "Hello, $firstName"
         } else {
             if (firstName.isNullOrBlank()) "שלום" else "שלום $firstName"
         }
@@ -327,7 +327,7 @@ fun IntroScreen(onContinue: () -> Unit) {
     val dynamicGreeting = remember(dynamicGreeting0, fetchedName, currentLang) {
         if (!fetchedName.isNullOrBlank()) {
             val first = fetchedName!!.trim().split(' ', limit = 2).first()
-            if (currentLang == AppLanguage.ENGLISH) "Hello $first" else "שלום $first"
+            if (currentLang == AppLanguage.ENGLISH) "Hello, $first" else "שלום $first"
         } else {
             dynamicGreeting0
         }
@@ -362,7 +362,7 @@ fun IntroScreen(onContinue: () -> Unit) {
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "ק.מ.י",
+                    text = if (isEnglish) "K.M.I" else "ק.מ.י",
                     fontSize = 68.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White,
@@ -370,9 +370,10 @@ fun IntroScreen(onContinue: () -> Unit) {
                 )
                 Text(
                     text = if (isEnglish) "Israeli Krav Magen" else "קרב מגן ישראלי",
-                    fontSize = 34.sp,
+                    fontSize = if (isEnglish) 24.sp else 34.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.9f),
+                    maxLines = 1,
                     modifier = Modifier.alpha(alpha).scale(scale)
                 )
 

@@ -240,7 +240,7 @@ fun RegistrationLandingScreen(
                 val langManager = remember { AppLanguageManager(contextLang) }
 
                 KmiTopBar(
-                    title = if (isEnglish) "Registration" else "סיום ההרשמה",
+                    title = if (isEnglish) "Sign In / Register" else "מסך כניסה / רישום",
                     showRoleStatus = false,
                     showBottomActions = true,
                     onOpenDrawer = { onOpenDrawer.invoke() },

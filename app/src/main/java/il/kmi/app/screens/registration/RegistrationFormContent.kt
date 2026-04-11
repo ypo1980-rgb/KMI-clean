@@ -84,21 +84,19 @@ fun RegistrationFormContent(
     acceptedTerms: Boolean,
     onAcceptedTermsChange: (Boolean) -> Unit,
     onOpenTerms: () -> Unit,
-    branchesByRegion: Map<String, List<String>> = TrainingCatalog.branchesByRegion,
-    groupsByBranch: Map<String, List<String>> = TrainingCatalog.ageGroupsByBranch,
 ) {
     val scroll = rememberScrollState()
     var passwordVisible by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
 
-    val allGroupsAcrossBranches by remember(selectedBranches, groupsByBranch) {
+    val allGroupsAcrossBranches by remember(selectedBranches) {
         derivedStateOf {
             selectedBranches
                 .flatMap { branch ->
                     val key = branch.trim()
-                    groupsByBranch[key]
-                        ?: groupsByBranch[key.replace("’", "'")]
-                        ?: groupsByBranch[key.replace("־", "-")]
+                    TrainingCatalog.ageGroupsByBranch[key]
+                        ?: TrainingCatalog.ageGroupsByBranch[key.replace("’", "'")]
+                        ?: TrainingCatalog.ageGroupsByBranch[key.replace("־", "-")]
                         ?: emptyList()
                 }
                 .distinct()
@@ -345,8 +343,7 @@ fun RegistrationFormContent(
             onRegionChange = onRegionChange,
             onBranchesConfirm = onBranchesChange,
             regionError = regionError,
-            branchError = branchError,
-            branchesByRegion = branchesByRegion
+            branchError = branchError
         )
 
         // ===== Groups (1–3) =====
@@ -678,17 +675,16 @@ private fun RegionAndMultiBranchPicker(
     onBranchesConfirm: (List<String>) -> Unit,
     regionError: Boolean,
     branchError: Boolean,
-    branchesByRegion: Map<String, List<String>>,
     fieldHeight: Dp = 52.dp
 ) {
     val ctx = LocalContext.current
 
-    val regions = remember(branchesByRegion) {
-        branchesByRegion.keys.sorted()
+    val regions = remember {
+        TrainingCatalog.activeRegions()
     }
 
-    val allBranches = remember(selectedRegion, branchesByRegion) {
-        branchesByRegion[selectedRegion].orEmpty()
+    val allBranches = remember(selectedRegion) {
+        TrainingCatalog.branchesFor(selectedRegion)
     }
 
     // 🔹 סטטוס אזור (פעיל / לא פעיל) + הודעה "אין סניפים..."

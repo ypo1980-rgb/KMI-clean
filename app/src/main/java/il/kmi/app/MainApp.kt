@@ -204,7 +204,9 @@ fun MainApp(
                         onOpenAboutNetwork = { nav.navigate(Route.AboutNetwork.route) },
                         onOpenAboutMethod = { nav.navigate(Route.AboutMethod.route) },
                         onOpenSubscriptions = { nav.navigate(Route.Subscription.route) },
+                        onOpenMembershipPayment = {nav.navigate(Route.MembershipPayment.route) },
                         onOpenForum = { nav.navigate(Route.Forum.route) },
+                        onOpenContactUs = { nav.navigate(Route.ContactUs.route)},
                         onOpenAboutAvi = { nav.navigate(Route.AboutAvi.route) },
                         onOpenMyProfile = { nav.navigate(Route.MyProfile.route) },
                         onOpenMonthlyCalendar = { nav.navigate(Route.MonthlyCalendar.route) },
@@ -219,6 +221,7 @@ fun MainApp(
                         // מאמן
                         isCoach = isCoach,
                         onOpenCoachAttendance = { nav.navigate("attendance") },
+                        onOpenCoachPaymentsReport = { nav.navigate(Route.PaymentsReport.route) },
                         onOpenCoachBroadcast = { nav.navigate(Route.CoachBroadcast.route) },
                         onOpenCoachTrainees = { nav.navigate("coach/trainees") },
                         onOpenCoachInternalExam = {

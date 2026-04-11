@@ -36,13 +36,14 @@ object CoachWhitelist {
         "0524887178" to "יוני מלסה",
         "0526969287" to "איציק ביטון",
         "0585911518" to "אדם הולצמן",
-        "0526319090" to "גל חג'ג'"
+        "0526319090" to "גל חג'ג'",
+        "0505300596" to "אבי אביסדון"
     )
 
     // מפה: אימייל → שם
     val allowedEmails: Map<String, String> = mapOf(
-        "coach1@example.com" to "מאמן 1",
-        "coach2@example.com" to "מאמן 2",
+        "ypo1980@gmail.com" to "יובל פולק",
+        "yonatanmalesa99.com" to "יוני מלסה",
         "coach3@example.com" to "מאמן 3"
         // ... תוסיף כאן עד ~20
     )
@@ -612,9 +613,7 @@ fun RegistrationFormScreen(
                     acceptedTerms = it
                     if (it) termsError = false
                 },
-                onOpenTerms = onOpenTerms,
-                branchesByRegion = branchesByRegion,
-                groupsByBranch = groupsByBranch
+                onOpenTerms = onOpenTerms
             )
 
             if (!acceptedTerms && termsError) {

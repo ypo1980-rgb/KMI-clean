@@ -3,19 +3,13 @@
 
     <!-- ערכת Splash לאפליקציה -->
     <style name="Theme.KMI.Splash" parent="Theme.SplashScreen">
-        <!-- רקע לבן גם בטלפון -->
         <item name="windowSplashScreenBackground">@android:color/white</item>
-
-        <!-- לוגו עגול במרכז -->
         <item name="windowSplashScreenAnimatedIcon">@drawable/kmi_splash_logo</item>
-
-        <!-- מעבר לתמה הראשית של האפליקציה -->
         <item name="postSplashScreenTheme">@style/Theme.KMI</item>
     </style>
 
     <!-- ערכת עיצוב ראשית לאפליקציה -->
     <style name="Theme.KMI" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- מכבים גם ברמת AppCompat וגם ברמת Android -->
         <item name="windowNoTitle">true</item>
         <item name="windowActionBar">false</item>
         <item name="android:windowNoTitle">true</item>

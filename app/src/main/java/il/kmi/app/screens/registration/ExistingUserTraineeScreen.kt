@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
@@ -275,7 +276,7 @@ fun ExistingUserTraineeScreen(
                     )
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp) // רווח בין כפתור התחבר לכפתור שכחתי סיסמה / שם משתמש
             ) {
 
                 Spacer(Modifier.height(8.dp))
@@ -371,69 +372,6 @@ fun ExistingUserTraineeScreen(
                             errorBorderColor = MaterialTheme.colorScheme.error
                         )
                     )
-                    TextButton(
-                        onClick = {
-                            val uid = FirebaseAuth.getInstance().currentUser?.uid
-                            if (uid.isNullOrBlank()) {
-                                coachCodeResetError = tr(
-                                    "צריך להיות מחובר כמאמן כדי לאפס קוד.",
-                                    "You must be signed in as a coach to reset the code."
-                                )
-                                coachCodeResetSuccess = null
-                                return@TextButton
-                            }
-
-                            resettingCoachCode = true
-                            coachCodeResetError = null
-                            coachCodeResetSuccess = null
-
-                            val newCode = generateCoachCode()
-                            val userSp = appCtx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-
-                            FirebaseFirestore.getInstance()
-                                .collection("users")
-                                .document(uid)
-                                .set(
-                                    mapOf(
-                                        "coach_code" to newCode,
-                                        "user_role" to "coach"
-                                    ),
-                                    com.google.firebase.firestore.SetOptions.merge()
-                                )
-                                .addOnSuccessListener {
-                                    coachCode = newCode
-                                    serverCoachCode = newCode
-                                    coachCodeError = false
-
-                                    sp.edit().putString("coach_code", newCode).apply()
-                                    userSp.edit().putString("coach_code", newCode).apply()
-
-                                    coachCodeResetSuccess = tr(
-                                        "נוצר קוד מאמן חדש: $newCode",
-                                        "A new coach code was created: $newCode"
-                                    )
-                                    resettingCoachCode = false
-                                }
-                                .addOnFailureListener {
-                                    coachCodeResetError = tr(
-                                        "לא הצלחנו ליצור קוד מאמן חדש.",
-                                        "Failed to create a new coach code."
-                                    )
-                                    resettingCoachCode = false
-                                }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth(fieldWidth),
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
-                    ) {
-                        Text(
-                            text = if (resettingCoachCode)
-                                tr("יוצר קוד חדש...", "Creating new code...")
-                            else
-                                tr("שכחתי קוד מאמן", "Forgot coach code"),
-                            textDecoration = TextDecoration.Underline
-                        )
-                    }
 
                     coachCodeResetError?.let {
                         Text(
@@ -515,16 +453,26 @@ fun ExistingUserTraineeScreen(
                 // שמירה לכניסה הבאה
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth(fieldWidth)
-                        .padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.End,
+                        .height(32.dp)
+                        .background(
+                            color = Color.White.copy(alpha = 0.10f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Checkbox(
                         checked = rememberMe,
                         onCheckedChange = { rememberMe = it },
-                        modifier = Modifier.padding(end = 2.dp)
+                        modifier = Modifier.padding(end = 2.dp),
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = Color.White,
+                            uncheckedColor = Color.White,
+                            checkmarkColor = Color.Black
+                        )
                     )
+
                     Spacer(Modifier.width(10.dp))
 
                     Text(
@@ -532,6 +480,7 @@ fun ExistingUserTraineeScreen(
                         maxLines = 1,
                         softWrap = false,
                         modifier = Modifier.padding(end = 6.dp),
+                        color = Color.White,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -628,26 +577,115 @@ fun ExistingUserTraineeScreen(
                     Text(tr("התחבר", "Login"))
                 }
 
-                TextButton(
-                    onClick = { showRecoveryDialog = true },   // ← פותח דיאלוג מקומי
+                Column(
                     modifier = Modifier
-                        .align(Alignment.End)
-                        .padding(end = ((1 - fieldWidth) / 2f * 100).dp),
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color.Black)
+                        .fillMaxWidth(fieldWidth),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(-15.dp)
                 ) {
-                    Text(
-                        tr("שכחתי סיסמה / שם משתמש", "Forgot password / username"),
-                        textDecoration = TextDecoration.Underline
-                    )
-                }
+                    TextButton(
+                        onClick = { showRecoveryDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 0.dp),
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                    ) {
+                        Text(
+                            tr("שכחתי סיסמה / שם משתמש", "Forgot password / username"),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.End,
+                            textDecoration = TextDecoration.Underline
+                        )
+                    }
 
-                Spacer(Modifier.weight(1f))
+                    if (isCoach) {
+                        TextButton(
+                            onClick = {
+                                val uid = FirebaseAuth.getInstance().currentUser?.uid
+                                if (uid.isNullOrBlank()) {
+                                    coachCodeResetError = tr(
+                                        "צריך להיות מחובר כמאמן כדי לאפס קוד.",
+                                        "You must be signed in as a coach to reset the code."
+                                    )
+                                    coachCodeResetSuccess = null
+                                    return@TextButton
+                                }
+
+                                resettingCoachCode = true
+                                coachCodeResetError = null
+                                coachCodeResetSuccess = null
+
+                                val newCode = generateCoachCode()
+                                val userSp = appCtx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+
+                                FirebaseFirestore.getInstance()
+                                    .collection("users")
+                                    .document(uid)
+                                    .set(
+                                        mapOf(
+                                            "coach_code" to newCode,
+                                            "user_role" to "coach"
+                                        ),
+                                        com.google.firebase.firestore.SetOptions.merge()
+                                    )
+                                    .addOnSuccessListener {
+                                        coachCode = newCode
+                                        serverCoachCode = newCode
+                                        coachCodeError = false
+
+                                        sp.edit().putString("coach_code", newCode).apply()
+                                        userSp.edit().putString("coach_code", newCode).apply()
+
+                                        coachCodeResetSuccess = tr(
+                                            "נוצר קוד מאמן חדש: $newCode",
+                                            "A new coach code was created: $newCode"
+                                        )
+                                        resettingCoachCode = false
+                                    }
+                                    .addOnFailureListener {
+                                        coachCodeResetError = tr(
+                                            "לא הצלחנו ליצור קוד מאמן חדש.",
+                                            "Failed to create a new coach code."
+                                        )
+                                        resettingCoachCode = false
+                                    }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 0.dp),
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                        ) {
+                            Text(
+                                text = if (resettingCoachCode)
+                                    tr("יוצר קוד חדש...", "Creating new code...")
+                                else
+                                    tr("שכחתי קוד מאמן", "Forgot coach code"),
+                                textDecoration = TextDecoration.Underline
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ===== קרדיט קבוע בתחתית המסך =====
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(bottom = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
 
                 Divider(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(PaddingValues(start = 16.dp, end = 16.dp, bottom = 4.dp))
+                        .padding(horizontal = 16.dp)
                 )
+
+                Spacer(Modifier.height(6.dp))
 
                 Text(
                     text = tr(
@@ -658,10 +696,6 @@ fun ExistingUserTraineeScreen(
                         fontSize = if (LocalConfiguration.current.screenWidthDp <= 360) 14.sp else 16.sp,
                         fontWeight = FontWeight.Bold
                     ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp)
-                        .navigationBarsPadding(),
                     textAlign = TextAlign.Center
                 )
             }

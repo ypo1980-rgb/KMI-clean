@@ -1446,17 +1446,6 @@ private fun HomePremiumQuickMenuPanel(
                                 .clickable { onClose() }
                         )
                     } else {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "סגור",
-                            tint = Color(0xFF16A34A),
-                            modifier = Modifier
-                                .size(15.dp)
-                                .clickable { onClose() }
-                        )
-
-                        Spacer(Modifier.width(6.dp))
-
                         Text(
                             text = title,
                             color = Color(0xFF16A34A),
@@ -1466,6 +1455,17 @@ private fun HomePremiumQuickMenuPanel(
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.titleSmall,
                             modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(Modifier.width(6.dp))
+
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "סגור",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier
+                                .size(15.dp)
+                                .clickable { onClose() }
                         )
                     }
                 }
@@ -1833,26 +1833,17 @@ private fun TrainingCardCompact(
                 .padding(12.dp)
         ) {
             val branchLine = remember(training.place, training.address, isEnglish) {
-                val raw = training.place?.takeIf { it.isNotBlank() } ?: run {
-                    val parts = training.address
-                        .split('–', '-', ',', '·')
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                    if (parts.size >= 2) parts[1] else parts.firstOrNull().orEmpty()
-                }
+                val displaySource = training.place
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: training.address.orEmpty()
 
-                if (!isEnglish) {
-                    raw
-                } else {
-                    when (raw.trim()) {
-                        "מרכז קהילתי אופק" -> "Ofek Community Center"
-                        "מרכז קהילתי סוקולוב" -> "Sokolov Community Center"
-                        "נורדאו" -> "Nordau"
-                        "מושב עזריאל" -> "Moshav Azriel"
-                        else -> raw
-                    }
-                }
+                il.kmi.app.training.TrainingCatalog.placeDisplayName(
+                    displaySource,
+                    isEnglish
+                )
             }
+
             Text(
                 text = branchLine,
                 style = MaterialTheme.typography.titleSmall,
@@ -1900,7 +1891,10 @@ private fun TrainingCardCompact(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 NavigationChip(
-                    address = training.address,
+                    address = il.kmi.app.training.TrainingCatalog.addressDisplayName(
+                        training.address.orEmpty(),
+                        isEnglish
+                    ),
                     isEnglish = isEnglish,
                     modifier = Modifier.weight(1f)
                 )

@@ -47,7 +47,6 @@ import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.domain.ContentRepo
 import android.app.Activity
-import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -65,6 +64,10 @@ fun ExercisesTabsScreen(
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val langManager = remember { AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
     val scroll = rememberScrollState()
     val sp = remember { ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
     val notesSp = remember { ctx.getSharedPreferences("kmi_notes", android.content.Context.MODE_PRIVATE) }
@@ -288,7 +291,7 @@ fun ExercisesTabsScreen(
             val langManager = remember { AppLanguageManager(contextLang) }
 
             il.kmi.app.ui.KmiTopBar(
-                title = "כרטיסיות התרגילים",
+                title = tr("כרטיסיות התרגילים", "Exercise Cards"),
                 onHome = onHome,                      // חזרה לבית שעובד ✅
                 centerTitle = true,
                 showTopHome = false,
@@ -333,13 +336,13 @@ fun ExercisesTabsScreen(
                     }
 
                     ActionButton(
-                        text = "תרגול",
+                        text = tr("תרגול", "Practice"),
                         modifier = Modifier.weight(1f),
                         containerColor = Color(0xFF6F64FF),
                         onClick = { onPractice(belt, practiceToken) }
                     )
                     ActionButton(
-                        text = "איפוס",
+                        text = tr("איפוס", "Reset"),
                         modifier = Modifier.weight(1f),
                         containerColor = Color(0xFFD32F2F),
                         onClick = {
@@ -436,7 +439,7 @@ fun ExercisesTabsScreen(
                     return if ("::" in got) got.substringAfter("::").trim() else got
                 }
             }
-            return "אין כרגע הסבר לתרגיל הזה."
+            return tr("אין כרגע הסבר לתרגיל הזה.", "There is currently no explanation for this exercise.")
         }
 
         // ===== טאבים "מקצה-לקצה" =====
@@ -514,21 +517,21 @@ fun ExercisesTabsScreen(
             )
             Row(modifier = Modifier.fillMaxWidth()) {
                 MetricFieldEdgeToEdge(
-                    title    = "הכל",
+                    title    = tr("הכל", "All"),
                     number   = allCount,
                     selected = selectedTab == 0,
                     onClick  = { selectedTab = 0 },
                     modifier = Modifier.weight(1f)
                 )
                 MetricFieldEdgeToEdge(
-                    title    = "לא יודע",
+                    title    = tr("לא יודע", "Unknown"),
                     number   = unknownCount,
                     selected = selectedTab == 1,
                     onClick  = { selectedTab = 1 },
                     modifier = Modifier.weight(1f)
                 )
                 MetricFieldEdgeToEdge(
-                    title    = "מועדפים",
+                    title    = tr("מועדפים", "Favorites"),
                     number   = favCount,
                     selected = selectedTab == 2,
                     onClick  = { selectedTab = 2 },
@@ -569,7 +572,9 @@ fun ExercisesTabsScreen(
                     val isFav = favorites.contains(normalizeItemId(item))
                     val itemHasNote = hasNote(item)
 
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    CompositionLocalProvider(
+                        LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Ltr
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -594,7 +599,7 @@ fun ExercisesTabsScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Info,
-                                    contentDescription = "הסבר"
+                                    contentDescription = tr("הסבר", "Explanation")
                                 )
                             }
 
@@ -606,7 +611,7 @@ fun ExercisesTabsScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Edit,
-                                    contentDescription = "עריכת הערה",
+                                    contentDescription = tr("עריכת הערה", "Edit note"),
                                     tint = if (itemHasNote) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -617,13 +622,13 @@ fun ExercisesTabsScreen(
                                 if (isFav) {
                                     Icon(
                                         Icons.Filled.Star,
-                                        contentDescription = "הסר ממועדפים",
+                                        contentDescription = tr("הסר ממועדפים", "Remove from favorites"),
                                         tint = Color(0xFFFFC107)
                                     )
                                 } else {
                                     Icon(
                                         Icons.Outlined.StarBorder,
-                                        contentDescription = "הוסף למועדפים"
+                                        contentDescription = tr("הוסף למועדפים", "Add to favorites")
                                     )
                                 }
                             }
@@ -637,16 +642,16 @@ fun ExercisesTabsScreen(
                                 ) {
                                     Text(
                                         text = displayName,
-                                        textAlign = TextAlign.Right,
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                         color = MaterialTheme.colorScheme.onBackground
                                     )
 
                                     if (itemHasNote) {
                                         Text(
-                                            text = "יש הערה שמורה",
+                                            text = tr("יש הערה שמורה", "Saved note exists"),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.primary,
-                                            textAlign = TextAlign.Right
+                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
                                         )
                                     }
                                 }
@@ -663,8 +668,13 @@ fun ExercisesTabsScreen(
         pickedKey?.let { key ->
             val (hitBelt, hitTopic, hitItem) = parseSearchKey(key)
             val displayName = ExerciseTitleFormatter.displayName(hitItem)
-            val explanation = remember(hitBelt, hitItem, hitTopic) {
-                findExplanationForHit(hitBelt, hitItem, hitTopic)
+            val explanation = remember(hitBelt, hitItem, hitTopic, isEnglish) {
+                val raw = findExplanationForHit(hitBelt, hitItem, hitTopic)
+                if (raw == "NO_EXPLANATION") {
+                    tr("אין כרגע הסבר לתרגיל הזה.", "There is currently no explanation for this exercise.")
+                } else {
+                    raw
+                }
             }
             val isFav = favorites.contains(normalizeItemId(hitItem))
             val noteText = loadNote(hitItem)
@@ -684,13 +694,13 @@ fun ExercisesTabsScreen(
                                 text = displayName,
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Text(
-                                text = "(${hitBelt.heb})",
+                                text = if (isEnglish) "(${hitBelt.en})" else "(${hitBelt.heb})",
                                 style = MaterialTheme.typography.labelSmall,
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -741,7 +751,7 @@ fun ExercisesTabsScreen(
                         )
                         Text(
                             text = annotated,
-                            textAlign = TextAlign.Right,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
@@ -750,13 +760,13 @@ fun ExercisesTabsScreen(
                             Text(
                                 text = "הערה של המתאמן:",
                                 fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Text(
                                 text = noteText,
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -764,7 +774,7 @@ fun ExercisesTabsScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { pickedKey = null }) { Text("סגור") }
+                    TextButton(onClick = { pickedKey = null }) { Text(tr("סגור", "Close")) }
                 }
             )
         }
@@ -783,7 +793,7 @@ fun ExercisesTabsScreen(
 
             val explanation = Explanations.get(belt, displayName)
                 .ifBlank { Explanations.get(belt, item) }
-                .ifBlank { "לא נמצא הסבר עבור \"$displayName\"." }
+                .ifBlank { tr("לא נמצא הסבר עבור \"$displayName\".", "No explanation found for \"$displayName\".") }
 
             val isFav = favorites.contains(normalizeItemId(item))
             val noteText = loadNote(item)
@@ -812,7 +822,7 @@ fun ExercisesTabsScreen(
                                 ) {
                                     Icon(
                                         Icons.Filled.Edit,
-                                        contentDescription = "עריכת הערה",
+                                        contentDescription = tr("עריכת הערה", "Edit note"),
                                         tint = if (noteText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -823,13 +833,13 @@ fun ExercisesTabsScreen(
                                     if (isFav) {
                                         Icon(
                                             Icons.Filled.Star,
-                                            contentDescription = "הסר ממועדפים",
+                                            contentDescription = tr("הסר ממועדפים", "Remove from favorites"),
                                             tint = Color(0xFFFFC107)
                                         )
                                     } else {
                                         Icon(
                                             Icons.Outlined.StarBorder,
-                                            contentDescription = "הוסף למועדפים"
+                                            contentDescription = tr("הוסף למועדפים", "Add to favorites")
                                         )
                                     }
                                 }
@@ -849,13 +859,13 @@ fun ExercisesTabsScreen(
                                         text = displayName,
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Right,
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     Text(
-                                        text = "(${belt.heb})",
+                                        text = if (isEnglish) "(${belt.en})" else "(${belt.heb})",
                                         style = MaterialTheme.typography.labelSmall,
-                                        textAlign = TextAlign.Right,
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
@@ -874,29 +884,29 @@ fun ExercisesTabsScreen(
                         )
                         Text(
                             annotated,
-                            textAlign = TextAlign.Right,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
                         if (noteText.isNotBlank()) {
                             HorizontalDivider()
                             Text(
-                                text = "הערה של המתאמן:",
+                                text = tr("הערה של המתאמן:", "Trainee note:"),
                                 fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Text(
                                 text = noteText,
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
 
                         IconButton(onClick = { KmiTtsManager.speak(explanation) }) {
-                            Icon(Icons.Filled.VolumeUp, contentDescription = "השמע הסבר")
+                            Icon(Icons.Filled.VolumeUp, contentDescription = tr("השמע הסבר", "Play explanation"))
                         }
                     }
                 },
@@ -904,7 +914,7 @@ fun ExercisesTabsScreen(
                     TextButton(onClick = {
                         KmiTtsManager.stop()
                         explainFromSearch = null
-                    }) { Text("סגור") }
+                    }) { Text(tr("סגור", "Close")) }
                 }
             )
         }
@@ -914,8 +924,8 @@ fun ExercisesTabsScreen(
                 onDismissRequest = { noteEditorFor = null },
                 title = {
                     Text(
-                        text = "עריכת הערה",
-                        textAlign = TextAlign.Right,
+                        text = tr("עריכת הערה", "Edit note"),
+                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                         modifier = Modifier.fillMaxWidth()
                     )
                 },
@@ -926,7 +936,7 @@ fun ExercisesTabsScreen(
                         Text(
                             text = ExerciseTitleFormatter.displayName(item),
                             fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -936,7 +946,7 @@ fun ExercisesTabsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 4,
                             maxLines = 8,
-                            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right)
+                            textStyle = LocalTextStyle.current.copy(textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right)
                         )
                     }
                 },
@@ -946,14 +956,14 @@ fun ExercisesTabsScreen(
                             saveNote(item, noteDraft)
                             noteEditorFor = null
                         }
-                    ) { Text("שמור") }
+                    ) { Text(tr("שמור", "Save")) }
                 },
                 dismissButton = {
                     TextButton(
                         onClick = {
                             noteEditorFor = null
                         }
-                    ) { Text("ביטול") }
+                    ) { Text(tr("ביטול", "Cancel")) }
                 }
             )
         }

@@ -44,8 +44,11 @@ import il.kmi.app.ui.assistant.VoiceNavCommand
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import il.kmi.app.screens.ContactUsScreen
 import il.kmi.app.screens.SubTopics.subTopicsByBeltNavGraph
 import il.kmi.app.screens.SubTopics.subTopicsByTopicNavGraph
+import il.kmi.app.screens.admin.PaymentsReportScreen
+import il.kmi.app.screens.payments.PaymentScreen
 
 /**
  * NavHost הראשי של האפליקציה.
@@ -61,6 +64,10 @@ fun MainNavHost(
     startDestination: String = Route.Intro.route
 ) {
     val ctx = LocalContext.current
+
+    val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() ==
+            il.kmi.shared.localization.AppLanguage.ENGLISH
 
 // ✅ PRELOAD רשימת מתאמנים כבר בהפעלת האפליקציה
     LaunchedEffect(Unit) {
@@ -246,6 +253,43 @@ fun MainNavHost(
                         }
                     },
                     onBack = { nav.popBackStack() }
+                )
+            }
+
+            composable(Route.MembershipPayment.route) {
+                il.kmi.app.screens.forms.payment.MembershipPaymentScreen(
+                    isEnglish = isEnglish,
+                    onClose = {
+                        nav.popBackStack()
+                    },
+                    onContinueToPayment = { _ ->
+                        nav.navigate(Route.Payment.route)
+                    }
+                )
+            }
+
+            composable(Route.ContactUs.route) {
+                ContactUsScreen(
+                    isEnglish = isEnglish,
+                    onClose = {
+                        nav.popBackStack()
+                    },
+                    onSubmit = { fullName, phone, email, subject, message ->
+                        // כאן תדבר בהמשך לשרת / Firebase / Firestore
+                    }
+                )
+            }
+
+            composable(Route.Payment.route) {
+                PaymentScreen(
+                    isEnglish = isEnglish,
+                    amountToPay = "150 ₪",
+                    onClose = {
+                        nav.popBackStack()
+                    },
+                    onPayClicked = { _, _, _, _, _, _, _, _ ->
+                        // כאן תחבר סליקה / שמירה / הצלחה
+                    }
                 )
             }
 
@@ -512,6 +556,18 @@ fun MainNavHost(
                     // לא נשארים במסך "ריק" — חוזרים אחורה מיד
                     nav.popBackStack()
                 }
+            }
+
+            composable(Route.PaymentsReport.route) {
+                PaymentsReportScreen(
+                    isEnglish = isEnglish,
+                    onClose = {
+                        nav.popBackStack()
+                    },
+                    onSaveManualPayment = { traineeId, amount, method, notes ->
+                        // כאן נחבר בהמשך ל-Firebase / Firestore
+                    }
+                )
             }
 
             // ✅ NEW: Voice settings (קול אחיד לכל האפליקציה)

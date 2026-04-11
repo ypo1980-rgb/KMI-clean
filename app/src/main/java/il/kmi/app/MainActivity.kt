@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.*
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import il.kmi.shared.localization.AppLanguageManager
 
 // Firebase
@@ -44,9 +45,11 @@ import il.kmi.shared.prefs.LegacyPrefsMigration
 class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
 
-// 🌍 Language Manager
+        installSplashScreen()
+
+        super.onCreate(savedInstanceState)
+        // 🌍 Language Manager
         val languageManager = AppLanguageManager(this)
         val localizedContext = languageManager.applySavedLanguage(this)
 
