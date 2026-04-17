@@ -181,11 +181,14 @@ fun ExistingUserTraineeScreen(
     val fieldWidth = 0.88f
     val fieldHeight = 52.dp
 
-    // רקע ברירת מחדל (סגול-כחול)
+    // רקע ברירת מחדל (ירוק-כחול כמו מסך כניסה / רישום)
     val traineeBg = remember {
-        Brush.linearGradient(
-            listOf(Color(0xFF7F00FF), Color(0xFF3F51B5), Color(0xFF03A9F4)),
-            start = Offset(0f, 0f), end = Offset(1000f, 3000f)
+        Brush.verticalGradient(
+            listOf(
+                Color(0xFF0F172A),   // כחול כהה
+                Color(0xFF1D4ED8),   // כחול ראשי של מתאמן
+                Color(0xFF0EA5E9)    // כחול טורקיז תחתון
+            )
         )
     }
     // רקע למצב מאמן – גרדיאנט מודרני בכחול/טורקיז

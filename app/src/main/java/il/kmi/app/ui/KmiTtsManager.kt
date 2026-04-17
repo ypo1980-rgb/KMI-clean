@@ -11,17 +11,23 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import kotlin.coroutines.resume
 
 object KmiTtsManager {
 
     private const val TAG = "KMI_TTS"
+
+    @Volatile
+    private var onSpeechCompleted: (() -> Unit)? = null
 
     // ✅ DEBUG: נוודא שהאובייקט בכלל נטען בזמן ריצה
     init {
@@ -29,11 +35,11 @@ object KmiTtsManager {
     }
 
     // ✅ PREF שממנו מגיעה בחירת הקול (מהמסך הגדרות שלך)
-    private const val PREF_CLOUD_FILE = "kmi_ai_voice"
-    private const val PREF_CLOUD_VOICE = "voice" // "male" | "female"
+    private const val PREF_CLOUD_FILE = "app_prefs"
+    private const val PREF_CLOUD_VOICE = "kmi_tts_voice" // "male" | "female" | "human"
     private const val VOICE_MALE = "male"
     private const val VOICE_FEMALE = "female"
-
+    private const val VOICE_HUMAN = "human"
     // ✅ Cloud Function שלך
     // ✅ Cloud Function שלך
     // ✅ Cloud Function כתובת (Gen1 us-central1)
@@ -55,11 +61,13 @@ object KmiTtsManager {
     // ✅ שליטה במהירות ניגון (ExoPlayer PlaybackParameters)
     private const val SPEED_MIN = 0.60f
     private const val SPEED_MAX = 1.60f
-    private var defaultSpeed = 0.90f   // ✅ "בן אדם" (אם חזק מדי תרד ל-1.10)
 
-    // ✅ מהירות דיבור בצד השרת (Google TTS speakingRate)
-    // בעברית he-IL, 1.0 עדיין נשמע איטי → ברירת מחדל אנושית: ~1.30–1.40
-    private var defaultSpeakingRate = 1.05
+    // חשוב: לא למתוח את הקול שוב מקומית אם כבר קיבלנו אודיו משרת TTS
+    private var defaultSpeed = 1.05f
+    private var defaultSpeakingRate = 1.01
+    // ✅ פיצול תשובות ארוכות למקטעים טבעיים
+    private const val MAX_TTS_CHARS_PER_CHUNK = 220
+    private const val CHUNK_PAUSE_MS = 60L
 
     // ✅ DEBUG: לבטל קאש זמנית כדי לראות שינוי מהירות בוודאות
     private const val FORCE_FRESH_TTS = false
@@ -89,6 +97,15 @@ object KmiTtsManager {
     fun init(context: Context) {
         appCtx = context.applicationContext
         Log.e(TAG, "init() OK appCtx=${appCtx?.packageName} cacheDir=${appCtx?.cacheDir?.absolutePath}")
+
+        if (FORCE_FRESH_TTS) {
+            val deleted = clearCloudTtsCache()
+            Log.w(TAG, "init() FORCE_FRESH_TTS deletedCacheFiles=$deleted")
+        }
+    }
+
+    fun setOnSpeechCompletedListener(listener: (() -> Unit)?) {
+        onSpeechCompleted = listener
     }
 
     fun setSpeechProfile(rate: Float = 1.0f, pitch: Float = 1.0f) {
@@ -142,6 +159,7 @@ object KmiTtsManager {
         exo = null
 
         isSpeaking = false
+        onSpeechCompleted = null
         Log.d(TAG, "stop()")
     }
 
@@ -173,25 +191,47 @@ object KmiTtsManager {
         val seq = ++speakSeq
         Log.e(TAG, "SPEAK(seq=$seq) len=${clean.length} preview='${clean.take(60)}'")
 
-        // ✅ עוצרים את הקודם לפני שמתחילים חדש
         stop()
 
         val voice = currentVoiceKey(ctx)
         val speakingRate = defaultSpeakingRate
+        val chunks = splitForNaturalSpeech(clean)
+
         Log.e(
             TAG,
-            "SPEAK(seq=$seq) voice=$voice speakingRate=${String.format(Locale.US, "%.2f", speakingRate)}"
+            "SPEAK(seq=$seq) voice=$voice speakingRate=${String.format(Locale.US, "%.2f", speakingRate)} forceFresh=$FORCE_FRESH_TTS chunks=${chunks.size}"
         )
 
         inFlightJob = scope.launch {
             try {
                 isSpeaking = true
-                Log.e(TAG, "SPEAK(seq=$seq) -> IO start")
-                val mp3 = fetchOrGetCachedMp3(ctx, clean, voice, speakingRate)
-                Log.e(TAG, "SPEAK(seq=$seq) -> play file=${mp3.name} bytes=${mp3.length()}")
-                playMp3(mp3)
+
+                chunks.forEachIndexed { index, chunk ->
+                    Log.e(TAG, "SPEAK(seq=$seq) -> chunk ${index + 1}/${chunks.size} len=${chunk.length}")
+
+                    val mp3 = fetchOrGetCachedMp3(ctx, chunk, voice, speakingRate)
+                    Log.e(TAG, "SPEAK(seq=$seq) -> play file=${mp3.name} bytes=${mp3.length()}")
+
+                    playMp3Await(mp3)
+
+                    if (index < chunks.lastIndex) {
+                        val pause = when {
+                            chunk.endsWith("?") -> 220L
+                            chunk.endsWith("!") -> 180L
+                            chunk.endsWith(".") -> 140L
+                            else -> 80L
+                        }
+                        delay(pause)
+                    }
+                }
+
+                val callback = onSpeechCompleted
+                onSpeechCompleted = null
+                callback?.invoke()
+
             } catch (t: Throwable) {
                 Log.e(TAG, "SPEAK(seq=$seq) failed", t)
+            } finally {
                 isSpeaking = false
             }
         }
@@ -202,12 +242,74 @@ object KmiTtsManager {
     // ------------------------------------------------------------
 
     private fun currentVoiceKey(ctx: Context): String {
-        val sp = ctx.getSharedPreferences(PREF_CLOUD_FILE, Context.MODE_PRIVATE)
-        val raw = sp.getString(PREF_CLOUD_VOICE, VOICE_MALE)?.trim()?.lowercase(Locale.US)
-        return when (raw) {
-            VOICE_FEMALE -> VOICE_FEMALE
-            VOICE_MALE -> VOICE_MALE
+        val sp = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+
+        val raw = sp.getString("kmi_tts_voice", "male")
+            ?.trim()
+            ?.lowercase(Locale.US)
+
+        val normalized = when (raw) {
+            "female" -> VOICE_FEMALE
+            "male" -> VOICE_MALE
+            "human" -> VOICE_HUMAN
             else -> VOICE_MALE
+        }
+
+        Log.w(TAG, "currentVoiceKey() rawPref=$raw normalized=$normalized prefFile=app_prefs prefKey=kmi_tts_voice")
+
+        return normalized
+    }
+
+    private fun cleanForSpeech(text: String): String {
+
+        return text
+            .replace("(", "")
+            .replace(")", "")
+            .replace("–", " ")
+            .replace("-", " ")
+            .replace(",", ", ")
+            .replace("  ", " ")
+            .trim()
+    }
+
+    private fun hourToHebrewSpeech(time: String): String {
+
+        val parts = time.split(":")
+        if (parts.size < 2) return time
+
+        val hour = parts[0].toIntOrNull() ?: return time
+        val minute = parts[1].toIntOrNull() ?: 0
+
+        val hourWords = mapOf(
+            1 to "אחת",
+            2 to "שתיים",
+            3 to "שלוש",
+            4 to "ארבע",
+            5 to "חמש",
+            6 to "שש",
+            7 to "שבע",
+            8 to "שמונה",
+            9 to "תשע",
+            10 to "עשר",
+            11 to "אחת עשרה",
+            12 to "שתים עשרה"
+        )
+
+        val period = when (hour) {
+            in 5..11 -> "בבוקר"
+            in 12..16 -> "בצהריים"
+            in 17..21 -> "בערב"
+            else -> "בלילה"
+        }
+
+        val h = if (hour > 12) hour - 12 else hour
+
+        val hourText = hourWords[h] ?: return time
+
+        return if (minute == 0) {
+            "$hourText $period"
+        } else {
+            "$hourText ו-$minute $period"
         }
     }
 
@@ -239,8 +341,8 @@ object KmiTtsManager {
 
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
-                connectTimeout = 12_000
-                readTimeout = 25_000
+                connectTimeout = 4_000
+                readTimeout = 8_000
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
             }
@@ -261,9 +363,16 @@ object KmiTtsManager {
             val ce = conn.getHeaderField("Content-Encoding")
             Log.w(TAG, "Cloud headers: code=$code contentType=$ct contentLen=$cl contentEnc=$ce")
 
+            val hdrVersion = conn.getHeaderField("X-KMI-Version")
             val hdrRate = conn.getHeaderField("X-KMI-Rate")
-            val hdrSsml = conn.getHeaderField("X-KMI-SSML-Rate")
-            Log.w(TAG, "DEBUG server used -> X-KMI-Rate=$hdrRate X-KMI-SSML-Rate=$hdrSsml")
+            val hdrStyle = conn.getHeaderField("X-KMI-Style")
+            val hdrVoice = conn.getHeaderField("X-KMI-Voice")
+            val hdrEngine = conn.getHeaderField("X-KMI-Engine")
+
+            Log.w(
+                TAG,
+                "DEBUG server used -> X-KMI-Version=$hdrVersion X-KMI-Voice=$hdrVoice X-KMI-Engine=$hdrEngine X-KMI-Style=$hdrStyle X-KMI-Rate=$hdrRate"
+            )
 
             if (code !in 200..299) {
                 val err = runCatching {
@@ -290,82 +399,158 @@ object KmiTtsManager {
         return outFile
     }
 
-    private fun playMp3(mp3: File) {
+    private suspend fun playMp3Await(mp3: File) = suspendCancellableCoroutine<Unit> { cont ->
         runCatching { exo?.stop() }
         runCatching { exo?.release() }
         exo = null
 
-        val ctx = appCtx ?: return
-        val speed = defaultSpeed.coerceIn(SPEED_MIN, SPEED_MAX)
-
-        val p = ExoPlayer.Builder(ctx).build().apply {
-            setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(mp3)))
-
-            // ✅ מחילים לפני prepare
-            try {
-                playbackParameters = PlaybackParameters(speed)
-            } catch (t: Throwable) {
-                Log.e(TAG, "PLAY failed to set playbackParameters BEFORE prepare", t)
-            }
-
-            prepare()
-
-            // ✅ מחילים שוב אחרי prepare (כדי לשלול מקרה שהפרמטר נדרס)
-            try {
-                playbackParameters = PlaybackParameters(speed)
-            } catch (t: Throwable) {
-                Log.e(TAG, "PLAY failed to set playbackParameters AFTER prepare", t)
-            }
-
-            playWhenReady = true
-
-            Log.e(
-                TAG,
-                "PLAY dbg -> requestedSpeed=$speed actual=${playbackParameters.speed} file=${mp3.name} bytes=${mp3.length()}"
-            )
-
-            addListener(object : Player.Listener {
-
-                override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
-                    Log.w(
-                        TAG,
-                        "PLAY onPlaybackParametersChanged -> speed=${playbackParameters.speed}"
-                    )
-                }
-
-                override fun onPlaybackStateChanged(state: Int) {
-                    Log.w(TAG, "PLAY state=$state isPlaying=$isPlaying speedNow=${playbackParameters.speed}")
-                    if (state == Player.STATE_ENDED) {
-                        Log.w(TAG, "PLAY ended file=${mp3.name}")
-                        isSpeaking = false
-                        runCatching { release() }
-                        if (exo === this@apply) exo = null
-                    }
-                }
-
-                override fun onPlayerError(error: PlaybackException) {
-                    Log.e(TAG, "PLAY error file=${mp3.name}", error)
-                    isSpeaking = false
-                    runCatching { release() }
-                    if (exo === this@apply) exo = null
-                }
-            })
+        val ctx = appCtx
+        if (ctx == null) {
+            cont.resume(Unit)
+            return@suspendCancellableCoroutine
         }
 
+        val speed = defaultSpeed.coerceIn(SPEED_MIN, SPEED_MAX)
+        val p = ExoPlayer.Builder(ctx).build()
         exo = p
-        Log.e(TAG, "PLAY -> ExoPlayer started speed=$speed file=${mp3.name} bytes=${mp3.length()}")
+
+        cont.invokeOnCancellation {
+            runCatching { p.stop() }
+            runCatching { p.release() }
+            if (exo === p) exo = null
+        }
+
+        p.addListener(object : Player.Listener {
+            private var finished = false
+
+            private fun finish() {
+                if (finished) return
+                finished = true
+                runCatching { p.release() }
+                if (exo === p) exo = null
+
+                if (cont.isActive) cont.resume(Unit)
+            }
+
+            override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
+                Log.w(TAG, "PLAY onPlaybackParametersChanged -> speed=${playbackParameters.speed}")
+            }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                Log.w(TAG, "PLAY state=$state isPlaying=${p.isPlaying} speedNow=${p.playbackParameters.speed}")
+
+                if (state == Player.STATE_ENDED) {
+                    Log.w(TAG, "PLAY ended file=${mp3.name}")
+                    finish()
+                    return
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlayingNow: Boolean) {
+                Log.w(TAG, "PLAY onIsPlayingChanged=$isPlayingNow state=${p.playbackState}")
+
+                if (!isPlayingNow && p.playbackState == Player.STATE_ENDED) {
+                    finish()
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                Log.e(TAG, "PLAY error file=${mp3.name}", error)
+                finish()
+            }
+        })
+
+        p.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(mp3)))
+
+        try {
+            p.playbackParameters = PlaybackParameters(speed)
+        } catch (t: Throwable) {
+            Log.e(TAG, "PLAY failed to set playbackParameters BEFORE prepare", t)
+        }
+
+        p.prepare()
+
+        try {
+            p.playbackParameters = PlaybackParameters(speed)
+        } catch (t: Throwable) {
+            Log.e(TAG, "PLAY failed to set playbackParameters AFTER prepare", t)
+        }
+
+        p.playWhenReady = true
+
+        Log.e(
+            TAG,
+            "PLAY -> ExoPlayer started speed=$speed file=${mp3.name} bytes=${mp3.length()}"
+        )
     }
 
     // ------------------------------------------------------------
     // Text normalization
     // ------------------------------------------------------------
 
+    private fun splitForNaturalSpeech(text: String): List<String> {
+        val normalized = text
+            .replace("\n•", ". ")
+            .replace("\n-", ". ")
+            .replace("\n", ". ")
+            .replace("...", ". ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        if (normalized.length <= MAX_TTS_CHARS_PER_CHUNK) {
+            return listOf(normalized)
+        }
+
+        val sentences = normalized
+            .split(Regex("(?<=[.!?,])\\s+"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+
+        if (sentences.isEmpty()) return listOf(normalized)
+
+        val chunks = mutableListOf<String>()
+        val current = StringBuilder()
+
+        for (sentence in sentences) {
+            if (current.isEmpty()) {
+                current.append(sentence)
+                continue
+            }
+
+            val candidate = current.toString() + " " + sentence
+            if (candidate.length <= MAX_TTS_CHARS_PER_CHUNK) {
+                current.append(" ").append(sentence)
+            } else {
+                chunks.add(current.toString().trim())
+                current.clear()
+                current.append(sentence)
+            }
+        }
+
+        if (current.isNotEmpty()) {
+            chunks.add(current.toString().trim())
+        }
+
+        return chunks.ifEmpty { listOf(normalized) }
+    }
+
     private fun normalizeForTts(text: String): String {
         return text
+            .replace(Regex("""(?m)^\s*\d+\.\s*"""), "")
+            .replace("שלום,", "שַלוֹם,")
+            .replace("יובל", "יוּבָל")
+            .replace("•", ". ")
+            .replace(" - ", ". ")
+            .replace("\n", ". ")
+            .replace(":", ". ")
+            .replace(";", ". ")
+            .replace("...", ". ")
             .replace("ק.מ.י", "קמי")
             .replace("ק מ י", "קמי")
             .replace("K.M.I", "KAMI", ignoreCase = true)
             .replace("K M I", "KAMI", ignoreCase = true)
             .replace("קמי", "קָמִי")
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 }

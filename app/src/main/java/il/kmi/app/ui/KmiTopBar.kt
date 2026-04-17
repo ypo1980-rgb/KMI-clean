@@ -58,9 +58,8 @@ import kotlinx.coroutines.launch
 import androidx.core.view.doOnPreDraw
 import shareCurrentScreen
 import androidx.compose.runtime.saveable.rememberSaveable
-import il.kmi.app.ui.assistant.AiAssistantDialog
+import il.kmi.app.ui.assistant.ui.AiAssistantDialog
 import il.kmi.app.search.KmiSearchBridge
-import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
 //===============================================================================
@@ -340,8 +339,8 @@ fun KmiTopBar(
                 val scopeOpen = rememberCoroutineScope()
                 val openDrawerClick: () -> Unit = {
                     when {
-                        onOpenDrawer != null -> onOpenDrawer()
                         providedDrawer != null -> scopeOpen.launch { providedDrawer.open() }
+                        onOpenDrawer != null -> onOpenDrawer()
                         else -> DrawerBridge.open()
                     }
                 }
@@ -355,10 +354,10 @@ fun KmiTopBar(
                     if (showMenu) {
                         PremiumActionIcon(
                             icon = Icons.Filled.Menu,
-                            tint = Color(0xFF4F46E5),
-                            background = Color(0x1A4F46E5),
+                            tint = Color(0xFF312E81),
+                            background = Color(0x334F46E5),
                             contentDescription = "תפריט",
-                            onClick = openDrawerClick
+                            onClick = { openDrawerClick() }
                         )
                     } else {
                         Spacer(Modifier.width(8.dp))
@@ -553,9 +552,6 @@ fun KmiTopBar(
                     onSettings = if (showSettingsAllowed) {
                         {
                             focusManager.clearFocus(force = true)
-                            android.widget.Toast
-                                .makeText(ctx, "settings click", android.widget.Toast.LENGTH_SHORT)
-                                .show()
                             DrawerBridge.openSettings()
                         }
                     } else null,
@@ -632,7 +628,6 @@ fun KmiTopBar(
     if (showAiDialog) {
         AiAssistantDialog(
             onDismiss = { showAiDialog = false },
-            contextLabel = title
         )
     }
 
@@ -721,7 +716,6 @@ fun KmiTopBar(
                 if (showAiDialog) {
                     AiAssistantDialog(
                         onDismiss = { showAiDialog = false },
-                        contextLabel = title
                     )
                 }
             }
@@ -800,23 +794,23 @@ fun PremiumActionIcon(
     }
 
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.86f else 1f,
+        targetValue = if (pressed) 0.76f else 1f,
         animationSpec = spring(
-            dampingRatio = 0.45f,
-            stiffness = Spring.StiffnessMedium
+            dampingRatio = 0.28f,
+            stiffness = Spring.StiffnessVeryLow
         ),
         label = "iconBounce"
     )
 
     Box(
         modifier = Modifier
-            .size(42.dp)
+            .size(30.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(CircleShape)
-            .background(background)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFFE6E6EE))
             .clickable {
                 pressed = true
                 onClick()
@@ -826,8 +820,8 @@ fun PremiumActionIcon(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = tint,
-            modifier = Modifier.size(20.dp)
+            tint = Color(0xFF4B478F),
+            modifier = Modifier.size(19.dp)
         )
     }
 }

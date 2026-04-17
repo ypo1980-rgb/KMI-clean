@@ -13,6 +13,12 @@ const db = admin.firestore();
 const textToSpeech = require("@google-cloud/text-to-speech");
 const ttsClient = new textToSpeech.TextToSpeechClient();
 
+// 🔥 Generative TTS (קול אנושי הרבה יותר)
+const { v1beta1: ttsGen } = require("@google-cloud/text-to-speech");
+const genClient = new ttsGen.TextToSpeechClient();
+
+const KMI_TTS_VERSION = "tts-human-v4";
+
 /**
  * פונקציית עזר לפיצול מערכים למקטעים (כרגע לא נשתמש בה, אבל נשאיר אם תרצה בעתיד)
  */
@@ -223,6 +229,209 @@ exports.onCoachBroadcastCreated = functions.firestore
     }
   });
 
+function detectTtsStyle(text) {
+  const t = String(text || "").trim().toLowerCase();
+
+  if (!t) return "default";
+
+  if (
+    t.includes("שים לב") ||
+    t.includes("זהירות") ||
+    t.includes("אסור") ||
+    t.includes("danger") ||
+    t.includes("warning")
+  ) {
+    return "warning";
+  }
+
+  if (
+    t.includes("שלב") ||
+    t.includes("עמידת מוצא") ||
+    t.includes("בצע") ||
+    t.includes("הרם") ||
+    t.includes("סובב") ||
+    t.includes("step") ||
+    t.includes("start position")
+  ) {
+    return "instruction";
+  }
+
+  if (
+    t.includes("מעולה") ||
+    t.includes("יפה") ||
+    t.includes("בהצלחה") ||
+    t.includes("כל הכבוד") ||
+    t.includes("great") ||
+    t.includes("excellent") ||
+    t.includes("well done")
+  ) {
+    return "friendly";
+  }
+
+  return "default";
+}
+
+function buildExpressiveSsml(text, style) {
+
+  const normalizedText = String(text || "")
+    .trim()
+    .replace(/\n+/g, ". ")
+    .replace(/•/g, ". ")
+    .replace(/\s+/g, " ");
+
+  const rate =
+    style === "instruction" ? "95%" :
+    style === "warning" ? "90%" :
+    style === "friendly" ? "100%" :
+    "96%";
+
+  return `
+<speak>
+  <prosody rate="${rate}" pitch="+0%">
+    ${escapeXml(normalizedText)}
+  </prosody>
+</speak>`;
+}
+
+async function synthesizeHumanVoice({ text, lang, preferredHumanVoice }) {
+  try {
+    console.log("Trying human voice path:", {
+      engine: "genClient.synthesizeSpeech",
+      lang,
+      preferredHumanVoice,
+    });
+
+ const ssml = buildExpressiveSsml(text, "default");
+
+ const request = {
+   input: { ssml },
+         voice: {
+        languageCode: lang,
+        name: preferredHumanVoice,
+      },
+      audioConfig: {
+        audioEncoding: "MP3",
+        speakingRate: 1.10,
+        pitch: 0.0,
+      }
+    };
+
+    const [response] = await genClient.synthesizeSpeech(request);
+
+    if (!response || !response.audioContent) {
+      throw new Error("Human voice path returned empty audio");
+    }
+
+    return {
+      audioContent: response.audioContent,
+      usedVoiceName: preferredHumanVoice,
+      usedEngine: "human-path",
+    };
+
+  } catch (err) {
+    console.log("Human voice path failed, fallback to classic:", {
+      preferredHumanVoice,
+      message: String(err),
+    });
+
+    return null;
+  }
+}
+
+async function synthesizeWithVoiceFallback({
+  text,
+  lang,
+  voiceKey,
+  rate,
+  pitch,
+  style,
+}) {
+  const wantFemale = voiceKey === "female";
+  const wantMale = voiceKey === "male";
+
+  const preferredVoices =
+    lang === "he-IL"
+      ? [
+          // קודם Chirp 3: HD - הכי טבעי כרגע בגוגל לעברית
+          wantFemale
+            ? "he-IL-Chirp3-HD-Aoede"
+            : "he-IL-Chirp3-HD-Charon",
+
+          // fallback נוסף בתוך Chirp 3: HD
+          wantFemale
+            ? "he-IL-Chirp3-HD-Kore"
+            : "he-IL-Chirp3-HD-Schedar",
+
+          // fallback ישן יותר
+          wantFemale
+            ? "he-IL-Neural2-A"
+            : "he-IL-Neural2-B",
+
+          wantFemale
+            ? "he-IL-Wavenet-A"
+            : "he-IL-Wavenet-B",
+        ]
+      : [null];
+
+  const resolvedPitch =
+    typeof pitch === "number"
+      ? Math.min(2.0, Math.max(-2.0, pitch))
+      : 0.0;
+
+  const plainText = buildExpressiveSsml(text, style);
+
+  let lastError = null;
+
+  for (const voiceName of preferredVoices) {
+    try {
+console.log("kmiTts trying voice:", {
+  lang,
+  voiceKey,
+  voiceName,
+  rate,
+  style,
+  resolvedPitch,
+  engine: "classic"
+});
+
+    const request = {
+      input: { ssml: plainText },
+              voice: voiceName
+          ? { languageCode: lang, name: voiceName }
+          : {
+              languageCode: lang,
+              ssmlGender: wantFemale ? "FEMALE" : "MALE",
+            },
+        audioConfig: {
+          audioEncoding: "MP3",
+          speakingRate: rate,
+          pitch: resolvedPitch,
+        },
+      };
+
+      const [response] = await ttsClient.synthesizeSpeech(request);
+
+      if (!response || !response.audioContent) {
+        throw new Error("Empty audioContent from TTS");
+      }
+
+      return {
+        audioContent: response.audioContent,
+        usedVoiceName: voiceName || (wantFemale ? "FEMALE" : "MALE"),
+        usedEngine: "classic-fallback",
+      };
+    } catch (err) {
+      lastError = err;
+      console.error("kmiTts voice failed, trying next fallback:", {
+        attemptedVoice: voiceName,
+        message: String(err),
+      });
+    }
+  }
+
+  throw lastError || new Error("All TTS voice fallbacks failed");
+}
+
 /**
  * ====================================================
  * 3. פונקציית HTTP ל-TTS – kmiTts
@@ -238,69 +447,132 @@ exports.kmiTts = functions.https.onRequest(async (req, res) => {
   if (req.method !== "POST") return res.status(405).json({ error: "Use POST with JSON body" });
 
   try {
-    const { text, languageCode, pitch, voice } = req.body || {};
-    if (!text || typeof text !== "string" || !text.trim()) {
-      return res.status(400).json({ error: 'Missing "text" field in body' });
-    }
+ const { text, languageCode, pitch, voice, style } = req.body || {};
+ if (!text || typeof text !== "string" || !text.trim()) {
+   return res.status(400).json({ error: 'Missing "text" field in body' });
+ }
 
-    const lang = (languageCode || "he-IL").trim();
-    const wantMale = ((voice || "male") + "").toLowerCase().trim() === "male";
+ const lang = (languageCode || "he-IL").trim();
+ const voiceKey = ((voice || "human") + "").toLowerCase().trim();
 
-    // ✅ FIX מוחלט: ל-he-IL נועלים Wavenet קיים (ולא Neural2)
-    // male  -> he-IL-Wavenet-B
-    // female-> he-IL-Wavenet-A
-    const voiceName =
-      lang === "he-IL"
-        ? (wantMale ? "he-IL-Wavenet-B" : "he-IL-Wavenet-A")
-        : null;
+ const wantMale = voiceKey === "male";
+ const wantFemale = voiceKey === "female";
+ const wantHuman = voiceKey === "human";
 
-    console.log("kmiTts voice selection:", { lang, wantMale, voiceName });
+ const preferredHumanVoice =
+   lang === "he-IL"
+     ? (wantFemale ? "he-IL-Chirp3-HD-Aoede" : "he-IL-Chirp3-HD-Charon")
+     : null;
+
+ console.log("kmiTts voice selection:", {
+   lang,
+   voiceKey,
+   wantMale,
+   wantFemale,
+   wantHuman,
+   preferredHumanVoice,
+   preferred: lang === "he-IL"
+     ? (
+         wantFemale
+           ? "he-IL-Chirp3-HD-Aoede -> he-IL-Chirp3-HD-Kore -> he-IL-Neural2-A -> he-IL-Wavenet-A"
+           : "he-IL-Chirp3-HD-Charon -> he-IL-Chirp3-HD-Schedar -> he-IL-Neural2-B -> he-IL-Wavenet-B"
+       )
+     : "default",
+   style: style || "default",
+ });
 
     // ✅ FIX: ברירת מחדל "אנושית" = 1.0 (לא 0.45!)
     // וגם טווח הגיוני שלא יגרום לקול "רובוטי"
-    const rawRateAny = (req.body || {}).speakingRate;
-    const rawRateNum =
-      typeof rawRateAny === "number"
-        ? rawRateAny
-        : (typeof rawRateAny === "string" ? Number(rawRateAny) : NaN);
+ const rawRateAny = (req.body || {}).speakingRate;
+ const rawRateNum =
+   typeof rawRateAny === "number"
+     ? rawRateAny
+     : (typeof rawRateAny === "string" ? Number(rawRateAny) : NaN);
+
+ const baseRate =
+   Number.isFinite(rawRateNum)
+     ? Math.min(1.18, Math.max(0.96, rawRateNum))
+     : 1.08;
+
+ const resolvedStyle = ((style || detectTtsStyle(text) || "default") + "")
+   .toLowerCase()
+   .trim();
 
  const rate =
-   Number.isFinite(rawRateNum)
-     ? Math.min(1.6, Math.max(1.2, rawRateNum))
-     : 1.35;
+   resolvedStyle === "instruction" ? Math.min(1.18, baseRate + 0.04) :
+   resolvedStyle === "warning" ? Math.min(1.12, baseRate) :
+   resolvedStyle === "friendly" ? Math.max(0.96, baseRate - 0.03) :
+   baseRate;
 
-    console.log("kmiTts speakingRate:", {
-      rawRateAny,
-      rawType: typeof rawRateAny,
-      rawRateNum,
-      rate,
-    });
+ console.log("kmiTts speakingRate:", {
+   rawRateAny,
+   rawType: typeof rawRateAny,
+   rawRateNum,
+   baseRate,
+   resolvedStyle,
+   rate,
+ });
 
     // ✅ להחזיר headers כדי שנראה באנדרואיד מה באמת שימש
+    res.set("X-KMI-Version", KMI_TTS_VERSION);
     res.set("X-KMI-Rate", String(rate));
+    res.set("X-KMI-Style", String(resolvedStyle));
 
-    // ✅ FIX: לא מערבבים SSML prosody + audioConfig.speakingRate
-    // שולחים text רגיל ומכוונים את המהירות רק דרך audioConfig
-    const request = {
-      input: { text: text.trim() },
-      voice: voiceName
-        ? { languageCode: lang, name: voiceName }
-        : { languageCode: lang, ssmlGender: wantMale ? "MALE" : "FEMALE" },
-      audioConfig: {
-        audioEncoding: "MP3",
-        speakingRate: rate,
-        pitch:
-          typeof pitch === "number"
-            ? Math.min(6.0, Math.max(-6.0, pitch))
-            : (wantMale ? -0.2 : 0.2),
-      },
-    };
+// 🔥 ניסיון ראשון – קול אנושי, רק אם נבחר human
+if (wantHuman && preferredHumanVoice) {
+  const humanResult = await synthesizeHumanVoice({
+    text,
+    lang,
+    preferredHumanVoice,
+  });
 
-    const [response] = await ttsClient.synthesizeSpeech(request);
+   if (humanResult) {
+     console.log("kmiTts final response:", {
+       version: KMI_TTS_VERSION,
+       voice: humanResult.usedVoiceName,
+       engine: humanResult.usedEngine,
+       style: resolvedStyle,
+       rate,
+     });
 
-    res.set("Content-Type", "audio/mpeg");
-    return res.status(200).send(response.audioContent);
-  } catch (err) {
+     res.set("X-KMI-Voice", String(humanResult.usedVoiceName));
+     res.set("X-KMI-Engine", String(humanResult.usedEngine));
+     res.set("Content-Type", "audio/mpeg");
+
+     return res.status(200).send(humanResult.audioContent);
+   }
+   }
+
+// fallback רגיל
+const { audioContent, usedVoiceName, usedEngine } = await synthesizeWithVoiceFallback({
+  text,
+  lang,
+  voiceKey,
+  rate,
+  pitch,
+  style: resolvedStyle,
+});
+
+  console.log("kmiTts final voice:", {
+    voice: usedVoiceName,
+    engine: usedEngine || "classic-fallback",
+    style: resolvedStyle,
+    rate,
+  });
+
+  console.log("kmiTts final response:", {
+    version: KMI_TTS_VERSION,
+    voice: usedVoiceName,
+    engine: usedEngine || "classic-fallback",
+    style: resolvedStyle,
+    rate,
+  });
+
+  res.set("X-KMI-Voice", String(usedVoiceName));
+  res.set("X-KMI-Engine", String(usedEngine || "classic-fallback"));
+  res.set("Content-Type", "audio/mpeg");
+  return res.status(200).send(audioContent);
+    } catch (err) {
     console.error("kmiTts error:", err);
     return res.status(500).json({ error: "TTS failed", details: String(err) });
   }

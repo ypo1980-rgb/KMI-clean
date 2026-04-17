@@ -143,6 +143,40 @@ private fun uiDisplayName(topicTitle: String, rawItem: String): String {
         .trim()
 }
 
+private fun topicDisplayName(topicTitle: String, isEnglish: Boolean): String {
+    if (!isEnglish) return topicTitle
+
+    return when (topicTitle.trim()) {
+        "כללי" -> "General"
+        "עבודת ידיים" -> "Hand techniques"
+        "בעיטות" -> "Kicks"
+        "שחרורים" -> "Releases"
+        "הגנות" -> "Defenses"
+        "נפילות" -> "Breakfalls"
+        "קרקע" -> "Ground"
+        "כושר" -> "Fitness"
+        "קוואלר" -> "Kavaler"
+        else -> topicTitle
+    }
+}
+
+private fun exerciseDisplayNameForUi(topicTitle: String, rawItem: String, isEnglish: Boolean): String {
+    val base = uiDisplayName(topicTitle, rawItem)
+    if (!isEnglish) return base
+
+    return when (base.trim()) {
+        "גלגול לאחור צד ימין" -> "Backward roll right side"
+        "גלגול לאחור צד שמאל" -> "Backward roll left side"
+        "גלגול לפנים צד שמאל" -> "Forward roll left side"
+        "שילובי ידיים ורגליים" -> "Hand and leg combinations"
+        "בלימה לצד ימין" -> "Right-side breakfall"
+        "בלימה לצד שמאל" -> "Left-side breakfall"
+        "מכת גב בהצלפה" -> "Back strike with whip motion"
+        "מכת גב בהצלפה בסיבוב" -> "Spinning back strike"
+        else -> base
+    }
+}
+
 /* ------------------------------ ProgressMeter ------------------------------ */
 
 @Composable
@@ -225,8 +259,12 @@ fun ProgressMeter(
                 fontWeight = FontWeight.Bold,
                 color = txt
             )
+            val context = LocalContext.current
+            val languageManager = remember { AppLanguageManager(context) }
+            val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
             Text(
-                text = "$done מתוך $total",
+                text = if (isEnglish) "$done out of $total" else "$done מתוך $total",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -256,6 +294,9 @@ fun SummaryScreen(
     onOpenSettings: () -> Unit
 ) {
     val ctx = LocalContext.current
+    val languageManager = remember { AppLanguageManager(ctx) }
+    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
 
     val scroll = rememberScrollState()
     val focusManager = LocalFocusManager.current
@@ -351,7 +392,7 @@ fun SummaryScreen(
 
             masteredMap = computed
         } catch (e: Exception) {
-            loadError = e.message ?: "שגיאה בקריאת הנתונים"
+            loadError = e.message ?: tr("שגיאה בקריאת הנתונים", "Error reading data")
             masteredMap = emptyMap()
         }
     }
@@ -405,7 +446,7 @@ fun SummaryScreen(
     val sharePdf: (String?) -> Unit = { targetPackage ->
         runCatching {
             val dir = File(ctx.cacheDir, "pdfs").apply { mkdirs() }
-            val pdf = createSummaryPdf(dir, belt, itemsByTopic, masteredMap)
+            val pdf = createSummaryPdf(dir, belt, itemsByTopic, masteredMap, isEnglish = isEnglish)
             val uri = androidx.core.content.FileProvider.getUriForFile(
                 ctx, "${ctx.packageName}.fileprovider", pdf
             )
@@ -415,31 +456,46 @@ fun SummaryScreen(
                 addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 targetPackage?.let { setPackage(it) }
             }
-            ctx.startActivity(android.content.Intent.createChooser(intent, "שיתוף דו\"ח סיכום"))
+            ctx.startActivity(android.content.Intent.createChooser(intent, tr("שיתוף דו\"ח סיכום", "Share summary report")))
         }.onFailure {
             val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                 type = "text/plain"
-                putExtra(android.content.Intent.EXTRA_TEXT, "דו\"ח סיכום ${belt.heb}")
+                putExtra(
+                    android.content.Intent.EXTRA_TEXT,
+                    if (isEnglish) "Summary report ${belt.id}" else "דו\"ח סיכום ${belt.heb}"
+                )
                 targetPackage?.let { setPackage(it) }
             }
             runCatching {
-                ctx.startActivity(android.content.Intent.createChooser(intent, "שיתוף"))
+                ctx.startActivity(android.content.Intent.createChooser(intent, tr("שיתוף", "Share")))
             }
         }
     }
 
     Scaffold(
         topBar = {
-            val beltLabel = remember(belt) {
-                val h = belt.heb.trim()
-                if (h.startsWith("חגורה")) h else "חגורה $h"
+            val beltLabel = remember(belt, isEnglish) {
+                if (isEnglish) {
+                    when (belt) {
+                        Belt.WHITE -> "White Belt"
+                        Belt.YELLOW -> "Yellow Belt"
+                        Belt.ORANGE -> "Orange Belt"
+                        Belt.GREEN -> "Green Belt"
+                        Belt.BLUE -> "Blue Belt"
+                        Belt.BROWN -> "Brown Belt"
+                        Belt.BLACK -> "Black Belt"
+                    }
+                } else {
+                    val h = belt.heb.trim()
+                    if (h.startsWith("חגורה")) h else "חגורה $h"
+                }
             }
 
             val contextLang = LocalContext.current
             val langManager = remember { AppLanguageManager(contextLang) }
 
             il.kmi.app.ui.KmiTopBar(
-                title = "סיכום $beltLabel - ${overallPct}%",
+                title = if (isEnglish) "Summary $beltLabel - ${overallPct}%" else "סיכום $beltLabel - ${overallPct}%",
                 onShare = { sharePdf(null) },
                 onPickSearchResult = { key -> handlePickFromTopBar(key) },
                 onShareWhatsApp = { sharePdf("com.whatsapp") },
@@ -556,7 +612,7 @@ fun SummaryScreen(
                             Spacer(Modifier.width(8.dp))
 
                             Text(
-                                text = "חזרה למסך הנושאים",
+                                text = tr("חזרה למסך הנושאים", "Back to topics screen"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
@@ -575,7 +631,7 @@ fun SummaryScreen(
             val explanation = il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
                 val alt = canonical.substringAfter(":", canonical).trim()
                 il.kmi.app.domain.Explanations.get(b, alt)
-            }.ifBlank { "לא נמצא הסבר עבור \"$canonical\"." }
+            }.ifBlank { tr("לא נמצא הסבר עבור \"$canonical\".", "No explanation was found for \"$canonical\".") }
 
             val cleanFavId = cleanItem(t, canonical)
             val isFav = favorites.contains(cleanFavId)
@@ -583,7 +639,7 @@ fun SummaryScreen(
 
             il.kmi.app.ui.dialogs.ExerciseExplanationDialog(
                 title = canonical,
-                beltLabel = "(${b.heb})",
+                beltLabel = if (isEnglish) "(${b.id.replaceFirstChar { it.uppercase() }})" else "(${b.heb})",
                 explanation = explanation,
                 noteText = noteText,
                 isFavorite = isFav,
@@ -607,8 +663,8 @@ fun SummaryScreen(
                 onDismissRequest = { noteEditorFor = null },
                 title = {
                     Text(
-                        text = "עריכת הערה",
-                        textAlign = TextAlign.Right,
+                        text = tr("עריכת הערה", "Edit note"),
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                         modifier = Modifier.fillMaxWidth()
                     )
                 },
@@ -617,9 +673,9 @@ fun SummaryScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = ExerciseTitleFormatter.displayName(item).ifBlank { item },
+                            text = exerciseDisplayNameForUi("", item, isEnglish),
                             fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right,
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -629,7 +685,9 @@ fun SummaryScreen(
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 4,
                             maxLines = 8,
-                            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right)
+                            textStyle = LocalTextStyle.current.copy(
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                            )
                         )
                     }
                 },
@@ -639,12 +697,12 @@ fun SummaryScreen(
                             saveNote(item, noteDraft)
                             noteEditorFor = null
                         }
-                    ) { Text("שמור") }
+                    ) { Text(tr("שמור", "Save")) }
                 },
                 dismissButton = {
                     TextButton(
                         onClick = { noteEditorFor = null }
-                    ) { Text("ביטול") }
+                    ) { Text(tr("ביטול", "Cancel")) }
                 }
             )
         }
@@ -682,6 +740,20 @@ fun SummaryScreen(
                         Belt.BLACK  -> il.kmi.app.R.drawable.belt_black
                     }
 
+                    val beltLabel = if (isEnglish) {
+                        when (belt) {
+                            Belt.WHITE -> "White Belt"
+                            Belt.YELLOW -> "Yellow Belt"
+                            Belt.ORANGE -> "Orange Belt"
+                            Belt.GREEN -> "Green Belt"
+                            Belt.BLUE -> "Blue Belt"
+                            Belt.BROWN -> "Brown Belt"
+                            Belt.BLACK -> "Black Belt"
+                        }
+                    } else {
+                        belt.heb
+                    }
+
                     Surface(
                         shape = CircleShape,
                         color = Color.White.copy(alpha = 0.88f),
@@ -695,7 +767,7 @@ fun SummaryScreen(
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 painter = painterResource(id = beltRes),
-                                contentDescription = belt.heb,
+                                contentDescription = beltLabel,
                                 tint = Color.Unspecified,
                                 modifier = Modifier.size(30.dp)
                             )
@@ -726,7 +798,7 @@ fun SummaryScreen(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = "התקדמות",
+                                text = tr("התקדמות", "Progress"),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF263238)
@@ -737,7 +809,7 @@ fun SummaryScreen(
 
                 loadError?.let { err ->
                     Text(
-                        text = "שגיאה: $err",
+                        text = tr("שגיאה: $err", "Error: $err"),
                         color = Color(0xFFC62828),
                         modifier = Modifier.padding(8.dp)
                     )
@@ -746,13 +818,25 @@ fun SummaryScreen(
                 if (showProgress) {
                     Spacer(Modifier.height(8.dp))
 
-                    val beltLabel = remember(belt) {
-                        val h = belt.heb.trim()
-                        if (h.startsWith("חגורה")) h else "חגורה $h"
+                    val beltLabel = remember(belt, isEnglish) {
+                        if (isEnglish) {
+                            when (belt) {
+                                Belt.WHITE -> "White Belt"
+                                Belt.YELLOW -> "Yellow Belt"
+                                Belt.ORANGE -> "Orange Belt"
+                                Belt.GREEN -> "Green Belt"
+                                Belt.BLUE -> "Blue Belt"
+                                Belt.BROWN -> "Brown Belt"
+                                Belt.BLACK -> "Black Belt"
+                            }
+                        } else {
+                            val h = belt.heb.trim()
+                            if (h.startsWith("חגורה")) h else "חגורה $h"
+                        }
                     }
 
                     Text(
-                        text = "מד התקדמות – $beltLabel",
+                        text = tr("מד התקדמות – $beltLabel", "Progress meter - $beltLabel"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF535353),
@@ -787,7 +871,7 @@ fun SummaryScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Close,
-                                contentDescription = "סגור מד התקדמות",
+                                contentDescription = tr("סגור מד התקדמות", "Close progress meter"),
                                 tint = Color(0xFF444444)
                             )
                         }
@@ -810,7 +894,10 @@ fun SummaryScreen(
                             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                         ) {
                             Text(
-                                text = "לא נמצאו פריטים להצגה.\nבדוק שהחגורה/נושא קיימים ב-ContentRepo.",
+                                text = tr(
+                                    "לא נמצאו פריטים להצגה.\nבדוק שהחגורה/נושא קיימים ב-ContentRepo.",
+                                    "No items were found to display.\nCheck that the belt/topic exists in ContentRepo."
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(
@@ -880,10 +967,13 @@ fun SummaryScreen(
                                         Spacer(Modifier.width(8.dp))
 
                                         Text(
-                                            text = "$topicTitle – $pct%",
+                                            text = if (isEnglish)
+                                                "${topicDisplayName(topicTitle, true)} - $pct%"
+                                            else
+                                                "$topicTitle – $pct%",
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
-                                            textAlign = TextAlign.Right,
+                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                             modifier = Modifier.weight(1f),
                                             color = Color(0xFF263238)
                                         )
@@ -891,7 +981,7 @@ fun SummaryScreen(
 
                                     if (items.isEmpty()) {
                                         Text(
-                                            text = "אין פריטים בנושא הזה.",
+                                            text = tr("אין פריטים בנושא הזה.", "No items in this topic."),
                                             style = MaterialTheme.typography.bodyMedium,
                                             textAlign = TextAlign.Right,
                                             modifier = Modifier.fillMaxWidth(),
@@ -956,22 +1046,22 @@ fun SummaryScreen(
 
                                                 Column(
                                                     modifier = Modifier.weight(1f),
-                                                    horizontalAlignment = Alignment.End
+                                                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                                 ) {
                                                     Text(
-                                                        text = uiDisplayName(topicTitle, itemRaw),
+                                                        text = exerciseDisplayNameForUi(topicTitle, itemRaw, isEnglish),
                                                         style = MaterialTheme.typography.bodyMedium,
-                                                        textAlign = TextAlign.Right,
+                                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                                         modifier = Modifier.fillMaxWidth(),
                                                         color = Color(0xFF1B1B1B)
                                                     )
 
                                                     if (itemHasNote) {
                                                         Text(
-                                                            text = "יש הערה שמורה",
+                                                            text = tr("יש הערה שמורה", "Saved note exists"),
                                                             style = MaterialTheme.typography.labelSmall,
                                                             color = MaterialTheme.colorScheme.primary,
-                                                            textAlign = TextAlign.Right,
+                                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                                             modifier = Modifier.fillMaxWidth()
                                                         )
                                                     }
@@ -1026,7 +1116,7 @@ fun SummaryScreen(
                                                         ) {
                                                             Icon(
                                                                 imageVector = Icons.Filled.Info,
-                                                                contentDescription = "אפשרויות",
+                                                                contentDescription = tr("אפשרויות", "Options"),
                                                                 tint = Color(0xFF455A64),
                                                                 modifier = Modifier
                                                                     .size(18.dp)
@@ -1059,7 +1149,13 @@ fun SummaryScreen(
                                                     ) {
 
                                                         DropdownMenuItem(
-                                                            text = { Text("מידע") },
+                                                            text = {
+                                                                Text(
+                                                                    tr("מידע", "Info"),
+                                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                                    modifier = Modifier.fillMaxWidth()
+                                                                )
+                                                            },
                                                             onClick = {
                                                                 menuExpanded = false
                                                                 explainFromSearch = Triple(belt, topicTitle, itemRaw)
@@ -1070,9 +1166,11 @@ fun SummaryScreen(
                                                             text = {
                                                                 Text(
                                                                     if (isFav)
-                                                                        "הסר ממועדפים"
+                                                                        tr("הסר ממועדפים", "Remove from favorites")
                                                                     else
-                                                                        "הוסף למועדפים"
+                                                                        tr("הוסף למועדפים", "Add to favorites"),
+                                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                                    modifier = Modifier.fillMaxWidth()
                                                                 )
                                                             },
                                                             onClick = {
@@ -1082,14 +1180,19 @@ fun SummaryScreen(
                                                         )
 
                                                         DropdownMenuItem(
-                                                            text = { Text("הוסף הערה למתרגל") },
+                                                            text = {
+                                                                Text(
+                                                                    tr("הוסף הערה למתרגל", "Add note for trainee"),
+                                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                                    modifier = Modifier.fillMaxWidth()
+                                                                )
+                                                            },
                                                             onClick = {
                                                                 menuExpanded = false
                                                                 noteEditorFor = cleanFavId
                                                                 noteDraft = loadNote(cleanFavId)
                                                             }
                                                         )
-
                                                     }
                                                 }
                                             }
@@ -1113,7 +1216,8 @@ private fun createSummaryPdf(
     dir: File,
     belt: Belt,
     itemsByTopic: Map<String, List<String>>,
-    masteredMap: Map<Pair<String, String>, MarkState>
+    masteredMap: Map<Pair<String, String>, MarkState>,
+    isEnglish: Boolean = false
 ): File {
     val document = PdfDocument()
     val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
@@ -1127,13 +1231,19 @@ private fun createSummaryPdf(
     }
 
     var y = 50f
-    canvas.drawText("דו״ח סיכום – ${belt.heb}", 550f, y, paint)
+    canvas.drawText(
+        if (isEnglish) "Summary report - ${belt.id.replaceFirstChar { it.uppercase() }}" else "דו״ח סיכום – ${belt.heb}",
+        550f,
+        y,
+        paint
+    )
     y += 30f
 
     itemsByTopic.forEach { (topicTitle, items) ->
         paint.color = android.graphics.Color.BLACK
         paint.textSize = 16f
-        canvas.drawText("נושא: $topicTitle", 550f, y, paint)
+        val topicLabel = if (isEnglish) topicDisplayName(topicTitle, true) else topicTitle
+        canvas.drawText(if (isEnglish) "Topic: $topicLabel" else "נושא: $topicTitle", 550f, y, paint)
         y += 22f
 
         paint.textSize = 13.5f
@@ -1172,7 +1282,7 @@ private fun createSummaryPdf(
 
             paint.color = android.graphics.Color.BLACK
             paint.textAlign = android.graphics.Paint.Align.RIGHT
-            val display = uiDisplayName(topicTitle, itemRaw)
+            val display = exerciseDisplayNameForUi(topicTitle, itemRaw, isEnglish)
             canvas.drawText(display, 530f, y, paint)
 
             val markPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {

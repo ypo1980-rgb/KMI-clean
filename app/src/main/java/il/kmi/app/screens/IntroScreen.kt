@@ -34,6 +34,11 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.Belt
 import android.content.SharedPreferences // ✅ ADD
 import android.util.Log // ✅ ADD
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.draw.clip
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
@@ -333,32 +338,61 @@ fun IntroScreen(onContinue: () -> Unit) {
         }
     }
 
+    val accent = Color(0xFF16C47F)
+    val bgTop = Color(0xFF071019)
+    val bgBottom = Color(0xFF0E1A26)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.linearGradient(
+                brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF512DA8),
-                        Color(0xFF673AB7),
-                        Color(0xFF2196F3),
-                        Color(0xFF03A9F4)
-                    ),
-                    start = Offset(gradientShift, 0f),
-                    end = Offset(0f, gradientShift)
+                        bgTop,
+                        bgBottom,
+                        Color(0xFF101F2E)
+                    )
                 )
             )
             .padding(horizontal = 24.dp, vertical = 16.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .matchParentSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            accent.copy(alpha = 0.16f),
+                            Color.Transparent
+                        ),
+                        radius = 1200f
+                    )
+                )
         ) {
-            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                accent.copy(alpha = 0.16f),
+                                Color.Transparent
+                            ),
+                            radius = 1200f
+                        )
+                    )
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Spacer(Modifier.height(8.dp))
+            }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
@@ -423,38 +457,90 @@ fun IntroScreen(onContinue: () -> Unit) {
                 )
             }
 
-            Button(
-                onClick = onContinue,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                contentPadding = PaddingValues()
-            ) {
-                Box(
+                val buttonTransition = rememberInfiniteTransition(label = "introButtonAnim")
+                val bubbleOffset by buttonTransition.animateFloat(
+                    initialValue = -70f,
+                    targetValue = 70f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 2200, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "introBubbleOffset"
+                )
+
+                Button(
+                    onClick = onContinue,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(Color(0xFF2196F3), Color(0xFF673AB7))
-                            ),
-                            shape = MaterialTheme.shapes.medium
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (isEnglish) {
-                            "Continue to Login / Sign Up"
-                        } else {
-                            "מעבר למסך כניסה / רישום"
-                        },
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        .fillMaxWidth()
+                        .height(58.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(28.dp),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 10.dp,
+                        pressedElevation = 14.dp
                     )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0xFF1E88E5),
+                                        Color(0xFF5E35B1)
+                                    )
+                                )
+                            )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .offset(x = bubbleOffset.dp)
+                                .size(140.dp)
+                                .background(
+                                    Brush.radialGradient(
+                                        listOf(
+                                            Color.White.copy(alpha = 0.42f),
+                                            Color.Transparent
+                                        )
+                                    ),
+                                    shape = CircleShape
+                                )
+                        )
+
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Star,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+
+                                Spacer(Modifier.width(8.dp))
+
+                                Text(
+                                    text = if (isEnglish) {
+                                        "Continue to Login / Sign Up"
+                                    } else {
+                                        "מעבר למסך כניסה / רישום"
+                                    },
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                        }
+                    }
                 }
             }
-        }
     }
 }
 }

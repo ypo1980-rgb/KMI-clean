@@ -45,12 +45,11 @@ import il.kmi.app.subscription.KmiAccess   // 👈 מצב גישה + ניסיו�
 import androidx.compose.ui.graphics.vector.ImageVector
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.app.ui.rememberClickSound
-import il.kmi.app.ui.assistant.AiAssistantDialog      // 👈 העוזר הקולי
+import il.kmi.app.ui.assistant.ui.AiAssistantDialog      // 👈 העוזר הקולי
 import androidx.compose.foundation.shape.CircleShape
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.ui.ext.color
 import android.app.Activity
-import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -343,7 +342,7 @@ fun TopicsScreen(
     onOpenHome: () -> Unit,
     onOpenExercise: (String) -> Unit,
     onOpenWeakPoints: () -> Unit = {},   // ✅ חדש: לא מחובר עדיין (no-op)
-
+    onRandomPracticeByTopic: (Belt, String) -> Unit,
     // ✅ חשוב: בלי default כדי שלא “יתקע” אם שכחת להעביר מה-NavGraph
     onPracticeByTopics: (PracticeByTopicsSelection) -> Unit
 ) {
@@ -552,9 +551,15 @@ fun TopicsScreen(
                     clickSound()
                     haptic(true)
 
-                    // ✅ חשוב: קודם סוגרים, ואז מזניקים ניווט (כדי שהדיאלוג לא יישאר מעל המסך)
                     showPracticeMenu = false
                     onPracticeByTopics(selection)
+                },
+                onPracticeByTopicSelected = { beltArg, topicArg ->
+                    clickSound()
+                    haptic(true)
+
+                    showPracticeMenu = false
+                    onRandomPracticeByTopic(beltArg, topicArg)
                 }
             )
         }

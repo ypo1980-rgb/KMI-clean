@@ -58,6 +58,8 @@ import il.kmi.app.attendance.data.GroupMember
 import il.kmi.app.ui.KmiTopBar
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 import java.util.Locale
@@ -82,7 +84,8 @@ data class TraineeProfile(
     val age: Int,
     val attendancePct: Int = 0,
     val branch: String = "",
-    val groupKey: String = ""
+    val groupKey: String = "",
+    val beltAwardDates: Map<String, String> = emptyMap()
 )
 
 data class GroupStatsUi(
@@ -155,7 +158,8 @@ fun CoachTraineesScreen(
     branch: String = "",
     groupKey: String = "",
     onBack: () -> Unit = {},
-    onOpenDrawer: () -> Unit = { il.kmi.app.ui.DrawerBridge.open() }
+    onOpenDrawer: () -> Unit = { il.kmi.app.ui.DrawerBridge.open() },
+    onOpenHome: () -> Unit = onBack
 ) {
     val ctx = LocalContext.current
     val sp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
@@ -442,7 +446,14 @@ fun CoachTraineesScreen(
                 }.getOrDefault(0)
             }
 
-            val userInfoByName = mutableMapOf<String, Triple<Int, String, String>>() // nameKey -> (age, beltHeb, seniority)
+            data class FireUserInfo(
+                val age: Int,
+                val beltHeb: String,
+                val seniority: String,
+                val beltAwardDates: Map<String, String>
+            )
+
+            val userInfoByName = mutableMapOf<String, FireUserInfo>() // nameKey -> full user info
 
             val userDocs = runCatching {
                 // מנסה להביא לפי groups+role (אצלך groups[] קיים)
@@ -470,7 +481,17 @@ fun CoachTraineesScreen(
                         ?: doc.getString("yearsTraining")
                         ?: ""
 
-                userInfoByName[n] = Triple(age, beltHeb(beltRaw), seniority)
+                val rawAwardDates = doc.get("beltAwardDates") as? Map<*, *> ?: emptyMap<Any, Any>()
+                val beltAwardDates = rawAwardDates.entries.associate { entry ->
+                    entry.key.toString() to entry.value.toString()
+                }
+
+                userInfoByName[n] = FireUserInfo(
+                    age = age,
+                    beltHeb = beltHeb(beltRaw),
+                    seniority = seniority,
+                    beltAwardDates = beltAwardDates
+                )
             }
 
             traineeProfiles = members.map { m ->
@@ -481,9 +502,10 @@ fun CoachTraineesScreen(
 
                 val key = m.displayName.normKey()
                 val info = userInfoByName[key]
-                val age = info?.first ?: 0
-                val belt = info?.second.orEmpty()
-                val seniority = info?.third.orEmpty()
+                val age = info?.age ?: 0
+                val belt = info?.beltHeb.orEmpty()
+                val seniority = info?.seniority.orEmpty()
+                val beltAwardDates = info?.beltAwardDates ?: emptyMap()
 
                 TraineeProfile(
                     id = m.id.toString(),
@@ -493,7 +515,8 @@ fun CoachTraineesScreen(
                     age = age,
                     attendancePct = pct,
                     branch = branchDbKey,
-                    groupKey = groupName
+                    groupKey = groupName,
+                    beltAwardDates = beltAwardDates
                 )
             }
         }
@@ -510,6 +533,8 @@ fun CoachTraineesScreen(
                 KmiTopBar(
                     title = "רשימת המתאמנים",
                     onOpenDrawer = onOpenDrawer,
+                    onHome = onOpenHome,
+                    showTopHome = false,
                     showRoleStatus = false,
                     lockSearch = true,
                     showBottomActions = true,
@@ -566,20 +591,67 @@ fun CoachTraineesScreen(
     val selected: TraineeProfile? = uiProfiles.firstOrNull { it.id == selectedId }
         ?: uiProfiles.firstOrNull()
 
+    // הערות מאמן לפי מתאמן
+    val coachNotes = remember { mutableStateMapOf<String, String>() }
+
+    // תאריכי קבלת חגורות לפי מתאמן
+    val beltAwardDatesState = remember { mutableStateMapOf<String, Map<String, String>>() }
+
+    var showStatsSheet by remember { mutableStateOf(false) }
+
+    val groupStats = remember(uiProfiles) {
+        buildGroupStats(uiProfiles, uiProfiles)
+    }
+
+    val screenScope = rememberCoroutineScope()
+
+    suspend fun saveBeltAwardDatesForSelected(
+        selectedProfile: TraineeProfile,
+        dates: Map<String, String>
+    ) {
+        val cleanedDates = dates
+            .mapValues { it.value.trim() }
+            .filterValues { it.isNotBlank() }
+
+        val userDocs = Firebase.firestore.collection("users")
+            .whereEqualTo("role", "trainee")
+            .whereIn(
+                "fullName",
+                listOf(selectedProfile.fullName, selectedProfile.fullName.trim())
+            )
+            .get()
+            .await()
+
+        val targetDoc = userDocs.documents.firstOrNull()
+            ?: userDocs.documents.firstOrNull { doc ->
+                val n1 = doc.getString("fullName")?.trim()
+                val n2 = doc.getString("name")?.trim()
+                val n3 = doc.getString("displayName")?.trim()
+                n1 == selectedProfile.fullName.trim() ||
+                        n2 == selectedProfile.fullName.trim() ||
+                        n3 == selectedProfile.fullName.trim()
+            }
+
+        if (targetDoc != null) {
+            Firebase.firestore.collection("users")
+                .document(targetDoc.id)
+                .update("beltAwardDates", cleanedDates)
+                .await()
+        }
+    }
+
     LaunchedEffect(uiProfiles) {
         if (selectedId == null && uiProfiles.isNotEmpty()) {
             selectedId = uiProfiles.first().id
         } else if (selectedId != null && uiProfiles.isNotEmpty() && uiProfiles.none { it.id == selectedId }) {
             selectedId = uiProfiles.firstOrNull()?.id
         }
-    }
 
-    // הערות מאמן לפי מתאמן
-    val coachNotes = remember { mutableStateMapOf<String, String>() }
-    var showStatsSheet by remember { mutableStateOf(false) }
-
-    val groupStats = remember(uiProfiles) {
-        buildGroupStats(uiProfiles, uiProfiles)
+        uiProfiles.forEach { trainee ->
+            if (beltAwardDatesState[trainee.id] == null) {
+                beltAwardDatesState[trainee.id] = trainee.beltAwardDates
+            }
+        }
     }
 
     Scaffold(
@@ -590,6 +662,8 @@ fun CoachTraineesScreen(
             KmiTopBar(
                 title = if (showStatsSheet) "סטטיסטיקת קבוצה" else "רשימת המתאמנים",
                 onOpenDrawer = onOpenDrawer,
+                onHome = onOpenHome,
+                showTopHome = false,
                 showRoleStatus = false,
                 lockSearch = true,
                 showBottomActions = true,
@@ -857,10 +931,207 @@ fun CoachTraineesScreen(
                                 "קבוצה",
                                 selected.groupKey.ifBlank { "—" }
                             )
-                            LabeledField(
-                                "אחוז נוכחות (60 ימים אחרונים)",
-                                if (selected.attendancePct > 0) "${selected.attendancePct}%" else "—"
-                            )
+                                    LabeledField(
+                                        "אחוז נוכחות (60 ימים אחרונים)",
+                                        if (selected.attendancePct > 0) "${selected.attendancePct}%" else "—"
+                                    )
+
+                                    Divider()
+
+                                    Surface(
+                                        color = Color.Transparent,
+                                        shape = RoundedCornerShape(24.dp),
+                                        shadowElevation = 6.dp,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .background(
+                                                    brush = Brush.verticalGradient(
+                                                        colors = listOf(
+                                                            Color(0xFFF8FAFF),
+                                                            Color(0xFFF3F7FF),
+                                                            Color(0xFFFFFFFF)
+                                                        )
+                                                    ),
+                                                    shape = RoundedCornerShape(24.dp)
+                                                )
+                                                .border(
+                                                    width = 1.dp,
+                                                    color = Color(0xFFD8E6FF),
+                                                    shape = RoundedCornerShape(24.dp)
+                                                )
+                                                .padding(horizontal = 14.dp, vertical = 14.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Text(
+                                                text = "תאריכי קבלת חגורות",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color(0xFF1E293B)
+                                            )
+
+                                            Text(
+                                                text = "היסטוריית דרגות המתאמן",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF64748B)
+                                            )
+
+                                            val beltOrder = listOf(
+                                                "צהובה",
+                                                "כתומה",
+                                                "ירוקה",
+                                                "כחולה",
+                                                "חומה",
+                                                "שחורה"
+                                            )
+
+                                            val beltAccentMap = mapOf(
+                                                "צהובה" to Color(0xFFFACC15),
+                                                "כתומה" to Color(0xFFF97316),
+                                                "ירוקה" to Color(0xFF22C55E),
+                                                "כחולה" to Color(0xFF3B82F6),
+                                                "חומה" to Color(0xFF8B5A2B),
+                                                "שחורה" to Color(0xFF111111)
+                                            )
+
+                                            val selectedDates = beltAwardDatesState[selected.id] ?: emptyMap()
+
+                                            beltOrder.forEach { beltName ->
+                                                val beltAccent = beltAccentMap[beltName] ?: Color(0xFF6366F1)
+
+                                                Surface(
+                                                    color = Color.White,
+                                                    shape = RoundedCornerShape(20.dp),
+                                                    shadowElevation = 3.dp,
+                                                    border = BorderStroke(
+                                                        1.dp,
+                                                        beltAccent.copy(alpha = 0.18f)
+                                                    ),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(10.dp)
+                                                                    .clip(CircleShape)
+                                                                    .background(beltAccent)
+                                                            )
+
+                                                            Spacer(Modifier.width(8.dp))
+
+                                                            Text(
+                                                                text = "חגורה $beltName",
+                                                                style = MaterialTheme.typography.titleSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color(0xFF1F2937)
+                                                            )
+                                                        }
+
+                                                        OutlinedTextField(
+                                                            value = selectedDates[beltName].orEmpty(),
+                                                            onValueChange = { newValue ->
+                                                                val current = beltAwardDatesState[selected.id].orEmpty().toMutableMap()
+                                                                current[beltName] = newValue
+                                                                beltAwardDatesState[selected.id] = current
+                                                            },
+                                                            label = { Text("תאריך קבלה") },
+                                                            placeholder = { Text("YYYY-MM-DD") },
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            singleLine = true,
+                                                            shape = RoundedCornerShape(16.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            var isSavingBeltDates by remember(selected.id) { mutableStateOf(false) }
+                                            var beltDatesSaveMessage by remember(selected.id) { mutableStateOf<String?>(null) }
+
+                                            Surface(
+                                                onClick = {
+                                                    val selectedProfile = selected
+                                                    if (selectedProfile != null && !isSavingBeltDates) {
+                                                        val datesToSave = beltAwardDatesState[selectedProfile.id].orEmpty()
+                                                        screenScope.launch {
+                                                            isSavingBeltDates = true
+                                                            beltDatesSaveMessage = null
+
+                                                            runCatching {
+                                                                saveBeltAwardDatesForSelected(
+                                                                    selectedProfile = selectedProfile,
+                                                                    dates = datesToSave
+                                                                )
+                                                            }.onSuccess {
+                                                                beltDatesSaveMessage = "תאריכי החגורות נשמרו"
+                                                            }.onFailure {
+                                                                beltDatesSaveMessage = "שמירת תאריכי החגורות נכשלה"
+                                                            }
+
+                                                            isSavingBeltDates = false
+                                                        }
+                                                    }
+                                                },
+                                                shape = RoundedCornerShape(18.dp),
+                                                color = Color.Transparent,
+                                                shadowElevation = 6.dp,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(
+                                                            brush = Brush.horizontalGradient(
+                                                                colors = listOf(
+                                                                    Color(0xFF7C3AED),
+                                                                    Color(0xFF6366F1),
+                                                                    Color(0xFF0EA5E9)
+                                                                )
+                                                            ),
+                                                            shape = RoundedCornerShape(18.dp)
+                                                        )
+                                                        .padding(vertical = 14.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = if (isSavingBeltDates) "שומר..." else "שמור תאריכי חגורות",
+                                                        style = MaterialTheme.typography.titleSmall,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = Color.White
+                                                    )
+                                                }
+                                            }
+
+                                            beltDatesSaveMessage?.let { msg ->
+                                                Surface(
+                                                    color = if (msg.contains("נשמרו")) {
+                                                        Color(0xFFDCFCE7)
+                                                    } else {
+                                                        Color(0xFFFEE2E2)
+                                                    },
+                                                    shape = RoundedCornerShape(14.dp),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text(
+                                                        text = msg,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (msg.contains("נשמרו")) Color(0xFF166534) else Color(0xFF991B1B),
+                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
 
                                     OutlinedTextField(
                                         value = coachNotes[selected.id] ?: "",

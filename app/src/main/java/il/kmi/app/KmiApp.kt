@@ -7,6 +7,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import il.kmi.app.ui.assistant.exercise.AssistantExerciseExplanationKnowledge
 import java.lang.ref.WeakReference
 
 class KmiApp : Application() {
@@ -36,7 +37,7 @@ class KmiApp : Application() {
         runCatching {
             il.kmi.app.catalog.ExerciseHtmlProvider.setResolver { r ->
                 val q = "תן בבקשה הסבר על ${r.itemTitle}"
-                val ans = il.kmi.app.ui.assistant.AssistantExerciseExplanationKnowledge.answer(
+                val ans = AssistantExerciseExplanationKnowledge.answer(
                     question = q,
                     preferredBelt = r.belt
                 ) ?: return@setResolver null

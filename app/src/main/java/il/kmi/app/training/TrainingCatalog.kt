@@ -169,6 +169,14 @@ object TrainingCatalog {
             if (v != null && v > 0) return v
         }
 
+        val branchCoordinates = mapOf(
+
+            "נתניה – סוקולוב" to Pair(32.1750, 34.9070),
+            "נתניה – אופק" to Pair(32.1795, 34.9105),
+            "נתניה – נורדאו" to Pair(32.3215, 34.8532)
+
+        )
+
         // 2) נסה לגזור לפי end (אם קיים) מול td.cal
         val endAny = runCatching {
             val f = cls.getDeclaredField("end").apply { isAccessible = true }

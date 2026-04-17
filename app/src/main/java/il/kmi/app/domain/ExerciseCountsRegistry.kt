@@ -65,7 +65,15 @@ object ExerciseCountsRegistry {
                         HardSectionsCatalog.defenseCount("kicks_hard", "knee")
                 ),
         "הגנות מסכין" to HardSectionsCatalog.defenseCount("knife_hard", "all"),
+
+        "הגנות עם רובה נגד דקירות סכין" to
+                HardSectionsCatalog.defenseCount("knife_rifle_hard", "all"),
+
         "הגנות מאיום אקדח" to HardSectionsCatalog.defenseCount("gun_hard", "all"),
+
+        "הגנות נגד מספר תוקפים" to
+                HardSectionsCatalog.defenseCount("multiple_attackers_hard", "all"),
+
         "הגנות נגד מקל" to HardSectionsCatalog.defenseCount("stick_hard", "all"),
     )
 

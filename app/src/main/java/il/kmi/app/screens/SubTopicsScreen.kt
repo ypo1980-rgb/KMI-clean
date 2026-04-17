@@ -91,7 +91,11 @@ private fun hardDisplayTitleFallback(raw: String): String {
         "releases_hugs_neck" -> "חביקות צוואר"
         "releases_hugs_arm" -> "חביקות זרוע"
         "knife_defense" -> "הגנות מסכין"
+        "knife_rifle_defense" -> "הגנות עם רובה נגד דקירות סכין"
+        "knife_defense_rifle_against_knife_stabs" -> "הגנות עם רובה נגד דקירות סכין"
         "gun_threat_defense" -> "הגנות מאיום אקדח"
+        "multiple_attackers_defense" -> "הגנות נגד מספר תוקפים"
+        "multiple_attackers_main" -> "הגנות נגד מספר תוקפים"
         "stick_defense" -> "הגנות נגד מקל"
         "kicks_hard" -> "הגנות נגד בעיטות"
         "kicks_straight_groin" -> "הגנות נגד בעיטות ישרות / למפשעה"
@@ -130,6 +134,10 @@ private fun normalizeHardNavTopic(raw: String): String {
                 t.contains("חביקות צואר") ||
                 t.contains("חביקות זרוע") ->
             "releases_hugs"
+
+        t == "הגנות עם רובה נגד דקירות סכין" -> "knife_rifle_defense"
+        t == "הגנות נגד מספר תוקפים" -> "multiple_attackers_defense"
+        t == "הגנות נגד 2 תוקפים" -> "multiple_attackers_defense"
 
         else -> t
     }
@@ -345,7 +353,21 @@ fun SubTopicsScreen(
 
     // שולפים את תתי־הנושאים הרגילים רק אם זה לא hard flow
     val subs: List<String> = remember(belt, topicDecoded, isHardFlow) {
+        Log.e(
+            "KMI_DEFENSE_DEBUG",
+            "topic=$topicDecoded belt=${belt.id} hardFlow=$isHardFlow"
+        )
+
         if (isHardFlow) return@remember emptyList()
+
+        val forcedDefenseSubs = if (belt == Belt.BLACK && topicDecoded.trim() == "הגנות") {
+            listOf(
+                "הגנות עם רובה נגד דקירות סכין",
+                "הגנות נגד מספר תוקפים"
+            )
+        } else {
+            emptyList()
+        }
 
         val fromShared = runCatching {
             AppSubTopicRegistry.getSubTopicsFor(belt, topicDecoded)
@@ -354,9 +376,17 @@ fun SubTopicsScreen(
                 .distinct()
         }.getOrElse { emptyList() }
 
-        if (fromShared.isNotEmpty()) {
-            Log.d("KMI-SubTopics", "fromShared: belt=${belt.id}, topic='$topicDecoded', subs=${fromShared.size}")
-            return@remember fromShared
+        if (fromShared.isNotEmpty() || forcedDefenseSubs.isNotEmpty()) {
+            val merged = (fromShared + forcedDefenseSubs)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+            Log.d(
+                "KMI-SubTopics",
+                "fromShared+forced: belt=${belt.id}, topic='$topicDecoded', subs=${merged.size}, values=$merged"
+            )
+            return@remember merged
         }
 
         val fromRepo = runCatching {
@@ -366,8 +396,16 @@ fun SubTopicsScreen(
                 .distinct()
         }.getOrElse { emptyList() }
 
-        Log.d("KMI-SubTopics", "fromRepo: belt=${belt.id}, topic='$topicDecoded', subs=${fromRepo.size}")
-        fromRepo
+        val merged = (fromRepo + forcedDefenseSubs)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        Log.d(
+            "KMI-SubTopics",
+            "fromRepo+forced: belt=${belt.id}, topic='$topicDecoded', subs=${merged.size}, values=$merged"
+        )
+        merged
     }
 
     val realSubs: List<String> = remember(subs, topicDecoded) {
@@ -587,15 +625,38 @@ fun SubTopicsScreen(
 
                         val itemCount by remember(belt, topicDecoded, subTitle) {
                             mutableStateOf(
-                                AppSubTopicRegistry
-                                    .getItemsFor(belt, topicDecoded, subTitle)
-                                    .takeIf { it.isNotEmpty() }
-                                    ?.size
-                                    ?: ContentRepo.listItemTitles(
-                                        belt = belt,
-                                        topicTitle = topicDecoded,
-                                        subTopicTitle = subTitle
-                                    ).size
+                                when {
+                                    belt == Belt.BLACK &&
+                                            topicDecoded.trim() == "הגנות" &&
+                                            subTitle == "הגנות עם רובה נגד דקירות סכין" -> {
+                                        HardSectionsCatalog.subjectSubSectionItemsFor(
+                                            subjectId = "knife_defense",
+                                            subSectionId = "knife_defense_rifle_against_knife_stabs",
+                                            belt = belt
+                                        ).size
+                                    }
+
+                                    belt == Belt.BLACK &&
+                                            topicDecoded.trim() == "הגנות" &&
+                                            subTitle == "הגנות נגד מספר תוקפים" -> {
+                                        HardSectionsCatalog.subjectItemsFor(
+                                            subjectId = "multiple_attackers_defense",
+                                            belt = belt
+                                        ).size
+                                    }
+
+                                    else -> {
+                                        AppSubTopicRegistry
+                                            .getItemsFor(belt, topicDecoded, subTitle)
+                                            .takeIf { it.isNotEmpty() }
+                                            ?.size
+                                            ?: ContentRepo.listItemTitles(
+                                                belt = belt,
+                                                topicTitle = topicDecoded,
+                                                subTopicTitle = subTitle
+                                            ).size
+                                    }
+                                }
                             )
                         }
 
@@ -1047,11 +1108,14 @@ private fun HardExerciseLegacyRow(
     val langManager = remember(context) { AppLanguageManager(context) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
+    var isFavorite by remember(itemName) {
+        mutableStateOf(il.kmi.app.favorites.FavoritesStore.isFavorite(itemName))
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onOpenExercise(itemName) },
+            .clip(RoundedCornerShape(16.dp)),
         color = Color.White,
         tonalElevation = 1.dp,
         shadowElevation = 1.dp
@@ -1066,12 +1130,20 @@ private fun HardExerciseLegacyRow(
                     .padding(start = 10.dp, top = 10.dp, end = 0.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.StarBorder,
-                    contentDescription = "מועדפים",
-                    tint = Color(0xFF90A4AE),
-                    modifier = Modifier.size(20.dp)
-                )
+                IconButton(
+                    onClick = {
+                        il.kmi.app.favorites.FavoritesStore.toggle(itemName)
+                        isFavorite = !isFavorite
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                        contentDescription = "מועדפים",
+                        tint = if (isFavorite) Color(0xFFFFC107) else Color(0xFF90A4AE),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
                 Spacer(Modifier.width(10.dp))
 
@@ -1087,6 +1159,7 @@ private fun HardExerciseLegacyRow(
                         modifier = Modifier
                             .weight(1f)
                             .padding(start = 18.dp)
+                            .clickable { onOpenExercise(itemName) }
                     )
                 }
 

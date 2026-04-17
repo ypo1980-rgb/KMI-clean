@@ -251,6 +251,8 @@ fun FloatingQuickMenu(
     onExpandedChange: (Boolean) -> Unit,
     triggerMode: QuickMenuTriggerMode = QuickMenuTriggerMode.Fab,
     includePractice: Boolean = true,
+    includeAllLists: Boolean = true,
+    includeSummary: Boolean = true,
     accentColorOverride: Color? = null,
     onWeakPoints: () -> Unit,
     onAllLists: () -> Unit,
@@ -273,11 +275,19 @@ fun FloatingQuickMenu(
 
     val items = buildList {
         add(Triple(tr("נקודות תורפה", "Weak Points"), Icons.Filled.Warning, onWeakPoints))
-        add(Triple(tr("כל הרשימות", "All Lists"), Icons.Filled.FormatListBulleted, onAllLists))
+
+        if (includeAllLists) {
+            add(Triple(tr("כל הרשימות", "All Lists"), Icons.Filled.FormatListBulleted, onAllLists))
+        }
+
         if (includePractice) {
             add(Triple(tr("תרגול", "Practice"), Icons.Filled.SportsMma, onPractice))
         }
-        add(Triple(tr("מסך סיכום", "Summary"), Icons.Filled.ReceiptLong, onSummary))
+
+        if (includeSummary) {
+            add(Triple(tr("מסך סיכום", "Summary"), Icons.Filled.ReceiptLong, onSummary))
+        }
+
         add(Triple(tr("עוזר קולי", "Voice Assistant"), Icons.Filled.Mic, onVoice))
     }
 
@@ -360,41 +370,22 @@ fun FloatingQuickMenu(
         }
 
         val shouldShowTrigger =
-            !menuVisibilityState.currentState && !menuVisibilityState.targetState
+            triggerMode == QuickMenuTriggerMode.Fab &&
+                    !menuVisibilityState.currentState &&
+                    !menuVisibilityState.targetState
 
         if (shouldShowTrigger) {
             Box(
-                modifier = when (triggerMode) {
-                    QuickMenuTriggerMode.BottomBar -> Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(60.dp)
-                    QuickMenuTriggerMode.Fab -> Modifier.align(
-                        if (isEnglish) Alignment.BottomEnd else Alignment.BottomStart
-                    )
-                                              },
-                contentAlignment = when (triggerMode) {
-                    QuickMenuTriggerMode.BottomBar -> Alignment.Center
-                    QuickMenuTriggerMode.Fab -> Alignment.Center
-                }
+                modifier = Modifier.align(
+                    if (isEnglish) Alignment.BottomEnd else Alignment.BottomStart
+                ),
+                contentAlignment = Alignment.Center
             ) {
-                when (triggerMode) {
-                    QuickMenuTriggerMode.Fab -> {
-                        ModernGlowFab(
-                            accentColor = accentColor,
-                            expanded = expanded,
-                            onClick = { onExpandedChange(true) }
-                        )
-                    }
-
-                    QuickMenuTriggerMode.BottomBar -> {
-                        BottomQuickMenuButton(
-                            belt = belt,
-                            isEnglish = isEnglish,
-                            onClick = { onExpandedChange(true) }
-                        )
-                    }
-                }
+                ModernGlowFab(
+                    accentColor = accentColor,
+                    expanded = expanded,
+                    onClick = { onExpandedChange(true) }
+                )
             }
         }
     }

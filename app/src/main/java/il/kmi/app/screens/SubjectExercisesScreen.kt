@@ -5,10 +5,13 @@ package il.kmi.app.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
@@ -38,9 +41,9 @@ import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.SubjectTopic as SharedSubjectTopic
 import il.kmi.shared.domain.content.SubjectItemsResolver
 import androidx.compose.ui.unit.LayoutDirection
+import il.kmi.app.favorites.FavoritesStore
 import il.kmi.shared.domain.content.HardSectionsCatalog
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
-
 private fun toSharedBeltOrNull(rawId: String?): Belt? {
     val s = rawId?.trim().orEmpty()
     if (s.isBlank()) return null
@@ -457,30 +460,14 @@ fun SubjectExercisesScreen(
         }
     }
 
-    // ----------------- ⭐ Favorites + 🕒 Recents (Persisted) -----------------
+    // ----------------- ⭐ Favorites + 🕒 Recents -----------------
     val prefs = remember(ctx) {
         ctx.getSharedPreferences("kmi_subject_exercises", android.content.Context.MODE_PRIVATE)
     }
 
     val SEP = "\u001F" // unit-separator (נדיר בטקסט)
 
-    // ✅ לכל נושא KEY נפרד, כדי שלא יתערבבו מועדפים בין קטגוריות שונות
-    // ⚠️ חשוב: אל תשתמש ב-getStringSet / putStringSet (עלול לקרוס)
-    val KEY_FAVS = remember(subjectId) { "fav_ids_str__subject__$subjectId" }
     val KEY_RECENTS = remember(subjectId) { "recent_ids_str__subject__$subjectId" }
-
-    fun loadFavs(): Set<String> {
-        val raw = prefs.getString(KEY_FAVS, "").orEmpty()
-        if (raw.isBlank()) return emptySet()
-        return raw.split(SEP).asSequence()
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .toSet()
-    }
-
-    fun saveFavs(set: Set<String>) {
-        prefs.edit().putString(KEY_FAVS, set.joinToString(SEP)).apply()
-    }
 
     fun loadRecents(): List<String> {
         val raw = prefs.getString(KEY_RECENTS, "").orEmpty()
@@ -495,7 +482,17 @@ fun SubjectExercisesScreen(
         prefs.edit().putString(KEY_RECENTS, list.joinToString(SEP)).apply()
     }
 
-    var favIds by remember(subjectId) { mutableStateOf(loadFavs()) }
+    val favIds: Set<String> by FavoritesStore
+        .favoritesFlow
+        .collectAsState(initial = emptySet())
+
+    LaunchedEffect(favIds) {
+        android.util.Log.e(
+            "KMI_FAV",
+            "favorites changed -> size=${favIds.size} ids=${favIds.joinToString()}"
+        )
+    }
+
     var recentIds by remember(subjectId) { mutableStateOf(loadRecents()) }
     var filterMode by remember { mutableStateOf(FilterMode.ALL) }
 
@@ -606,10 +603,11 @@ fun SubjectExercisesScreen(
                                     isFavorite = row.canonicalId in favIds,
                                     showMeta = (effectiveAppSubject.id != "releases"),
                                     onToggleFavorite = {
-                                        val next = favIds.toMutableSet()
-                                        if (row.canonicalId in next) next.remove(row.canonicalId) else next.add(row.canonicalId)
-                                        favIds = next
-                                        saveFavs(next)
+                                        android.util.Log.e(
+                                            "KMI_FAV",
+                                            "toggle favorite RECENTS -> id=${row.canonicalId} currentlyFav=${row.canonicalId in favIds}"
+                                        )
+                                        FavoritesStore.toggle(row.canonicalId)
                                     },
                                     onClick = {
                                         clickSound()
@@ -647,10 +645,11 @@ fun SubjectExercisesScreen(
                                                 isFavorite = row.canonicalId in favIds,
                                                 showMeta = (effectiveAppSubject.id != "releases"),
                                                 onToggleFavorite = {
-                                                    val next = favIds.toMutableSet()
-                                                    if (row.canonicalId in next) next.remove(row.canonicalId) else next.add(row.canonicalId)
-                                                    favIds = next
-                                                    saveFavs(next)
+                                                    android.util.Log.e(
+                                                        "KMI_FAV",
+                                                        "toggle favorite BELT_LIST -> id=${row.canonicalId} currentlyFav=${row.canonicalId in favIds}"
+                                                    )
+                                                    FavoritesStore.toggle(row.canonicalId)
                                                 },
                                                 onClick = {
                                                     clickSound()
@@ -728,19 +727,11 @@ fun SubjectExercisesScreen(
 
                             IconButton(
                                 onClick = {
-                                    val next = favIds.toMutableSet()
+                                    val wasFavorite = row.canonicalId in favIds
+                                    FavoritesStore.toggle(row.canonicalId)
 
-                                    if (row.canonicalId in next) {
-                                        next.remove(row.canonicalId)
-                                    } else {
-                                        next.add(row.canonicalId)
-                                    }
-
-                                    favIds = next.toSet()
-                                    saveFavs(favIds)
-
-                                    // אם אנחנו בפילטר "מועדפים" והסרנו מועדף — נסגור דיאלוג כדי למנוע מצב UI מוזר
-                                    if (filterMode == FilterMode.FAVORITES && row.canonicalId !in favIds) {
+                                    // אם אנחנו בפילטר "מועדפים" והסרנו מועדף — נסגור דיאלוג
+                                    if (filterMode == FilterMode.FAVORITES && wasFavorite) {
                                         selectedRow = null
                                     }
                                 }
@@ -1002,19 +993,37 @@ private fun ExerciseRowCardModern(
         tonalElevation = 1.dp,
         border = BorderStroke(1.dp, belt.color.copy(alpha = 0.35f))
     ) {
-        // ✅ כופה LTR על השורה עצמה כדי שהפריט הראשון באמת יהיה בשמאל
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onClick() }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val scale by animateFloatAsState(
+                    targetValue = if (isFavorite) 1.25f else 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    ),
+                    label = "favoriteScale"
+                )
 
-                // ✅ כוכבית בצד שמאל (ראשון בשורה)
-                IconButton(onClick = onToggleFavorite) {
+                IconButton(
+                    onClick = {
+                        android.util.Log.e(
+                            "KMI_FAV",
+                            "STAR_ICON_BUTTON clicked -> item=$item isFavorite=$isFavorite"
+                        )
+                        onToggleFavorite()
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                        }
+                ) {
                     Icon(
                         imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                         contentDescription = if (isFavorite) "הסר ממועדפים" else "הוסף למועדפים",
@@ -1025,36 +1034,49 @@ private fun ExerciseRowCardModern(
 
                 Spacer(Modifier.width(8.dp))
 
-                // ✅ תוכן בעברית: רק הטקסט עצמו יהיה RTL ומיושר לימין
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.End
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                            android.util.Log.e(
+                                "KMI_FAV",
+                                "ROW_TEXT clicked -> item=$item"
+                            )
+                            onClick()
+                        }
+                        .padding(vertical = 2.dp)
                 ) {
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                        Text(
-                            text = item,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                            Text(
+                                text = item,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
 
-                        if (showMeta) {
-                            Spacer(Modifier.height(3.dp))
+                            if (showMeta) {
+                                Spacer(Modifier.height(3.dp))
 
-                            val meta = topic.trim()
-                            if (meta.isNotBlank() && meta != "כללי" && meta != "שחרורים") {
-                                Text(
-                                    text = meta,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                val meta = topic.trim()
+                                if (meta.isNotBlank() && meta != "כללי" && meta != "שחרורים") {
+                                    Text(
+                                        text = meta,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Right,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
                     }
@@ -1062,7 +1084,6 @@ private fun ExerciseRowCardModern(
 
                 Spacer(Modifier.width(10.dp))
 
-                // ✅ הקו הצבעוני בצד ימין (אחרון בשורה)
                 Box(
                     modifier = Modifier
                         .width(4.dp)

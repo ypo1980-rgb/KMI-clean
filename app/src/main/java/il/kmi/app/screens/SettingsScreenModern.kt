@@ -146,7 +146,23 @@ fun SettingsScreenModern(
 
     val discardAndExit: () -> Unit = { onBack() }
     val saveAllAndApply: () -> Unit = { /* preferences already saved inline */ }
-    val fullName by remember { mutableStateOf(sp.getString("fullName", "שם מלא לא מוגדר") ?: "") }
+
+    val appCtxLang = LocalContext.current
+    val languageManager = remember { AppLanguageManager(appCtxLang) }
+    var currentLanguage by remember { mutableStateOf(languageManager.getCurrentLanguage()) }
+    val isEnglish = currentLanguage == AppLanguage.ENGLISH
+    val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
+    val rowSpaceBetween = Arrangement.SpaceBetween
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val fullName by remember {
+        mutableStateOf(
+            sp.getString("fullName", null)
+                ?: tr("שם מלא לא מוגדר", "Full name not set")
+        )
+    }
     val phone    by remember { mutableStateOf(sp.getString("phone", "") ?: "") }
     val email    by remember { mutableStateOf(sp.getString("email", "") ?: "") }
     val region   by remember { mutableStateOf(sp.getString("region", "") ?: "") }
@@ -250,16 +266,16 @@ fun SettingsScreenModern(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = rowSpaceBetween
                     ) {
                         Text(
-                            text = "הגדרות",
+                            text = tr("הגדרות", "Settings"),
                             style = MaterialTheme.typography.headlineMedium.copy(
                                 color = Color.White,
                                 fontWeight = FontWeight.ExtraBold
                             ),
-                            textAlign = TextAlign.End,
-                            modifier = Modifier.padding(end = 8.dp)
+                            textAlign = textAlignPrimary,
+                            modifier = Modifier.padding(horizontal = 8.dp)
                         )
 
                         val ctx = LocalContext.current
@@ -272,20 +288,23 @@ fun SettingsScreenModern(
                                 .background(MaterialTheme.colorScheme.primary)
                                 .clickable {
                                     try {
-                                        // ⬅️ פותח ישירות את טופס העריכה (דלג OTP)
                                         onOpenRegistrationState.value.invoke()
                                     } catch (t: Throwable) {
                                         android.util.Log.e("Settings", "EditProfile click failed", t)
                                         android.widget.Toast.makeText(
                                             ctx,
-                                            "לא הצלחתי לפתוח עריכת פרטים",
+                                            tr("לא הצלחתי לפתוח עריכת פרטים", "Could not open profile editing"),
                                             android.widget.Toast.LENGTH_SHORT
                                         ).show()
                                     }
                                 }
                                 .padding(horizontal = 16.dp, vertical = 10.dp)
                         ) {
-                            Text("ערוך פרטים", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                tr("ערוך פרטים", "Edit profile"),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
 
@@ -314,13 +333,13 @@ fun SettingsScreenModern(
 
                             Column(
                                 modifier = Modifier.weight(1f),
-                                horizontalAlignment = Alignment.End
+                                horizontalAlignment = horizontalEnd
                             ) {
                                 Text(
-                                    text = fullName.ifBlank { "משתמש" },
+                                    text = fullName.ifBlank { tr("משתמש", "User") },
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.ExtraBold,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = textAlignPrimary,
                                     modifier = Modifier.fillMaxWidth()
                                 )
 
@@ -328,7 +347,7 @@ fun SettingsScreenModern(
                                     Text(
                                         text = phone,
                                         style = MaterialTheme.typography.titleMedium,
-                                        textAlign = TextAlign.Right,
+                                        textAlign = textAlignPrimary,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
@@ -373,13 +392,10 @@ fun SettingsScreenModern(
                 ) {
 
                     Text(
-                        text = if (currentLanguage == AppLanguage.ENGLISH)
-                            "Choose interface language"
-                        else
-                            "בחר שפת ממשק",
+                        text = tr("בחר שפת ממשק", "Choose interface language"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Right,
+                        textAlign = textAlignPrimary,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -420,8 +436,8 @@ fun SettingsScreenModern(
 
 // --- תזכורות אימון ---
             SettingsCard(
-                title = "תזכורות אימון",
-                subtitle = "קבל התראה לפני תחילת אימון",
+                title = tr("תזכורות אימון", "Training reminders"),
+                subtitle = tr("קבל התראה לפני תחילת אימון", "Get a reminder before training starts"),
                 icon = Icons.Filled.AlarmOn,
                 iconTint = sectionIconTint
             ) {
@@ -458,11 +474,14 @@ fun SettingsScreenModern(
                     ) {
                         if (remindersEnabled) {
                             Text(
-                                text = "כמה דקות לפני האימון לקבל תזכורת?",
+                                text = tr(
+                                    "כמה דקות לפני האימון לקבל תזכורת?",
+                                    "How many minutes before training would you like a reminder?"
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.weight(1f),
-                                textAlign = TextAlign.Right
+                                textAlign = textAlignPrimary
                             )
                         } else {
                             // כשכבוי – רק משאיר רווח כדי שהמתג יישב בצד
@@ -533,7 +552,7 @@ fun SettingsScreenModern(
                                         text = {
                                             // שתי שורות כמו בתמונה
                                             Text(
-                                                text = "${minutes} דק׳\nלפני",
+                                                text = if (isEnglish) "$minutes min\nbefore" else "${minutes} דק׳\nלפני",
                                                 minLines = 2,
                                                 maxLines = 2,
                                                 softWrap = true,
@@ -557,8 +576,11 @@ fun SettingsScreenModern(
 
             // --- תרגיל יומי ---
             SettingsCard(
-                title = "תרגיל יומי",
-                subtitle = "קבל כל יום תרגיל מהחגורה הבאה בשעה שתבחר",
+                title = tr("תרגיל יומי", "Daily exercise"),
+                subtitle = tr(
+                    "קבל כל יום תרגיל מהחגורה הבאה בשעה שתבחר",
+                    "Get a daily exercise from the next belt at the time you choose"
+                ),
                 icon = Icons.Filled.NotificationsActive,
                 iconTint = sectionIconTint
             ) {
@@ -592,13 +614,19 @@ fun SettingsScreenModern(
                     ) {
                         Text(
                             text = if (isCoach)
-                                "המאמן יכול לכבות או להפעיל תרגיל יומי לעצמו"
+                                tr(
+                                    "המאמן יכול לכבות או להפעיל תרגיל יומי לעצמו",
+                                    "The coach can enable or disable a daily exercise for themselves"
+                                )
                             else
-                                "שלח לי בכל יום תרגיל מהחגורה הבאה",
+                                tr(
+                                    "שלח לי בכל יום תרגיל מהחגורה הבאה",
+                                    "Send me a daily exercise from the next belt"
+                                ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
-                            textAlign = TextAlign.Right
+                            textAlign = textAlignPrimary
                         )
 
                         Switch(
@@ -640,14 +668,17 @@ fun SettingsScreenModern(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("שעת התזכורת: $formattedDailyTime")
+                            Text(tr("שעת התזכורת: $formattedDailyTime", "Reminder time: $formattedDailyTime"))
                         }
 
                         Text(
-                            text = "תקבל התראה יומית עם אפשרות לפתוח כרטיס תרגיל, לשמור למועדפים ולקבל תרגיל נוסף.",
+                            text = tr(
+                                "תקבל התראה יומית עם אפשרות לפתוח כרטיס תרגיל, לשמור למועדפים ולקבל תרגיל נוסף.",
+                                "You will receive a daily reminder with options to open the exercise card, save it to favorites, and get another exercise."
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Right,
+                            textAlign = textAlignPrimary,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -656,8 +687,11 @@ fun SettingsScreenModern(
 
             // --- תזכורות אימונים חופשיים ---
             SettingsCard(
-                title = "תזכורות אימונים חופשיים",
-                subtitle = "קבל התראה לפני אימון חופשי שאישרת הגעה",
+                title = tr("תזכורות אימונים חופשיים", "Free training reminders"),
+                subtitle = tr(
+                    "קבל התראה לפני אימון חופשי שאישרת הגעה",
+                    "Get a reminder before a free training session you confirmed"
+                ),
                 icon = Icons.Filled.NotificationsActive,
                 iconTint = sectionIconTint
             ) {
@@ -686,11 +720,14 @@ fun SettingsScreenModern(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "התראות 30 ו-10 דקות לפני אימון חופשי שסימנת \"אני מגיע\"",
+                            text = tr(
+                                "התראות 30 ו-10 דקות לפני אימון חופשי שסימנת \"אני מגיע\"",
+                                "Notifications 30 and 10 minutes before a free training session marked as \"I'm coming\""
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
-                            textAlign = TextAlign.Right
+                            textAlign = textAlignPrimary
                         )
 
                         Switch(
@@ -717,8 +754,8 @@ fun SettingsScreenModern(
 
             // --- סנכרון ליומן (עם הרשאות וסנכרון מיידי) ---
             SettingsCard(
-                title = "סנכרון ליומן",
-                subtitle = "ייווצרו/עודכנו אירועים שבועיים",
+                title = tr("סנכרון ליומן", "Calendar sync"),
+                subtitle = tr("ייווצרו/עודכנו אירועים שבועיים", "Weekly events will be created or updated"),
                 icon = Icons.Filled.Event,
                 iconTint = sectionIconTint
             ) {
@@ -739,16 +776,16 @@ fun SettingsScreenModern(
                         try {
                             isBusy = true
                             KmiCalendarSync.upsertAll(appCtx)
-                            haptic(true); toast("האימונים סונכרנו ליומן")
+                            haptic(true); toast(tr("האימונים סונכרנו ליומן", "Trainings were synced to the calendar"))
                         } catch (t: Throwable) {
-                            haptic(true); toast("שגיאה בסנכרון ליומן")
+                            haptic(true); toast(tr("שגיאה בסנכרון ליומן", "Calendar sync error"))
                         } finally {
                             isBusy = false
                         }
                     } else {
                         calendarSyncEnabled = false
                         sp.edit().putBoolean("calendar_sync_enabled", false).apply()
-                        haptic(true); toast("אין הרשאה ליומן – לא בוצע סנכרון")
+                        haptic(true); toast(tr("אין הרשאה ליומן – לא בוצע סנכרון", "No calendar permission - sync was not performed"))
                     }
                 }
 
@@ -757,7 +794,7 @@ fun SettingsScreenModern(
                         if (hasCalendarPermission(appCtx)) {
                             isBusy = true
                             KmiCalendarSync.upsertAll(appCtx)
-                            haptic(true); toast("האימונים סונכרנו ליומן")
+                            haptic(true); toast(tr("האימונים סונכרנו ליומן", "Trainings were synced to the calendar"))
                         } else {
                             calendarPermissionLauncher.launch(
                                 arrayOf(
@@ -778,14 +815,14 @@ fun SettingsScreenModern(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "סנכרן אימונים ליומן במכשיר",
-                        // היה: MaterialTheme.typography.titleLarge (גדול מדי לשורה)
+                        tr("סנכרן אימונים ליומן במכשיר", "Sync trainings to device calendar"),
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Right,
+                        textAlign = textAlignPrimary,
                         modifier = Modifier.weight(1f)
                     )
+
                     Spacer(Modifier.width(12.dp))
                     Switch(
                         checked = calendarSyncEnabled,
@@ -799,9 +836,9 @@ fun SettingsScreenModern(
                                 try {
                                     isBusy = true
                                     KmiCalendarSync.removeAll(appCtx)
-                                    haptic(true); toast("האימונים הוסרו מהיומן")
+                                    haptic(true); toast(tr("האימונים הוסרו מהיומן", "Trainings were removed from the calendar"))
                                 } catch (t: Throwable) {
-                                    haptic(true); toast("שגיאה בביטול סנכרון")
+                                    haptic(true); toast(tr("שגיאה בביטול סנכרון", "Error while disabling sync"))
                                 } finally {
                                     isBusy = false
                                 }
@@ -815,8 +852,8 @@ fun SettingsScreenModern(
 
             // --- חוויית משתמש ---
             SettingsCard(
-                title = "חוויית משתמש",
-                subtitle = "צלילים, רטט ושיפור חוויית האינטראקציה",
+                title = tr("חוויית משתמש", "User experience"),
+                subtitle = tr("צלילים, רטט ושיפור חוויית האינטראקציה", "Sounds, haptics, and improved interaction experience"),
                 icon = Icons.Filled.Tune,
                 iconTint = sectionIconTint
             ) {
@@ -867,8 +904,8 @@ fun SettingsScreenModern(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        "צליל הקשה בכפתורים",
-                        textAlign = TextAlign.Right,
+                        tr("צליל הקשה בכפתורים", "Button tap sound"),
+                        textAlign = textAlignPrimary,
                         modifier = Modifier.weight(1f)
                     )
                     Switch(
@@ -899,8 +936,8 @@ fun SettingsScreenModern(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        "רטט קצר בעת סימון ✓/✗",
-                        textAlign = TextAlign.Right,
+                        tr("רטט קצר בעת סימון ✓/✗", "Short haptic on ✓/✗ marking"),
+                        textAlign = textAlignPrimary,
                         modifier = Modifier.weight(1f)
                     )
                     Switch(
@@ -924,15 +961,15 @@ fun SettingsScreenModern(
 
             // --- הגדרות קול (ענן) ---
             SettingsCard(
-                title = "הגדרות קול",
-                subtitle = "בחירת קול גבר/אישה (אחיד לכל האפליקציה)",
+                title = tr("הגדרות קול", "Voice settings"),
+                subtitle = tr("בחירת קול גבר/אישה (אחיד לכל האפליקציה)", "Choose male/female voice for the entire app"),
                 icon = Icons.Filled.SupportAgent,
                 iconTint = sectionIconTint
             ) {
             val ctx = LocalContext.current
 
                 val voicePrefs = remember {
-                    ctx.getSharedPreferences("kmi_ai_voice", Context.MODE_PRIVATE)
+                    ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
                 }
 
                 // ✅ זה ה-SP שה-TTS המקומי באמת קורא ממנו
@@ -946,15 +983,15 @@ fun SettingsScreenModern(
 
                 fun setCloudVoice(v: String) {
                     cloudVoice = v
-                    voicePrefs.edit().putString("voice", v).apply()
 
-                    // נשמור רק לענן (אנושי) — אין TTS מקומי
-                    userSp.edit()
-                        .putString("kmi_tts_voice", v) // נשאיר אם יש עוד מקומות שקוראים לזה
+                    voicePrefs.edit()
+                        .putString("voice", v)
                         .apply()
 
-                    // הכל ענן (אנושי) – לא מפעילים שום apply מקומי
-                    // KmiTtsManager.applyUserVoicePreference(userSp)
+                    ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("kmi_tts_voice", v)
+                        .apply()
                 }
 
                 val selectedIndex = if (cloudVoice == "male") 0 else 1
@@ -964,10 +1001,10 @@ fun SettingsScreenModern(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "בחר קול להשמעה:",
+                        text = tr("בחר קול להשמעה:", "Choose voice playback:"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Right,
+                        textAlign = textAlignPrimary,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -979,21 +1016,24 @@ fun SettingsScreenModern(
                             selected = selectedIndex == 0,
                             onClick = { setCloudVoice("male") },
                             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                            label = { Text("קול גבר", maxLines = 1) }
+                            label = { Text(tr("קול גבר", "Male voice"), maxLines = 1) }
                         )
                         SegmentedButton(
                             selected = selectedIndex == 1,
                             onClick = { setCloudVoice("female") },
                             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                            label = { Text("קול אישה", maxLines = 1) }
+                            label = { Text(tr("קול אישה", "Female voice"), maxLines = 1) }
                         )
                     }
 
                     Text(
-                        text = "הבחירה נשמרת למכשיר ותשפיע על הדיבור בעוזר הקולי.",
+                        text = tr(
+                            "הבחירה נשמרת למכשיר ותשפיע על הדיבור בעוזר הקולי.",
+                            "The selection is saved on the device and affects speech in the voice assistant."
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Right,
+                        textAlign = textAlignPrimary,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1001,8 +1041,8 @@ fun SettingsScreenModern(
 
             // --- נראות אפליקציה (מצב כהה/בהיר/לפי מערכת) ---
             SettingsCard(
-                title = "נראות אפליקציה",
-                subtitle = "בחר מצב מסך עם ניגודיות נוחה לעיניים",
+                title = tr("נראות אפליקציה", "App appearance"),
+                subtitle = tr("בחר מצב מסך עם ניגודיות נוחה לעיניים", "Choose a display mode with comfortable contrast"),
                 icon = Icons.Filled.Palette,
                 iconTint = sectionIconTint
             ) {
@@ -1012,10 +1052,10 @@ fun SettingsScreenModern(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "בחר מצב תצוגה:",
+                        text = tr("בחר מצב תצוגה:", "Choose display mode:"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Right,
+                        textAlign = textAlignPrimary,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -1038,7 +1078,7 @@ fun SettingsScreenModern(
                             },
                             text = {
                                 Text(
-                                    text = "מצב\nבהיר",
+                                    text = tr("מצב\nבהיר", "Light\nmode"),
                                     minLines = 2,
                                     maxLines = 2,
                                     softWrap = true,
@@ -1062,7 +1102,7 @@ fun SettingsScreenModern(
                             },
                             text = {
                                 Text(
-                                    text = "מצב\nכהה",
+                                    text = tr("מצב\nכהה", "Dark\nmode"),
                                     minLines = 2,
                                     maxLines = 2,
                                     softWrap = true,
@@ -1078,10 +1118,13 @@ fun SettingsScreenModern(
                     }
 
                     Text(
-                        text = "הטקסט והצבעים יתאימו אוטומטית למצב שבחרת (לדוגמה: טקסט לבן על רקע כהה).",
+                        text = tr(
+                            "הטקסט והצבעים יתאימו אוטומטית למצב שבחרת (לדוגמה: טקסט לבן על רקע כהה).",
+                            "Text and colors will automatically adjust to the selected mode."
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Right,
+                        textAlign = textAlignPrimary,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1089,8 +1132,8 @@ fun SettingsScreenModern(
 
             // --- נעילת אפליקציה (ללא נעילה / אצבע / סיסמה) ---
             SettingsCard(
-                title = "נעילת אפליקציה",
-                subtitle = "בחר שיטת נעילה להגנה על האפליקציה",
+                title = tr("נעילת אפליקציה", "App lock"),
+                subtitle = tr("בחר שיטת נעילה להגנה על האפליקציה", "Choose a lock method to protect the app"),
                 icon = Icons.Filled.Lock,
                 iconTint = sectionIconTint
             ) {
@@ -1126,14 +1169,14 @@ fun SettingsScreenModern(
                     when (mode) {
                         "none" -> {
                             il.kmi.app.security.AppLockStore.setMethod(ctx, il.kmi.app.security.AppLockMethod.NONE)
-                            android.widget.Toast.makeText(ctx, "נעילת האפליקציה בוטלה", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(ctx, tr("נעילת האפליקציה בוטלה", "App lock disabled"), android.widget.Toast.LENGTH_SHORT).show()
                         }
                         "biometric" -> {
                             val canBio = androidx.biometric.BiometricManager.from(ctx)
                                 .canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
                                     androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
                             if (!canBio) {
-                                android.widget.Toast.makeText(ctx, "ביומטרי לא זמין במכשיר", android.widget.Toast.LENGTH_LONG).show()
+                                android.widget.Toast.makeText(ctx, tr("ביומטרי לא זמין במכשיר", "Biometric authentication is not available on this device"), android.widget.Toast.LENGTH_LONG).show()
                                 lockMode = sp.getString("app_lock_mode", "none") ?: "none"
                                 return
                             }
@@ -1305,8 +1348,8 @@ fun SettingsScreenModern(
                             TextButton(
                                 onClick = {
                                     when {
-                                        pin.length < 4 -> pinError = "הסיסמה צריכה להיות לפחות 4 תווים"
-                                        pin != pinConfirm -> pinError = "הסיסמאות אינן תואמות"
+                                        pin.length < 4 -> pinError = tr("הסיסמה צריכה להיות לפחות 4 תווים", "Password must be at least 4 characters")
+                                        pin != pinConfirm -> pinError = tr("הסיסמאות אינן תואמות", "Passwords do not match")
                                         else -> {
                                             savePin(pin)
                                             lockMode = "pin"
@@ -1316,7 +1359,7 @@ fun SettingsScreenModern(
                                         }
                                     }
                                 }
-                            ) { Text("שמירה") }
+                            ) { Text(tr("שמירה", "Save")) }
                         },
                         dismissButton = {
                             TextButton(
@@ -1324,7 +1367,7 @@ fun SettingsScreenModern(
                                     showPinDialog = false
                                     resetPinDialog()
                                 }
-                            ) { Text("ביטול") }
+                            ) { Text(tr("ביטול", "Cancel")) }
                         }
                     )
                 }
@@ -1340,10 +1383,10 @@ fun SettingsScreenModern(
             if (!bioAvailable) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "ביומטרי לא זמין במכשיר או לא הוגדר למשתמש.",
+                    tr("ביומטרי לא זמין במכשיר או לא הוגדר למשתמש.", "Biometric authentication is not available or not configured for this user."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Right,
+                    textAlign = textAlignPrimary,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -1353,8 +1396,8 @@ fun SettingsScreenModern(
             // =========================
 
             SettingsCard(
-                title = "סטטיסטיקות",
-                subtitle = "התקדמות לפי חגורות ונושאים",
+                title = tr("סטטיסטיקות", "Statistics"),
+                subtitle = tr("התקדמות לפי חגורות ונושאים", "Progress by belts and topics"),
                 icon = Icons.Filled.BarChart,
                 iconTint = sectionIconTint
             ) {
@@ -1366,10 +1409,13 @@ fun SettingsScreenModern(
                 }
 
                 Text(
-                    text = "דרגתי הנוכחית: חגורה ${currentBelt.heb.removePrefix("חגורה").trim()}",
+                    text = if (isEnglish)
+                        "My current rank: ${currentBelt.id.replaceFirstChar { it.uppercase() }} belt"
+                    else
+                        "דרגתי הנוכחית: חגורה ${currentBelt.heb.removePrefix("חגורה").trim()}",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
                     color = beltTextColor,
-                    textAlign = TextAlign.Right,
+                    textAlign = textAlignPrimary,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -1383,8 +1429,8 @@ fun SettingsScreenModern(
 
             // כרטיס: ניהול נתונים (היסטוריית שידורים + מטמון)
             SettingsCard(
-                title = "ניהול נתונים",
-                subtitle = "ניקוי נתונים מקומיים במכשיר",
+                title = tr("ניהול נתונים", "Data management"),
+                subtitle = tr("ניקוי נתונים מקומיים במכשיר", "Clear local data on the device"),
                 icon = Icons.Filled.Storage,
                 iconTint = sectionIconTint
             ) {
@@ -1397,10 +1443,10 @@ fun SettingsScreenModern(
                     Button(
                         onClick = {
                             spUser.edit().remove(PREF_RECENTS_KEY).apply()
-                            toast("היסטוריית השידורים נוקתה"); haptic(true)
+                            toast(tr("היסטוריית השידורים נוקתה", "Broadcast history cleared")); haptic(true)
                         },
                         modifier = Modifier.fillMaxWidth().height(44.dp)
-                    ) { Text("נקה היסטוריית שידורים") }
+                    ) { Text(tr("נקה היסטוריית שידורים", "Clear broadcast history")) }
 
                     // ניקוי מטמון קבצים (תמונות/ייצוא זמני וכד׳)
                     OutlinedButton(
@@ -1408,17 +1454,17 @@ fun SettingsScreenModern(
                             isBusy = true
                             val ok = clearAppCache(ctx)
                             isBusy = false
-                            if (ok) { toast("נוקו קבצי המטמון"); haptic(true) } else { toast("ניקוי נכשל"); haptic(false) }
+                            if (ok) { toast(tr("נוקו קבצי המטמון", "Cache files cleared")); haptic(true) } else { toast(tr("ניקוי נכשל", "Clear failed")); haptic(false) }
                         },
                         modifier = Modifier.fillMaxWidth().height(44.dp)
-                    ) { Text("נקה מטמון אפליקציה") }
+                    ) { Text(tr("נקה מטמון אפליקציה", "Clear app cache")) }
                 }
             }
 
             // כרטיס: משפטי (פרימיום) — 3 מסמכים
             SettingsCard(
-                title = "מידע משפטי",
-                subtitle = "מסמכים רשמיים ומידע חשוב",
+                title = tr("מידע משפטי", "Legal information"),
+                subtitle = tr("מסמכים רשמיים ומידע חשוב", "Official documents and important information"),
                 icon = Icons.Filled.Gavel,
                 iconTint = sectionIconTint
             ) {
@@ -1467,13 +1513,13 @@ fun SettingsScreenModern(
 
                             Column(
                                 modifier = Modifier.weight(1f),
-                                horizontalAlignment = Alignment.End
+                                horizontalAlignment = horizontalEnd
                             ) {
                                 Text(
                                     text = title,
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    textAlign = TextAlign.Right,
-                                    maxLines = 2, // ⬅️ היה 1
+                                    textAlign = textAlignPrimary,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -1481,7 +1527,7 @@ fun SettingsScreenModern(
                                     text = subtitle,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = textAlignPrimary,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth()
@@ -1497,24 +1543,24 @@ fun SettingsScreenModern(
                 ) {
 
                     LegalTile(
-                        title = "מדיניות פרטיות",
-                        subtitle = "איך אנחנו שומרים על הנתונים שלך",
+                        title = tr("מדיניות פרטיות", "Privacy policy"),
+                        subtitle = tr("איך אנחנו שומרים על הנתונים שלך", "How we protect your data"),
                         icon = Icons.Filled.Lock,
                         onClick = onOpenPrivacy,
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     LegalTile(
-                        title = "תנאי שימוש",
-                        subtitle = "כללי שימוש והתחייבויות המשתמש",
+                        title = tr("תנאי שימוש", "Terms of use"),
+                        subtitle = tr("כללי שימוש והתחייבויות המשתמש", "Usage rules and user responsibilities"),
                         icon = Icons.Filled.Gavel,
                         onClick = onOpenTerms,
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     LegalTile(
-                        title = "הצהרת נגישות",
-                        subtitle = "מידע על התאמות ונגישות באפליקציה",
+                        title = tr("הצהרת נגישות", "Accessibility statement"),
+                        subtitle = tr("מידע על התאמות ונגישות באפליקציה", "Information about accessibility and adaptations in the app"),
                         icon = Icons.Filled.AccessibilityNew,
                         onClick = onOpenAccessibility,
                         modifier = Modifier.fillMaxWidth()
@@ -1524,8 +1570,8 @@ fun SettingsScreenModern(
 
             // כרטיס: אודות ותמיכה
             SettingsCard(
-                title = "אודות ותמיכה",
-                subtitle = "ספרו לנו איך אפשר לשפר",
+                title = tr("אודות ותמיכה", "About and support"),
+                subtitle = tr("ספרו לנו איך אפשר לשפר", "Tell us how we can improve"),
                 icon = Icons.Filled.SupportAgent,
                 iconTint = sectionIconTint
             ) {
@@ -1545,8 +1591,8 @@ fun SettingsScreenModern(
                             pm.getPackageInfo(ctx.packageName, 0)
                         }
                         val longCode = PackageInfoCompat.getLongVersionCode(pInfo)
-                        "גרסה ${pInfo.versionName} ($longCode)"
-                    }.getOrDefault("גרסה לא ידועה")
+                        tr("גרסה ${pInfo.versionName} ($longCode)", "Version ${pInfo.versionName} ($longCode)")
+                    }.getOrDefault(tr("גרסה לא ידועה", "Unknown version"))
                 }
 
                 Text(
@@ -1567,27 +1613,27 @@ fun SettingsScreenModern(
                             val body = buildString {
                                 appendLine("")
                                 appendLine("---")
-                                appendLine("פרטי מערכת (לעזרה באיתור תקלות):")
-                                appendLine("חבילה: ${ctx.packageName}")
+                                appendLine(tr("פרטי מערכת (לעזרה באיתור תקלות):", "System details (for troubleshooting):"))
+                                appendLine(tr("חבילה: ${ctx.packageName}", "Package: ${ctx.packageName}"))
                                 appendLine(pkgVer)
-                                appendLine("מכשיר: ${Build.MANUFACTURER} ${Build.MODEL}")
-                                appendLine("אנדרואיד: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+                                appendLine(tr("מכשיר: ${Build.MANUFACTURER} ${Build.MODEL}", "Device: ${Build.MANUFACTURER} ${Build.MODEL}"))
+                                appendLine(tr("אנדרואיד: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})", "Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})"))
                             }
                             openEmailFeedback(
                                 ctx,
                                 to = "support@kmi.example",
-                                subject = "משוב על האפליקציה",
+                                subject = tr("משוב על האפליקציה", "App feedback"),
                                 body = body
                             )
                             h(true)
                         },
                         modifier = Modifier.weight(1f).height(44.dp)
-                    ) { Text("שלח משוב") }
+                    ) { Text(tr("שלח משוב", "Send feedback")) }
 
                     OutlinedButton(
                         onClick = { openStorePage(ctx); h(true) },
                         modifier = Modifier.weight(1f).height(44.dp)
-                    ) { Text("דרג בחנות") }
+                    ) { Text(tr("דרג בחנות", "Rate in store")) }
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -1595,7 +1641,7 @@ fun SettingsScreenModern(
                 OutlinedButton(
                     onClick = { shareApp(ctx); h(true) },
                     modifier = Modifier.fillMaxWidth().height(44.dp)
-                ) { Text("שתף את האפליקציה") }
+                ) { Text(tr("שתף את האפליקציה", "Share the app")) }
             }
 
             // --- מרווח לפני כפתורי פעולה ---
@@ -1608,16 +1654,15 @@ fun SettingsScreenModern(
                 OutlinedButton(
                     onClick = { discardAndExit() },
                     modifier = Modifier.weight(1f)
-                ) { Text("ביטול") }
+                ) { Text(tr("ביטול", "Cancel")) }
 
                 Button(
                     onClick = {
-                        // שומר את כל ההעדפות (כולל סנכרון יומן/התראות) ואז חוזר
                         saveAllAndApply()
                         onBack()
                     },
                     modifier = Modifier.weight(1f)
-                ) { Text("אישור") }
+                ) { Text(tr("אישור", "Confirm")) }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1652,11 +1697,13 @@ private fun RowScope.LegalLink(
 
 @Composable
 fun BeltsProgressBars(
-    vm: StatsVm,                         // ⬅️ במקום KmiViewModel
+    vm: StatsVm,
     modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
     val sp  = remember { ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE) }
+    val languageManager = remember { AppLanguageManager(ctx) }
+    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
     val belts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK)
 
@@ -1690,13 +1737,13 @@ fun BeltsProgressBars(
 
             val pct = if (total > 0) ((done * 100f) / total).toInt().coerceIn(0, 100) else 0
             val title = when (belt) {
-                Belt.YELLOW -> "חגורה: צהובה"
-                Belt.ORANGE -> "חגורה: כתומה"
-                Belt.GREEN  -> "חגורה: ירוקה"
-                Belt.BLUE   -> "חגורה: כחולה"
-                Belt.BROWN  -> "חגורה: חומה"
-                Belt.BLACK  -> "חגורה: שחורה"
-                else        -> "חגורה"
+                Belt.YELLOW -> if (isEnglish) "Yellow belt" else "חגורה: צהובה"
+                Belt.ORANGE -> if (isEnglish) "Orange belt" else "חגורה: כתומה"
+                Belt.GREEN  -> if (isEnglish) "Green belt" else "חגורה: ירוקה"
+                Belt.BLUE   -> if (isEnglish) "Blue belt" else "חגורה: כחולה"
+                Belt.BROWN  -> if (isEnglish) "Brown belt" else "חגורה: חומה"
+                Belt.BLACK  -> if (isEnglish) "Black belt" else "חגורה: שחורה"
+                else        -> if (isEnglish) "Belt" else "חגורה"
             }
             out += Row(title, pct, belt.color)
         }
@@ -1707,7 +1754,7 @@ fun BeltsProgressBars(
         rows.forEach { row ->
             // צבע טקסט מיוחד לחגורה שחורה – לפי Theme
             val textColor =
-                if (row.title.contains("שחורה"))
+                if (row.title.contains("שחורה") || row.title.contains("Black"))
                     MaterialTheme.colorScheme.onSurface
                 else
                     row.color
@@ -1766,10 +1813,16 @@ private fun resolveDeviceCredentialEnum(): il.kmi.app.security.AppLockMethod {
 fun SettingsCard(
     title: String,
     subtitle: String? = null,
-    icon: ImageVector? = null,            // ✅ חדש
-    iconTint: Color? = null,              // ✅ חדש (ל"פרימיום" מאמן/מתאמן)
+    icon: ImageVector? = null,
+    iconTint: Color? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val context = LocalContext.current
+    val languageManager = remember { AppLanguageManager(context) }
+    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
+
     Surface(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 2.dp,
@@ -1808,13 +1861,13 @@ fun SettingsCard(
 
                 Column(
                     modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.End
+                    horizontalAlignment = horizontalEnd
                 ) {
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Right,
+                        textAlign = textAlignPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth()
@@ -1824,7 +1877,7 @@ fun SettingsCard(
                             text = subtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Right,
+                            textAlign = textAlignPrimary,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()

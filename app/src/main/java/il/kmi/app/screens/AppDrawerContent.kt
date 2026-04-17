@@ -742,44 +742,50 @@ fun AppDrawerContent(
                             )
                         }
 
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "About Itzik Biton",
-                                subtitle = "Senior coach",
-                                onClick = {
-                                    onClose()
-                                    onOpenAboutItzik()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "אודות איציק ביטון",
-                                subtitle = "מאמן בכיר",
-                                onClick = {
-                                    onClose()
-                                    onOpenAboutItzik()
-                                }
-                            )
-                        }
+                        val showHiddenAboutItems = false
 
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "About the Network",
-                                subtitle = "Knockout",
-                                onClick = {
-                                    onClose()
-                                    onOpenAboutNetwork()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "אודות הרשת",
-                                subtitle = "Knockout",
-                                onClick = {
-                                    onClose()
-                                    onOpenAboutNetwork()
-                                }
-                            )
+                        if (showHiddenAboutItems) {
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "About Itzik Biton",
+                                    subtitle = "Senior coach",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutItzik()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "אודות איציק ביטון",
+                                    subtitle = "מאמן בכיר",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutItzik()
+                                    }
+                                )
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "About the Network",
+                                    subtitle = "Knockout",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutNetwork()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "אודות הרשת",
+                                    subtitle = "Knockout",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutNetwork()
+                                    }
+                                )
+                            }
+
                         }
 
                         if (isEnglish) {

@@ -102,9 +102,13 @@ object HardSectionsCatalog {
                     t.contains("חביקות זרוע") ->
                 "releases_hugs"
 
+            t == "הגנות" -> "defenses_root"
             t == "הגנות מסכין" -> "knife_defense"
+            t == "הגנות עם רובה נגד דקירות סכין" -> "knife_rifle_defense"
             t == "הגנות מאיום אקדח" -> "gun_threat_defense"
             t == "הגנות נגד מקל" -> "stick_defense"
+            t == "הגנות נגד מספר תוקפים" -> "multiple_attackers_defense"
+            t == "הגנות נגד 2 תוקפים" -> "multiple_attackers_defense"
             t == "עבודת ידיים" -> "hands_all"
             t == "מכות יד" -> "hands_strikes"
             t == "מכות מרפק" -> "hands_elbows"
@@ -129,9 +133,12 @@ object HardSectionsCatalog {
 
     val supportedSubjectIds: Set<String> = setOf(
         "releases",
+        "defenses_root",
         "knife_defense",
+        "knife_rifle_defense",
         "gun_threat_defense",
         "stick_defense",
+        "multiple_attackers_defense",
         "hands_all",
         "hands_strikes",
         "hands_elbows",
@@ -176,9 +183,12 @@ object HardSectionsCatalog {
                 }
             }
 
-            id == "knife_defense" -> defensesKnife
+            id == "defenses_root" -> defensesRoot
+            id == "knife_defense" -> defensesKnife.filter { it.id == "knife_defense_main" }
+            id == "knife_rifle_defense" -> defensesKnife.filter { it.id == "knife_defense_rifle_against_knife_stabs" }
             id == "gun_threat_defense" -> defensesGunThreat
             id == "stick_defense" -> defensesStick
+            id == "multiple_attackers_defense" -> defensesMultipleAttackers
             id == "kicks_hard" -> defensesKicks
             id == "hands_all" -> handsAll
             id == "hands_strikes" -> handsAll.filter { it.id == "hands_strikes" }
@@ -203,9 +213,12 @@ object HardSectionsCatalog {
     fun subjectDisplayTitle(subjectId: String): String? {
         return when (canonicalSubjectId(subjectId)) {
             "releases" -> "שחרורים"
+            "defenses_root" -> "הגנות"
             "knife_defense" -> "הגנות מסכין"
+            "knife_rifle_defense" -> "הגנות עם רובה נגד דקירות סכין"
             "gun_threat_defense" -> "הגנות מאיום אקדח"
             "stick_defense" -> "הגנות נגד מקל"
+            "multiple_attackers_defense" -> "הגנות נגד מספר תוקפים"
             "kicks_hard" -> "הגנות נגד בעיטות"
             "hands_all" -> "עבודת ידיים"
             "hands_strikes" -> "מכות יד"
@@ -498,16 +511,17 @@ object HardSectionsCatalog {
                 BeltGroup(
                     belt = Belt.YELLOW,
                     items = listOf(
+                        "מוצא לעבודת קרקע",
                         "הוצאת אגן",
-                        "הרמת אגן והפניית גוף לכיון ההפלה",
-                        "מוצא לעבודת קרקע"
+                        "הרמת אגן והפניית גוף לכיוון ההפלה"
                     )
                 ),
-                BeltGroup(belt = Belt.ORANGE, items = emptyList()),
-                BeltGroup(belt = Belt.GREEN, items = emptyList()),
-                BeltGroup(belt = Belt.BLUE, items = emptyList()),
-                BeltGroup(belt = Belt.BROWN, items = emptyList()),
-                BeltGroup(belt = Belt.BLACK, items = emptyList())
+                BeltGroup(
+                    belt = Belt.ORANGE,
+                    items = listOf(
+                        "הגנה נגד אגרופים בשכיבה"
+                    )
+                )
             )
         )
     )
@@ -757,12 +771,35 @@ object HardSectionsCatalog {
                     )
                 )
             )
+        ),
+                    Section(
+                    id = "knife_defense_rifle_against_knife_stabs",
+            title = "הגנות עם רובה נגד דקירות סכין",
+            beltGroups = listOf(
+                BeltGroup(belt = Belt.YELLOW, items = emptyList()),
+                BeltGroup(belt = Belt.ORANGE, items = emptyList()),
+                BeltGroup(belt = Belt.GREEN, items = emptyList()),
+                BeltGroup(belt = Belt.BLUE, items = emptyList()),
+                BeltGroup(belt = Belt.BROWN, items = emptyList()),
+                BeltGroup(
+                    belt = Belt.BLACK,
+                    items = listOf(
+                        "רובה נגד דקירה ישרה גבוהה",
+                        "רובה נגד דקירה ישרה נמוכה",
+                        "רובה נגד דקירה רגילה",
+                        "רובה נגד דקירה מזרחית מימין",
+                        "רובה נגד דקירה מזרחית משמאל",
+                        "רובה נגד דקירה מזרחית מלמטה"
+                    )
+                )
+            )
         )
     )
 
+
     // ----------------------------
-// הגנות מאיום אקדח – לפי חגורה
-// ----------------------------
+    // הגנות מאיום אקדח – לפי חגורה
+    // ----------------------------
     val defensesGunThreat: List<Section> = listOf(
         Section(
             id = "gun_threat_defense_main",
@@ -787,6 +824,7 @@ object HardSectionsCatalog {
                         "הגנה נגד איום אקדח מלפנים – קנה קצר",
                         "הגנה נגד איום אקדח לראש – צד ימין",
                         "הגנה נגד איום אקדח לראש – צד שמאל",
+                        "הגנה נגד איום אקדח מאחור בדחיפה",
                         "הגנה נגד איום אקדח לראש מהצד מאחור – צד שמאל",
                         "הגנה מאיום אקדח בהובלה",
                         "הגנה נגד איום אקדח לראש מאחור",
@@ -796,6 +834,28 @@ object HardSectionsCatalog {
             )
         )
     )
+
+    // ----------------------------
+    // הגנות נגד  מספר תוקפים – חגורה שחורה (בקטלוג הקשיח)
+    // ----------------------------
+    val defensesMultipleAttackers: List<Section> = listOf(
+
+        Section(
+            id = "multiple_attackers_main",
+            title = "הגנות נגד 2 תוקפים",
+            beltGroups = listOf(
+                BeltGroup(
+                    belt = Belt.BLACK,
+                    items = listOf(
+                        "1 מקל 1 סכין - מקל בצד חי",
+                        "1 מקל 1 סכין - מקל בצד מת",
+                        "1 מקל 1 סכין - במקרה והסכין קרוב"
+                    )
+                )
+            )
+        )
+    )
+
 
     // ----------------------------
     // הגנות נגד מקל – לפי חגורה (בקטלוג הקשיח)
@@ -953,36 +1013,22 @@ object HardSectionsCatalog {
             id = "hands_stick_rifle",
             title = "מכות במקל / רובה",
             beltGroups = listOf(
-                BeltGroup(
-                    belt = Belt.YELLOW,
-                    items = emptyList()
-                ),
-                BeltGroup(
-                    belt = Belt.ORANGE,
-                    items = emptyList()
-                ),
+
                 BeltGroup(
                     belt = Belt.GREEN,
                     items = listOf(
                         "התקפה עם מקל לנקודות תורפה"
                     )
                 ),
-                BeltGroup(
-                    belt = Belt.BLUE,
-                    items = emptyList()
-                ),
-                BeltGroup(
-                    belt = Belt.BROWN,
-                    items = emptyList()
-                ),
+
                 BeltGroup(
                     belt = Belt.BLACK,
                     items = listOf(
                         "מכות במקל קצר - מכת מקל לראש",
                         "מכות במקל קצר - מכת מקל לרקה",
-                        "מכות במקל קצר - מכת מקל ללסת / צוואר",
+                        "מכות במקל קצר - מכת מקל ללסת / צואר",
                         "מכות במקל קצר - מכת מקל לעצם הבריח",
-                        "מכות במקל קצר - מכת מקל למפרק",
+                        "מכות במקל קצר - מכת מקל למרפק",
                         "מכות במקל קצר - מכת מקל לשורש כף היד",
                         "מכות במקל קצר - מכת מקל לפרקי האצבעות",
                         "מכות במקל קצר - מכת מקל לברך",
@@ -991,6 +1037,8 @@ object HardSectionsCatalog {
                         "מכות במקל קצר - דקירת מקל חיצונית לצלעות",
                         "מכות במקל קצר - דקירת מקל ישרה לבטן / לגרון",
                         "מכות במקל קצר - דקירת מקל הפוכה",
+
+                        "מכות במקל / רובה - התקפה עם מקל לנקודות תורפה",
                         "מכות במקל / רובה - מכה אופקית לצוואר",
                         "מכות במקל / רובה - דקירה",
                         "מכות במקל / רובה - מכת מגל",
@@ -1160,6 +1208,65 @@ object HardSectionsCatalog {
                     )
                 )
             )
+        )
+    )
+
+    val defensesRoot: List<Section> = listOf(
+        Section(
+            id = "def_internal_punch",
+            title = "הגנות פנימיות - אגרופים",
+            beltGroups = defensesInternalPunch.firstOrNull()?.beltGroups.orEmpty()
+        ),
+        Section(
+            id = "def_internal_kick",
+            title = "הגנות פנימיות - בעיטות",
+            beltGroups = defensesInternalKick.firstOrNull()?.beltGroups.orEmpty()
+        ),
+        Section(
+            id = "def_external_punch",
+            title = "הגנות חיצוניות - אגרופים",
+            beltGroups = defensesExternalPunch.firstOrNull()?.beltGroups.orEmpty()
+        ),
+        Section(
+            id = "def_external_kick",
+            title = "הגנות חיצוניות - בעיטות",
+            beltGroups = defensesExternalKick.firstOrNull()?.beltGroups.orEmpty()
+        ),
+        Section(
+            id = "kicks_hard",
+            title = "הגנות נגד בעיטות",
+            subSections = defensesKicks
+        ),
+        Section(
+            id = "knife_defense",
+            title = "הגנות מסכין",
+            beltGroups = defensesKnife
+                .firstOrNull { it.id == "knife_defense_main" }
+                ?.beltGroups
+                .orEmpty()
+        ),
+        Section(
+            id = "knife_rifle_defense",
+            title = "הגנות עם רובה נגד דקירות סכין",
+            beltGroups = defensesKnife
+                .firstOrNull { it.id == "knife_defense_rifle_against_knife_stabs" }
+                ?.beltGroups
+                .orEmpty()
+        ),
+        Section(
+            id = "gun_threat_defense",
+            title = "הגנות מאיום אקדח",
+            beltGroups = defensesGunThreat.firstOrNull()?.beltGroups.orEmpty()
+        ),
+        Section(
+            id = "multiple_attackers_defense",
+            title = "הגנות נגד מספר תוקפים",
+            beltGroups = defensesMultipleAttackers.firstOrNull()?.beltGroups.orEmpty()
+        ),
+        Section(
+            id = "stick_defense",
+            title = "הגנות נגד מקל",
+            beltGroups = defensesStick.firstOrNull()?.beltGroups.orEmpty()
         )
     )
 
@@ -1420,7 +1527,9 @@ object HardSectionsCatalog {
             t == "kicks_hard" -> "kicks_hard"
             t == "releases_hard" -> "releases_hard"
             t == "knife_hard" -> "knife_hard"
+            t == "knife_rifle_hard" -> "knife_rifle_hard"
             t == "gun_hard" -> "gun_hard"
+            t == "multiple_attackers_hard" -> "multiple_attackers_hard"
             t == "stick_hard" -> "stick_hard"
             else -> t
         }
@@ -1504,8 +1613,20 @@ object HardSectionsCatalog {
             return fromSection(defensesExternalKick.firstOrNull())
         }
 
-        if (kind == "knife_hard") return fromSection(defensesKnife.firstOrNull())
+        if (kind == "knife_hard") {
+            return fromSection(
+                defensesKnife.firstOrNull { it.id == "knife_defense_main" }
+            )
+        }
+
+        if (kind == "knife_rifle_hard") {
+            return fromSection(
+                defensesKnife.firstOrNull { it.id == "knife_defense_rifle_against_knife_stabs" }
+            )
+        }
+
         if (kind == "gun_hard") return fromSection(defensesGunThreat.firstOrNull())
+        if (kind == "multiple_attackers_hard") return fromSection(defensesMultipleAttackers.firstOrNull())
         if (kind == "stick_hard") return fromSection(defensesStick.firstOrNull())
 
         return emptyList()
@@ -1530,7 +1651,9 @@ object HardSectionsCatalog {
             "kicks_hard" to "knee" -> "הגנות נגד ברך"
             "kicks_hard" to "side_kick" -> "הגנות נגד בעיטה לצד"
             "knife_hard" to "all" -> "הגנות מסכין"
+            "knife_rifle_hard" to "all" -> "הגנות עם רובה נגד דקירות סכין"
             "gun_hard" to "all" -> "הגנות מאיום אקדח"
+            "multiple_attackers_hard" to "all" -> "הגנות נגד מספר תוקפים"
             "stick_hard" to "all" -> "הגנות נגד מקל"
             else -> "הגנות"
         }
@@ -1620,7 +1743,9 @@ object HardSectionsCatalog {
                         defenseCount("kicks_hard", "side_kick")
                 ),
         "הגנות מסכין" to defenseCount("knife_hard", "all"),
+        "הגנות עם רובה נגד דקירות סכין" to defenseCount("knife_rifle_hard", "all"),
         "הגנות מאיום אקדח" to defenseCount("gun_hard", "all"),
+        "הגנות נגד מספר תוקפים" to defenseCount("multiple_attackers_hard", "all"),
         "הגנות נגד מקל" to defenseCount("stick_hard", "all"),
     )
 

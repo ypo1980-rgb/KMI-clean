@@ -259,6 +259,13 @@ fun NavGraphBuilder.trainingNavGraph(
                 }
             },
 
+            onOpenRandomPracticeByTopic = { belt, topic ->
+                nav.navigate(Route.Practice.make(belt, topic)) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
             onOpenFinalExam = { belt ->
                 nav.navigate(Route.Exam.make(belt)) {
                     launchSingleTop = true

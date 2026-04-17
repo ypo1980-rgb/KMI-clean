@@ -34,7 +34,11 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -47,6 +51,7 @@ import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.domain.ContentRepo
 import android.app.Activity
+import androidx.compose.foundation.BorderStroke
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -501,20 +506,12 @@ fun ExercisesTabsScreen(
         val unknownCount = itemList.count { normalizeItemId(it) in unknowns }
         val favCount     = itemList.count { normalizeItemId(it) in favorites }
 
-        // ✅ DEBUG (זמני): כמה נושאים יש לפי ה-Bridge
-        val dbgTopics = remember(belt) { ContentRepo.listTopicTitles(belt).size }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            Text(
-                "debug: sharedTopics=$dbgTopics | itemList=${itemList.size}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+
             Row(modifier = Modifier.fillMaxWidth()) {
                 MetricFieldEdgeToEdge(
                     title    = tr("הכל", "All"),
@@ -579,69 +576,49 @@ fun ExercisesTabsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
-                                .bringIntoViewRequester(bringer)
-                                .clickable { explainFromSearch = item },
+                                .bringIntoViewRequester(bringer),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            FilledTonalIconButton(
-                                onClick = {
+                            ExerciseRowActionsMenu(
+                                isEnglish = isEnglish,
+                                isFav = isFav,
+                                hasNote = itemHasNote,
+                                isUnknown = normalizeItemId(item) in unknowns,
+                                onInfo = {
                                     pressed = true
                                     explainFromSearch = item
-                                    scope.launch { kotlinx.coroutines.delay(150); pressed = false }
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(150)
+                                        pressed = false
+                                    }
                                 },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .scale(scale),
-                                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.primary
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Info,
-                                    contentDescription = tr("הסבר", "Explanation")
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
+                                onToggleFavorite = {
+                                    val cleanId = normalizeItemId(item)
+                                    FavoritesStore.toggle(cleanId)
+                                },
+                                onEditNote = {
                                     noteEditorFor = item
                                     noteDraft = loadNote(item)
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Edit,
-                                    contentDescription = tr("עריכת הערה", "Edit note"),
-                                    tint = if (itemHasNote) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            IconButton(
-                                onClick = { toggleFavorite(item) }
-                            ) {
-                                if (isFav) {
-                                    Icon(
-                                        Icons.Filled.Star,
-                                        contentDescription = tr("הסר ממועדפים", "Remove from favorites"),
-                                        tint = Color(0xFFFFC107)
-                                    )
-                                } else {
-                                    Icon(
-                                        Icons.Outlined.StarBorder,
-                                        contentDescription = tr("הוסף למועדפים", "Add to favorites")
-                                    )
-                                }
-                            }
+                                },
+                                onToggleUnknown = {
+                                    val cleanId = normalizeItemId(item)
+                                    setUnknown(item, cleanId !in unknowns)
+                                },
+                                modifier = Modifier.scale(scale)
+                            )
 
                             Spacer(Modifier.width(10.dp))
 
                             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                                 Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.End
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { explainFromSearch = item },
+                                    horizontalAlignment = androidx.compose.ui.AbsoluteAlignment.Right
                                 ) {
                                     Text(
                                         text = displayName,
+                                        modifier = Modifier.fillMaxWidth(),
                                         textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                         color = MaterialTheme.colorScheme.onBackground
                                     )
@@ -649,6 +626,7 @@ fun ExercisesTabsScreen(
                                     if (itemHasNote) {
                                         Text(
                                             text = tr("יש הערה שמורה", "Saved note exists"),
+                                            modifier = Modifier.fillMaxWidth(),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.primary,
                                             textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
@@ -972,6 +950,148 @@ fun ExercisesTabsScreen(
 
 } // ✅ סוגר את ExercisesTabsScreen(...)
 
+
+@Composable
+private fun ExerciseRowActionsMenu(
+    isEnglish: Boolean,
+    isFav: Boolean,
+    hasNote: Boolean,
+    isUnknown: Boolean,
+    onInfo: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onEditNote: () -> Unit,
+    onToggleUnknown: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var expanded by remember { mutableStateOf(false) }
+
+    val infoScale by animateFloatAsState(
+        targetValue = if (expanded) 1.08f else 1f,
+        animationSpec = tween(180),
+        label = "exerciseInfoScale"
+    )
+
+    val infoRotation by animateFloatAsState(
+        targetValue = if (expanded) 12f else 0f,
+        animationSpec = tween(180),
+        label = "exerciseInfoRotation"
+    )
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    Box(modifier = modifier) {
+        Surface(
+            onClick = { expanded = true },
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            shadowElevation = 4.dp,
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+            ),
+            modifier = Modifier
+                .size(40.dp)
+                .graphicsLayer {
+                    scaleX = infoScale
+                    scaleY = infoScale
+                }
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = tr("פעולות לתרגיל", "Exercise actions"),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .graphicsLayer {
+                            rotationZ = infoRotation
+                        }
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.99f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
+                            Color.White.copy(alpha = 0.97f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    RoundedCornerShape(18.dp)
+                )
+        ) {
+            DropdownMenuItem(
+                text = { Text(tr("מידע", "Info"), style = MaterialTheme.typography.labelLarge) },
+                onClick = {
+                    expanded = false
+                    onInfo()
+                }
+            )
+
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        tr(
+                            if (isFav) "הסר ממועדפים" else "הוסף למועדפים",
+                            if (isFav) "Remove from favorites" else "Add to favorites"
+                        ),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onToggleFavorite()
+                }
+            )
+
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        tr(
+                            if (hasNote) "ערוך / מחק הערה" else "הוסף הערה לתרגיל",
+                            if (hasNote) "Edit / delete note" else "Add note"
+                        ),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onEditNote()
+                }
+            )
+
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        tr(
+                            if (isUnknown) "בטל לא יודע" else "סמן כלא יודע",
+                            if (isUnknown) "Remove unknown mark" else "Mark as unknown"
+                        ),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onToggleUnknown()
+                }
+            )
+        }
+    }
+}
 
 // ========= כפתור מונפש לשימוש חוזר =========
 @Composable

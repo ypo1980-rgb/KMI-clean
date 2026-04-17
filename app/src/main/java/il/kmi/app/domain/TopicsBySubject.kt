@@ -150,11 +150,33 @@ object TopicsBySubjectRegistry {
             )
         ),
 
-
+// ================== הגנות ==================
+        SubjectTopic(
+            id = "defenses",
+            titleHeb = "הגנות",
+            description = "הגנות פנימיות, חיצוניות, בעיטות, סכין, אקדח, מקל ומספר תוקפים",
+            belts = listOf(
+                Belt.YELLOW,
+                Belt.ORANGE,
+                Belt.GREEN,
+                Belt.BLUE,
+                Belt.BROWN,
+                Belt.BLACK
+            ),
+            topicsByBelt = mapOf(
+                Belt.YELLOW to listOf("הגנות"),
+                Belt.ORANGE to listOf("הגנות"),
+                Belt.GREEN to listOf("הגנות"),
+                Belt.BLUE to listOf("הגנות"),
+                Belt.BROWN to listOf("הגנות"),
+                Belt.BLACK to listOf("הגנות")
+            )
+        ),
 
         // ================== הגנות פנימיות – אגרופים ==================
         SubjectTopic(
             id = "def_internal_punches",
+            parentId = "defenses",
             titleHeb = "הגנות פנימיות – אגרופים",
             description = "הגנות פנימיות נגד אגרופים.",
             belts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK),
@@ -173,6 +195,7 @@ object TopicsBySubjectRegistry {
         // ================== הגנות פנימיות – בעיטות ==================
         SubjectTopic(
             id = "def_internal_kicks",
+            parentId = "defenses",
             titleHeb = "הגנות פנימיות – בעיטות",
             description = "הגנות פנימיות נגד בעיטות.",
             belts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK),
@@ -190,6 +213,7 @@ object TopicsBySubjectRegistry {
         // ================== הגנות חיצוניות – אגרופים ==================
         SubjectTopic(
             id = "def_external_punches",
+            parentId = "defenses",
             titleHeb = "הגנות חיצוניות – אגרופים",
             description = "הגנות חיצוניות נגד אגרופים.",
             belts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK),
@@ -207,6 +231,7 @@ object TopicsBySubjectRegistry {
         // ================== הגנות חיצוניות – בעיטות ==================
         SubjectTopic(
             id = "def_external_kicks",
+            parentId = "defenses",
             titleHeb = "הגנות חיצוניות – בעיטות",
             description = "הגנות חיצוניות נגד בעיטות.",
             belts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK),
@@ -318,6 +343,7 @@ object TopicsBySubjectRegistry {
         // ================== הגנות סכין ==================
         SubjectTopic(
             id = "knife_defense",
+            parentId = "defenses",
             titleHeb = "הגנות סכין",
             description = "עקרונות עבודה והגנות מול איום ודקירות בסכין.",
             belts = listOf(
@@ -339,9 +365,39 @@ object TopicsBySubjectRegistry {
             excludeItemKeywords = listOf("מקל", "אקדח", "תמ\"ק")
         ),
 
+        // ================== הגנות עם רובה נגד דקירות סכין ==================
+        SubjectTopic(
+            id = "knife_rifle_defense",
+            parentId = "defenses",
+            titleHeb = "הגנות עם רובה נגד דקירות סכין",
+            belts = listOf(
+                Belt.BLACK
+            ),
+            topicsByBelt = mapOf(
+                Belt.BLACK to listOf("הגנות")
+            ),
+            includeItemKeywords = listOf("רובה"),
+            subTopicHint = "סכין"
+        ),
+
+// ================== הגנות נגד מספר תוקפים ==================
+        SubjectTopic(
+            id = "multiple_attackers_defense",
+            parentId = "defenses",
+            titleHeb = "הגנות נגד מספר תוקפים",
+            belts = listOf(
+                Belt.BLACK
+            ),
+            topicsByBelt = mapOf(
+                Belt.BLACK to listOf("הגנות")
+            ),
+            includeItemKeywords = listOf("1 מקל", "2 תוקפים")
+        ),
+
         // ================== הגנות מאיום אקדח ==================
         SubjectTopic(
             id = "gun_threat_defense",
+            parentId = "defenses",
             titleHeb = "הגנות מאיום אקדח",
             belts = listOf(
                 Belt.BROWN,
@@ -361,6 +417,7 @@ object TopicsBySubjectRegistry {
         // ================== הגנות נגד מקל ==================
         SubjectTopic(
             id = "stick_defense",
+            parentId = "defenses",
             titleHeb = "הגנות נגד מקל",
             belts = listOf(
                 Belt.GREEN,

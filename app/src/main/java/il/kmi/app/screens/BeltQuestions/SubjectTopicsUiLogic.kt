@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.absolutePadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
@@ -52,7 +52,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.window.DialogProperties
-import kotlin.math.abs
 
 
 // -------------------------------------------------------------
@@ -670,7 +669,7 @@ internal fun DefenseCategoryPickDialogModern(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(top = 205.dp, start = 8.dp, end = 8.dp),
+                        .padding(top = 92.dp, bottom = 20.dp, start = 8.dp, end = 8.dp),
                     contentAlignment = if (isEnglish) {
                         BiasAbsoluteAlignment(-1f, -1f)
                     } else {
@@ -679,9 +678,8 @@ internal fun DefenseCategoryPickDialogModern(
                 ) {
                     Surface(
                         modifier = Modifier
-                            .fillMaxWidth(0.84f)
-                            .wrapContentHeight()
-                            .heightIn(min = 520.dp, max = 620.dp)
+                            .fillMaxWidth(0.88f)
+                            .fillMaxHeight()
                             .clickable(
                                 indication = null,
                                 interactionSource = remember { MutableInteractionSource() }
@@ -692,9 +690,11 @@ internal fun DefenseCategoryPickDialogModern(
                         color = Color(0xFFF7F4FB),
                         border = BorderStroke(1.dp, Color(0xFFE3DDF0))
                     ) {
+                        val scrollState = rememberScrollState()
+
                         Column(
                             modifier = Modifier
-                                .wrapContentHeight()
+                                .fillMaxSize()
                                 .padding(horizontal = 16.dp, vertical = 10.dp)
                         ) {
                         Row(
@@ -730,59 +730,116 @@ internal fun DefenseCategoryPickDialogModern(
 
                         Spacer(Modifier.height(4.dp))
 
-                            Column(
+                            Box(
                                 modifier = Modifier
-                                    .wrapContentHeight()
-                                    .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    .weight(1f, fill = false)
+                                    .fillMaxWidth()
                             ) {
-                                DrawerStylePickItem(
-                                    title = tr("הגנות פנימיות", "Internal Defenses"),
-                                    subtitle = countLabel(counts["הגנות פנימיות"] ?: 0),
-                                    accent = Color(0xFF2E7D32),
-                                    isEnglish = isEnglish,
-                                    onClick = { onPick("הגנות פנימיות") }
-                                )
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .verticalScroll(scrollState)
+                                        .padding(bottom = 34.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    DrawerStylePickItem(
+                                        title = tr("הגנות פנימיות", "Internal Defenses"),
+                                        subtitle = countLabel(counts["הגנות פנימיות"] ?: 0),
+                                        accent = Color(0xFF2E7D32),
+                                        isEnglish = isEnglish,
+                                        onClick = { onPick("הגנות פנימיות") }
+                                    )
 
-                                DrawerStylePickItem(
-                                    title = tr("הגנות חיצוניות", "External Defenses"),
-                                    subtitle = countLabel(counts["הגנות חיצוניות"] ?: 0),
-                                    accent = Color(0xFF1565C0),
-                                    isEnglish = isEnglish,
-                                    onClick = { onPick("הגנות חיצוניות") }
-                                )
+                                    DrawerStylePickItem(
+                                        title = tr("הגנות חיצוניות", "External Defenses"),
+                                        subtitle = countLabel(counts["הגנות חיצוניות"] ?: 0),
+                                        accent = Color(0xFF1565C0),
+                                        isEnglish = isEnglish,
+                                        onClick = { onPick("הגנות חיצוניות") }
+                                    )
 
-                                DrawerStylePickItem(
-                                    title = tr("הגנות נגד בעיטות", "Defenses Against Kicks"),
-                                    subtitle = countLabel(counts["הגנות נגד בעיטות"] ?: 0),
-                                    accent = Color(0xFFFF9800),
-                                    isEnglish = isEnglish,
-                                    onClick = { onPick("kicks") }
-                                )
+                                    DrawerStylePickItem(
+                                        title = tr("הגנות נגד בעיטות", "Defenses Against Kicks"),
+                                        subtitle = countLabel(counts["הגנות נגד בעיטות"] ?: 0),
+                                        accent = Color(0xFFFF9800),
+                                        isEnglish = isEnglish,
+                                        onClick = { onPick("kicks") }
+                                    )
 
-                                DrawerStylePickItem(
-                                    title = tr("הגנות מסכין", "Knife Defenses"),
-                                    subtitle = countLabel(counts["הגנות מסכין"] ?: 0),
-                                    accent = Color(0xFFE53935),
-                                    isEnglish = isEnglish,
-                                    onClick = { onPick("knife") }
-                                )
+                                    DrawerStylePickItem(
+                                        title = tr("הגנות מסכין", "Knife Defenses"),
+                                        subtitle = countLabel(counts["הגנות מסכין"] ?: 0),
+                                        accent = Color(0xFFE53935),
+                                        isEnglish = isEnglish,
+                                        onClick = { onPick("knife") }
+                                    )
 
-                                DrawerStylePickItem(
-                                    title = tr("הגנות מאיום אקדח", "Gun Threat Defenses"),
-                                    subtitle = countLabel(counts["הגנות מאיום אקדח"] ?: 0),
-                                    accent = Color(0xFF5E35B1),
-                                    isEnglish = isEnglish,
-                                    onClick = { onPick("gun") }
-                                )
+                                    DrawerStylePickItem(
+                                        title = tr("הגנות עם רובה נגד דקירות סכין", "Rifle Defenses Against Knife Stabs"),
+                                        subtitle = countLabel(counts["הגנות עם רובה נגד דקירות סכין"] ?: 0),
+                                        accent = Color(0xFFEF6C00),
+                                        isEnglish = isEnglish,
+                                        onClick = { onPick("knife_rifle") }
+                                    )
 
-                                DrawerStylePickItem(
-                                    title = tr("הגנות נגד מקל", "Stick Defenses"),
-                                    subtitle = countLabel(counts["הגנות נגד מקל"] ?: 0),
-                                    accent = Color(0xFF00897B),
-                                    isEnglish = isEnglish,
-                                    onClick = { onPick("stick") }
-                                )
+                                    DrawerStylePickItem(
+                                        title = tr("הגנות מאיום אקדח", "Gun Threat Defenses"),
+                                        subtitle = countLabel(counts["הגנות מאיום אקדח"] ?: 0),
+                                        accent = Color(0xFF5E35B1),
+                                        isEnglish = isEnglish,
+                                        onClick = { onPick("gun") }
+                                    )
+
+                                    DrawerStylePickItem(
+                                        title = tr("הגנות נגד מספר תוקפים", "Defenses Against Multiple Attackers"),
+                                        subtitle = countLabel(counts["הגנות נגד מספר תוקפים"] ?: 0),
+                                        accent = Color(0xFFD81B60),
+                                        isEnglish = isEnglish,
+                                        onClick = { onPick("multiple_attackers") }
+                                    )
+
+                                    DrawerStylePickItem(
+                                        title = tr("הגנות נגד מקל", "Stick Defenses"),
+                                        subtitle = countLabel(counts["הגנות נגד מקל"] ?: 0),
+                                        accent = Color(0xFF00897B),
+                                        isEnglish = isEnglish,
+                                        onClick = { onPick("stick") }
+                                    )
+                                }
+
+                                if (scrollState.canScrollForward) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .padding(bottom = 4.dp),
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = Color.White.copy(alpha = 0.95f),
+                                        shadowElevation = 6.dp,
+                                        border = BorderStroke(1.dp, Color(0xFFE3DDF0))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                text = "⌄",
+                                                color = Color(0xFF7C4DFF),
+                                                fontWeight = FontWeight.ExtraBold,
+                                                style = MaterialTheme.typography.titleMedium
+                                            )
+
+                                            Spacer(Modifier.width(6.dp))
+
+                                            Text(
+                                                text = tr("גלול למטה", "Scroll down"),
+                                                color = Color(0xFF7C4DFF),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1479,21 +1536,23 @@ internal object SubjectTopicsUiLogic {
 
     fun buildDefenseRootCard(
         totalDefense: Int,
-        formatCount: (Int) -> String
+        formatCount: (Int) -> String,
+        subTopicsCount: Int
     ): RootCardModel {
         return RootCardModel(
             title = "הגנות",
-            countText = "6 תתי נושאים\n${formatCount(totalDefense)}"
+            countText = "$subTopicsCount תתי נושאים\n${formatCount(totalDefense)}"
         )
     }
 
     fun buildHandsRootCard(
         handsRootCount: Int,
-        formatCount: (Int) -> String
+        formatCount: (Int) -> String,
+        subTopicsCount: Int
     ): RootCardModel {
         return RootCardModel(
             title = "עבודת ידיים",
-            countText = "3 תתי נושאים\n${formatCount(handsRootCount)}"
+            countText = "$subTopicsCount תתי נושאים\n${formatCount(handsRootCount)}"
         )
     }
 
@@ -1669,6 +1728,14 @@ internal object SubjectTopicsUiLogic {
 
             p.contains("בעיט") || p == "kicks" -> {
                 DefenseDialogDecision.OpenHardSubject("kicks_hard")
+            }
+
+            p == "knife_rifle" || p.contains("רובה") -> {
+                DefenseDialogDecision.OpenHardSubject("knife_rifle_defense")
+            }
+
+            p == "multiple_attackers" || p.contains("מספר תוקפים") || p.contains("2 תוקפים") -> {
+                DefenseDialogDecision.OpenHardSubject("multiple_attackers_defense")
             }
 
             p.contains("סכין") || p == "knife" -> {

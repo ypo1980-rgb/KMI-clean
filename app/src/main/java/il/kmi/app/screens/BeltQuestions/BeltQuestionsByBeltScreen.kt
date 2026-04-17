@@ -259,6 +259,7 @@ fun BeltQuestionsByBeltScreen(
     onOpenWeakPoints: (Belt) -> Unit = {},
     onOpenAllLists: (Belt) -> Unit = {},
     onOpenRandomPractice: (Belt) -> Unit = {},
+    onOpenRandomPracticeByTopic: (Belt, String) -> Unit = { _, _ -> },
     onOpenFinalExam: (Belt) -> Unit = {},
     onPracticeByTopics: (PracticeByTopicsSelection) -> Unit = {},
     onOpenSummaryScreen: (Belt) -> Unit = {},
@@ -279,6 +280,7 @@ fun BeltQuestionsByBeltScreen(
         onOpenWeakPoints = onOpenWeakPoints,
         onOpenAllLists = onOpenAllLists,
         onOpenRandomPractice = onOpenRandomPractice,
+        onOpenRandomPracticeByTopic = onOpenRandomPracticeByTopic,
         onOpenFinalExam = onOpenFinalExam,
         onPracticeByTopics = onPracticeByTopics,
         onOpenSummaryScreen = onOpenSummaryScreen,
@@ -304,6 +306,7 @@ internal fun BeltPangoLayout(
     onOpenSubTopic: (Belt, String, String) -> Unit,
     onOpenWeakPoints: (Belt) -> Unit,    onOpenAllLists: (Belt) -> Unit,
     onOpenRandomPractice: (Belt) -> Unit,
+    onOpenRandomPracticeByTopic: (Belt, String) -> Unit,
     onOpenFinalExam: (Belt) -> Unit,
     onPracticeByTopics: (PracticeByTopicsSelection) -> Unit,
     onOpenSummaryScreen: (Belt) -> Unit,
@@ -434,6 +437,10 @@ internal fun BeltPangoLayout(
             onPracticeByTopics = { selection ->
                 showPracticeMenu = false
                 onPracticeByTopics(selection)
+            },
+            onPracticeByTopicSelected = { beltArg, topicArg ->
+                showPracticeMenu = false
+                onOpenRandomPracticeByTopic(beltArg, topicArg)
             }
         )
     }
@@ -547,7 +554,65 @@ internal fun BeltPangoLayout(
                                     }
                                 )
 
-                                Spacer(Modifier.height(110.dp))
+                                Spacer(Modifier.height(10.dp))
+
+                                Surface(
+                                    onClick = {
+                                        clickSound()
+                                        haptic(true)
+                                        quickMenuExpanded = true
+                                    },
+                                    shape = RoundedCornerShape(18.dp),
+                                    shadowElevation = 10.dp,
+                                    color = Color.White,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        currentBelt.color.copy(alpha = 0.22f)
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp)
+                                        .height(60.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                brush = Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        currentBelt.color.copy(alpha = 0.10f),
+                                                        Color.White,
+                                                        currentBelt.color.copy(alpha = 0.05f)
+                                                    )
+                                                )
+                                            )
+                                            .padding(horizontal = 16.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Menu,
+                                            contentDescription = null,
+                                            tint = currentBelt.color,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+
+                                        Spacer(Modifier.width(8.dp))
+
+                                        Text(
+                                            text = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) {
+                                                "Quick View"
+                                            } else {
+                                                "מבט מהיר"
+                                            },
+                                            fontWeight = FontWeight.Bold,
+                                            color = currentBelt.color,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(8.dp))
                             }
                         }
                     }
@@ -591,6 +656,48 @@ internal fun BeltPangoLayout(
                     onExpandedChange = { quickMenuExpanded = it },
                     triggerMode = QuickMenuTriggerMode.Fab,
                     includePractice = true,
+                    onWeakPoints = {
+                        clickSound(); haptic(true)
+                        onOpenWeakPoints(currentBelt)
+                    },
+                    onAllLists = {
+                        clickSound(); haptic(true)
+                        onOpenAllLists(currentBelt)
+                    },
+                    onPractice = {
+                        clickSound(); haptic(true)
+                        showPracticeMenu = true
+                    },
+                    onSummary = {
+                        clickSound(); haptic(true)
+                        onOpenSummaryScreen(currentBelt)
+                    },
+                    onVoice = {
+                        clickSound(); haptic(true)
+                        onOpenVoiceAssistant(currentBelt)
+                    },
+                    onPdf = {
+                        clickSound(); haptic(true)
+                        onOpenPdfMaterials(currentBelt)
+                    }
+                )
+            }
+
+            if (topicsViewMode == TopicsViewMode.BY_TOPIC) {
+                FloatingQuickMenu(
+                    belt = currentBelt,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(start = 10.dp, end = 10.dp, bottom = 78.dp)
+                        .fillMaxWidth()
+                        .zIndex(999f),
+                    expanded = quickMenuExpanded,
+                    onExpandedChange = { quickMenuExpanded = it },
+                    triggerMode = QuickMenuTriggerMode.BottomBar,
+                    includePractice = true,
+                    includeAllLists = false,
+                    includeSummary = false,
                     onWeakPoints = {
                         clickSound(); haptic(true)
                         onOpenWeakPoints(currentBelt)

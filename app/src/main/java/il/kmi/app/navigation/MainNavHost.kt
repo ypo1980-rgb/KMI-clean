@@ -38,9 +38,9 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import il.kmi.app.free_sessions.ui.FreeSessionsScreen
 import il.kmi.app.free_sessions.ui.navigation.FreeSessionsRoute
-import il.kmi.app.ui.assistant.AiAssistantDialog
+import il.kmi.app.ui.assistant.ui.AiAssistantDialog
 import il.kmi.app.ui.WakeWordManager
-import il.kmi.app.ui.assistant.VoiceNavCommand
+import il.kmi.app.ui.assistant.ui.VoiceNavCommand
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -49,6 +49,7 @@ import il.kmi.app.screens.SubTopics.subTopicsByBeltNavGraph
 import il.kmi.app.screens.SubTopics.subTopicsByTopicNavGraph
 import il.kmi.app.screens.admin.PaymentsReportScreen
 import il.kmi.app.screens.payments.PaymentScreen
+import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 
 /**
  * NavHost הראשי של האפליקציה.
@@ -61,7 +62,7 @@ fun MainNavHost(
     kmiPrefs: KmiPrefs,
     themeMode: String,
     onThemeChange: (String) -> Unit,
-    startDestination: String = Route.Intro.route
+    startDestination: String = Route.Splash.route
 ) {
     val ctx = LocalContext.current
 
@@ -168,12 +169,35 @@ fun MainNavHost(
 
         NavHost(
             navController = nav,
-            // תמיד מתחילים במסך הפתיחה; נחליט שם אם לדלג על האימות
-            startDestination = startDestination,
+            startDestination = Route.Splash.route,
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
+
+            composable(Route.Splash.route) {
+                KmiStartupLoadingScreen(
+                    isEnglish = isEnglish,
+                    onFinished = {
+                        nav.navigate(Route.Intro.route) {
+                            popUpTo(Route.Splash.route) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+
+            composable(Route.Splash.route) {
+                KmiStartupLoadingScreen(
+                    isEnglish = isEnglish,
+                    onFinished = {
+                        nav.navigate(Route.Intro.route) {
+                            popUpTo(Route.Splash.route) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
 
             // מסך פתיחה
             composable(Route.Intro.route) {
@@ -595,7 +619,6 @@ fun MainNavHost(
                         WakeWordManager.start(ctx) { showAssistant = true }
                     }
                 },
-                contextLabel = "כל האפליקציה",
 
                 // ✅ זה החיבור שמבצע את הניווט אחרי שהעוזר סיים לדבר
                 onVoiceCommand = { cmd ->

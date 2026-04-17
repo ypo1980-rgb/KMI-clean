@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
@@ -30,6 +31,8 @@ import il.kmi.app.localization.rememberIsEnglish
 import il.kmi.app.screens.parseSearchKey
 import il.kmi.app.ui.FloatingQuickMenu
 import il.kmi.app.ui.QuickMenuTriggerMode
+import il.kmi.app.screens.PracticeByTopicsSelection
+import il.kmi.app.screens.PracticeMenuDialog
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
@@ -37,14 +40,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.ui.graphics.vector.ImageVector
+import il.kmi.app.domain.color
 
 
 // ✅ FIX: פונקציית נרמול אחת בלבד, ברמת קובץ (נראית לכולם, אין forward-ref ואין אמביגיוטי)
@@ -198,6 +204,10 @@ fun BeltQuestionsByTopicScreen(
     onOpenHardSubjectRoute: (belt: Belt, subjectId: String) -> Unit = { _, _ -> },
     onOpenWeakPoints: (Belt) -> Unit = {},
     onOpenAllLists: (Belt) -> Unit = {},
+    onOpenRandomPractice: (Belt) -> Unit = {},
+    onOpenRandomPracticeByTopic: (Belt, String) -> Unit = { _, _ -> },
+    onOpenFinalExam: (Belt) -> Unit = {},
+    onPracticeByTopics: (PracticeByTopicsSelection) -> Unit = {},
     onOpenSummaryScreen: (Belt) -> Unit = {},
     onOpenVoiceAssistant: (Belt) -> Unit = {},
     onOpenPdfMaterials: (Belt) -> Unit = {}
@@ -209,8 +219,33 @@ fun BeltQuestionsByTopicScreen(
 
     // State לניהול התפריט המהיר
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var showPracticeMenu by rememberSaveable { mutableStateOf(false) }
     var effectiveBelt by rememberSaveable { mutableStateOf(Belt.GREEN) }
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
+
+    if (showPracticeMenu) {
+        PracticeMenuDialog(
+            canUseExtras = true,
+            defaultBelt = effectiveBelt,
+            onDismiss = { showPracticeMenu = false },
+            onRandomPractice = { beltArg ->
+                showPracticeMenu = false
+                onOpenRandomPractice(beltArg)
+            },
+            onFinalExam = { beltArg ->
+                showPracticeMenu = false
+                onOpenFinalExam(beltArg)
+            },
+            onPracticeByTopics = { selection ->
+                showPracticeMenu = false
+                onPracticeByTopics(selection)
+            },
+            onPracticeByTopicSelected = { beltArg, topicArg ->
+                showPracticeMenu = false
+                onOpenRandomPracticeByTopic(beltArg, topicArg)
+            }
+        )
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -225,7 +260,8 @@ fun BeltQuestionsByTopicScreen(
                 showBottomActions = true,
                 centerTitle = true
             )
-        }
+        },
+        bottomBar = {}
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -235,7 +271,8 @@ fun BeltQuestionsByTopicScreen(
             // 1. תוכן המסך (נגלל)
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .fillMaxHeight()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 8.dp, vertical = 8.dp)
             ) {
@@ -248,30 +285,79 @@ fun BeltQuestionsByTopicScreen(
                     onOpenTopic = onOpenTopic,
                     onOpenTopicWithSub = onOpenTopicWithSub,
                     onOpenDefenseList = onOpenDefenseList,
-                    onOpenHardSubjectRoute = onOpenHardSubjectRoute
+                    onOpenHardSubjectRoute = onOpenHardSubjectRoute,
+                    onQuickViewClick = {
+                        quickMenuExpanded = true
+                    }
                 )
 
-                // רווח בתחתית כדי שהתפריט הצף לא יסתיר את הפריט האחרון
-                Spacer(modifier = Modifier.height(120.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Surface(
+                    onClick = { quickMenuExpanded = true },
+                    shape = RoundedCornerShape(18.dp),
+                    shadowElevation = 10.dp,
+                    color = Color.White,
+                    border = BorderStroke(
+                        1.dp,
+                        effectiveBelt.color.copy(alpha = 0.22f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .height(60.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    colors = listOf(
+                                        effectiveBelt.color.copy(alpha = 0.10f),
+                                        Color.White,
+                                        effectiveBelt.color.copy(alpha = 0.05f)
+                                    )
+                                )
+                            )
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Menu,
+                            contentDescription = null,
+                            tint = effectiveBelt.color,
+                            modifier = Modifier.size(18.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Text(
+                            text = if (isEnglish) "Quick View" else "מבט מהיר",
+                            fontWeight = FontWeight.Bold,
+                            color = effectiveBelt.color,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(88.dp))
             }
 
             FloatingQuickMenu(
                 belt = effectiveBelt,
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .navigationBarsPadding()
-                    .padding(
-                        start = 18.dp,
-                        bottom = 72.dp
-                    )
-                    .size(64.dp)
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 12.dp, bottom = 84.dp)
                     .zIndex(999f),
                 expanded = quickMenuExpanded,
                 onExpandedChange = { quickMenuExpanded = it },
                 triggerMode = QuickMenuTriggerMode.BottomBar,
-                includePractice = false,
+                includePractice = true,
                 onWeakPoints = { onOpenWeakPoints(effectiveBelt) },
                 onAllLists = { onOpenAllLists(effectiveBelt) },
+                onPractice = { showPracticeMenu = true },
                 onSummary = { onOpenSummaryScreen(effectiveBelt) },
                 onVoice = { onOpenVoiceAssistant(effectiveBelt) },
                 onPdf = { onOpenPdfMaterials(effectiveBelt) }
@@ -298,10 +384,20 @@ fun BeltQuestionsByTopicScreen(
             AlertDialog(
                 onDismissRequest = { pickedKey = null },
                 title = {
-                    Row(modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                            Text(text = displayName, fontWeight = FontWeight.Bold, textAlign = TextAlign.Right)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Text(
+                                text = displayName,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Right
+                            )
+
                             Text(
                                 text = if (isEnglish) {
                                     "${ExerciseTitlesEn.getOrSame(topic)} • ${belt.en}"
@@ -312,11 +408,25 @@ fun BeltQuestionsByTopicScreen(
                                 textAlign = TextAlign.Right
                             )
                         }
-                        IconButton(onClick = { showNoteEditor = true }) {
-                            Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF42A5F5))
+
+                        IconButton(
+                            onClick = { showNoteEditor = true }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = Color(0xFF42A5F5)
+                            )
                         }
-                        IconButton(onClick = { FavoritesStore.toggle(favoriteId) }) {
-                            Icon(if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder, contentDescription = null, tint = if (isFavorite) Color(0xFFFFC107) else Color.Gray)
+
+                        IconButton(
+                            onClick = { FavoritesStore.toggle(favoriteId) }
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = null,
+                                tint = if (isFavorite) Color(0xFFFFC107) else Color.Gray
+                            )
                         }
                     }
                 },
@@ -536,6 +646,7 @@ internal fun TopicsBySubjectCard(
     onOpenTopicWithSub: (belt: Belt, topic: String, subTopic: String) -> Unit = { _, _, _ -> },
     onOpenDefenseList: (belt: Belt, kind: String, pick: String) -> Unit = { _, _, _ -> },
     onOpenHardSubjectRoute: (belt: Belt, subjectId: String) -> Unit = { _, _ -> },
+    onQuickViewClick: () -> Unit = {}
 ) {
 
     val isEnglish = rememberIsEnglish()
@@ -678,32 +789,36 @@ internal fun TopicsBySubjectCard(
         }
     }
 
-    val defenseRootCard = remember(totalDefense, isEnglish) {
+    val defenseRootCard = remember(totalDefense, defenseDialogCountsMap, isEnglish) {
         SubjectTopicsUiLogic.buildDefenseRootCard(
             totalDefense = totalDefense,
-            formatCount = ::formatCount
+            formatCount = ::formatCount,
+            subTopicsCount = defenseDialogCountsMap.size
         ).copy(
             title = subjectTitleForUi(
                 subjectId = "defense_root",
                 fallbackHeb = SubjectTopicsUiLogic.buildDefenseRootCard(
                     totalDefense = totalDefense,
-                    formatCount = ::formatCount
+                    formatCount = ::formatCount,
+                    subTopicsCount = defenseDialogCountsMap.size
                 ).title,
                 isEnglish = isEnglish
             )
         )
     }
 
-    val handsRootCard = remember(handsRootCount, isEnglish) {
+    val handsRootCard = remember(handsRootCount, handsPickCounts, isEnglish) {
         SubjectTopicsUiLogic.buildHandsRootCard(
             handsRootCount = handsRootCount,
-            formatCount = ::formatCount
+            formatCount = ::formatCount,
+            subTopicsCount = handsPickCounts.size
         ).copy(
             title = subjectTitleForUi(
                 subjectId = "hands_root",
                 fallbackHeb = SubjectTopicsUiLogic.buildHandsRootCard(
                     handsRootCount = handsRootCount,
-                    formatCount = ::formatCount
+                    formatCount = ::formatCount,
+                    subTopicsCount = handsPickCounts.size
                 ).title,
                 isEnglish = isEnglish
             )
@@ -722,21 +837,36 @@ internal fun TopicsBySubjectCard(
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp, horizontal = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp)
-            ) {            Text(
-                text = if (isEnglish) "Subjects (Categories)" else "נושאים (קטגוריות)",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 2.dp),
-                color = Color(0xFF263238)
-            )
+            Box(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val scrollState = rememberScrollState()
+
+                val showScrollHint by remember {
+                    derivedStateOf {
+                        scrollState.value < scrollState.maxValue
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(scrollState)
+                        .padding(vertical = 4.dp, horizontal = 8.dp)
+                        .padding(bottom = if (showScrollHint) 46.dp else 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    Text(
+                        text = if (isEnglish) "Subjects (Categories)" else "נושאים (קטגוריות)",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 2.dp),
+                        color = Color(0xFF263238)
+                    )
 
                 if (!countsReady) {
                     Text(
@@ -810,9 +940,11 @@ internal fun TopicsBySubjectCard(
                 }
 
                 // ✅ מציגים נושאים בלי תתי־נושאים
-                subjectsWithoutSubTopicsCards.forEachIndexed { index, card ->
-                    val subject = subjects.firstOrNull { it.id == card.id } ?: return@forEachIndexed
+                    subjectsWithoutSubTopicsCards
+                        .filter { it.id != "defenses" }
+                        .forEachIndexed { index, card ->
 
+                            val subject = subjects.firstOrNull { it.id == card.id } ?: return@forEachIndexed
                     SubjectRootCardPremium(
                         title = card.title,
                         subtitle = "",
@@ -967,82 +1099,120 @@ internal fun TopicsBySubjectCard(
                     )
                 }
 
-                askSubTopicsForId?.let { id ->
+                    askSubTopicsForId?.let { id ->
 
-                    val dialogData = remember(subjects, id) {
-                        SubjectTopicsUiLogic.buildSubTopicsDialogData(
-                            subjects = subjects,
-                            id = id
+                        val dialogData = remember(subjects, id) {
+                            SubjectTopicsUiLogic.buildSubTopicsDialogData(
+                                subjects = subjects,
+                                id = id
+                            )
+                        }
+
+                        val counts = subTopicsPickCountsBySubjectId[id].orEmpty()
+                        val displayPicks = remember(dialogData.picks, isEnglish) {
+                            dialogData.picks.map { subTopicTitleForUi(it.trim(), isEnglish) }
+                        }
+
+
+                        SubTopicsPickModeDialogModern(
+                            title = dialogData.base?.titleHeb ?: if (isEnglish) "Sub topics" else "תתי נושאים",
+                            picks = displayPicks,
+                            counts = counts,
+                            onDismiss = { askSubTopicsForId = null },
+                            onPick = { pickedDisplay: String ->
+                                askSubTopicsForId = null
+
+                                val picked = dialogData.picks.firstOrNull {
+                                    subTopicTitleForUi(it, isEnglish) == pickedDisplay
+                                } ?: pickedDisplay
+
+                                val decision = SubjectTopicsUiLogic.resolveSubTopicPick(
+                                    base = dialogData.base,
+                                    bodyHugsChild = dialogData.bodyHugsChild,
+                                    picked = picked,
+                                    norm = ::normText
+                                )
+
+                                when (decision) {
+                                    is SubjectTopicsUiLogic.SubTopicPickDecision.OpenTopicWithSub -> {
+                                        android.util.Log.e(
+                                            "KMI_NAV",
+                                            "SubTopic decision -> onOpenTopicWithSub(${decision.topic}, ${decision.subTopic})"
+                                        )
+
+                                        onOpenTopicWithSub(
+                                            currentBelt,
+                                            decision.topic,
+                                            decision.subTopic
+                                        )
+                                    }
+
+                                    is SubjectTopicsUiLogic.SubTopicPickDecision.OpenSubject -> {
+                                        val hardSubjectId = when (decision.subject.id) {
+                                            "releases" -> releasesSectionIdFor(picked)
+                                            else -> null
+                                        }
+
+                                        if (hardSubjectId != null) {
+                                            android.util.Log.e(
+                                                "KMI_NAV",
+                                                "SubTopic decision DIRECT_HARD_SUBJECT -> subjectId='$hardSubjectId' picked='$picked'"
+                                            )
+
+                                            onOpenHardSubjectRoute(currentBelt, hardSubjectId)
+                                        } else {
+                                            android.util.Log.e(
+                                                "KMI_NAV",
+                                                "SubTopic decision -> openSubjectSmart id='${decision.subject.id}' title='${decision.subject.titleHeb}'"
+                                            )
+
+                                            openSubjectSmart(decision.subject)
+                                        }
+                                    }
+
+                                    SubjectTopicsUiLogic.SubTopicPickDecision.None -> Unit
+                                }
+                            }
                         )
                     }
-
-                    val counts = subTopicsPickCountsBySubjectId[id].orEmpty()
-                    val displayPicks = remember(dialogData.picks, isEnglish) {
-                        dialogData.picks.map { subTopicTitleForUi(it.trim(), isEnglish) }
-                    }
-
-
-                    SubTopicsPickModeDialogModern(
-                        title = dialogData.base?.titleHeb ?: if (isEnglish) "Sub topics" else "תתי נושאים",
-                        picks = displayPicks,
-                        counts = counts,
-                        onDismiss = { askSubTopicsForId = null },
-                        onPick = { pickedDisplay: String ->
-                            askSubTopicsForId = null
-
-                            val picked = dialogData.picks.firstOrNull {
-                                subTopicTitleForUi(it, isEnglish) == pickedDisplay
-                            } ?: pickedDisplay
-
-                            val decision = SubjectTopicsUiLogic.resolveSubTopicPick(
-                                base = dialogData.base,
-                                bodyHugsChild = dialogData.bodyHugsChild,
-                                picked = picked,
-                                norm = ::normText
-                            )
-
-                            when (decision) {
-                                is SubjectTopicsUiLogic.SubTopicPickDecision.OpenTopicWithSub -> {
-                                    android.util.Log.e(
-                                        "KMI_NAV",
-                                        "SubTopic decision -> onOpenTopicWithSub(${decision.topic}, ${decision.subTopic})"
-                                    )
-
-                                    onOpenTopicWithSub(
-                                        currentBelt,
-                                        decision.topic,
-                                        decision.subTopic
-                                    )
-                                }
-
-                                is SubjectTopicsUiLogic.SubTopicPickDecision.OpenSubject -> {
-                                    val hardSubjectId = when (decision.subject.id) {
-                                        "releases" -> releasesSectionIdFor(picked)
-                                        else -> null
-                                    }
-
-                                    if (hardSubjectId != null) {
-                                        android.util.Log.e(
-                                            "KMI_NAV",
-                                            "SubTopic decision DIRECT_HARD_SUBJECT -> subjectId='$hardSubjectId' picked='$picked'"
-                                        )
-
-                                        onOpenHardSubjectRoute(currentBelt, hardSubjectId)
-                                    } else {
-                                        android.util.Log.e(
-                                            "KMI_NAV",
-                                            "SubTopic decision -> openSubjectSmart id='${decision.subject.id}' title='${decision.subject.titleHeb}'"
-                                        )
-
-                                        openSubjectSmart(decision.subject)
-                                    }
-                                }
-
-                                SubjectTopicsUiLogic.SubTopicPickDecision.None -> Unit
-                            }
-                        }
-                    )
                 }
+                if (showScrollHint) {
+
+
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 10.dp)
+                        .zIndex(5f),
+                    shape = RoundedCornerShape(999.dp),
+                    color = Color(0xCC6A1B9A),
+                    shadowElevation = 8.dp,
+                    tonalElevation = 2.dp,
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (isEnglish) "Scroll down" else "גלול למטה",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
             }
         }
     }

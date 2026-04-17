@@ -12,8 +12,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,12 +29,16 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Topic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Divider
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -65,6 +67,8 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import java.util.LinkedHashSet
 
+//============================================================================
+
 @Immutable
 data class PracticeByTopicsSelection(
     val belts: Set<Belt>,
@@ -80,22 +84,46 @@ fun PracticeMenuDialog(
     onDismiss: () -> Unit,
     onRandomPractice: (Belt) -> Unit,
     onFinalExam: (Belt) -> Unit,
-    onPracticeByTopics: (PracticeByTopicsSelection) -> Unit
+    onPracticeByTopics: (PracticeByTopicsSelection) -> Unit,
+    onPracticeByTopicSelected: (belt: Belt, topic: String) -> Unit
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val langManager = remember { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    val textAlignPrimary = if (isEnglish) TextAlign.Start else TextAlign.Right
+
+    val graniteBrush = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFFF7F2FA),
+            Color(0xFFF1EAF6),
+            Color(0xFFECE5F3),
+            Color(0xFFF8F4FA)
+        )
+    )
+
+    val premiumHeaderBrush = Brush.linearGradient(
+        colors = listOf(
+            defaultBelt.color.copy(alpha = 0.92f),
+            defaultBelt.color.copy(alpha = 0.72f),
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.82f)
+        )
+    )
+
     var showTopicsPicker by rememberSaveable { mutableStateOf(false) }
 
     if (showTopicsPicker) {
         PracticeByTopicsPickerDialog(
             contentRepo = contentRepo,
-            initialBelts = setOf(defaultBelt),
+            initialBelts = emptySet(),
             isEnglish = isEnglish,
             onDismiss = { showTopicsPicker = false },
             onConfirm = { selection ->
+                val belt = selection.belts.firstOrNull() ?: return@PracticeByTopicsPickerDialog
+                val topic = selection.topicsByBelt[belt]?.firstOrNull() ?: return@PracticeByTopicsPickerDialog
+
                 showTopicsPicker = false
-                onPracticeByTopics(selection)
+                onPracticeByTopicSelected(belt, topic)
             }
         )
         return
@@ -103,7 +131,7 @@ fun PracticeMenuDialog(
 
     // ✅ accent לפי החגורה במסך הנוכחי
     val beltAccent = defaultBelt.color
-    val beltName = if (isEnglish) "(${defaultBelt.en})" else "(${defaultBelt.heb})"
+    val beltName = tr("(${defaultBelt.heb})", "(${defaultBelt.en})")
 
     // ✅ הכל RTL בתוך הדיאלוג
     CompositionLocalProvider(
@@ -138,17 +166,17 @@ fun PracticeMenuDialog(
             enabled: Boolean,
             onClick: () -> Unit
         ) {
-            val shape = RoundedCornerShape(18.dp)
-            val border = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)
+            val shape = RoundedCornerShape(22.dp)
+            val border = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
 
             val interaction = remember { MutableInteractionSource() }
             val pressed by interaction.collectIsPressedAsState()
 
             val bg by animateColorAsState(
                 targetValue = when {
-                    !enabled -> MaterialTheme.colorScheme.surface.copy(alpha = 0.70f)
-                    pressed -> beltAccent.copy(alpha = 0.08f)
-                    else -> MaterialTheme.colorScheme.surface
+                    !enabled -> Color.White.copy(alpha = 0.60f)
+                    pressed -> beltAccent.copy(alpha = 0.10f)
+                    else -> Color.White.copy(alpha = 0.84f)
                 },
                 label = "row_bg"
             )
@@ -167,7 +195,7 @@ fun PracticeMenuDialog(
                 shape = shape,
                 color = bg,
                 tonalElevation = 0.dp,
-                shadowElevation = if (enabled) 8.dp else 0.dp,
+                shadowElevation = if (enabled) 12.dp else 0.dp,
                 border = BorderStroke(1.dp, border)
             ) {
                 Row(
@@ -222,114 +250,135 @@ fun PracticeMenuDialog(
 
         AlertDialog(
             onDismissRequest = onDismiss,
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = Color.Transparent,
             tonalElevation = 0.dp,
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(30.dp),
 
             title = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color.Transparent,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start // RTL: Start=ימין
+                            .background(premiumHeaderBrush, RoundedCornerShape(24.dp))
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = beltAccent.copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, beltAccent.copy(alpha = 0.18f))
-                        ) {
-                            Box(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                contentAlignment = Alignment.Center
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Topic,
-                                    contentDescription = null,
-                                    tint = beltAccent
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color.White.copy(alpha = 0.16f),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+                                ) {
+                                    Box(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Topic,
+                                            contentDescription = null,
+                                            tint = Color.White
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.width(12.dp))
+
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                ) {
+                                    Text(
+                                        text = tr("תרגול", "Practice"),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White,
+                                        textAlign = textAlignPrimary,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+
+                                    Text(
+                                        text = tr("בחר פעולה כדי להתחיל", "Choose an action to begin"),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.White.copy(alpha = 0.88f),
+                                        textAlign = textAlignPrimary,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
-                        }
 
-                        Spacer(Modifier.width(12.dp))
-
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = if (isEnglish) "Practice" else "תרגול",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(Modifier.height(2.dp))
-
-                            Text(
-                                text = if (isEnglish) "Choose an action to begin" else "בחר פעולה כדי להתחיל",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f),
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            Spacer(Modifier.height(12.dp))
+                            GradientDivider()
                         }
                     }
-
-                    Spacer(Modifier.height(12.dp))
-                    GradientDivider()
                 }
             },
 
             text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(28.dp),
+                    color = Color.Transparent,
+                    shadowElevation = 0.dp
                 ) {
-                    ModernActionRow(
-                        title = if (isEnglish) "Random Practice - $beltName" else "תרגול אקראי - $beltName",
-                        icon = Icons.Filled.Casino,
-                        enabled = canUseExtras,
-                        onClick = { onRandomPractice(defaultBelt) }
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(graniteBrush, RoundedCornerShape(28.dp))
+                            .padding(horizontal = 2.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        ModernActionRow(
+                            title = tr("תרגול אקראי - $beltName", "Random Practice - $beltName"),
+                            icon = Icons.Filled.Casino,
+                            enabled = canUseExtras,
+                            onClick = { onRandomPractice(defaultBelt) }
+                        )
 
-                    ModernActionRow(
-                        title = if (isEnglish) "Final Exam - $beltName" else "מבחן מסכם - $beltName",
-                        icon = Icons.Filled.AssignmentTurnedIn,
-                        enabled = canUseExtras,
-                        onClick = { onFinalExam(defaultBelt) }
-                    )
+                        ModernActionRow(
+                            title = tr("מבחן מסכם - $beltName", "Final Exam - $beltName"),
+                            icon = Icons.Filled.AssignmentTurnedIn,
+                            enabled = canUseExtras,
+                            onClick = { onFinalExam(defaultBelt) }
+                        )
 
-                    ModernActionRow(
-                        title = if (isEnglish) "Practice by Topic" else "תרגול לפי נושא",
-                        icon = Icons.Filled.Topic,
-                        enabled = canUseExtras,
-                        onClick = { showTopicsPicker = true }
-                    )
+                        ModernActionRow(
+                            title = tr("תרגול לפי נושא", "Practice by Topic"),
+                            icon = Icons.Filled.Topic,
+                            enabled = canUseExtras,
+                            onClick = { showTopicsPicker = true }
+                        )
 
-                    if (!canUseExtras) {
-                        Spacer(Modifier.height(2.dp))
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f))
-                        ) {
-                            Text(
-                                text = if (isEnglish) {
-                                    "Practice options are available only with Extras / subscription access."
-                                } else {
-                                    "אפשרויות התרגול זמינות רק בהרשאות Extras/מנוי."
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
-                            )
+                        if (!canUseExtras) {
+                            Spacer(Modifier.height(2.dp))
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f))
+                            ) {
+                                Text(
+                                    text = tr(
+                                        "אפשרויות התרגול זמינות רק בהרשאות Extras/מנוי.",
+                                        "Practice options are available only with Extras / subscription access."
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    textAlign = textAlignPrimary
+                                )
+                            }
                         }
                     }
                 }
@@ -338,8 +387,9 @@ fun PracticeMenuDialog(
             confirmButton = {
                 TextButton(onClick = onDismiss) {
                     Text(
-                        if (isEnglish) "Close" else "סגור",
-                        fontWeight = FontWeight.SemiBold
+                        tr("סגור", "Close"),
+                        fontWeight = FontWeight.SemiBold,
+                        color = beltAccent
                     )
                 }
             }
@@ -347,23 +397,31 @@ fun PracticeMenuDialog(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PracticeByTopicsPickerDialog(
-    contentRepo: ContentRepo = ContentRepo,
+    @Suppress("UNUSED_PARAMETER") contentRepo: ContentRepo = ContentRepo,
     initialBelts: Set<Belt>,
     isEnglish: Boolean,
     onDismiss: () -> Unit,
     onConfirm: (PracticeByTopicsSelection) -> Unit
 ) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    val textAlignPrimary = if (isEnglish) TextAlign.Start else TextAlign.Right
+
+    val graniteBrush = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFFF7F2FA),
+            Color(0xFFF1EAF6),
+            Color(0xFFECE5F3),
+            Color(0xFFF8F4FA)
+        )
+    )
 
     // ✅ RTL לכל הדיאלוג
     CompositionLocalProvider(
         LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
     ) {
-
-        @Suppress("UNUSED_PARAMETER")
-        val _unused = contentRepo // כרגע אנחנו לא משתמשים בו כאן
 
         // ✅ בלי חגורה לבנה ברשימה בכלל
         val allBelts = remember { Belt.order.filterNot { it == Belt.WHITE } }
@@ -420,596 +478,287 @@ private fun PracticeByTopicsPickerDialog(
             }
         }
 
-        val canConfirm =
-            selectedBelts.isNotEmpty() &&
-                    selectedBelts.any { b -> topicsByBelt[b].orEmpty().isNotEmpty() }
+        // מצב הבחירה החדש – חגורה אחת ונושא אחד
+        var selectedBelt by rememberSaveable { mutableStateOf<Belt?>(null) }
+        var selectedTopic by rememberSaveable { mutableStateOf<String?>(null) }
 
-        // ✅ Accordion state
-        var beltsExpanded by rememberSaveable { mutableStateOf(true) }
-        var topicsExpanded by rememberSaveable { mutableStateOf(false) }
+        var beltMenuExpanded by rememberSaveable { mutableStateOf(false) }
+        var topicMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
-        fun toggleBelts() {
-            beltsExpanded = !beltsExpanded
-            if (beltsExpanded) topicsExpanded = false
-        }
+        val topics = selectedBelt?.let { topicTitlesForBelt(it) }.orEmpty()
 
-        fun toggleTopics() {
-            topicsExpanded = !topicsExpanded
-            if (topicsExpanded) beltsExpanded = false
-        }
-
-        @Composable
-        fun AccordionHeader(
-            title: String,
-            subtitle: String?,
-            expanded: Boolean,
-            onClick: () -> Unit
-        ) {
-            val rot by animateFloatAsState(
-                targetValue = if (expanded) 90f else 0f,
-                label = "chevRot"
-            )
-
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                shadowElevation = 6.dp,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onClick)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start // RTL: Start=ימין
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                            color = Color.Black,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        if (!subtitle.isNullOrBlank()) {
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.width(10.dp))
-
-                    Icon(
-                        imageVector = Icons.Filled.ChevronLeft,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                        modifier = Modifier.graphicsLayer {
-                            rotationZ = rot
-                            scaleX = if (isEnglish) -1f else 1f
-                        }
-                    )
-                }
-            }
-        }
+        val selectedBeltAccent = selectedBelt?.color ?: MaterialTheme.colorScheme.primary
+        val selectedBeltFieldBg = selectedBeltAccent.copy(alpha = 0.08f)
+        val selectedBeltFieldBorder = selectedBeltAccent.copy(alpha = 0.22f)
 
         // ✅ NEW: כרטיס נושא "אפליקציה מובילה" כמו במסך נושאים
-        @Composable
-        fun PremiumTopicTile(
-            title: String,
-            subtitle: String,
-            badgeText: String,
-            accent: Color,
-            selected: Boolean,
-            onClick: () -> Unit
-        ) {
-            val shape = RoundedCornerShape(18.dp)
-            val bg = if (selected) Color(0xFFEFF6FF) else Color(0xFFF2EFF6)
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(shape)
-                    .clickable(onClick = onClick),
-                shape = shape,
-                color = bg,
-                tonalElevation = 0.dp,
-                shadowElevation = 8.dp,
-                border = BorderStroke(
-                    1.dp,
-                    if (selected) accent.copy(alpha = 0.35f)
-                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start // RTL: Start=ימין
-                ) {
-                    // פס צבע מימין
-                    Box(
-                        modifier = Modifier
-                            .width(6.dp)
-                            .height(54.dp)
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    listOf(
-                                        accent.copy(alpha = 0.95f),
-                                        accent.copy(alpha = 0.55f)
-                                    )
-                                ),
-                                shape = RoundedCornerShape(999.dp)
-                            )
-                    )
-
-                    Spacer(Modifier.width(10.dp))
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                            maxLines = 1,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-
-                    Spacer(Modifier.width(10.dp))
-
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = accent.copy(alpha = 0.16f),
-                            border = BorderStroke(1.dp, accent.copy(alpha = 0.30f))
-                        ) {
-                            Text(
-                                text = badgeText,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = accent
-                            )
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Icon(
-                            imageVector = Icons.Filled.ChevronLeft,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
-                        )
-                    }
-                }
+        fun topicDisplayName(topic: String): String {
+            if (!isEnglish) return topic
+            return when (topic.trim()) {
+                "כללי" -> "General"
+                "עבודת ידיים" -> "Hand techniques"
+                "בעיטות" -> "Kicks"
+                "שחרורים" -> "Releases"
+                "הגנות" -> "Defenses"
+                "נפילות" -> "Breakfalls"
+                "קרקע" -> "Ground"
+                "כושר" -> "Fitness"
+                "קוואלר" -> "Kavaler"
+                else -> topic
             }
         }
 
         AlertDialog(
             onDismissRequest = onDismiss,
-            shape = RoundedCornerShape(26.dp),
+            shape = RoundedCornerShape(28.dp),
+            containerColor = Color.Transparent,
 
             title = {
-                Text(
-                    text = if (isEnglish) "Practice by Topic" else "תרגול לפי נושא",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                    textAlign = TextAlign.Center,
-                    color = Color.Black,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                    },
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color.Transparent
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.92f),
+                                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.82f)
+                                    )
+                                ),
+                                RoundedCornerShape(24.dp)
+                            )
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                    ) {
+                        Text(
+                            text = tr("תרגול לפי נושא", "Practice by Topic"),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Black,
+                            textAlign = TextAlign.Center,
+                            color = Color.White,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
 
             text = {
                 val scrollState = rememberScrollState()
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 560.dp)
-                        .verticalScroll(scrollState),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(26.dp),
+                    color = Color.Transparent
                 ) {
-
-                    // =========================
-                    // 1) Accordion: חגורות
-                    // =========================
-                    val beltsSubtitle = remember(selectedBelts, isEnglish) {
-                        when (selectedBelts.size) {
-                            0 -> if (isEnglish) "No belt selected" else "לא נבחרה חגורה"
-                            1 -> if (isEnglish) {
-                                "Selected: ${selectedBelts.first().en}"
-                            } else {
-                                "נבחרה: ${selectedBelts.first().heb}"
-                            }
-                            else -> if (isEnglish) {
-                                "${selectedBelts.size} belts selected"
-                            } else {
-                                "נבחרו ${selectedBelts.size} חגורות"
-                            }
-                        }
-                    }
-
-                    AccordionHeader(
-                        title = if (isEnglish) "Choose Belt(s)" else "בחר חגורה/ות",
-                        subtitle = beltsSubtitle,
-                        expanded = beltsExpanded,
-                        onClick = { toggleBelts() }
-                    )
-
-                    AnimatedVisibility(visible = beltsExpanded) {
-
-                        val pickedCount = selectedBelts.size
-                        val allCount = allBelts.size
-                        val allPicked = pickedCount == allCount
-
-                        Surface(
-                            shape = RoundedCornerShape(22.dp),
-                            color = Color(0xFFF7F8FC),
-                            tonalElevation = 0.dp,
-                            shadowElevation = 10.dp,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.10f)),
-                            modifier = Modifier.fillMaxWidth()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(graniteBrush, RoundedCornerShape(26.dp))
+                            .verticalScroll(scrollState)
+                            .padding(horizontal = 6.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        ExposedDropdownMenuBox(
+                            expanded = beltMenuExpanded,
+                            onExpandedChange = { beltMenuExpanded = !beltMenuExpanded }
                         ) {
-                            Column(
-                                modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            Surface(
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp),
+                                color = selectedBeltFieldBg,
+                                shadowElevation = 8.dp,
+                                border = BorderStroke(1.dp, selectedBeltFieldBorder)
                             ) {
-
-                                Row(
+                                TextField(
+                                    value = selectedBelt?.let { if (isEnglish) it.en else it.heb }
+                                        ?: tr("בחר חגורה", "Choose Belt"),
+                                    onValueChange = {},
+                                    readOnly = true,
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Start // RTL: Start=ימין
-                                ) {
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        horizontalAlignment = Alignment.End
-                                    ) {
-                                        Text(
-                                            text = if (isEnglish) "Belts" else "חגורות",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                            color = Color.Black,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                        Spacer(Modifier.height(2.dp))
-                                        Text(
-                                            text = if (pickedCount == 0) {
-                                                if (isEnglish) "No belts selected" else "לא נבחרו חגורות"
-                                            } else {
-                                                if (isEnglish) "$pickedCount of $allCount selected" else "נבחרו $pickedCount מתוך $allCount"
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-
-                                    TextButton(
-                                        onClick = {
-                                            selectedBelts = if (allPicked) emptySet() else allBelts.toSet()
-                                            if (selectedBelts.isEmpty()) topicsByBelt = emptyMap()
+                                    textStyle = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        textAlign = textAlignPrimary
+                                    ),
+                                    colors = ExposedDropdownMenuDefaults.textFieldColors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        disabledContainerColor = Color.Transparent,
+                                        focusedIndicatorColor = Color.Transparent,
+                                        unfocusedIndicatorColor = Color.Transparent,
+                                        disabledIndicatorColor = Color.Transparent
+                                    ),
+                                    leadingIcon = {
+                                        Surface(
+                                            shape = RoundedCornerShape(999.dp),
+                                            color = selectedBeltAccent.copy(alpha = 0.14f),
+                                            border = BorderStroke(1.dp, selectedBeltAccent.copy(alpha = 0.20f))
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                                                    .width(10.dp)
+                                                    .height(10.dp)
+                                                    .background(
+                                                        selectedBeltAccent,
+                                                        RoundedCornerShape(999.dp)
+                                                    )
+                                            )
                                         }
-                                    ) {
-                                        Text(if (allPicked) {
-                                            if (isEnglish) "Clear" else "נקה"
-                                        } else {
-                                            if (isEnglish) "Select All" else "בחר הכל"
-                                        })
+                                    },
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = beltMenuExpanded)
                                     }
-                                }
+                                )
+                            }
 
-                                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.10f))
-
-                                FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    allBelts.forEach { belt ->
-                                        val picked = belt in selectedBelts
-                                        FilterChip(
-                                            selected = picked,
-                                            onClick = {
-                                                selectedBelts =
-                                                    if (picked) selectedBelts - belt
-                                                    else selectedBelts + belt
-
-                                                if (belt !in selectedBelts) {
-                                                    topicsByBelt = topicsByBelt.toMutableMap().apply { remove(belt) }
-                                                }
-                                            },
-                                            label = {
+                            ExposedDropdownMenu(
+                                expanded = beltMenuExpanded,
+                                onDismissRequest = { beltMenuExpanded = false }
+                            ) {
+                                allBelts.forEach { belt ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(10.dp)
+                                                        .height(10.dp)
+                                                        .background(
+                                                            belt.color,
+                                                            RoundedCornerShape(999.dp)
+                                                        )
+                                                )
                                                 Text(
                                                     text = if (isEnglish) belt.en else belt.heb,
-                                                    fontWeight = if (picked) FontWeight.Bold else FontWeight.Medium
+                                                    fontWeight = if (selectedBelt == belt) FontWeight.Bold else FontWeight.Medium
                                                 )
                                             }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.10f))
-
-                    // =========================
-                    // 2) Accordion: נושאים
-                    // =========================
-                    val topicsCount = remember(selectedBelts, topicsByBelt) {
-                        selectedBelts.sumOf { b -> topicsByBelt[b].orEmpty().size }
-                    }
-                    val topicsSubtitle = when {
-                        selectedBelts.isEmpty() -> if (isEnglish) "Choose at least one belt first" else "בחר קודם חגורה אחת לפחות"
-                        topicsCount == 0 -> if (isEnglish) "No topics selected" else "לא נבחרו נושאים"
-                        topicsCount == 1 -> if (isEnglish) "One topic selected" else "נבחר נושא אחד"
-                        else -> if (isEnglish) "$topicsCount topics selected" else "נבחרו $topicsCount נושאים"
-                    }
-
-                    AccordionHeader(
-                        title = if (isEnglish) "Choose Topic" else "בחר נושא",
-                        subtitle = topicsSubtitle,
-                        expanded = topicsExpanded,
-                        onClick = { toggleTopics() }
-                    )
-
-                    AnimatedVisibility(visible = topicsExpanded) {
-
-                        val totalPickedTopics = remember(selectedBelts, topicsByBelt) {
-                            selectedBelts.sumOf { b -> topicsByBelt[b].orEmpty().size }
-                        }
-
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                            // Summary card
-                            Surface(
-                                shape = RoundedCornerShape(22.dp),
-                                color = Color(0xFFF7F8FC),
-                                tonalElevation = 0.dp,
-                                shadowElevation = 10.dp,
-                                border = BorderStroke(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.10f)
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Start // RTL: Start=ימין
-                                ) {
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        horizontalAlignment = Alignment.End
-                                    ) {
-                                        Text(
-                                            text = if (isEnglish) "Topics" else "נושאים",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                            color = Color.Black,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                        Spacer(Modifier.height(2.dp))
-                                        Text(
-                                            text = when {
-                                                selectedBelts.isEmpty() -> if (isEnglish) "Choose at least one belt first" else "בחר קודם חגורה אחת לפחות"
-                                                totalPickedTopics == 0 -> if (isEnglish) "No topics selected" else "לא נבחרו נושאים"
-                                                totalPickedTopics == 1 -> if (isEnglish) "One topic selected" else "נבחר נושא אחד"
-                                                else -> if (isEnglish) "$totalPickedTopics topics selected" else "נבחרו $totalPickedTopics נושאים"
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-
-                                    TextButton(
-                                        enabled = selectedBelts.isNotEmpty(),
+                                        },
                                         onClick = {
-                                            topicsByBelt = topicsByBelt.toMutableMap().apply {
-                                                selectedBelts.forEach { b -> remove(b) }
-                                            }
+                                            selectedBelt = belt
+                                            selectedTopic = null
+                                            beltMenuExpanded = false
                                         }
-                                    ) { Text(if (isEnglish) "Clear All" else "נקה הכל") }
+                                    )
                                 }
                             }
+                        }
 
-                            // Per-belt cards
-                            selectedBelts
-                                .sortedBy { Belt.order.indexOf(it).let { idx -> if (idx >= 0) idx else 999 } }
-                                .forEach { belt ->
-
-                                    val topics = topicTitlesForBelt(belt)
-                                    val pickedSet = topicsByBelt[belt].orEmpty()
-                                    val allSelected = topics.isNotEmpty() && pickedSet.size == topics.size
-
-                                    Surface(
-                                        shape = RoundedCornerShape(22.dp),
-                                        color = Color.White,
-                                        tonalElevation = 0.dp,
-                                        shadowElevation = 10.dp,
-                                        border = BorderStroke(
-                                            1.dp,
-                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.10f)
-                                        ),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ExposedDropdownMenuBox(
+                            expanded = topicMenuExpanded,
+                            onExpandedChange = {
+                                if (selectedBelt != null) topicMenuExpanded = !topicMenuExpanded
+                            }
+                        ) {
+                            Surface(
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp),
+                                color = selectedBeltFieldBg,
+                                shadowElevation = 8.dp,
+                                border = BorderStroke(1.dp, selectedBeltFieldBorder)
+                            ) {
+                                TextField(
+                                    value = selectedTopic?.let { topicDisplayName(it) }
+                                        ?: tr("בחר נושא", "Choose Topic"),
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = selectedBelt != null,
+                                    textStyle = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        textAlign = textAlignPrimary
+                                    ),
+                                    colors = ExposedDropdownMenuDefaults.textFieldColors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        disabledContainerColor = Color.Transparent,
+                                        focusedIndicatorColor = Color.Transparent,
+                                        unfocusedIndicatorColor = Color.Transparent,
+                                        disabledIndicatorColor = Color.Transparent
+                                    ),
+                                    leadingIcon = {
+                                        Surface(
+                                            shape = RoundedCornerShape(999.dp),
+                                            color = selectedBeltAccent.copy(alpha = 0.14f),
+                                            border = BorderStroke(1.dp, selectedBeltAccent.copy(alpha = 0.20f))
                                         ) {
-
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.Start // RTL: Start=ימין
+                                            Box(
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Column(
-                                                    modifier = Modifier.weight(1f),
-                                                    horizontalAlignment = Alignment.End
-                                                ) {
-                                                    Text(
-                                                        text = if (isEnglish) belt.en else belt.heb,
-                                                        style = MaterialTheme.typography.titleMedium,
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                                        color = Color.Black,
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    )
-                                                    Spacer(Modifier.height(2.dp))
-                                                    Text(
-                                                        text = if (topics.isEmpty()) {
-                                                            if (isEnglish) "No topics for this belt" else "אין נושאים לחגורה הזו"
-                                                        } else {
-                                                            if (isEnglish) "${pickedSet.size} of ${topics.size} selected" else "נבחרו ${pickedSet.size} מתוך ${topics.size}"
-                                                        },
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    )
-                                                }
-
-                                                TextButton(
-                                                    enabled = topics.isNotEmpty(),
-                                                    onClick = {
-                                                        topicsByBelt = topicsByBelt.toMutableMap().apply {
-                                                            this[belt] = if (allSelected) emptySet() else topics.toSet()
-                                                        }
-                                                    }
-                                                ) { Text(if (allSelected) "נקה" else "בחר הכל") }
-                                            }
-
-                                            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.10f))
-
-                                            if (topics.isEmpty()) {
-                                                Text(
-                                                    text = if (isEnglish) "No topics to display" else "אין נושאים להצגה",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f),
-                                                    modifier = Modifier.fillMaxWidth()
+                                                Icon(
+                                                    imageVector = Icons.Filled.Topic,
+                                                    contentDescription = null,
+                                                    tint = selectedBeltAccent
                                                 )
-                                            } else {
-                                                // ✅ במקום FlowRow+FilterChip — כרטיסים "כמו במסך נושאים"
-                                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                                    topics.forEach { t ->
-                                                        val checked = t in pickedSet
-
-                                                        // אם יש לך belt.color בפרויקט, אפשר להחליף כאן ל: val accent = belt.color
-                                                        val accent = belt.color
-
-                                                        PremiumTopicTile(
-                                                            title = t,
-                                                            subtitle = if (checked) {
-                                                                if (isEnglish) "Selected" else "נבחר"
-                                                            } else {
-                                                                if (isEnglish) "Tap to select" else "הקש כדי לבחור"
-                                                            },
-                                                            badgeText = if (checked) {
-                                                                if (isEnglish) "Checked" else "מסומן"
-                                                            } else {
-                                                                if (isEnglish) "Topic" else "נושא"
-                                                            },
-                                                            accent = accent,
-                                                            selected = checked,
-                                                            onClick = {
-                                                                topicsByBelt = topicsByBelt.toMutableMap().apply {
-                                                                    val cur = this[belt].orEmpty().toMutableSet()
-                                                                    if (!cur.add(t)) cur.remove(t)
-                                                                    this[belt] = cur
-                                                                }
-                                                            }
-                                                        )
-                                                    }
-                                                }
                                             }
                                         }
-                                    }
-                                }
-
-                            if (!canConfirm) {
-                                Text(
-                                    text = if (isEnglish) {
-                                        "To begin, select at least one topic."
-                                    } else {
-                                        "כדי להתחיל — בחר לפחות נושא אחד."
                                     },
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = topicMenuExpanded)
+                                    }
                                 )
+                            }
+
+                            ExposedDropdownMenu(
+                                expanded = topicMenuExpanded,
+                                onDismissRequest = { topicMenuExpanded = false }
+                            ) {
+                                topics.forEach { topic ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = topicDisplayName(topic),
+                                                fontWeight = if (selectedTopic == topic) FontWeight.Bold else FontWeight.Medium
+                                            )
+                                        },
+                                        onClick = {
+                                            val belt = selectedBelt ?: return@DropdownMenuItem
+
+                                            selectedTopic = topic
+                                            topicMenuExpanded = false
+
+                                            onConfirm(
+                                                PracticeByTopicsSelection(
+                                                    belts = setOf(belt),
+                                                    topicsByBelt = mapOf(belt to setOf(topic))
+                                                )
+                                            )
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
             },
 
-            confirmButton = {
-                TextButton(
-                    enabled = canConfirm,
-                    onClick = {
-                        val cleaned: Map<Belt, Set<String>> =
-                            selectedBelts
-                                .filterNot { it == Belt.WHITE }
-                                .associateWith { b ->
-                                    topicsByBelt[b].orEmpty()
-                                        .map { it.trim() }
-                                        .filter { it.isNotEmpty() }
-                                        .toSet()
-                                }
-                                .filterValues { it.isNotEmpty() }
-
-                        if (cleaned.isEmpty()) return@TextButton
-
-                        onConfirm(
-                            PracticeByTopicsSelection(
-                                belts = cleaned.keys,
-                                topicsByBelt = cleaned
-                            )
-                        )
-
-                        onDismiss()
-                    }
-                ) { Text(if (isEnglish) "Start" else "התחל") }
-            },
+            confirmButton = {},
 
             dismissButton = {
-                TextButton(onClick = onDismiss) { Text(if (isEnglish) "Cancel" else "ביטול") }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.60f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(
+                            tr("סגור", "Close"),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         )
     }

@@ -55,7 +55,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.material3.Switch
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.app.ui.rememberClickSound
-import il.kmi.app.ui.assistant.AiAssistantDialog
+import il.kmi.app.ui.assistant.ui.AiAssistantDialog
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -1326,7 +1326,6 @@ fun HomeScreen(
     if (showAiDialog) {
         AiAssistantDialog(
             onDismiss = { showAiDialog = false },
-            contextLabel = "מסך הבית"
         )
     }
 }
