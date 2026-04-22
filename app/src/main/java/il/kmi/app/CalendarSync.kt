@@ -26,12 +26,20 @@ fun hasCalendarPermission(ctx: Context): Boolean =
  */
 object KmiCalendarSync {
     private const val TAG_MARK = "[KMI_SYNC]"   // מזהה הייחוס שלנו בתיאור האירוע
+    private const val TAG_MARK_SELECTED = "[KMI_SYNC_SELECTED]"
     // ↓↓↓ חדש: אותו שם כמו במסך הכניסה
     private const val PREFS_NAME = "kmi_prefs"
     // כותרות ואורכים
     private const val TITLE_SOKOLOV = "אימון ק.מ.י – מתנ\"ס סוקולוב"
     private const val TITLE_OFEK    = "אימון ק.מ.י – מרכז אופק"
     private const val DURATION_MIN  = 90
+
+    data class DeviceCalendar(
+        val id: Long,
+        val displayName: String,
+        val accountName: String,
+        val accountType: String
+    )
 
     // BYDAY ל-RRULE
     private fun byday(day: Int) = when (day) {
@@ -80,6 +88,32 @@ object KmiCalendarSync {
         return chosen
     }
 
+    fun listWritableCalendars(context: Context): List<DeviceCalendar> {
+        val out = mutableListOf<DeviceCalendar>()
+        val cr = context.contentResolver
+        val proj = arrayOf(
+            Calendars._ID,
+            Calendars.CALENDAR_DISPLAY_NAME,
+            Calendars.ACCOUNT_NAME,
+            Calendars.ACCOUNT_TYPE,
+            Calendars.VISIBLE,
+            Calendars.SYNC_EVENTS,
+            Calendars.CALENDAR_ACCESS_LEVEL
+        )
+        val sel = "${Calendars.VISIBLE}=1 AND ${Calendars.SYNC_EVENTS}=1 AND ${Calendars.CALENDAR_ACCESS_LEVEL}>=200"
+        cr.query(Calendars.CONTENT_URI, proj, sel, null, "${Calendars.CALENDAR_DISPLAY_NAME} COLLATE NOCASE ASC")?.use { c ->
+            while (c.moveToNext()) {
+                out += DeviceCalendar(
+                    id = c.getLong(0),
+                    displayName = c.getString(1).orEmpty(),
+                    accountName = c.getString(2).orEmpty(),
+                    accountType = c.getString(3).orEmpty()
+                )
+            }
+        }
+        return out
+    }
+
     /** מחשב את המועד הבא ליום/שעה/דקה נתונים (כ־DTSTART של אירוע חוזר). */
     private fun nextStartUtcMillis(dayOfWeek: Int, hour: Int, minute: Int): Long {
         val tz = TimeZone.getDefault()
@@ -105,6 +139,7 @@ object KmiCalendarSync {
         title: String,
         location: String,
         descriptionTag: String,
+        eventKeyPrefix: String,
         dayOfWeek: Int,
         hour: Int,
         minute: Int,
@@ -118,7 +153,7 @@ object KmiCalendarSync {
         val tzId  = TimeZone.getDefault().id
 
         // 🔐 מפתח יציב לכל אירוע – ימנע התנגשות בין שני סוקולוב
-        val eventKey = "KMI_WEEKLY:${byday(dayOfWeek)}_${String.format("%02d%02d", hour, minute)}:${title}"
+        val eventKey = "$eventKeyPrefix:${byday(dayOfWeek)}_${String.format("%02d%02d", hour, minute)}:${title}"
 
         // חיפוש אירוע קיים לפי CUSTOM_APP_PACKAGE + CUSTOM_APP_URI (יציב ובטוח)
         val proj = arrayOf(Events._ID)
@@ -169,6 +204,50 @@ object KmiCalendarSync {
         return UpsertResult(eventId, created)
     }
 
+    private fun upsertAllToCalendar(
+        context: Context,
+        calendarId: Long,
+        descriptionTag: String,
+        eventKeyPrefix: String
+    ) {
+        val sp = context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+        val leadMin = sp.getInt("lead_minutes", 60).coerceIn(0, 180)
+
+        upsertWeeklyEvent(
+            context, calendarId,
+            title = TITLE_SOKOLOV,
+            location = addressFor("נתניה – מרכז קהילתי סוקולוב"),
+            descriptionTag = descriptionTag,
+            eventKeyPrefix = eventKeyPrefix,
+            dayOfWeek = Calendar.SUNDAY,
+            hour = 20, minute = 30,
+            durationMin = DURATION_MIN,
+            leadMinutes = leadMin
+        )
+        upsertWeeklyEvent(
+            context, calendarId,
+            title = TITLE_OFEK,
+            location = addressFor("נתניה – מרכז קהילתי אופק"),
+            descriptionTag = descriptionTag,
+            eventKeyPrefix = eventKeyPrefix,
+            dayOfWeek = Calendar.MONDAY,
+            hour = 19, minute = 0,
+            durationMin = DURATION_MIN,
+            leadMinutes = leadMin
+        )
+        upsertWeeklyEvent(
+            context, calendarId,
+            title = TITLE_SOKOLOV,
+            location = addressFor("נתניה – מרכז קהילתי סוקולוב"),
+            descriptionTag = descriptionTag,
+            eventKeyPrefix = eventKeyPrefix,
+            dayOfWeek = Calendar.TUESDAY,
+            hour = 20, minute = 30,
+            durationMin = DURATION_MIN,
+            leadMinutes = leadMin
+        )
+    }
+
     /** יוצר/מעדכן את שלושת האימונים הקבועים. */
     fun upsertAll(context: Context) {
         // הרשאות?
@@ -183,48 +262,35 @@ object KmiCalendarSync {
             return
         }
 
-        // זמן התראה מההגדרות (ברירת מחדל 60)
-        val sp = context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
-        val leadMin = sp.getInt("lead_minutes", 60).coerceIn(0, 180)
-
-        // נתונים קבועים – משתמש בקבועי הכתובות שלך
-        // א' 20:30–22:00 סוקולוב
-        val r1 = upsertWeeklyEvent(
-            context, calId,
-            title = TITLE_SOKOLOV,
-            location = addressFor("נתניה – מרכז קהילתי סוקולוב"),
+        upsertAllToCalendar(
+            context = context,
+            calendarId = calId,
             descriptionTag = TAG_MARK,
-            dayOfWeek = Calendar.SUNDAY,
-            hour = 20, minute = 30,
-            durationMin = DURATION_MIN,
-            leadMinutes = leadMin
-        )
-        // ב' 19:00–20:30 אופק
-        val r2 = upsertWeeklyEvent(
-            context, calId,
-            title = TITLE_OFEK,
-            location = addressFor("נתניה – מרכז קהילתי אופק"),
-            descriptionTag = TAG_MARK,
-            dayOfWeek = Calendar.MONDAY,
-            hour = 19, minute = 0,
-            durationMin = DURATION_MIN,
-            leadMinutes = leadMin
-        )
-        // ג' 20:30–22:00 סוקולוב
-        val r3 = upsertWeeklyEvent(
-            context, calId,
-            title = TITLE_SOKOLOV,
-            location = addressFor("נתניה – מרכז קהילתי סוקולוב"),
-            descriptionTag = TAG_MARK,
-            dayOfWeek = Calendar.TUESDAY,
-            hour = 20, minute = 30,
-            durationMin = DURATION_MIN,
-            leadMinutes = leadMin
+            eventKeyPrefix = "KMI_WEEKLY"
         )
 
         // ❌ לא מסמנים שום דגל למסך הכניסה ולא מציגים Toast כאן.
         //    אם תרצה משוב, תציג אותו במסך ההגדרות בעת הלחיצה על "אישור".
     }   // ←← סוגר fun upsertAll(context: Context)
+
+    fun upsertAllToSelectedCalendar(context: Context, selectedCalendarId: Long): Boolean {
+        if (!hasCalendarPermission(context)) {
+            Toast.makeText(context, "אין הרשאה ליומן", Toast.LENGTH_LONG).show()
+            return false
+        }
+        val valid = listWritableCalendars(context).any { it.id == selectedCalendarId }
+        if (!valid) {
+            Toast.makeText(context, "היומן שנבחר אינו זמין לכתיבה", Toast.LENGTH_LONG).show()
+            return false
+        }
+        upsertAllToCalendar(
+            context = context,
+            calendarId = selectedCalendarId,
+            descriptionTag = TAG_MARK_SELECTED,
+            eventKeyPrefix = "KMI_SELECTED_WEEKLY"
+        )
+        return true
+    }
 
     private fun logAvailableCalendars(context: Context) {
         val cr = context.contentResolver
@@ -260,8 +326,8 @@ object KmiCalendarSync {
         }
         val cr = context.contentResolver
         val proj = arrayOf(Events._ID)
-        val sel  = "${Events.CUSTOM_APP_PACKAGE}=?"
-        val args = arrayOf(context.packageName)
+        val sel  = "${Events.CUSTOM_APP_PACKAGE}=? AND ${Events.CUSTOM_APP_URI} LIKE ?"
+        val args = arrayOf(context.packageName, "KMI_WEEKLY:%")
 
         cr.query(Events.CONTENT_URI, proj, sel, args, null)?.use { cur ->
             while (cur.moveToNext()) {
@@ -271,5 +337,24 @@ object KmiCalendarSync {
             }
         }
         Toast.makeText(context, "האימונים הוסרו מהיומן", Toast.LENGTH_SHORT).show()
+    }
+
+    fun removeSelectedCalendarEvents(context: Context) {
+        if (!hasCalendarPermission(context)) {
+            Toast.makeText(context, "אין הרשאה למחיקה מהיומן", Toast.LENGTH_LONG).show()
+            return
+        }
+        val cr = context.contentResolver
+        val proj = arrayOf(Events._ID)
+        val sel = "${Events.CUSTOM_APP_PACKAGE}=? AND ${Events.CUSTOM_APP_URI} LIKE ?"
+        val args = arrayOf(context.packageName, "KMI_SELECTED_WEEKLY:%")
+
+        cr.query(Events.CONTENT_URI, proj, sel, args, null)?.use { cur ->
+            while (cur.moveToNext()) {
+                val id = cur.getLong(0)
+                val uri = ContentUris.withAppendedId(Events.CONTENT_URI, id)
+                cr.delete(uri, null, null)
+            }
+        }
     }
 }

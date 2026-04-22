@@ -18,6 +18,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.runtime.CompositionLocalProvider
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
 /**
  * מסך "דרגו אותנו" – תפריט צד (לפני "התנתקות")
@@ -29,124 +34,164 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun RateUsScreen(
     onClose: () -> Unit,
-    supportEmail: String = "support@kmi-app.example", // החלף למייל תמיכה שלך
-    playStoreAppId: String = "il.kmi.app",             // החלף ל־applicationId בפועל
-    appStoreAppId: String = "0000000000"               // מזהה אפליקציה ב-App Store (ל-iOS)
+    supportEmail: String = "support@kmi-app.example",
+    playStoreAppId: String = "il.kmi.app",
+    appStoreAppId: String = "0000000000"
 ) {
     val ctx = LocalContext.current
+    val langManager = remember { AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
-    Scaffold(
-        topBar = {
-            // סרגל צד עם X מודרני
-            SideScreenTopBar(
-                title = "דרגו אותנו",
-                onClose = onClose
-            )
-        },
-        containerColor = Color(0xFFF7F7FA)
-    ) { padding ->
+    val screenTitle = if (isEnglish) "Rate Us" else "דרגו אותנו"
+    val heroTitle = if (isEnglish) "Enjoying KMI?" else "אהבתם את KMI?"
+    val heroSubtitle = if (isEnglish) {
+        "Your rating helps us improve and grow."
+    } else {
+        "הדירוג שלכם עוזר לנו להשתפר ולגדול."
+    }
 
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            color = Color.White,
-            shape = RoundedCornerShape(16.dp),
-            tonalElevation = 1.dp,
-            shadowElevation = 2.dp
-        ) {
-            Column(
+    var stars by remember { mutableStateOf(5) }
+    var feedback by remember { mutableStateOf("") }
+    val lowRating = stars <= 3
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    ) {
+        Scaffold(
+            topBar = {
+                SideScreenTopBar(
+                    title = screenTitle,
+                    onClose = onClose
+                )
+            },
+            containerColor = Color(0xFFF7F7FA)
+        ) { padding ->
+
+            Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                color = Color.White,
+                shape = RoundedCornerShape(16.dp),
+                tonalElevation = 1.dp,
+                shadowElevation = 2.dp
             ) {
-                Text(
-                    "אהבתם את KMI?",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "הדירוג שלכם עוזר לנו להשתפר ולגדול.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center
-                )
-
-                // כוכבים (1–5)
-                var stars by remember { mutableStateOf(5) }
-                StarsRow(
-                    value = stars,
-                    onChange = { stars = it }
-                )
-
-                // אזור משוב כאשר הדירוג נמוך
-                var feedback by remember { mutableStateOf("") }
-                val lowRating = stars <= 3
-
-                if (lowRating) {
-                    OutlinedTextField(
-                        value = feedback,
-                        onValueChange = { feedback = it },
-                        label = { Text("מה נוכל לשפר?") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3
-                    )
-                    Button(
-                        onClick = {
-                            sendFeedbackEmail(ctx, supportEmail, "משוב מהאפליקציה (דירוג $stars★)", feedback)
-                            markRated(ctx)
-                            onClose()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Text("שליחת משוב")
-                    }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
-                        "אנחנו קוראים כל משוב 🙏",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = heroTitle,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                } else {
-                    // דירוג גבוה → הפניה ל-Google Play (באנדרואיד)
-                    Button(
-                        onClick = {
-                            openPlayStoreForApp(ctx, playStoreAppId)
-                            markRated(ctx)
-                            onClose()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        Text("דרגו אותנו בחנות Google Play")
-                    }
 
-                    // כפתור App Store יוצג רק ב-iOS
-                    if (isIos()) {
-                        OutlinedButton(
+                    Text(
+                        text = heroSubtitle,
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    StarsRow(
+                        value = stars,
+                        onChange = { stars = it },
+                        isEnglish = isEnglish
+                    )
+
+                    if (lowRating) {
+                        OutlinedTextField(
+                            value = feedback,
+                            onValueChange = { feedback = it },
+                            label = {
+                                Text(if (isEnglish) "What can we improve?" else "מה נוכל לשפר?")
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3,
+                            textStyle = LocalTextStyle.current.copy(
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+                            )
+                        )
+
+                        Button(
                             onClick = {
-                                openAppStoreForApp(ctx, appStoreAppId)
+                                sendFeedbackEmail(
+                                    ctx,
+                                    supportEmail,
+                                    if (isEnglish) "App feedback ($stars★)" else "משוב מהאפליקציה (דירוג $stars★)",
+                                    feedback
+                                )
                                 markRated(ctx)
                                 onClose()
                             },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(14.dp)
                         ) {
-                            Text("פתחו ב-App Store")
+                            Text(if (isEnglish) "Send Feedback" else "שליחת משוב")
                         }
-                    }
 
-                    // קישור משני לשליחת משוב
-                    TextButton(onClick = {
-                        sendFeedbackEmail(ctx, supportEmail, "משוב (דירוג $stars★)", "")
-                    }) {
-                        Text("או שלחו לנו משוב במקום")
+                        Text(
+                            text = if (isEnglish) "We read every message 🙏" else "אנחנו קוראים כל משוב 🙏",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Button(
+                            onClick = {
+                                openPlayStoreForApp(ctx, playStoreAppId)
+                                markRated(ctx)
+                                onClose()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text(
+                                if (isEnglish) {
+                                    "Rate Us on Google Play"
+                                } else {
+                                    "דרגו אותנו בחנות Google Play"
+                                }
+                            )
+                        }
+
+                        if (isIos()) {
+                            OutlinedButton(
+                                onClick = {
+                                    openAppStoreForApp(ctx, appStoreAppId)
+                                    markRated(ctx)
+                                    onClose()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Text(if (isEnglish) "Open in App Store" else "פתחו ב-App Store")
+                            }
+                        }
+
+                        TextButton(
+                            onClick = {
+                                sendFeedbackEmail(
+                                    ctx,
+                                    supportEmail,
+                                    if (isEnglish) "Feedback ($stars★)" else "משוב (דירוג $stars★)",
+                                    ""
+                                )
+                            }
+                        ) {
+                            Text(if (isEnglish) "Or send feedback instead" else "או שלחו לנו משוב במקום")
+                        }
                     }
                 }
             }
@@ -159,7 +204,8 @@ fun RateUsScreen(
 @Composable
 private fun StarsRow(
     value: Int,
-    onChange: (Int) -> Unit
+    onChange: (Int) -> Unit,
+    isEnglish: Boolean
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -170,12 +216,12 @@ private fun StarsRow(
             FilledIconToggleButton(
                 checked = filled,
                 onCheckedChange = {
-                    onChange(i) // בחירה ישירה בכוכב i
+                    onChange(i)
                 }
             ) {
                 Icon(
                     imageVector = if (filled) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                    contentDescription = "$i כוכבים"
+                    contentDescription = if (isEnglish) "$i stars" else "$i כוכבים"
                 )
             }
         }
@@ -207,6 +253,8 @@ private fun openAppStoreForApp(ctx: Context, appStoreId: String) {
 }
 
 private fun sendFeedbackEmail(ctx: Context, to: String, subject: String, body: String) {
+    val isEnglish = AppLanguageManager(ctx).getCurrentLanguage() == AppLanguage.ENGLISH
+
     val intent = Intent(Intent.ACTION_SENDTO).apply {
         data = Uri.parse("mailto:")
         putExtra(Intent.EXTRA_EMAIL, arrayOf(to))
@@ -214,7 +262,12 @@ private fun sendFeedbackEmail(ctx: Context, to: String, subject: String, body: S
         putExtra(Intent.EXTRA_TEXT, body)
     }
     try {
-        ctx.startActivity(Intent.createChooser(intent, "שליחת משוב"))
+        ctx.startActivity(
+            Intent.createChooser(
+                intent,
+                if (isEnglish) "Send feedback" else "שליחת משוב"
+            )
+        )
     } catch (_: Exception) { /* no-op */ }
 }
 

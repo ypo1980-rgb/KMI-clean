@@ -10,7 +10,8 @@ data class TrainingData(
     val end: String,
     val place: String,
     val address: String,
-    val coach: String            // ✅ מאמן
+    val coach: String,           // ✅ מאמן
+    val branch: String = ""      // ✅ שם סניף
 ) {
     // ✅ עוזר: חותמות זמנים לשימוש פנימי/סינון
     val startMillis: Long get() = cal.timeInMillis
@@ -48,6 +49,7 @@ data class TrainingData(
             place: String,
             address: String,
             coach: String,
+            branch: String = "",
             now: Calendar = Calendar.getInstance()
         ): TrainingData {
             val startCal = (now.clone() as Calendar).apply {
@@ -78,7 +80,8 @@ data class TrainingData(
                 end = endStr,
                 place = place,
                 address = address,
-                coach = coach
+                coach = coach,
+                branch = branch
             )
         }
     }

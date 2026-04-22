@@ -91,6 +91,90 @@ object TrainingCatalog {
         )
     )
 
+    private val abroadBranchesByCountry: Map<String, List<String>> = mapOf(
+        "USA" to listOf(
+            "Smithfield (RI) 🇺🇸 – Kevin Notch",
+            "East Greenwich (RI) 🇺🇸 – Kevin Notch"
+        ),
+        "Canada" to listOf(
+            "Concord 🇨🇦 – Sergey Baskin",
+            "Thunder Bay 🇨🇦 – Aviran Ben Sason"
+        ),
+        "Australia" to listOf(
+            "Perth 🇦🇺 – David Reznik"
+        ),
+        "Mexico" to listOf(
+            "Hermosillo 🇲🇽 – Oscar Monge",
+            "Guanajuato 🇲🇽 – Alberto Carrillo Moreno"
+        ),
+        "Poland" to listOf(
+            "Szczecin 🇵🇱 – Maciej Narkiewicz-Jodko"
+        ),
+        "Turkey" to listOf(
+            "Istanbul (Beyoglu) 🇹🇷 – Ibrahim Tokgoz",
+            "Istanbul (Kartal) 🇹🇷 – Burak Korkmaz, Tugay Akay"
+        ),
+        "Italy" to listOf(
+            "Carrara 🇮🇹 – Alessio Palagi",
+            "Massa 🇮🇹 – Alessio Palagi",
+            "Milan 🇮🇹 – Koren Mor",
+            "Castiglione del Lago (Perugia) 🇮🇹 – Gimmy Fattoni",
+            "Città della Pieve (PG) 🇮🇹 – Gimmy Fattoni",
+            "Perugia – Italy CKA 🇮🇹 – Gimmy Fattoni",
+            "Fabro (TR) – Futura Fitness Club 🇮🇹 – Gimmy Fattoni"
+        ),
+        "Ireland" to listOf(
+            "Ballina 🇮🇪 – Kevin Martin"
+        ),
+        "Korea" to listOf(
+            "Daegu 🇰🇷 – Younmin Jeong"
+        )
+    )
+
+    private val abroadAddressByBranch: Map<String, String> = mapOf(
+        "Smithfield (RI) 🇺🇸 – Kevin Notch" to "970 Douglas Pike, Smithfield, RI 02917, USA",
+        "East Greenwich (RI) 🇺🇸 – Kevin Notch" to "3725 Post Rd, East Greenwich, RI 02818, USA",
+
+        "Concord 🇨🇦 – Sergey Baskin" to "411 Confederation Pkwy Unit #12, Concord, ON L4K 0A8, Canada",
+        "Thunder Bay 🇨🇦 – Aviran Ben Sason" to "766 Sprague St, Thunder Bay, ON, Canada",
+
+        "Perth 🇦🇺 – David Reznik" to "Perth, Australia",
+
+        "Hermosillo 🇲🇽 – Oscar Monge" to "Hermosillo, Sonora, Mexico",
+        "Guanajuato 🇲🇽 – Alberto Carrillo Moreno" to "Viznagas 6, San Isidro, Guanajuato, Mexico",
+
+        "Szczecin 🇵🇱 – Maciej Narkiewicz-Jodko" to "Szczecin, Poland",
+
+        "Istanbul (Beyoglu) 🇹🇷 – Ibrahim Tokgoz" to "İstiklal Caddesi No:108 Aznavur Pasajı Kat:5, Beyoğlu, Istanbul, Turkey",
+        "Istanbul (Kartal) 🇹🇷 – Burak Korkmaz, Tugay Akay" to "Esentepe Mahallesi, Gülpınar Sk. No:16, Kartal, Istanbul, Turkey",
+
+        "Carrara 🇮🇹 – Alessio Palagi" to "Viale XX Settembre 177/D, Carrara, Italy",
+        "Massa 🇮🇹 – Alessio Palagi" to "Via Degli Unni 1, Massa, Italy",
+        "Milan 🇮🇹 – Koren Mor" to "Via Leopardi 24, Milan, Italy",
+        "Castiglione del Lago (Perugia) 🇮🇹 – Gimmy Fattoni" to "Via Piana 17/M, Castiglione del Lago, Perugia, Italy",
+        "Città della Pieve (PG) 🇮🇹 – Gimmy Fattoni" to "Città della Pieve, PG, Cardete, Italy",
+        "Perugia – Italy CKA 🇮🇹 – Gimmy Fattoni" to "Via Piccolpasso 9/13, Perugia, Italy",
+        "Fabro (TR) – Futura Fitness Club 🇮🇹 – Gimmy Fattoni" to "Via Monte Biaco 4, Fabro TR, Italy",
+
+        "Ballina 🇮🇪 – Kevin Martin" to "Sean Duffy Community Center, Ballina, Ireland",
+
+        "Daegu 🇰🇷 – Younmin Jeong" to "Ansim-ro, Dong-gu, Daegu, Korea"
+    )
+
+    fun abroadRegions(): List<String> {
+        return listOf(
+            "USA",
+            "Canada",
+            "Australia",
+            "Mexico",
+            "Poland",
+            "Turkey",
+            "Italy",
+            "Ireland",
+            "Korea"
+        )
+    }
+
     fun branchDisplayName(branch: String, isEnglish: Boolean): String {
         return BRANCH_INFO[branch]?.branch?.value(isEnglish) ?: branch
     }
@@ -279,8 +363,11 @@ object TrainingCatalog {
         BRANCHES_BY_REGION_RAW
 
     /** סניפים נראים למשתמש עבור אזור */
-    fun branchesFor(region: String): List<String> =
-        branchesByRegion[region] ?: emptyList()
+    fun branchesFor(region: String): List<String> {
+        return abroadBranchesByCountry[region]
+            ?: branchesByRegion[region]
+            ?: emptyList()
+    }
 
     /** כל האזורים כפי שמוגדרים בקטלוג */
     fun allRegions(): List<String> =
@@ -399,6 +486,17 @@ object TrainingCatalog {
         }
     }
 
+    fun hasMapForBranch(branch: String): Boolean {
+        return mapAddressForBranch(branch).isNotBlank()
+    }
+
+    fun mapAddressForBranch(branch: String): String {
+        val normalized = normalizeBranchKey(branch)
+        return abroadAddressByBranch[branch]
+            ?: abroadAddressByBranch[normalized]
+            ?: addressFor(branch)
+    }
+
     // לוגיקה עבור סניף/ערך בודד (כמו קודם, עם נרמול מקפים ורווחים)
     private fun addressForSingleBranch(src: String): String {
         if (looksLikeFullAddress(src)) return src
@@ -411,8 +509,20 @@ object TrainingCatalog {
         }
 
         for (key in candidates) {
+            val normalizedKey = normalizeBranchKey(key)
+
+            abroadAddressByBranch[key]?.let { mapped ->
+                if (mapped.isNotBlank()) return mapped
+            }
+            abroadAddressByBranch[normalizedKey]?.let { mapped ->
+                if (mapped.isNotBlank()) return mapped
+            }
+
             ADDRESS_BY_BRANCH[key]?.let { mapped ->
                 if (mapped.isNotBlank() && mapped != key) return mapped
+            }
+            ADDRESS_BY_BRANCH[normalizedKey]?.let { mapped ->
+                if (mapped.isNotBlank() && mapped != normalizedKey) return mapped
             }
         }
 
@@ -927,7 +1037,8 @@ object TrainingCatalog {
                 durationMinutes = s.durationMinutes,
                 place = s.place,
                 address = s.address,
-                coach = s.coach
+                coach = s.coach,
+                branch = s.branch
             )
         }.sortedBy { it.cal.timeInMillis }
     }

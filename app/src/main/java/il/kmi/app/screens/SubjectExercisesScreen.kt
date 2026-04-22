@@ -5,7 +5,6 @@ package il.kmi.app.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -278,9 +277,12 @@ fun SubjectExercisesScreen(
     }
 
     // (belts) המרה מרשימת החגורות ב־app לרשימת חגורות ב־shared ✅
+    val ctx = LocalContext.current
+    val langManager = remember(ctx) { il.kmi.shared.localization.AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == il.kmi.shared.localization.AppLanguage.ENGLISH
+
     val beltsForUi: List<Belt> = remember(effectiveAppSubject) {
         effectiveAppSubject.belts.mapNotNull { appBelt ->
-            // ✅ חשוב: לא ליפול ל-WHITE בשקט
             val b = toSharedBeltOrNull(appBelt.id)
             if (b == null) {
                 android.util.Log.e("KMI_DBG", "SubjectExercisesScreen: cannot map belt id='${appBelt.id}'")
@@ -323,7 +325,6 @@ fun SubjectExercisesScreen(
     val haptic = rememberHapticsGlobal()
     val clickSound = rememberClickSound()
 
-    val ctx = LocalContext.current
     LaunchedEffect(subjectId) {
         KmiTtsManager.init(ctx)
         KmiTtsManager.setSpeechProfile(rate = 0.95f, pitch = 1.0f)
@@ -601,6 +602,7 @@ fun SubjectExercisesScreen(
                                     topic = row.topic,
                                     item = row.displayItem,
                                     isFavorite = row.canonicalId in favIds,
+                                    isEnglish = isEnglish,
                                     showMeta = (effectiveAppSubject.id != "releases"),
                                     onToggleFavorite = {
                                         android.util.Log.e(
@@ -643,6 +645,7 @@ fun SubjectExercisesScreen(
                                                 topic = row.topic,
                                                 item = row.displayItem,
                                                 isFavorite = row.canonicalId in favIds,
+                                                isEnglish = isEnglish,
                                                 showMeta = (effectiveAppSubject.id != "releases"),
                                                 onToggleFavorite = {
                                                     android.util.Log.e(
@@ -669,7 +672,7 @@ fun SubjectExercisesScreen(
                                         }
                                     }
                                 }
-                            }                            }
+                            }
                         }
                     }
                 }
@@ -754,9 +757,10 @@ fun SubjectExercisesScreen(
                     confirmButton = {
                         TextButton(onClick = { selectedRow = null }) {
                             Text("סגור")
+                            }
                         }
-                    }
-                )
+                     )
+                 }
             }
         }
     }
@@ -981,6 +985,7 @@ private fun ExerciseRowCardModern(
     topic: String,
     item: String,
     isFavorite: Boolean,
+    isEnglish: Boolean,
     showMeta: Boolean = false,
     onToggleFavorite: () -> Unit,
     onClick: () -> Unit
@@ -1049,16 +1054,18 @@ private fun ExerciseRowCardModern(
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.End
+                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                     ) {
-                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                        CompositionLocalProvider(
+                            LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+                        ) {
                             Text(
                                 text = item,
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -1073,7 +1080,7 @@ private fun ExerciseRowCardModern(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
-                                        textAlign = TextAlign.Right,
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }

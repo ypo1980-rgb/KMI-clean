@@ -71,6 +71,12 @@ fun NavGraphBuilder.subscriptionNavGraph(
                         restoreState = true
                     }
                 }
+            },
+
+            onOpenAssociationMembership = {
+                nav.navigate(Route.MembershipPayment.route) {
+                    launchSingleTop = true
+                }
             }
         )
     }

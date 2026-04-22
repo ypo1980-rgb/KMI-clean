@@ -38,7 +38,8 @@ import il.kmi.app.ui.rememberClickSoundGlobal
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutAviAbisidonScreen(
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onHome: () -> Unit
 ) {
 
     // ⭐ helpers גלובליים – לקרוא פעם אחת בתחילת המסך
@@ -67,6 +68,8 @@ fun AboutAviAbisidonScreen(
                 showMenu = false,
                 onBack = null,
                 showRoleBadge = false,
+                onHome = onHome,
+                showTopHome = false,
                 showBottomActions = true,
                 lockSearch = true,
                 lockHome = false,

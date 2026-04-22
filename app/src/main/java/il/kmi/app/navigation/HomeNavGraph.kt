@@ -1,5 +1,6 @@
 package il.kmi.app.navigation
 
+import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.compose.foundation.layout.*
@@ -36,6 +37,7 @@ import il.kmi.app.ui.BirthdayGate
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.ui.graphics.Color
+import il.kmi.app.subscription.KmiAccess
 
 const val TOPICS_PICK_TOKEN = "__TOPICS_PICK__"
 
@@ -76,6 +78,48 @@ fun NavGraphBuilder.homeNavGraph(
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs
 ) {
 
+    fun isLockedPremiumTopic(raw: String): Boolean {
+        val t = raw.trim().lowercase()
+
+        return t == "שחרורים" ||
+                t == "הגנות" ||
+
+                t.contains("שחרור") ||
+                t.contains("release") ||
+
+                t.contains("הגנה") ||
+                t.contains("defense") ||
+                t.contains("defence") ||
+
+                t.startsWith("def_") ||
+                t.startsWith("releases_") ||
+
+                t.contains("knife") ||
+                t.contains("gun") ||
+                t.contains("stick")
+    }
+
+    fun isLockedPremiumDefenseRoute(kindRaw: String, pickRaw: String = ""): Boolean {
+        val kind = kindRaw.trim().lowercase()
+        val pick = pickRaw.trim().lowercase()
+
+        return kind == "all" ||
+                kind == "internal" ||
+                kind == "external" ||
+                kind == "kicks_hard" ||
+                kind == "releases_hard" ||
+                kind == "knife_hard" ||
+                kind == "knife_rifle_hard" ||
+                kind == "gun_hard" ||
+                kind == "multiple_attackers_hard" ||
+                kind == "stick_hard" ||
+                pick.contains("release") ||
+                pick.contains("שחרור") ||
+                pick.contains("defense") ||
+                pick.contains("defence") ||
+                pick.contains("הגנה")
+    }
+
     // ---- מסך הבית ----
     composable(Route.Home.route) {
         val userRegion = kmiPrefs.region.orEmpty()
@@ -107,6 +151,12 @@ fun NavGraphBuilder.homeNavGraph(
                     }
                 },
                 onSettings = { nav.navigate(Route.Settings.route) },
+                onOpenSubscription = {
+                    nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
                 trainings = trainingsForUser,
 
                 onOpenFreeSessions = { branch, groupKey, uid, name ->
@@ -242,6 +292,14 @@ fun NavGraphBuilder.homeNavGraph(
     // ---- תרגילים לפי נושא (BeltQByTopic) ----
     composable(Route.BeltQByTopic.route) {
 
+        val accessSp = remember(nav.context) {
+            nav.context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+        }
+
+        fun shouldBlockPremiumTopic(raw: String): Boolean {
+            return isLockedPremiumTopic(raw) && !KmiAccess.hasFullAccess(accessSp)
+        }
+
         Log.e("KMI_WHERE", "ENTER HomeNavGraph -> Route.BeltQByTopic")
         Log.e("KMI_NAV", "ENTER Route.BeltQByTopic CALLBACK_PROBE_C")
         Log.e("KMI_NAV", "CALL BeltQuestionsByTopicScreen from Route.BeltQByTopic CALLBACK_PROBE_D")
@@ -302,47 +360,90 @@ fun NavGraphBuilder.homeNavGraph(
                     "homeNavGraph onOpenHardSubjectRoute belt=${belt.id} subjectId='$subjectId'"
                 )
 
-                openSubTopics(
-                    belt = belt,
-                    topic = subjectId
-                )
+                if (shouldBlockPremiumTopic(subjectId)) {
+                    nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                } else {
+                    openSubTopics(
+                        belt = belt,
+                        topic = subjectId
+                    )
+                }
             },
 
             onOpenSubject = { belt: Belt, subject: il.kmi.app.domain.SubjectTopic ->
-                openSubTopics(
-                    belt = belt,
-                    topic = subject.titleHeb
-                )
+                if (shouldBlockPremiumTopic(subject.titleHeb) || shouldBlockPremiumTopic(subject.id)) {
+                    nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                } else {
+                    openSubTopics(
+                        belt = belt,
+                        topic = subject.titleHeb
+                    )
+                }
             },
 
             onOpenTopic = { belt: Belt, topicTitle: String ->
                 vm.setSelectedBelt(belt)
 
-                nav.navigate(
-                    Route.Materials.make(
-                        belt = belt,
-                        topic = topicTitle
-                    )
-                ) {
-                    launchSingleTop = true
-                    restoreState = true
+                if (shouldBlockPremiumTopic(topicTitle)) {
+                    nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                } else {
+                    nav.navigate(
+                        Route.Materials.make(
+                            belt = belt,
+                            topic = topicTitle
+                        )
+                    ) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             },
 
             onOpenTopicWithSub = { belt: Belt, topicTitle: String, subTopicTitle: String ->
-                openChosenSubTopic(
-                    belt = belt,
-                    topic = topicTitle,
-                    subTopic = subTopicTitle
-                )
+                if (
+                    shouldBlockPremiumTopic(topicTitle) ||
+                    shouldBlockPremiumTopic(subTopicTitle) ||
+                    isLockedPremiumDefenseRoute(topicTitle, subTopicTitle)
+                ) {
+                    nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                } else {
+                    openChosenSubTopic(
+                        belt = belt,
+                        topic = topicTitle,
+                        subTopic = subTopicTitle
+                    )
+                }
             },
 
             onOpenDefenseList = { belt, kind, pick ->
-                openChosenSubTopic(
-                    belt = belt,
-                    topic = kind,
-                    subTopic = pick
-                )
+                if (
+                    shouldBlockPremiumTopic(kind) ||
+                    shouldBlockPremiumTopic(pick) ||
+                    isLockedPremiumDefenseRoute(kind, pick)
+                ) {
+                    nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                } else {
+                    openChosenSubTopic(
+                        belt = belt,
+                        topic = kind,
+                        subTopic = pick
+                    )
+                }
             }
         )
     }

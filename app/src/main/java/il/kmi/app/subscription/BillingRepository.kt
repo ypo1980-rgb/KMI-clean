@@ -18,6 +18,9 @@ data class SubscriptionState(
     val active: Boolean = false,
     val productId: String? = null,
     val purchaseToken: String? = null,
+    val renewalDate: Long? = null,
+    val monthlyPriceText: String? = null,
+    val yearlyPriceText: String? = null,
     val error: String? = null
 )
 
@@ -41,10 +44,49 @@ class BillingRepository(
         .setListener(this)
         .build()
 
-    // *** החלף כאן בזיהוי המוצר שלך ב-Play Console ***
-    private val productIds = listOf("kmi_monthly") // TODO: change to real product id(s)
+    // מוצרי המנוי מתוך Play Console
+    private val productIds = listOf(
+        SubscriptionProducts.REGULAR_MONTHLY,
+        SubscriptionProducts.REGULAR_YEARLY,
+        SubscriptionProducts.MEMBER_MONTHLY,
+        SubscriptionProducts.MEMBER_YEARLY
+    )
 
-    private var cachedProductDetails: ProductDetails? = null
+    private val cachedProductDetails = linkedMapOf<String, ProductDetails>()
+
+    private fun extractFormattedPrice(details: ProductDetails): String? {
+        val phases = details.subscriptionOfferDetails
+            ?.firstOrNull()
+            ?.pricingPhases
+            ?.pricingPhaseList
+            .orEmpty()
+
+        val paidPhase = phases.firstOrNull { it.priceAmountMicros > 0L }
+        return (paidPhase ?: phases.firstOrNull())?.formattedPrice
+    }
+
+    fun getPriceForProduct(productId: String): String? {
+        val details = cachedProductDetails[productId] ?: return null
+        return extractFormattedPrice(details)
+    }
+
+    private fun refreshPriceState() {
+
+        val monthlyPrice =
+            cachedProductDetails[SubscriptionProducts.REGULAR_MONTHLY]
+                ?.let(::extractFormattedPrice)
+
+        val yearlyPrice =
+            cachedProductDetails[SubscriptionProducts.REGULAR_YEARLY]
+                ?.let(::extractFormattedPrice)
+
+        _state.update {
+            it.copy(
+                monthlyPriceText = monthlyPrice,
+                yearlyPriceText = yearlyPrice
+            )
+        }
+    }
 
     fun startConnection(onReady: (() -> Unit)? = null) {
         if (billingClient.isReady) {
@@ -56,10 +98,14 @@ class BillingRepository(
                 val ok = result.responseCode == BillingClient.BillingResponseCode.OK
                 _state.update { it.copy(connected = ok, error = if (ok) null else result.debugMessage) }
                 if (ok) {
+
+                    // שחזור מנויים מיד אחרי התחברות ל-Google Play
+                    refreshPurchases()
+
                     scope.launch {
                         queryProductDetails()
-                        refreshPurchases()
                     }
+
                     onReady?.invoke()
                 }
             }
@@ -72,22 +118,35 @@ class BillingRepository(
     private suspend fun queryProductDetails() {
         runCatching {
             val params = QueryProductDetailsParams.newBuilder()
-                .setProductList(productIds.map {
+                .setProductList(productIds.map { productId ->
                     QueryProductDetailsParams.Product.newBuilder()
-                        .setProductId(it)
+                        .setProductId(productId)
                         .setProductType(BillingClient.ProductType.SUBS)
                         .build()
-                }).build()
+                })
+                .build()
+
             val res = billingClient.queryProductDetails(params)
-            cachedProductDetails = res.productDetailsList?.firstOrNull()
+
+            cachedProductDetails.clear()
+            res.productDetailsList
+                ?.forEach { details ->
+                    cachedProductDetails[details.productId] = details
+                }
+
+            refreshPriceState()
         }.onFailure {
             Log.e("Billing", "queryProductDetails", it)
+            _state.update { s ->
+                s.copy(error = it.message)
+            }
         }
     }
 
-    fun launchPurchase(activity: Activity) {
-        val details = cachedProductDetails ?: return
-        val offerToken = details.subscriptionOfferDetails?.firstOrNull()
+    fun launchPurchase(activity: Activity, productId: String) {
+        val details = cachedProductDetails[productId] ?: return
+        val offerToken = details.subscriptionOfferDetails
+            ?.firstOrNull()
             ?.offerToken ?: return
 
         val productDetailsParams = BillingFlowParams.ProductDetailsParams
@@ -127,9 +186,11 @@ class BillingRepository(
     }
 
     private fun handleOwnedPurchases(list: List<Purchase>) {
-        val sub = list.firstOrNull { p ->
-            p.products.any { it in productIds } &&
-                    p.purchaseState == Purchase.PurchaseState.PURCHASED
+        val sub = list.firstOrNull { purchase ->
+            purchase.products.any { product ->
+                product in productIds
+            } &&
+                    purchase.purchaseState != Purchase.PurchaseState.UNSPECIFIED_STATE
         }
 
         if (sub != null) {
@@ -150,9 +211,11 @@ class BillingRepository(
                     active = true,
                     productId = sub.products.firstOrNull(),
                     purchaseToken = sub.purchaseToken,
+                    renewalDate = sub.purchaseTime,
                     error = null
                 )
             }
+            refreshPriceState()
         } else {
             // אין מנוי פעיל
             sp.edit()
@@ -167,9 +230,11 @@ class BillingRepository(
                 it.copy(
                     active = false,
                     productId = null,
-                    purchaseToken = null
+                    purchaseToken = null,
+                    renewalDate = null
                 )
             }
+            refreshPriceState()
         }
     }
 

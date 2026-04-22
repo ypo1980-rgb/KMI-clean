@@ -119,12 +119,56 @@ private fun topicTitleForUi(title: String, lang: AppLanguage): String {
 }
 
 private fun itemTitleForUi(topic: String, rawItem: String, lang: AppLanguage): String {
-    val display = CanonicalIds.uiDisplayName(topic, rawItem).trim()
-    return if (lang == AppLanguage.ENGLISH) {
-        ExerciseTitlesEn.getOrSame(display)
-    } else {
-        display
+    val topicTrim = topic.trim()
+
+    fun normalizeForLookup(s: String): String =
+        s.trim()
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace(" - ", " - ")
+            .replace("- ", "-")
+            .replace(" -", "-")
+            .replace(Regex("\\s*/\\s*"), "/")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    val cleaned = buildString {
+        var s = rawItem.trim()
+
+        if (topicTrim.isNotBlank() && s.startsWith("$topicTrim::")) {
+            s = s.removePrefix("$topicTrim::").trim()
+        }
+
+        if (topicTrim.isNotBlank() && s.startsWith(topicTrim)) {
+            s = s.removePrefix(topicTrim).trim()
+            s = s.trimStart('-', '–', '—', ':').trim()
+        }
+
+        append(s)
     }
+
+    val display = ExerciseTitleFormatter.displayName(cleaned).ifBlank {
+        CanonicalIds.uiDisplayName(topicTrim, rawItem).trim()
+    }.trim()
+
+    if (lang != AppLanguage.ENGLISH) return display
+
+    val candidates = listOf(
+        display,
+        normalizeForLookup(display),
+        cleaned,
+        normalizeForLookup(cleaned),
+        rawItem.trim(),
+        normalizeForLookup(rawItem.trim()),
+        rawItem.substringAfter("::", rawItem).trim(),
+        normalizeForLookup(rawItem.substringAfter("::", rawItem).trim())
+    ).distinct()
+
+    val translated = candidates.firstNotNullOfOrNull { candidate ->
+        ExerciseTitlesEn.get(candidate)?.takeIf { it.isNotBlank() }
+    }
+
+    return translated ?: display
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -161,8 +205,14 @@ fun MaterialsScreen(
 
     // ✅ NEW: נושא לתצוגה/קאנוניקליזציה — כדי ש"" יתנהג בדיוק כמו "כללי"
     val topicUi = remember(topic) { if (topic.isBlank()) "כללי" else topic }
-    // ✅ NEW: נושא ל-VM/DataStore (ה-VM ממילא יהפוך "כללי" ל-"")
-    val vmTopic = topicUi
+
+    val topicKey = remember(topicUi, subTopicFilter) {
+        if (subTopicFilter.isNullOrBlank()) {
+            topicUi
+        } else {
+            "${topicUi}__${subTopicFilter}"
+        }
+    }
 
     // ===== canonical (✅ מקור אמת אחד לכל האפליקציה) =====
     fun canonicalFor(displayItem: String): String =
@@ -202,7 +252,7 @@ fun MaterialsScreen(
     fun itemsCacheKey(): String = buildString {
         append(belt.id)
         append("||")
-        append(topic.trim())
+        append(topicUi.trim())
         append("||")
         append(subTopicFilter?.trim().orEmpty())
     }
@@ -224,7 +274,7 @@ fun MaterialsScreen(
         }
 
         value = withContext(Dispatchers.Default) {
-            val topicTrim = topic.trim()
+            val topicTrim = topicUi.trim()
 
             val subTrim = subTopicFilter
                 ?.takeIf { it.isNotBlank() }
@@ -360,8 +410,8 @@ fun MaterialsScreen(
             val canonicalId = canonicalFor(item)
 
             val vFromVm: Boolean? =
-                runCatching { vm.getItemStatusNullable(belt, vmTopic, canonicalId) }.getOrNull()
-                    ?: runCatching { if (vm.isMastered(belt, vmTopic, canonicalId)) true else null }.getOrNull()
+                runCatching { vm.getItemStatusNullable(belt, topicKey, canonicalId) }.getOrNull()
+                    ?: runCatching { if (vm.isMastered(belt, topicKey, canonicalId)) true else null }.getOrNull()
 
             itemStates[item] = vFromVm
         }
@@ -451,7 +501,7 @@ fun MaterialsScreen(
                                 containerColor = Color(0xFFB3261E),
                                 onClick = {
                                     scope.launch {
-                                        vm.clearTopic(belt, vmTopic)
+                                        vm.clearTopic(belt, topicKey)
                                         itemList.forEach { item -> itemStates[item] = null }
 
                                         excludedItems.clear()
@@ -710,11 +760,6 @@ fun MaterialsScreen(
                         horizontalAlignment = Alignment.End
                     ) {
 
-                        // ✅ חשוב: מה שמוצג למשתמש (UI) ומה שנשלח ל-VM (Persist)
-                        // אין טיפול מיוחד ל"כללי" כאן — ה-VM מטפל בזה דרך canonicalTopicKey()
-                        val topicUi = topic
-                        val vmTopic = topic
-
                         val filtered = itemList
                         filtered.forEach { item ->
                             var showNoteDialog by remember { mutableStateOf(false) }
@@ -782,7 +827,7 @@ fun MaterialsScreen(
 
                                     Text(
                                         text = displayName,
-                                        textAlign = TextAlign.Right,
+                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                         modifier = Modifier
                                             .weight(1f)
                                             .padding(horizontal = 4.dp),
@@ -803,7 +848,7 @@ fun MaterialsScreen(
                                         mastered = mastered,
                                         onSelect = { newVal ->
                                             itemStates[item] = newVal
-                                            vm.setItemStatusNullable(belt, vmTopic, canonicalId, newVal)
+                                            vm.setItemStatusNullable(belt, topicKey, canonicalId, newVal)
                                         }
                                     )
                                 }

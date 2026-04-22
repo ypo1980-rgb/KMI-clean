@@ -53,13 +53,27 @@ fun NavGraphBuilder.aboutNavGraph(
 
     // ---- אודות השיטה ----
     composable(Route.AboutMethod.route) {
-        AboutMethodScreen(onBack = { nav.popBackStack() })
+        AboutMethodScreen(
+            onBack = { nav.popBackStack() },
+            onHome = {
+                nav.navigate(Route.Home.route) {
+                    launchSingleTop = true
+                    popUpTo(Route.Home.route) { inclusive = false }
+                }
+            }
+        )
     }
 
-    // ---- אודות אבי אביסידון ----
+// ---- אודות אבי אביסידון ----
     composable(Route.AboutAvi.route) {
         AboutAviAbisidonScreen(
-            onClose = { nav.popBackStack() }
+            onClose = { nav.popBackStack() },
+            onHome = {
+                nav.navigate(Route.Home.route) {
+                    launchSingleTop = true
+                    popUpTo(Route.Home.route) { inclusive = false }
+                }
+            }
         )
     }
 

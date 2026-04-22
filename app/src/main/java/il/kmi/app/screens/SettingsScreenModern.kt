@@ -45,7 +45,6 @@ import android.net.Uri
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material.icons.filled.AlarmOn
 import androidx.compose.material.icons.filled.BarChart
@@ -57,14 +56,9 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.pm.PackageInfoCompat
 import il.kmi.app.ui.ext.color
@@ -207,16 +201,29 @@ fun SettingsScreenModern(
         mutableStateOf(reminderPrefs.getMinute().takeIf { it in 0..59 } ?: 0)
     }
 
-    fun applyDailyReminderSettings(enabled: Boolean, hour: Int = dailyReminderHour, minute: Int = dailyReminderMinute) {
-        reminderPrefs.setHour(hour)
-        reminderPrefs.setMinute(minute)
+    fun applyDailyReminderSettings(
+        enabled: Boolean,
+        hour: Int = dailyReminderHour,
+        minute: Int = dailyReminderMinute
+    ) {
+        val safeHour = hour.coerceIn(0, 23)
+        val safeMinute = minute.coerceIn(0, 59)
+
+        reminderPrefs.setHour(safeHour)
+        reminderPrefs.setMinute(safeMinute)
         reminderPrefs.setEnabledForRole(isCoach, enabled)
 
         dailyReminderEnabled = enabled
-        dailyReminderHour = hour
-        dailyReminderMinute = minute
+        dailyReminderHour = safeHour
+        dailyReminderMinute = safeMinute
+
+        android.util.Log.d(
+            "KMI_REMINDER",
+            "applyDailyReminderSettings enabled=$enabled hour=$safeHour minute=$safeMinute isCoach=$isCoach"
+        )
 
         if (enabled) {
+            DailyReminderScheduler.cancel(appCtx)
             DailyReminderScheduler.schedule(appCtx)
         } else {
             DailyReminderScheduler.cancel(appCtx)
@@ -634,7 +641,21 @@ fun SettingsScreenModern(
                             onCheckedChange = { enabled ->
                                 if (enabled) {
                                     if (Build.VERSION.SDK_INT >= 33) {
-                                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        val alreadyGranted =
+                                            androidx.core.content.ContextCompat.checkSelfPermission(
+                                                ctx,
+                                                Manifest.permission.POST_NOTIFICATIONS
+                                            ) == PackageManager.PERMISSION_GRANTED
+
+                                        if (alreadyGranted) {
+                                            applyDailyReminderSettings(
+                                                enabled = true,
+                                                hour = dailyReminderHour,
+                                                minute = dailyReminderMinute
+                                            )
+                                        } else {
+                                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        }
                                     } else {
                                         applyDailyReminderSettings(
                                             enabled = true,
@@ -752,59 +773,176 @@ fun SettingsScreenModern(
                 }
             } // ← סוף כרטיס תזכורות אימונים חופשיים
 
-            // --- סנכרון ליומן (עם הרשאות וסנכרון מיידי) ---
+            // --- סנכרון ליומן חיצוני / יומן במכשיר ---
             SettingsCard(
-                title = tr("סנכרון ליומן", "Calendar sync"),
-                subtitle = tr("ייווצרו/עודכנו אירועים שבועיים", "Weekly events will be created or updated"),
+                title = tr("סנכרון ליומן במכשיר", "Device calendar sync"),
+                subtitle = tr(
+                    "בחר יומן חיצוני לסנכרון האימונים",
+                    "Choose an external/device calendar for training sync"
+                ),
                 icon = Icons.Filled.Event,
                 iconTint = sectionIconTint
             ) {
                 val appCtx = LocalContext.current
+                var selectedSyncEnabled by rememberSaveable {
+                    mutableStateOf(sp.getBoolean("calendar_sync_selected_enabled", false))
+                }
+                var selectedCalendarId by rememberSaveable {
+                    mutableLongStateOf(sp.getLong("calendar_sync_selected_calendar_id", -1L))
+                }
+                var selectedCalendarDisplay by rememberSaveable {
+                    mutableStateOf(sp.getString("calendar_sync_selected_calendar_display", "") ?: "")
+                }
+                var showCalendarPicker by rememberSaveable { mutableStateOf(false) }
+                var pendingEnableAfterPermission by rememberSaveable { mutableStateOf(false) }
 
-                var calendarSyncEnabled by rememberSaveable {
-                    mutableStateOf(sp.getBoolean("calendar_sync_enabled", false))
+                val writableCalendars = remember(showCalendarPicker) {
+                    if (showCalendarPicker) KmiCalendarSync.listWritableCalendars(appCtx) else emptyList()
                 }
 
-                val calendarPermissionLauncher = rememberLauncherForActivityResult(
+                val calendarPermissionLauncherSelected = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions()
                 ) { result ->
                     val granted =
                         result[Manifest.permission.READ_CALENDAR] == true &&
                                 result[Manifest.permission.WRITE_CALENDAR] == true
 
-                    if (granted) {
-                        try {
-                            isBusy = true
-                            KmiCalendarSync.upsertAll(appCtx)
-                            haptic(true); toast(tr("האימונים סונכרנו ליומן", "Trainings were synced to the calendar"))
-                        } catch (t: Throwable) {
-                            haptic(true); toast(tr("שגיאה בסנכרון ליומן", "Calendar sync error"))
-                        } finally {
-                            isBusy = false
+                    if (!granted) {
+                        selectedSyncEnabled = false
+                        sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
+                        pendingEnableAfterPermission = false
+                        haptic(true)
+                        toast(
+                            tr(
+                                "אין הרשאה ליומן – לא בוצע סנכרון",
+                                "No calendar permission - sync was not performed"
+                            )
+                        )
+                        return@rememberLauncherForActivityResult
+                    }
+
+                    if (pendingEnableAfterPermission) {
+                        pendingEnableAfterPermission = false
+                        if (selectedCalendarId <= 0L) {
+                            selectedSyncEnabled = false
+                            showCalendarPicker = true
+                            haptic(true)
+                            toast(
+                                tr(
+                                    "יש לבחור יומן לפני הפעלת הסנכרון",
+                                    "Please choose a calendar before enabling sync"
+                                )
+                            )
+                        } else {
+                            try {
+                                isBusy = true
+                                val ok = KmiCalendarSync.upsertAllToSelectedCalendar(appCtx, selectedCalendarId)
+                                if (ok) {
+                                    selectedSyncEnabled = true
+                                    sp.edit().putBoolean("calendar_sync_selected_enabled", true).apply()
+                                    haptic(true)
+                                    toast(
+                                        tr(
+                                            "האימונים סונכרנו ליומן שבחרת",
+                                            "Trainings were synced to the selected calendar"
+                                        )
+                                    )
+                                } else {
+                                    selectedSyncEnabled = false
+                                    sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
+                                    haptic(true)
+                                    toast(
+                                        tr(
+                                            "שגיאה בסנכרון ליומן שנבחר",
+                                            "Error syncing to selected calendar"
+                                        )
+                                    )
+                                }
+                            } catch (_: Throwable) {
+                                selectedSyncEnabled = false
+                                sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
+                                haptic(true)
+                                toast(
+                                    tr(
+                                        "שגיאה בסנכרון ליומן שנבחר",
+                                        "Error syncing to selected calendar"
+                                    )
+                                )
+                            } finally {
+                                isBusy = false
+                            }
                         }
-                    } else {
-                        calendarSyncEnabled = false
-                        sp.edit().putBoolean("calendar_sync_enabled", false).apply()
-                        haptic(true); toast(tr("אין הרשאה ליומן – לא בוצע סנכרון", "No calendar permission - sync was not performed"))
                     }
                 }
 
-                fun ensureSyncWithPermissions() {
+                fun persistCalendarSelection(cal: KmiCalendarSync.DeviceCalendar) {
+                    selectedCalendarId = cal.id
+                    selectedCalendarDisplay = "${cal.displayName} (${cal.accountName})"
+                    sp.edit()
+                        .putLong("calendar_sync_selected_calendar_id", cal.id)
+                        .putString("calendar_sync_selected_calendar_display", selectedCalendarDisplay)
+                        .apply()
+                }
+
+                fun enableSelectedCalendarSync() {
+                    if (!hasCalendarPermission(appCtx)) {
+                        pendingEnableAfterPermission = true
+                        calendarPermissionLauncherSelected.launch(
+                            arrayOf(
+                                Manifest.permission.READ_CALENDAR,
+                                Manifest.permission.WRITE_CALENDAR
+                            )
+                        )
+                        return
+                    }
+
+                    if (selectedCalendarId <= 0L) {
+                        selectedSyncEnabled = false
+                        showCalendarPicker = true
+                        haptic(true)
+                        toast(
+                            tr(
+                                "יש לבחור יומן לפני הפעלת הסנכרון",
+                                "Please choose a calendar before enabling sync"
+                            )
+                        )
+                        return
+                    }
+
                     try {
-                        if (hasCalendarPermission(appCtx)) {
-                            isBusy = true
-                            KmiCalendarSync.upsertAll(appCtx)
-                            haptic(true); toast(tr("האימונים סונכרנו ליומן", "Trainings were synced to the calendar"))
+                        isBusy = true
+                        val ok = KmiCalendarSync.upsertAllToSelectedCalendar(appCtx, selectedCalendarId)
+                        if (ok) {
+                            selectedSyncEnabled = true
+                            sp.edit().putBoolean("calendar_sync_selected_enabled", true).apply()
+                            haptic(true)
+                            toast(
+                                tr(
+                                    "האימונים סונכרנו ליומן שבחרת",
+                                    "Trainings were synced to the selected calendar"
+                                )
+                            )
                         } else {
-                            calendarPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.READ_CALENDAR,
-                                    Manifest.permission.WRITE_CALENDAR
+                            selectedSyncEnabled = false
+                            sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
+                            haptic(true)
+                            toast(
+                                tr(
+                                    "שגיאה בסנכרון ליומן שנבחר",
+                                    "Error syncing to selected calendar"
                                 )
                             )
                         }
-                    } catch (t: Throwable) {
-                        haptic(true); toast("שגיאה בסנכרון ליומן")
+                    } catch (_: Throwable) {
+                        selectedSyncEnabled = false
+                        sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
+                        haptic(true)
+                        toast(
+                            tr(
+                                "שגיאה בסנכרון ליומן שנבחר",
+                                "Error syncing to selected calendar"
+                            )
+                        )
                     } finally {
                         isBusy = false
                     }
@@ -815,7 +953,7 @@ fun SettingsScreenModern(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        tr("סנכרן אימונים ליומן במכשיר", "Sync trainings to device calendar"),
+                        tr("סנכרן ליומן חיצוני", "Sync to external calendar"),
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -824,24 +962,161 @@ fun SettingsScreenModern(
                     )
 
                     Spacer(Modifier.width(12.dp))
-                    Switch(
-                        checked = calendarSyncEnabled,
-                        onCheckedChange = { checked ->
-                            calendarSyncEnabled = checked
-                            sp.edit().putBoolean("calendar_sync_enabled", checked).apply()
 
-                if (checked) {
-                                ensureSyncWithPermissions()
+                    Switch(
+                        checked = selectedSyncEnabled,
+                        onCheckedChange = { checked ->
+                            if (checked) {
+                                enableSelectedCalendarSync()
                             } else {
+                                selectedSyncEnabled = false
+                                sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
                                 try {
                                     isBusy = true
-                                    KmiCalendarSync.removeAll(appCtx)
-                                    haptic(true); toast(tr("האימונים הוסרו מהיומן", "Trainings were removed from the calendar"))
-                                } catch (t: Throwable) {
-                                    haptic(true); toast(tr("שגיאה בביטול סנכרון", "Error while disabling sync"))
+                                    KmiCalendarSync.removeSelectedCalendarEvents(appCtx)
+                                    haptic(true)
+                                    toast(
+                                        tr(
+                                            "הסנכרון ליומן שבחרת בוטל",
+                                            "Selected calendar sync was disabled"
+                                        )
+                                    )
+                                } catch (_: Throwable) {
+                                    haptic(true)
+                                    toast(
+                                        tr(
+                                            "שגיאה בביטול הסנכרון",
+                                            "Error disabling calendar sync"
+                                        )
+                                    )
                                 } finally {
                                     isBusy = false
                                 }
+                            }
+                        }
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    text = if (selectedCalendarId > 0L && selectedCalendarDisplay.isNotBlank()) {
+                        tr("יומן שנבחר: $selectedCalendarDisplay", "Selected calendar: $selectedCalendarDisplay")
+                    } else {
+                        tr("עדיין לא נבחר יומן יעד", "No target calendar selected yet")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = textAlignPrimary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        if (!hasCalendarPermission(appCtx)) {
+                            calendarPermissionLauncherSelected.launch(
+                                arrayOf(
+                                    Manifest.permission.READ_CALENDAR,
+                                    Manifest.permission.WRITE_CALENDAR
+                                )
+                            )
+                        } else {
+                            showCalendarPicker = true
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                ) {
+                    Text(tr("בחר יומן יעד", "Choose target calendar"))
+                }
+
+                if (showCalendarPicker) {
+                    var tempSelectedId by remember(selectedCalendarId, writableCalendars) {
+                        mutableLongStateOf(
+                            if (writableCalendars.any { it.id == selectedCalendarId }) selectedCalendarId
+                            else writableCalendars.firstOrNull()?.id ?: -1L
+                        )
+                    }
+
+                    AlertDialog(
+                        onDismissRequest = { showCalendarPicker = false },
+                        title = { Text(tr("בחר יומן לסנכרון", "Choose calendar for sync")) },
+                        text = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 360.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (writableCalendars.isEmpty()) {
+                                    Text(
+                                        tr(
+                                            "לא נמצאו יומנים זמינים לכתיבה במכשיר.",
+                                            "No writable calendars were found on this device."
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                } else {
+                                    writableCalendars.forEach { cal ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable { tempSelectedId = cal.id }
+                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(
+                                                selected = tempSelectedId == cal.id,
+                                                onClick = { tempSelectedId = cal.id }
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                horizontalAlignment = horizontalEnd
+                                            ) {
+                                                Text(
+                                                    cal.displayName.ifBlank { tr("יומן ללא שם", "Unnamed calendar") },
+                                                    textAlign = textAlignPrimary
+                                                )
+                                                Text(
+                                                    cal.accountName.ifBlank { cal.accountType.ifBlank { "-" } },
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    textAlign = textAlignPrimary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val selected = writableCalendars.firstOrNull { it.id == tempSelectedId }
+                                    if (selected == null) {
+                                        haptic(true)
+                                        toast(tr("יש לבחור יומן תקין", "Please choose a valid calendar"))
+                                        return@TextButton
+                                    }
+                                    persistCalendarSelection(selected)
+                                    showCalendarPicker = false
+                                    if (selectedSyncEnabled) {
+                                        enableSelectedCalendarSync()
+                                    }
+                                }
+                            ) {
+                                Text(tr("שמירה", "Save"))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showCalendarPicker = false }) {
+                                Text(tr("ביטול", "Cancel"))
                             }
                         }
                     )
@@ -1130,7 +1405,7 @@ fun SettingsScreenModern(
                 }
             }
 
-            // --- נעילת אפליקציה (ללא נעילה / אצבע / סיסמה) ---
+            // --- נעילת אפליקציה (ללא נעילה / אצבע) ---
             SettingsCard(
                 title = tr("נעילת אפליקציה", "App lock"),
                 subtitle = tr("בחר שיטת נעילה להגנה על האפליקציה", "Choose a lock method to protect the app"),
@@ -1138,65 +1413,65 @@ fun SettingsScreenModern(
                 iconTint = sectionIconTint
             ) {
                 var lockMode by rememberSaveable {
-                    mutableStateOf(sp.getString("app_lock_mode", "none") ?: "none")
+                    mutableStateOf(
+                        when (sp.getString("app_lock_mode", "none") ?: "none") {
+                            "biometric" -> "biometric"
+                            else -> "none"
+                        }
+                    )
                 }
 
                 val ctx = LocalContext.current
                 val act = ctx as? androidx.fragment.app.FragmentActivity
 
-                // סטייט לדיאלוג סיסמה
-                var showPinDialog by rememberSaveable { mutableStateOf(false) }
-                var pin by rememberSaveable { mutableStateOf("") }
-                var pinConfirm by rememberSaveable { mutableStateOf("") }
-                var pinError by remember { mutableStateOf<String?>(null) }
-
-                fun resetPinDialog() {
-                    pin = ""
-                    pinConfirm = ""
-                    pinError = null
-                }
-
-                fun savePin(rawPin: String) {
-                    // כאן אפשר לשמור מוצפן/מגובה לפי מה שמתאים לך
-                    sp.edit().putString("app_lock_pin", rawPin).apply()
-                }
-
-                // מצב נעילה בסיסמה מתוך ה-enum שלך
-                val pinEnum = resolveDeviceCredentialEnum()
-
                 fun applyLock(mode: String) {
                     sp.edit().putString("app_lock_mode", mode).apply()
                     when (mode) {
                         "none" -> {
-                            il.kmi.app.security.AppLockStore.setMethod(ctx, il.kmi.app.security.AppLockMethod.NONE)
-                            android.widget.Toast.makeText(ctx, tr("נעילת האפליקציה בוטלה", "App lock disabled"), android.widget.Toast.LENGTH_SHORT).show()
+                            il.kmi.app.security.AppLockStore.setMethod(
+                                ctx,
+                                il.kmi.app.security.AppLockMethod.NONE
+                            )
+                            android.widget.Toast.makeText(
+                                ctx,
+                                tr("נעילת האפליקציה בוטלה", "App lock disabled"),
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
                         }
+
                         "biometric" -> {
                             val canBio = androidx.biometric.BiometricManager.from(ctx)
-                                .canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-                                    androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+                                .canAuthenticate(
+                                    androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
+                                ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+
                             if (!canBio) {
-                                android.widget.Toast.makeText(ctx, tr("ביומטרי לא זמין במכשיר", "Biometric authentication is not available on this device"), android.widget.Toast.LENGTH_LONG).show()
+                                android.widget.Toast.makeText(
+                                    ctx,
+                                    tr("ביומטרי לא זמין במכשיר", "Biometric authentication is not available on this device"),
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
                                 lockMode = sp.getString("app_lock_mode", "none") ?: "none"
                                 return
                             }
-                            il.kmi.app.security.AppLockStore.setMethod(ctx, il.kmi.app.security.AppLockMethod.BIOMETRIC)
+
+                            il.kmi.app.security.AppLockStore.setMethod(
+                                ctx,
+                                il.kmi.app.security.AppLockMethod.BIOMETRIC
+                            )
                             act?.let { il.kmi.app.security.AppLock.requireIfNeeded(it, true) }
-                            android.widget.Toast.makeText(ctx, "זיהוי ביומטרי הופעל", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                        "pin" -> {
-                            il.kmi.app.security.AppLockStore.setMethod(ctx, pinEnum)
-                            act?.let { il.kmi.app.security.AppLock.requireIfNeeded(it, true) }
-                            android.widget.Toast.makeText(ctx, "נעילה באמצעות סיסמה הופעלה", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(
+                                ctx,
+                                tr("זיהוי ביומטרי הופעל", "Biometric lock enabled"),
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
                         }
                     }
                 }
 
-                // ✅ במקום pills — כמו בתנאי שימוש (TabRow)
                 val lockIndex = when (lockMode) {
                     "none" -> 0
                     "biometric" -> 1
-                    "pin" -> 2
                     else -> 0
                 }
 
@@ -1209,7 +1484,7 @@ fun SettingsScreenModern(
                         },
                         text = {
                             Text(
-                                text = "ללא\nנעילה",
+                                text = tr("ללא\nנעילה", "No\nlock"),
                                 minLines = 2,
                                 maxLines = 2,
                                 softWrap = true,
@@ -1222,6 +1497,7 @@ fun SettingsScreenModern(
                             )
                         }
                     )
+
                     Tab(
                         selected = lockMode == "biometric",
                         onClick = {
@@ -1230,7 +1506,7 @@ fun SettingsScreenModern(
                         },
                         text = {
                             Text(
-                                text = "נעילה\nבאצבע",
+                                text = tr("נעילה\nבאצבע", "Biometric\nlock"),
                                 minLines = 2,
                                 maxLines = 2,
                                 softWrap = true,
@@ -1241,133 +1517,6 @@ fun SettingsScreenModern(
                                     .heightIn(min = 48.dp)
                                     .wrapContentHeight(Alignment.CenterVertically)
                             )
-                        }
-                    )
-                    Tab(
-                        selected = lockMode == "pin",
-                        onClick = {
-                            // קודם פותחים דיאלוג להגדרת סיסמה
-                            resetPinDialog()
-                            showPinDialog = true
-                        },
-                        text = {
-                            Text(
-                                text = "נעילה\nבסיסמה",
-                                minLines = 2,
-                                maxLines = 2,
-                                softWrap = true,
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 48.dp)
-                                    .wrapContentHeight(Alignment.CenterVertically)
-                            )
-                        }
-                    )
-                }
-
-                // דיאלוג הגדרת סיסמה + אימות
-                if (showPinDialog) {
-                    // מצב הצגה/הסתרה של הסיסמאות
-                    var pinVisible by rememberSaveable { mutableStateOf(false) }
-                    var pinConfirmVisible by rememberSaveable { mutableStateOf(false) }
-
-                    AlertDialog(
-                        onDismissRequest = {
-                            showPinDialog = false
-                            resetPinDialog()
-                        },
-                        title = { Text("הגדרת סיסמה לנעילת האפליקציה") },
-                        text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(
-                                    value = pin,
-                                    onValueChange = {
-                                        pin = it
-                                        pinError = null
-                                    },
-                                    label = { Text("סיסמה") },
-                                    singleLine = true,
-                                    visualTransformation = if (pinVisible)
-                                        VisualTransformation.None
-                                    else
-                                        PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(
-                                        keyboardType = KeyboardType.Password
-                                    ),
-                                    trailingIcon = {
-                                        IconButton(onClick = { pinVisible = !pinVisible }) {
-                                            Icon(
-                                                imageVector = if (pinVisible)
-                                                    Icons.Filled.VisibilityOff
-                                                else
-                                                    Icons.Filled.Visibility,
-                                                contentDescription = if (pinVisible) "הסתר סיסמה" else "הצג סיסמה"
-                                            )
-                                        }
-                                    }
-                                )
-                                OutlinedTextField(
-                                    value = pinConfirm,
-                                    onValueChange = {
-                                        pinConfirm = it
-                                        pinError = null
-                                    },
-                                    label = { Text("אימות סיסמה") },
-                                    singleLine = true,
-                                    visualTransformation = if (pinConfirmVisible)
-                                        VisualTransformation.None
-                                    else
-                                        PasswordVisualTransformation(),
-                                    keyboardOptions = KeyboardOptions(
-                                        keyboardType = KeyboardType.Password
-                                    ),
-                                    trailingIcon = {
-                                        IconButton(onClick = { pinConfirmVisible = !pinConfirmVisible }) {
-                                            Icon(
-                                                imageVector = if (pinConfirmVisible)
-                                                    Icons.Filled.VisibilityOff
-                                                else
-                                                    Icons.Filled.Visibility,
-                                                contentDescription = if (pinConfirmVisible) "הסתר סיסמה" else "הצג סיסמה"
-                                            )
-                                        }
-                                    }
-                                )
-                                if (pinError != null) {
-                                    Text(
-                                        text = pinError!!,
-                                        color = MaterialTheme.colorScheme.error,
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                            }
-                        },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    when {
-                                        pin.length < 4 -> pinError = tr("הסיסמה צריכה להיות לפחות 4 תווים", "Password must be at least 4 characters")
-                                        pin != pinConfirm -> pinError = tr("הסיסמאות אינן תואמות", "Passwords do not match")
-                                        else -> {
-                                            savePin(pin)
-                                            lockMode = "pin"
-                                            applyLock("pin")
-                                            resetPinDialog()
-                                            showPinDialog = false
-                                        }
-                                    }
-                                }
-                            ) { Text(tr("שמירה", "Save")) }
-                        },
-                        dismissButton = {
-                            TextButton(
-                                onClick = {
-                                    showPinDialog = false
-                                    resetPinDialog()
-                                }
-                            ) { Text(tr("ביטול", "Cancel")) }
                         }
                     )
                 }
@@ -1794,20 +1943,6 @@ fun BeltsProgressBars(
         }
     }
 }
-
-/* ========= רכיבי עזר גלובליים ========= */
-// מחזיר את הקבוע המתאים לנעילת מכשיר (PIN/Pattern/Password) לפי מה שקיים ב-enum שלך
-private fun resolveDeviceCredentialEnum(): il.kmi.app.security.AppLockMethod {
-    val cls = il.kmi.app.security.AppLockMethod::class.java
-    val candidates = listOf("DEVICE_CREDENTIAL", "PASSWORD", "PASSCODE", "PIN", "CREDENTIAL")
-    for (name in candidates) {
-        val v = runCatching { java.lang.Enum.valueOf(cls, name) }.getOrNull()
-        if (v != null) return v
-    }
-    // אם לא נמצא – נשתמש ב-BIOMETRIC כדי לא לשבור קומפילציה (לא יופעל אלא אם תבחר בו)
-    return java.lang.Enum.valueOf(cls, "BIOMETRIC")
-}
-
 
 @Composable
 fun SettingsCard(

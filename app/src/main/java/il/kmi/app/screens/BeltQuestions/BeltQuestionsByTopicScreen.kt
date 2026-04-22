@@ -105,9 +105,6 @@ private fun subjectTitleForUi(
 ): String {
     if (!isEnglish) return fallbackHeb
 
-    val sharedTranslated = ExerciseTitlesEn.get(fallbackHeb.trim())
-    if (!sharedTranslated.isNullOrBlank()) return sharedTranslated
-
     return when (subjectId) {
         "general" -> "General"
         "hands_all" -> "Hand Techniques"
@@ -122,18 +119,88 @@ private fun subjectTitleForUi(
         "hands_strikes" -> "Hand Strikes"
         "hands_elbows" -> "Elbow Strikes"
         "hands_stick_rifle" -> "Stick / Rifle Strikes"
+
         "rolls_breakfalls" -> "Breakfalls and Rolls"
         "topic_ready_stance" -> "Ready Stance"
         "topic_ground_prep" -> "Groundwork Preparation"
         "topic_kavaler" -> "Kavaler"
+
         "def_internal_punches" -> "Internal Defenses - Punches"
         "def_internal_kicks" -> "Internal Defenses - Kicks"
         "def_external_punches" -> "External Defenses - Punches"
         "def_external_kicks" -> "External Defenses - Kicks"
+
         "releases_hands_hair_shirt" -> "Releases from Hand / Hair / Shirt Grabs"
         "releases_chokes" -> "Choke Releases"
+
         else -> fallbackHeb
     }
+}
+
+private fun shouldShowLockOnSubject(subjectId: String, title: String): Boolean {
+    val id = subjectId.trim().lowercase()
+    val t = title.trim().lowercase()
+
+    return id == "releases" ||
+            id == "releases_hugs" ||
+            id.startsWith("releases_") ||
+            id == "defense_root" ||
+            id.startsWith("def_") ||
+            id.contains("defense") ||
+            id.contains("knife") ||
+            id.contains("gun") ||
+            id.contains("stick") ||
+            t.contains("שחרור") ||
+            t.contains("הגנות") ||
+            t.contains("release") ||
+            t.contains("defense") ||
+            t.contains("defence")
+}
+
+private fun shouldShowLockOnByTopicSubItem(
+    parentSubjectId: String,
+    parentTitle: String,
+    itemTitle: String
+): Boolean {
+    val parentId = parentSubjectId.trim().lowercase()
+    val parent = parentTitle.trim().lowercase()
+    val item = itemTitle.trim().lowercase()
+
+    val parentLocked =
+        parentId == "releases" ||
+                parentId == "releases_hugs" ||
+                parentId.startsWith("releases_") ||
+                parentId == "defense_root" ||
+                parentId.startsWith("def_") ||
+                parentId.contains("defense") ||
+                parentId.contains("knife") ||
+                parentId.contains("gun") ||
+                parentId.contains("stick") ||
+                parent.contains("שחרור") ||
+                parent.contains("הגנות") ||
+                parent.contains("release") ||
+                parent.contains("defense") ||
+                parent.contains("defence")
+
+    val itemLocked =
+        item.contains("שחרור") ||
+                item.contains("הגנה") ||
+                item.contains("release") ||
+                item.contains("defense") ||
+                item.contains("defence") ||
+                item.contains("knife") ||
+                item.contains("gun") ||
+                item.contains("stick")
+
+    return parentLocked || itemLocked
+}
+
+private fun withLockSuffix(text: String, locked: Boolean): String {
+    return if (locked) "$text 🔒" else text
+}
+
+private fun stripLockSuffix(text: String): String {
+    return text.removeSuffix(" 🔒").trim()
 }
 
 private fun normalizeFavoriteId(raw: String): String =
@@ -755,12 +822,19 @@ internal fun TopicsBySubjectCard(
             subjectCounts = subjectCounts,
             formatCount = ::formatCount
         ).map { card ->
+
+            val baseTitle = subjectTitleForUi(
+                subjectId = card.id,
+                fallbackHeb = card.title,
+                isEnglish = isEnglish
+            )
+
+            val titleWithLock =
+                if (shouldShowLockOnSubject(card.id, baseTitle)) "$baseTitle 🔒"
+                else baseTitle
+
             card.copy(
-                title = subjectTitleForUi(
-                    subjectId = card.id,
-                    fallbackHeb = card.title,
-                    isEnglish = isEnglish
-                ),
+                title = titleWithLock,
                 countText = translateCardCountText(card.countText)
             )
         }
@@ -778,50 +852,57 @@ internal fun TopicsBySubjectCard(
             subjectCounts = subjectCounts,
             formatCount = ::formatCount
         ).map { card ->
+
+            val baseTitle = subjectTitleForUi(
+                subjectId = card.id,
+                fallbackHeb = card.title,
+                isEnglish = isEnglish
+            )
+
+            val titleWithLock =
+                if (shouldShowLockOnSubject(card.id, baseTitle)) "$baseTitle 🔒"
+                else baseTitle
+
             card.copy(
-                title = subjectTitleForUi(
-                    subjectId = card.id,
-                    fallbackHeb = card.title,
-                    isEnglish = isEnglish
-                ),
+                title = titleWithLock,
                 countText = translateCardCountText(card.countText)
             )
         }
     }
 
     val defenseRootCard = remember(totalDefense, defenseDialogCountsMap, isEnglish) {
-        SubjectTopicsUiLogic.buildDefenseRootCard(
+        val base = SubjectTopicsUiLogic.buildDefenseRootCard(
             totalDefense = totalDefense,
             formatCount = ::formatCount,
             subTopicsCount = defenseDialogCountsMap.size
-        ).copy(
-            title = subjectTitleForUi(
-                subjectId = "defense_root",
-                fallbackHeb = SubjectTopicsUiLogic.buildDefenseRootCard(
-                    totalDefense = totalDefense,
-                    formatCount = ::formatCount,
-                    subTopicsCount = defenseDialogCountsMap.size
-                ).title,
-                isEnglish = isEnglish
-            )
+        )
+
+        val baseTitle = subjectTitleForUi(
+            subjectId = "defense_root",
+            fallbackHeb = base.title,
+            isEnglish = isEnglish
+        )
+
+        base.copy(
+            title = "$baseTitle 🔒",
+            countText = translateCardCountText(base.countText)
         )
     }
 
     val handsRootCard = remember(handsRootCount, handsPickCounts, isEnglish) {
-        SubjectTopicsUiLogic.buildHandsRootCard(
+        val base = SubjectTopicsUiLogic.buildHandsRootCard(
             handsRootCount = handsRootCount,
             formatCount = ::formatCount,
             subTopicsCount = handsPickCounts.size
-        ).copy(
+        )
+
+        base.copy(
             title = subjectTitleForUi(
                 subjectId = "hands_root",
-                fallbackHeb = SubjectTopicsUiLogic.buildHandsRootCard(
-                    handsRootCount = handsRootCount,
-                    formatCount = ::formatCount,
-                    subTopicsCount = handsPickCounts.size
-                ).title,
+                fallbackHeb = base.title,
                 isEnglish = isEnglish
-            )
+            ),
+            countText = translateCardCountText(base.countText)
         )
     }
 
@@ -989,118 +1070,119 @@ internal fun TopicsBySubjectCard(
                     }
                 }
 
-                if (askDefense) {
-                    DefenseCategoryPickDialogModern(
-                        counts = defenseDialogCountsMap,
-                        onDismiss = { askDefense = false },
-                        onPick = { picked ->
-                            askDefense = false
+                    if (askDefense) {
+                        DefenseCategoryPickDialogModern(
+                            counts = defenseDialogCountsMap,
+                            onDismiss = { askDefense = false },
+                            onPick = { picked ->
+                                askDefense = false
 
-                            when (val decision = SubjectTopicsUiLogic.resolveDefenseDialogPick(picked)) {
-                                is SubjectTopicsUiLogic.DefenseDialogDecision.AskKind -> {
-                                    askKind = decision.kind
+                                when (val decision = SubjectTopicsUiLogic.resolveDefenseDialogPick(picked)) {
+                                    is SubjectTopicsUiLogic.DefenseDialogDecision.AskKind -> {
+                                        askKind = decision.kind
+                                    }
+
+                                    is SubjectTopicsUiLogic.DefenseDialogDecision.OpenHardSubject -> {
+                                        android.util.Log.e(
+                                            "KMI_NAV",
+                                            "Defense dialog -> hard subject '${decision.subjectId}'"
+                                        )
+                                        android.util.Log.e(
+                                            "KMI_NAV",
+                                            "TOPICS_CARD before onOpenHardSubjectRoute belt=${currentBelt.id} subjectId='${decision.subjectId}'"
+                                        )
+                                        onOpenHardSubjectRoute(currentBelt, decision.subjectId)
+                                    }
+
+                                    SubjectTopicsUiLogic.DefenseDialogDecision.None -> Unit
                                 }
-
-                                is SubjectTopicsUiLogic.DefenseDialogDecision.OpenHardSubject -> {
-                                    android.util.Log.e(
-                                        "KMI_NAV",
-                                        "Defense dialog -> hard subject '${decision.subjectId}'"
-                                    )
-                                    android.util.Log.e(
-                                        "KMI_NAV",
-                                        "TOPICS_CARD before onOpenHardSubjectRoute belt=${currentBelt.id} subjectId='${decision.subjectId}'"
-                                    )
-                                    onOpenHardSubjectRoute(currentBelt, decision.subjectId)
-                                }
-
-                                SubjectTopicsUiLogic.DefenseDialogDecision.None -> Unit
                             }
-                        }
-                    )
-                }
-
-                askKind?.let { kind ->
-                    DefensePickModeDialogModern(
-                        kind = kind,
-                        counts = defensePickCountsMap,
-                        onDismiss = { askKind = null },
-                        onPick = { picked ->
-                            askKind = null
-
-                            when (val decision = SubjectTopicsUiLogic.resolveDefenseKindPick(kind, picked)) {
-                                is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenLegacyDefenses -> {
-                                    onOpenDefenseList(
-                                        currentBelt,
-                                        decision.kind,
-                                        decision.pick
-                                    )
-                                }
-
-                                is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenHardSubject -> {
-                                    android.util.Log.e(
-                                        "KMI_NAV",
-                                        "TOPICS_CARD kind before onOpenHardSubjectRoute belt=${currentBelt.id} subjectId='${decision.subjectId}'"
-                                    )
-                                    onOpenHardSubjectRoute(currentBelt, decision.subjectId)
-                                }
-
-                                SubjectTopicsUiLogic.DefenseKindPickDecision.None -> Unit
-                            }
-                        }
-                    )
-                }
-
-                if (askHands) {
-                    val handsPicks = remember(handsBase) {
-                        SubjectTopicsUiLogic.handsPicks(handsBase)
-                    }
-                    val handsDisplayPicks = remember(handsPicks, isEnglish) {
-                        handsPicks.map { subTopicTitleForUi(it, isEnglish) }
+                        )
                     }
 
-                    HandsPickModeDialogModern(
-                        picks = handsDisplayPicks,
-                        counts = handsPickCounts,
-                        onDismiss = { askHands = false },
-                        onPick = { pickedDisplay: String ->
-                            askHands = false
+                    askKind?.let { kind ->
+                        DefensePickModeDialogModern(
+                            kind = kind,
+                            counts = defensePickCountsMap,
+                            onDismiss = { askKind = null },
+                            onPick = { picked ->
+                                askKind = null
 
-                            val picked = handsPicks.firstOrNull {
-                                subTopicTitleForUi(it, isEnglish) == pickedDisplay
-                            } ?: pickedDisplay
+                                val pickedClean = stripLockSuffix(picked)
 
-                            val hardSubjectId = handsSectionIdFor(picked)
+                                when (val decision = SubjectTopicsUiLogic.resolveDefenseKindPick(kind, pickedClean)) {
+                                    is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenLegacyDefenses -> {
+                                        onOpenDefenseList(
+                                            currentBelt,
+                                            decision.kind,
+                                            decision.pick
+                                        )
+                                    }
 
-                            if (hardSubjectId != null) {
-                                android.util.Log.e(
-                                    "KMI_NAV",
-                                    "Hands dialog -> hard subject '$hardSubjectId' picked='$picked'"
-                                )
+                                    is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenHardSubject -> {
+                                        android.util.Log.e(
+                                            "KMI_NAV",
+                                            "TOPICS_CARD kind before onOpenHardSubjectRoute belt=${currentBelt.id} subjectId='${decision.subjectId}'"
+                                        )
+                                        onOpenHardSubjectRoute(currentBelt, decision.subjectId)
+                                    }
 
-                                onOpenHardSubjectRoute(currentBelt, hardSubjectId)
-                            } else {
-                                val subject = SubjectTopicsUiLogic.resolveHandsPick(
-                                    base = handsBase,
-                                    picked = picked
-                                )
+                                    SubjectTopicsUiLogic.DefenseKindPickDecision.None -> Unit
+                                }
+                            }
+                        )
+                    }
 
-                                if (subject != null) {
+                    if (askHands) {
+                        val handsPicks = remember(handsBase) {
+                            SubjectTopicsUiLogic.handsPicks(handsBase)
+                        }
+                        val handsDisplayPicks = remember(handsPicks, isEnglish) {
+                            handsPicks.map { subTopicTitleForUi(it, isEnglish) }
+                        }
+
+                        HandsPickModeDialogModern(
+                            picks = handsDisplayPicks,
+                            counts = handsPickCounts,
+                            onDismiss = { askHands = false },
+                            onPick = { pickedDisplay: String ->
+                                askHands = false
+
+                                val picked = handsPicks.firstOrNull {
+                                    subTopicTitleForUi(it, isEnglish) == pickedDisplay
+                                } ?: pickedDisplay
+
+                                val hardSubjectId = handsSectionIdFor(picked)
+
+                                if (hardSubjectId != null) {
                                     android.util.Log.e(
                                         "KMI_NAV",
-                                        "Hands tmp subject: id='${subject.id}' title='${subject.titleHeb}' hint='${subject.subTopicHint}' topicsByBelt=${subject.topicsByBelt}"
+                                        "Hands dialog -> hard subject '$hardSubjectId' picked='$picked'"
                                     )
 
-                                    openSubjectSmart(subject)
+                                    onOpenHardSubjectRoute(currentBelt, hardSubjectId)
                                 } else {
-                                    android.util.Log.e("KMI_NAV", "Hands base is NULL -> cannot navigate")
+                                    val subject = SubjectTopicsUiLogic.resolveHandsPick(
+                                        base = handsBase,
+                                        picked = picked
+                                    )
+
+                                    if (subject != null) {
+                                        android.util.Log.e(
+                                            "KMI_NAV",
+                                            "Hands tmp subject: id='${subject.id}' title='${subject.titleHeb}' hint='${subject.subTopicHint}' topicsByBelt=${subject.topicsByBelt}"
+                                        )
+
+                                        openSubjectSmart(subject)
+                                    } else {
+                                        android.util.Log.e("KMI_NAV", "Hands base is NULL -> cannot navigate")
+                                    }
                                 }
                             }
-                        }
-                    )
-                }
+                        )
+                    }
 
                     askSubTopicsForId?.let { id ->
-
                         val dialogData = remember(subjects, id) {
                             SubjectTopicsUiLogic.buildSubTopicsDialogData(
                                 subjects = subjects,
@@ -1109,10 +1191,21 @@ internal fun TopicsBySubjectCard(
                         }
 
                         val counts = subTopicsPickCountsBySubjectId[id].orEmpty()
-                        val displayPicks = remember(dialogData.picks, isEnglish) {
-                            dialogData.picks.map { subTopicTitleForUi(it.trim(), isEnglish) }
-                        }
 
+                        val displayPicks = remember(dialogData.picks, dialogData.base, isEnglish) {
+                            dialogData.picks.map { rawPick ->
+                                val uiTitle = subTopicTitleForUi(rawPick.trim(), isEnglish)
+
+                                withLockSuffix(
+                                    uiTitle,
+                                    shouldShowLockOnByTopicSubItem(
+                                        parentSubjectId = dialogData.base?.id.orEmpty(),
+                                        parentTitle = dialogData.base?.titleHeb.orEmpty(),
+                                        itemTitle = rawPick
+                                    )
+                                )
+                            }
+                        }
 
                         SubTopicsPickModeDialogModern(
                             title = dialogData.base?.titleHeb ?: if (isEnglish) "Sub topics" else "תתי נושאים",
@@ -1122,9 +1215,11 @@ internal fun TopicsBySubjectCard(
                             onPick = { pickedDisplay: String ->
                                 askSubTopicsForId = null
 
+                                val pickedDisplayClean = stripLockSuffix(pickedDisplay)
+
                                 val picked = dialogData.picks.firstOrNull {
-                                    subTopicTitleForUi(it, isEnglish) == pickedDisplay
-                                } ?: pickedDisplay
+                                    subTopicTitleForUi(it, isEnglish) == pickedDisplayClean
+                                } ?: pickedDisplayClean
 
                                 val decision = SubjectTopicsUiLogic.resolveSubTopicPick(
                                     base = dialogData.base,
@@ -1176,43 +1271,42 @@ internal fun TopicsBySubjectCard(
                         )
                     }
                 }
+
                 if (showScrollHint) {
-
-
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 10.dp)
-                        .zIndex(5f),
-                    shape = RoundedCornerShape(999.dp),
-                    color = Color(0xCC6A1B9A),
-                    shadowElevation = 8.dp,
-                    tonalElevation = 2.dp,
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 10.dp)
+                            .zIndex(5f),
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color(0xCC6A1B9A),
+                        shadowElevation = 8.dp,
+                        tonalElevation = 2.dp,
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
                     ) {
-                        Text(
-                            text = if (isEnglish) "Scroll down" else "גלול למטה",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = if (isEnglish) "Scroll down" else "גלול למטה",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
 
-                        Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
 
-                        Icon(
-                            imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
-            }
             }
         }
     }

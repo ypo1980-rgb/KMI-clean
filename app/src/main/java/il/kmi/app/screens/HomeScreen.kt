@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -80,6 +81,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.app.subscription.KmiAccess
 
 //=================================================================================
 
@@ -217,6 +219,7 @@ inline fun <T : AccessibleObject> T.makeAccessible(): T {
 fun HomeScreen(
     onContinue: () -> Unit,
     onSettings: () -> Unit,
+    onOpenSubscription: () -> Unit,
     trainings: List<TrainingData>,
     onOpenExercise: (String) -> Unit,
     onOpenFreeSessions: (String, String, String, String) -> Unit,
@@ -341,6 +344,10 @@ fun HomeScreen(
         ) {
             val listState = rememberLazyListState()
 
+            val ctx = LocalContext.current
+            val userSp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
+            val hasFullAccess = KmiAccess.hasFullAccess(userSp)
+
             val showFab by remember(listState) {
                 derivedStateOf {
                     listState.firstVisibleItemIndex > 0 ||
@@ -355,9 +362,6 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Spacer(Modifier.height(12.dp))
-
-                val ctx = LocalContext.current
-                val userSp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
 
                 // === KMI_MULTI_GROUPS (FIX) ===
                 var groupsCsv by remember(userSp) {
@@ -827,60 +831,96 @@ fun HomeScreen(
 
                     // ===== כרטיס הודעות מהמאמן – מעודכן להציג הודעה אחרונה =====
                     item {
+
+                        val msg = lastCoachMessage?.trim()
+
                         Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(16.dp),
-                            tonalElevation = 1.dp,
-                            shadowElevation = 1.dp,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color.White.copy(alpha = 0.95f),
+                            shadowElevation = 6.dp,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                Color(0xFF7DD3FC)
+                            )
                         ) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(
-                                    text = if (isEnglish) "Coach Messages" else "הודעות מהמאמן",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Spacer(Modifier.height(6.dp))
 
-                                val msg = lastCoachMessage?.trim()
-                                if (msg.isNullOrEmpty()) {
-                                    Text(
-                                        text = if (isEnglish) "No new messages right now" else "אין הודעות חדשות כרגע",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+
+                                // 👤 אייקון מאמן
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFFE0F2FE),
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = Color(0xFF0369A1),
+                                        modifier = Modifier.padding(8.dp)
                                     )
-                                } else {
-                                    val shortMsg = if (msg.length > 140) {
-                                        msg.take(140) + "..."
-                                    } else msg
+                                }
 
+                                Column(modifier = Modifier.weight(1f)) {
+
+                                    // שם המאמן
                                     Text(
-                                        text = shortMsg,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        text = lastCoachFrom?.takeIf { it.isNotBlank() } ?: "המאמן",
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0C4A6E),
+                                        style = MaterialTheme.typography.bodyMedium
                                     )
 
                                     Spacer(Modifier.height(4.dp))
 
-                                    val metaLine = remember(lastCoachFrom, lastCoachSentAt) {
-                                        val from =
-                                            lastCoachFrom?.takeIf { it.isNotBlank() } ?: "המאמן"
-                                        val timeStr = lastCoachSentAt?.let {
-                                            val fmt = java.text.SimpleDateFormat(
-                                                "dd/MM/yyyy HH:mm",
-                                                java.util.Locale("he", "IL")
-                                            )
-                                            fmt.format(it)
-                                        } ?: ""
-                                        if (timeStr.isNotBlank()) "$from · $timeStr" else from
+                                    if (msg.isNullOrEmpty()) {
+
+                                        Text(
+                                            text = if (isEnglish)
+                                                "No new messages right now"
+                                            else
+                                                "אין הודעות חדשות כרגע",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Color(0xFF64748B)
+                                        )
+
+                                    } else {
+
+                                        val shortMsg = if (msg.length > 140)
+                                            msg.take(140) + "..."
+                                        else msg
+
+                                        Text(
+                                            text = shortMsg,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Color(0xFF1E293B)
+                                        )
                                     }
 
-                                    Text(
-                                        text = metaLine,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Spacer(Modifier.height(6.dp))
+
+                                    val timeText = lastCoachSentAt?.let {
+                                        java.text.SimpleDateFormat(
+                                            "dd/MM/yyyy HH:mm",
+                                            java.util.Locale("he", "IL")
+                                        ).format(it)
+                                    } ?: ""
+
+                                    if (timeText.isNotBlank()) {
+                                        Text(
+                                            text = timeText,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF64748B)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1000,47 +1040,66 @@ fun HomeScreen(
                 Spacer(Modifier.height(2.dp))
             }
 
+            val lockSuffix = if (hasFullAccess) "" else " 🔒"
+
             val quickMenuItems = listOf(
                 Triple(
-                    if (isEnglish) "Voice Assistant" else "עוזר קולי",
+                    (if (isEnglish) "Voice Assistant" else "עוזר קולי") + lockSuffix,
                     Icons.Filled.Mic
                 ) {
                     clickSound()
                     haptic(true)
                     fabExpanded = false
-                    showAiDialog = true
+
+                    if (hasFullAccess) {
+                        showAiDialog = true
+                    } else {
+                        onOpenSubscription()
+                    }
                 },
                 Triple(
-                    if (isEnglish) "Monthly Calendar" else "לוח אימונים חודשי",
+                    (if (isEnglish) "Monthly Calendar" else "לוח אימונים חודשי") + lockSuffix,
                     Icons.Filled.DateRange
                 ) {
                     clickSound()
                     haptic(true)
                     fabExpanded = false
-                    onOpenMonthlyCalendar()
+                    if (hasFullAccess) {
+                        onOpenMonthlyCalendar()
+                    } else {
+                        onOpenSubscription()
+                    }
                 },
                 Triple(
-                    if (isEnglish) "Training Summary" else "סיכום אימון",
+                    (if (isEnglish) "Training Summary" else "סיכום אימון") + lockSuffix,
                     Icons.Filled.EditNote
                 ) {
                     clickSound()
                     haptic(true)
                     fabExpanded = false
-                    onOpenTrainingSummary()
+                    if (hasFullAccess) {
+                        onOpenTrainingSummary()
+                    } else {
+                        onOpenSubscription()
+                    }
                 },
                 Triple(
-                    if (isEnglish) "Free Trainings" else "אימונים חופשיים",
+                    (if (isEnglish) "Free Trainings" else "אימונים חופשיים") + lockSuffix,
                     Icons.Filled.Add
                 ) {
                     clickSound()
                     haptic(true)
                     fabExpanded = false
-                    onOpenFreeSessions(
-                        freeBranchUi,
-                        freeGroupKeyUi,
-                        freeUidUi,
-                        freeNameUi
-                    )
+                    if (hasFullAccess) {
+                        onOpenFreeSessions(
+                            freeBranchUi,
+                            freeGroupKeyUi,
+                            freeUidUi,
+                            freeNameUi
+                        )
+                    } else {
+                        onOpenSubscription()
+                    }
                 }
             )
 
@@ -1394,7 +1453,7 @@ private fun HomePremiumQuickMenuPanel(
         color = Color.White,
         tonalElevation = 0.dp,
         shadowElevation = 16.dp,
-        modifier = Modifier.width(210.dp)
+        modifier = Modifier.width(270.dp)
     ) {
         Box(
             modifier = Modifier
@@ -1498,6 +1557,9 @@ private fun HomePremiumQuickMenuRow(
     isEnglish: Boolean,
     onClick: () -> Unit
 ) {
+    val isLocked = text.endsWith(" 🔒")
+    val cleanText = if (isLocked) text.removeSuffix(" 🔒") else text
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1510,7 +1572,7 @@ private fun HomePremiumQuickMenuRow(
             Spacer(Modifier.width(10.dp))
 
             Text(
-                text = text,
+                text = cleanText,
                 color = Color(0xFF0F172A),
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Start,
@@ -1519,9 +1581,29 @@ private fun HomePremiumQuickMenuRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
+
+            if (isLocked) {
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.Filled.Lock,
+                    contentDescription = null,
+                    tint = Color(0xFFF59E0B),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         } else {
+            if (isLocked) {
+                Icon(
+                    imageVector = Icons.Filled.Lock,
+                    contentDescription = null,
+                    tint = Color(0xFFF59E0B),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+
             Text(
-                text = text,
+                text = cleanText,
                 color = Color(0xFF0F172A),
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Right,

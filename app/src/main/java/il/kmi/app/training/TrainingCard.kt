@@ -2,6 +2,7 @@ package il.kmi.app.training
 
 import android.content.Intent
 import android.net.Uri
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -15,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import il.kmi.app.R
+import il.kmi.app.training.TrainingCatalog
 import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
 import java.util.*
@@ -27,6 +29,18 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentEnforcement
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.remember
 
+private fun openBranchMap(context: Context, address: String) {
+
+    val encoded = Uri.encode(address)
+
+    val uri = Uri.parse("google.navigation:q=$encoded")
+
+    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+        setPackage("com.google.android.apps.maps")
+    }
+
+    context.startActivity(intent)
+}
 
 private fun dayOfWeekName(cal: Calendar): String {
     return when (cal.get(Calendar.DAY_OF_WEEK)) {
@@ -70,7 +84,8 @@ fun TrainingCardCompact(training: TrainingData) {
     }
 
     val timeLine = "${onlyTime(training.start)} – ${onlyTime(training.end)}"
-    val addrSafe = (training.address ?: "").ifBlank { "Israel" }
+    val branchAddress = TrainingCatalog.mapAddressForBranch(training.branch)
+    val addrSafe = branchAddress.ifBlank { training.address.ifBlank { "Israel" } }
     val encodedAddr = Uri.encode(addrSafe)
 
     Card(

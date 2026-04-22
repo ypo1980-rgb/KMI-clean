@@ -55,22 +55,22 @@ object ExerciseExplanationsEn {
 // ───── Starting Stances ─────
 
             "עמידת מוצא רגילה" ->
-                "Standard fighting stance. Right foot back, right heel slightly raised, left foot angled slightly inward. Knees relaxed and weight centered."
+                "Elbows bent downward, palms toward the attacker."
 
             "עמידת מוצא להגנות פנימיות" ->
-                "Starting stance for internal defenses. Elbows bent downward and palms facing inward."
+                "Hands extended forward, elbows bent and farther away from the body, palms toward the attacker and widened to draw in (lure in) a direct attack."
 
             "עמידת מוצא להגנות חיצוניות" ->
-                "Arms extended forward with bent elbows, palms facing the attacker, leaving a small opening that encourages a direct attack."
+                "Left hand passes the right hip while turning the left shoulder inward. Right hand passes the left shoulder."
 
             "עמידת מוצא צידית" ->
-                "Left hand extended forward with a bent elbow and palm inward. Right hand crosses the line of the left shoulder."
+                "Start from a simple stance with legs spread. Turn the body, hands and the foot closer to the attacker to the side, where the attacker is positioned. Correct the position of the rear foot for comfortability."
 
             "עמידת מוצא כללית מספר 1" ->
-                "Left shoulder slightly turned inward to reduce the target area. Left hand crosses the right thigh while the right hand crosses the left shoulder."
+                "Left palm is extended forward, elbow bent dowward, palm facing the attacker. Right hand passes the left hip. Knees are bent to make the stance lower (to make \"you\" as target smaller and the area of defence larger)."
 
             "עמידת מוצא כללית מספר 2" ->
-                "Left hand extended forward with the palm toward the attacker. Right hand near the left hip. Knees bent in a lower stance to reduce the target area."
+                "Left hand is extended forward, elbow is bent, and the palm is facing inward. The right hand is positioned over the left shoulder. This stance is for bursting toward the attacker."
 
 // ───── Elbow Strikes ─────
 

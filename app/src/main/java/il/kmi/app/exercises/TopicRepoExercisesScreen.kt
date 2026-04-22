@@ -1,6 +1,5 @@
 package il.kmi.app.exercises
 
-import android.net.Uri
 import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,7 +18,6 @@ import il.kmi.shared.domain.content.Canonical.parseDefenseTagAndName
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.shared.domain.content.HardSectionsCatalog
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
-import il.kmi.shared.domain.content.HardSectionsCatalog.totalItemsCount
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager

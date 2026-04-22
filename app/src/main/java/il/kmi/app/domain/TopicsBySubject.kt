@@ -337,6 +337,12 @@ object TopicsBySubjectRegistry {
             topicsByBelt = mapOf(
                 Belt.YELLOW to listOf("עבודת ידיים"),
                 Belt.ORANGE to listOf("עבודת ידיים")
+            ),
+            includeItemKeywords = listOf(
+                "אגרוף",
+                "פיסת",
+                "מגל",
+                "סנוקרת"
             )
         ),
 

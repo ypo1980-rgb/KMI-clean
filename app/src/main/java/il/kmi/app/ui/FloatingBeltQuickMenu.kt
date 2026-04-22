@@ -51,6 +51,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +62,13 @@ enum class QuickMenuTriggerMode {
     Fab,
     BottomBar
 }
+
+private data class QuickMenuItemUi(
+    val title: String,
+    val icon: ImageVector,
+    val action: () -> Unit,
+    val isLocked: Boolean
+)
 
 @Composable
 private fun ModernGlowFab(
@@ -254,6 +262,8 @@ fun FloatingQuickMenu(
     includeAllLists: Boolean = true,
     includeSummary: Boolean = true,
     accentColorOverride: Color? = null,
+    hasFullAccess: Boolean = true,
+    onLockedItemClick: () -> Unit = {},
     onWeakPoints: () -> Unit,
     onAllLists: () -> Unit,
     onPractice: () -> Unit = {},
@@ -274,21 +284,56 @@ fun FloatingQuickMenu(
     }
 
     val items = buildList {
-        add(Triple(tr("נקודות תורפה", "Weak Points"), Icons.Filled.Warning, onWeakPoints))
+        add(
+            QuickMenuItemUi(
+                title = tr("נקודות תורפה", "Weak Points"),
+                icon = Icons.Filled.Warning,
+                action = onWeakPoints,
+                isLocked = !hasFullAccess
+            )
+        )
 
         if (includeAllLists) {
-            add(Triple(tr("כל הרשימות", "All Lists"), Icons.Filled.FormatListBulleted, onAllLists))
+            add(
+                QuickMenuItemUi(
+                    title = tr("כל הרשימות", "All Lists"),
+                    icon = Icons.Filled.FormatListBulleted,
+                    action = onAllLists,
+                    isLocked = !hasFullAccess
+                )
+            )
         }
 
         if (includePractice) {
-            add(Triple(tr("תרגול", "Practice"), Icons.Filled.SportsMma, onPractice))
+            add(
+                QuickMenuItemUi(
+                    title = tr("תרגול", "Practice"),
+                    icon = Icons.Filled.SportsMma,
+                    action = onPractice,
+                    isLocked = !hasFullAccess
+                )
+            )
         }
 
         if (includeSummary) {
-            add(Triple(tr("מסך סיכום", "Summary"), Icons.Filled.ReceiptLong, onSummary))
+            add(
+                QuickMenuItemUi(
+                    title = tr("מסך סיכום", "Summary"),
+                    icon = Icons.Filled.ReceiptLong,
+                    action = onSummary,
+                    isLocked = !hasFullAccess
+                )
+            )
         }
 
-        add(Triple(tr("עוזר קולי", "Voice Assistant"), Icons.Filled.Mic, onVoice))
+        add(
+            QuickMenuItemUi(
+                title = tr("עוזר קולי", "Voice Assistant"),
+                icon = Icons.Filled.Mic,
+                action = onVoice,
+                isLocked = !hasFullAccess
+            )
+        )
     }
 
     val menuVisibilityState = remember { MutableTransitionState(false) }
@@ -357,6 +402,7 @@ fun FloatingQuickMenu(
                         isEnglish = isEnglish,
                         items = items,
                         onItemClick = { action -> closeThen(action) },
+                        onLockedItemClick = onLockedItemClick,
                         onClose = { onExpandedChange(false) }
                     )
 
@@ -397,8 +443,9 @@ fun FloatingQuickMenu(
        title: String,
        accentColor: Color,
        isEnglish: Boolean,
-       items: List<Triple<String, ImageVector, () -> Unit>>,
+       items: List<QuickMenuItemUi>,
        onItemClick: (() -> Unit) -> Unit,
+       onLockedItemClick: () -> Unit,
        onClose: () -> Unit
    ) {
        val panelWidth = 214.dp
@@ -499,11 +546,20 @@ fun FloatingQuickMenu(
 
                    items.forEachIndexed { index, item ->
                        PremiumQuickMenuRow(
-                           text = item.first,
-                           icon = item.second,
+                           text = item.title,
+                           icon = item.icon,
                            accentColor = accentColor,
                            isEnglish = isEnglish,
-                           onClick = { onItemClick(item.third) }
+                           isLocked = item.isLocked,
+                           onClick = {
+                               onItemClick {
+                                   if (item.isLocked) {
+                                       onLockedItemClick()
+                                   } else {
+                                       item.action()
+                                   }
+                               }
+                           }
                        )
 
                        if (index != items.lastIndex) {
@@ -524,6 +580,7 @@ private fun PremiumQuickMenuRow(
     icon: ImageVector,
     accentColor: Color,
     isEnglish: Boolean,
+    isLocked: Boolean = false,
     onClick: () -> Unit
 ){
     Row(
@@ -541,9 +598,10 @@ private fun PremiumQuickMenuRow(
 
             Spacer(Modifier.width(10.dp))
 
-            Box(
+            Row(
                 modifier = Modifier.weight(1f),
-                contentAlignment = Alignment.CenterStart
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start
             ) {
                 Text(
                     text = text,
@@ -553,14 +611,35 @@ private fun PremiumQuickMenuRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.weight(1f)
                 )
+
+                if (isLocked) {
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = accentColor.copy(alpha = 0.90f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         } else {
-            Box(
+            Row(
                 modifier = Modifier.weight(1f),
-                contentAlignment = BiasAbsoluteAlignment(1f, 0f)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
             ) {
+                if (isLocked) {
+                    Icon(
+                        imageVector = Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = accentColor.copy(alpha = 0.90f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+
                 Text(
                     text = text,
                     color = Color(0xFF0F172A),
@@ -569,7 +648,7 @@ private fun PremiumQuickMenuRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.weight(1f)
                 )
             }
 

@@ -76,6 +76,7 @@ import android.app.Activity
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.QuickMenuTriggerMode
+import il.kmi.app.subscription.KmiAccess
 
 /* ------------------------------ Helpers מקומיים למסך ------------------------------ */
 
@@ -250,6 +251,7 @@ fun BeltQuestionsByBeltScreen(
     isCoach: Boolean,
     onNext: () -> Unit,
     onBackHome: () -> Unit,
+    onOpenSubscription: () -> Unit,
     onOpenExercise: (String) -> Unit,
     onOpenTopic: (Belt, String) -> Unit,
     onOpenDefenseMenu: (Belt, String) -> Unit,
@@ -269,8 +271,10 @@ fun BeltQuestionsByBeltScreen(
     BeltPangoLayout(
         vm = vm,
         kmiPrefs = kmiPrefs,
-        isCoach = isCoach,        onNext = onNext,
+        isCoach = isCoach,
+        onNext = onNext,
         onBackHome = onBackHome,
+        onOpenSubscription = onOpenSubscription,
         onOpenExercise = onOpenExercise,
         onOpenTopic = onOpenTopic,
         onOpenDefenseMenu = onOpenDefenseMenu,
@@ -298,13 +302,15 @@ internal fun BeltPangoLayout(
     isCoach: Boolean,
     onNext: () -> Unit,
     onBackHome: () -> Unit,
+    onOpenSubscription: () -> Unit,
     onOpenTopic: (Belt, String) -> Unit,
     onOpenDefenseMenu: (Belt, String) -> Unit,
     onOpenExercise: (String) -> Unit,
     onOpenSubject: (SubjectTopic) -> Unit,
     onOpenHardSubjectRoute: (Belt, String) -> Unit,
     onOpenSubTopic: (Belt, String, String) -> Unit,
-    onOpenWeakPoints: (Belt) -> Unit,    onOpenAllLists: (Belt) -> Unit,
+    onOpenWeakPoints: (Belt) -> Unit,
+    onOpenAllLists: (Belt) -> Unit,
     onOpenRandomPractice: (Belt) -> Unit,
     onOpenRandomPracticeByTopic: (Belt, String) -> Unit,
     onOpenFinalExam: (Belt) -> Unit,
@@ -321,6 +327,10 @@ internal fun BeltPangoLayout(
     val notePrefs = remember(ctx) {
         ctx.getSharedPreferences("kmi_exercise_notes", android.content.Context.MODE_PRIVATE)
     }
+    val userSp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+    }
+    val hasFullAccess = KmiAccess.hasFullAccess(userSp)
 
     fun normalizeFavoriteId(raw: String): String =
         raw.substringAfter("::", raw)
@@ -656,6 +666,11 @@ internal fun BeltPangoLayout(
                     onExpandedChange = { quickMenuExpanded = it },
                     triggerMode = QuickMenuTriggerMode.Fab,
                     includePractice = true,
+                    hasFullAccess = hasFullAccess,
+                    onLockedItemClick = {
+                        clickSound(); haptic(true)
+                        onOpenSubscription()
+                    },
                     onWeakPoints = {
                         clickSound(); haptic(true)
                         onOpenWeakPoints(currentBelt)
@@ -698,6 +713,11 @@ internal fun BeltPangoLayout(
                     includePractice = true,
                     includeAllLists = false,
                     includeSummary = false,
+                    hasFullAccess = hasFullAccess,
+                    onLockedItemClick = {
+                        clickSound(); haptic(true)
+                        onOpenSubscription()
+                    },
                     onWeakPoints = {
                         clickSound(); haptic(true)
                         onOpenWeakPoints(currentBelt)
@@ -997,6 +1017,16 @@ internal fun TopicsViewModeToggle(
 
 /* ----------------------------- כרטיס “נושאים בחגורה” ---------------------------- */
 
+private fun shouldShowLockForBeltTopic(title: String): Boolean {
+    val t = title.trim().lowercase()
+
+    return t.contains("הגנות") ||
+            t.contains("שחרור") ||
+            t.contains("defense") ||
+            t.contains("defence") ||
+            t.contains("release")
+}
+
 @Composable
 private fun TopicsCardForBelt(
     belt: Belt,
@@ -1182,7 +1212,7 @@ private fun TopicsCardForBelt(
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = floatingTitleColor,
-                                        textAlign = TextAlign.Right,
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f)
@@ -1209,7 +1239,7 @@ private fun TopicsCardForBelt(
                                     text = countsLine,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = floatingSubColor,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth()
@@ -1217,6 +1247,8 @@ private fun TopicsCardForBelt(
 
                                 if (hasSubs && isExpanded) {
                                     Spacer(Modifier.height(8.dp))
+
+                                    val parentLocked = shouldShowLockForBeltTopic(title)
 
                                     Column(
                                         modifier = Modifier
@@ -1252,16 +1284,43 @@ private fun TopicsCardForBelt(
                                                     belt.color.copy(alpha = 0.14f)
                                                 )
                                             ) {
-                                                Text(
-                                                    text = displaySub,
+                                                Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .padding(horizontal = 12.dp, vertical = 10.dp),
-                                                    textAlign = TextAlign.Right,
-                                                    color = floatingTitleColor,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    if (!isEnglish && parentLocked) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Lock,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFFF59E0B),
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+
+                                                        Spacer(Modifier.width(8.dp))
+                                                    }
+
+                                                    Text(
+                                                        text = displaySub,
+                                                        modifier = Modifier.weight(1f),
+                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                                        color = floatingTitleColor,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+
+                                                    if (isEnglish && parentLocked) {
+                                                        Spacer(Modifier.width(8.dp))
+
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Lock,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFFF59E0B),
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
 

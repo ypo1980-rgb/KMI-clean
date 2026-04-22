@@ -84,72 +84,22 @@ object DailyReminderScheduler {
     fun rescheduleNextDay(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val reminderPrefs = ReminderPrefs(prefs)
-
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val pendingIntent = reminderPendingIntent(context)
-
-        val calendar = Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_YEAR, 1)
-            set(Calendar.HOUR_OF_DAY, reminderPrefs.getHour())
-            set(Calendar.MINUTE, reminderPrefs.getMinute())
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-
-        val triggerAtMillis =
-            ShabbatHolidayChecker.computeNextAllowedTriggerTimeMillis(
-                preferredHour = calendar.get(Calendar.HOUR_OF_DAY),
-                preferredMinute = calendar.get(Calendar.MINUTE)
-            )
+        val isCoach = isCoachUser(prefs)
+        val isEnabled = reminderPrefs.isEnabledForRole(isCoach)
 
         android.util.Log.d(
             "KMI_REMINDER",
-            "rescheduleNextDay triggerAtMillis=$triggerAtMillis hour=${calendar.get(Calendar.HOUR_OF_DAY)} minute=${calendar.get(Calendar.MINUTE)}"
+            "rescheduleNextDay isCoach=$isCoach isEnabled=$isEnabled hour=${reminderPrefs.getHour()} minute=${reminderPrefs.getMinute()}"
         )
 
-        scheduleExactAlarm(
-            alarmManager = alarmManager,
-            triggerAtMillis = triggerAtMillis,
-            pendingIntent = pendingIntent
-        )
-    }
-
-    private fun computeNextTriggerTimeMillis(hour: Int, minute: Int): Long {
-
-        val now = Calendar.getInstance()
-
-        val dayOfWeek = now.get(Calendar.DAY_OF_WEEK)
-
-        val targetHour =
-            if (dayOfWeek == Calendar.FRIDAY) 13 else hour
-
-        val targetMinute =
-            if (dayOfWeek == Calendar.FRIDAY) 0 else minute
-
-        val target = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, targetHour)
-            set(Calendar.MINUTE, targetMinute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
+        if (!isEnabled) {
+            cancel(context)
+            return
         }
 
-        if (target.timeInMillis <= now.timeInMillis) {
-
-            target.add(Calendar.DAY_OF_YEAR, 1)
-
-            val nextDay = target.get(Calendar.DAY_OF_WEEK)
-
-            val nextHour =
-                if (nextDay == Calendar.FRIDAY) 13 else hour
-
-            val nextMinute =
-                if (nextDay == Calendar.FRIDAY) 0 else minute
-
-            target.set(Calendar.HOUR_OF_DAY, nextHour)
-            target.set(Calendar.MINUTE, nextMinute)
-        }
-
-        return target.timeInMillis
+        // מקור אמת יחיד: תמיד מתזמנים מחדש דרך schedule()
+        // כדי להשתמש בשעה/דקה המעודכנות וגם בלוגיקת שבת/חג
+        schedule(context)
     }
 
     private fun reminderPendingIntent(context: Context): PendingIntent {

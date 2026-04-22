@@ -7,6 +7,7 @@ package il.kmi.app.screens.registration
 
 import android.annotation.SuppressLint
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -89,6 +91,8 @@ fun RegistrationFormContent(
     var passwordVisible by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
 
+    var branchType by rememberSaveable { mutableStateOf("israel") } // israel / abroad
+
     val allGroupsAcrossBranches by remember(selectedBranches) {
         derivedStateOf {
             selectedBranches
@@ -112,304 +116,475 @@ fun RegistrationFormContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // ===== Personal =====
-        OutlinedTextField(
-            value = fullName,
-            onValueChange = { onFullNameChange(it) },
-            label = { Text("שם מלא", color = Color.Black) },
-            singleLine = true,
-            isError = fullNameError,
-            modifier = Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = 52.dp)
-                .background(Color.White, shape = MaterialTheme.shapes.medium),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                errorBorderColor = MaterialTheme.colorScheme.error
-            )
-        )
-        if (fullNameError) {
-            Text("שדה חובה", color = MaterialTheme.colorScheme.error)
-        }
-
-        OutlinedTextField(
-            value = phone,
-            onValueChange = { onPhoneChange(it) },
-            label = { Text("טלפון", color = Color.Black) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-            isError = phoneError,
-            modifier = Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = 52.dp)
-                .background(Color.White, shape = MaterialTheme.shapes.medium),
-            textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                errorBorderColor = MaterialTheme.colorScheme.error
-            )
-        )
-        if (phoneError) {
-            Text("שדה חובה", color = MaterialTheme.colorScheme.error)
-        }
-
-        OutlinedTextField(
-            value = email,
-            onValueChange = { onEmailChange(it) },
-            label = { Text("מייל", color = Color.Black) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            isError = emailError,
-            modifier = Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = 52.dp)
-                .background(Color.White, shape = MaterialTheme.shapes.medium),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                errorBorderColor = MaterialTheme.colorScheme.error
-            )
-        )
-        if (emailError) {
-            Text(
-                "שדה חובה / פורמט מייל לא תקין",
-                color = MaterialTheme.colorScheme.error
-            )
-        }
-
-        // ===== מין המשתמש =====
-        Text(
-            text = "מין המשתמש",
-            style = MaterialTheme.typography.labelLarge,
-            color = Color.Black,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp, bottom = 4.dp)
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+        RegistrationSectionCard(
+            title = "פרטים אישיים"
         ) {
-            FilterChip(
-                selected = gender == "male",
-                onClick = { onGenderChange("male") },
-                label = { Text("זכר", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+            OutlinedTextField(
+                value = fullName,
+                onValueChange = { onFullNameChange(it) },
+                label = { Text("שם מלא", color = Color.Black) },
+                singleLine = true,
+                isError = fullNameError,
                 modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 52.dp)
+                    .background(Color.White, shape = MaterialTheme.shapes.medium),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    errorBorderColor = MaterialTheme.colorScheme.error
+                )
+            )
+            if (fullNameError) {
+                Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+            }
+
+            OutlinedTextField(
+                value = phone,
+                onValueChange = { onPhoneChange(it) },
+                label = { Text("טלפון", color = Color.Black) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                isError = phoneError,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 52.dp)
+                    .background(Color.White, shape = MaterialTheme.shapes.medium),
+                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    errorBorderColor = MaterialTheme.colorScheme.error
+                )
+            )
+            if (phoneError) {
+                Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+            }
+
+            OutlinedTextField(
+                value = email,
+                onValueChange = { onEmailChange(it) },
+                label = { Text("מייל", color = Color.Black) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                isError = emailError,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 52.dp)
+                    .background(Color.White, shape = MaterialTheme.shapes.medium),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    errorBorderColor = MaterialTheme.colorScheme.error
+                )
+            )
+            if (emailError) {
+                Text(
+                    "שדה חובה / פורמט מייל לא תקין",
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            Text(
+                text = "מין המשתמש",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF475569),
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
                     selected = gender == "male",
-                    borderColor = Color(0xFF334155),
-                    selectedBorderColor = Color(0xFF0EA5E9),
-                    borderWidth = 1.dp,
-                    selectedBorderWidth = 1.dp
-                ),
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = Color(0xFF0B1220),
-                    selectedContainerColor = Color(0xFF0EA5E9),
-                    labelColor = Color(0xFFE5E7EB),
-                    selectedLabelColor = Color.White
+                    onClick = { onGenderChange("male") },
+                    label = {
+                        Text(
+                            "זכר",
+                            textAlign = TextAlign.Center,
+                            color = if (gender == "male") Color.White else Color(0xFF475569),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = gender == "male",
+                        borderColor = Color(0xFFD2C4E3),
+                        selectedBorderColor = Color(0xFF0EA5E9),
+                        borderWidth = 1.dp,
+                        selectedBorderWidth = 2.dp
+                    ),
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = Color.White,
+                        selectedContainerColor = Color(0xFF0EA5E9),
+                        labelColor = Color(0xFF475569),
+                        selectedLabelColor = Color.White
+                    )
                 )
-            )
 
-            FilterChip(
-                selected = gender == "female",
-                onClick = { onGenderChange("female") },
-                label = { Text("נקבה", textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
+                FilterChip(
                     selected = gender == "female",
-                    borderColor = Color(0xFF334155),
-                    selectedBorderColor = Color(0xFFEC4899),
-                    borderWidth = 1.dp,
-                    selectedBorderWidth = 1.dp
-                ),
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = Color(0xFF0B1220),
-                    selectedContainerColor = Color(0xFFEC4899),
-                    labelColor = Color(0xFFE5E7EB),
-                    selectedLabelColor = Color.White
+                    onClick = { onGenderChange("female") },
+                    label = {
+                        Text(
+                            "נקבה",
+                            textAlign = TextAlign.Center,
+                            color = if (gender == "female") Color.White else Color(0xFF475569),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = gender == "female",
+                        borderColor = Color(0xFFD2C4E3),
+                        selectedBorderColor = Color(0xFFEC4899),
+                        borderWidth = 1.dp,
+                        selectedBorderWidth = 2.dp
+                    ),
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = Color.White,
+                        selectedContainerColor = Color(0xFFEC4899),
+                        labelColor = Color(0xFF475569),
+                        selectedLabelColor = Color.White
+                    )
                 )
+            }
+            if (genderError) {
+                Text("יש לבחור מין", color = MaterialTheme.colorScheme.error)
+            }
+
+            Text(
+                text = "תאריך לידה",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF475569),
+                fontWeight = FontWeight.SemiBold
+            )
+
+            BirthDatePicker(
+                year = birthYear,
+                month = birthMonth,
+                day = birthDay,
+                onYearChange = { onBirthYearChange(it) },
+                onMonthChange = { onBirthMonthChange(it) },
+                onDayChange = { onBirthDayChange(it) }
             )
         }
-        if (genderError) {
-            Text("יש לבחור מין", color = MaterialTheme.colorScheme.error)
-        }
-
-        // ===== תאריך לידה =====
-        Text(
-            text = "תאריך לידה",
-            style = MaterialTheme.typography.labelLarge,
-            color = Color.Black,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 4.dp)
-        )
-
-        BirthDatePicker(
-            year = birthYear,
-            month = birthMonth,
-            day = birthDay,
-            onYearChange = { onBirthYearChange(it) },
-            onMonthChange = { onBirthMonthChange(it) },
-            onDayChange = { onBirthDayChange(it) }
-        )
 
         // ===== Account =====
-        OutlinedTextField(
-            value = username,
-            onValueChange = { onUsernameChange(it) },
-            label = { Text("שם משתמש", color = Color.Black) },
-            singleLine = true,
-            isError = usernameError,
-            modifier = Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = 52.dp)
-                .background(Color.White, shape = MaterialTheme.shapes.medium),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                errorBorderColor = MaterialTheme.colorScheme.error
-            )
-        )
-        if (usernameError) {
-            Text("שדה חובה", color = MaterialTheme.colorScheme.error)
-        }
-
-        OutlinedTextField(
-            value = password,
-            onValueChange = { onPasswordChange(it) },
-            label = { Text("סיסמה", color = Color.Black) },
-            singleLine = true,
-            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Next
-            ),
-            trailingIcon = {
-                val icon =
-                    if (passwordVisible) androidx.compose.material.icons.Icons.Filled.VisibilityOff
-                    else androidx.compose.material.icons.Icons.Filled.Visibility
-                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                    Icon(icon, contentDescription = null, tint = Color.Black)
-                }
-            },
-            isError = passwordError,
-            modifier = Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = 52.dp)
-                .background(Color.White, shape = MaterialTheme.shapes.medium),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                errorBorderColor = MaterialTheme.colorScheme.error
-            )
-        )
-        if (passwordError) {
-            Text("שדה חובה", color = MaterialTheme.colorScheme.error)
-        }
-
-        // ===== Region + Branches =====
-        RegionAndMultiBranchPicker(
-            selectedRegion = selectedRegion,
-            selectedBranches = selectedBranches,
-            onRegionChange = onRegionChange,
-            onBranchesConfirm = onBranchesChange,
-            regionError = regionError,
-            branchError = branchError
-        )
-
-        // ===== Groups (1–3) =====
-        if (selectedBranches.isNotEmpty()) {
-            MultiGroupsPicker(
-                allGroupsAcrossBranches = allGroupsAcrossBranches,
-                selectedGroups = selectedGroups,
-                onGroupsChange = onGroupsChange,
-                groupError = groupError
-            )
-        }
-
-        // ===== Belt =====
-        if (!isCoach) {
-            BeltPicker(
-                currentBeltId = currentBeltId,
-                onBeltChange = onBeltChange
-            )
-        }
-
-        // ===== Preferences =====
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
+        RegistrationSectionCard(
+            title = "חשבון משתמש"
         ) {
-            Checkbox(
-                checked = subscribeSms,
-                onCheckedChange = onSubscribeSmsChange
+            OutlinedTextField(
+                value = username,
+                onValueChange = { onUsernameChange(it) },
+                label = { Text("שם משתמש", color = Color.Black) },
+                singleLine = true,
+                isError = usernameError,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 52.dp)
+                    .background(Color.White, shape = MaterialTheme.shapes.medium),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    errorBorderColor = MaterialTheme.colorScheme.error
+                )
             )
-            Spacer(Modifier.width(8.dp))
-            Text("ארצה לקבל עדכונים בהודעת SMS לגבי אימונים קרובים")
+            if (usernameError) {
+                Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+            }
+
+            OutlinedTextField(
+                value = password,
+                onValueChange = { onPasswordChange(it) },
+                label = { Text("סיסמה", color = Color.Black) },
+                singleLine = true,
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Next
+                ),
+                trailingIcon = {
+                    val icon =
+                        if (passwordVisible) androidx.compose.material.icons.Icons.Filled.VisibilityOff
+                        else androidx.compose.material.icons.Icons.Filled.Visibility
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(icon, contentDescription = null, tint = Color.Black)
+                    }
+                },
+                isError = passwordError,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 52.dp)
+                    .background(Color.White, shape = MaterialTheme.shapes.medium),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    errorBorderColor = MaterialTheme.colorScheme.error
+                )
+            )
+            if (passwordError) {
+                Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+            }
         }
 
-        // ===== Terms =====
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp)
+        // ===== Branch / Group / Belt =====
+        RegistrationSectionCard(
+            title = "שיוך לסניף"
         ) {
-            Checkbox(
-                checked = acceptedTerms,
-                onCheckedChange = onAcceptedTermsChange
+            Text(
+                text = "בחירת סוג סניף",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF475569),
+                fontWeight = FontWeight.SemiBold
             )
-            Spacer(Modifier.width(8.dp))
 
-            val interaction = remember { MutableInteractionSource() }
-            Column(
-                Modifier
-                    .weight(1f)
-                    .clickable(
-                        interactionSource = interaction,
-                        indication = null
-                    ) { onOpenTerms() }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("אני מאשר את תנאי השימוש ומדיניות הפרטיות")
-                Text(
-                    "קרא עוד",
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        textDecoration = TextDecoration.Underline
+                FilterChip(
+                    selected = branchType == "israel",
+                    onClick = {
+                        branchType = "israel"
+                        onRegionChange("")
+                        onBranchesChange(emptyList())
+                        onGroupsChange(emptyList())
+                    },
+                    label = {
+                        Text(
+                            "ישראל",
+                            color = if (branchType == "israel") Color.White else Color(0xFF475569)
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = branchType == "israel",
+                        borderColor = Color(0xFFD2C4E3),
+                        selectedBorderColor = Color(0xFF6C4DFF),
+                        borderWidth = 1.dp,
+                        selectedBorderWidth = 2.dp
                     ),
-                    modifier = Modifier.padding(top = 2.dp)
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = Color.White,
+                        selectedContainerColor = Color(0xFF7C4DFF),
+                        labelColor = Color(0xFF475569),
+                        selectedLabelColor = Color.White
+                    )
+                )
+
+                FilterChip(
+                    selected = branchType == "abroad",
+                    onClick = {
+                        branchType = "abroad"
+                        onRegionChange("")
+                        onBranchesChange(emptyList())
+                        onGroupsChange(emptyList())
+                    },
+                    label = {
+                        Text(
+                            "חו״ל",
+                            color = if (branchType == "abroad") Color.White else Color(0xFF475569)
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = branchType == "abroad",
+                        borderColor = Color(0xFFD2C4E3),
+                        selectedBorderColor = Color(0xFF6C4DFF),
+                        borderWidth = 1.dp,
+                        selectedBorderWidth = 2.dp
+                    ),
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = Color.White,
+                        selectedContainerColor = Color(0xFF7C4DFF),
+                        labelColor = Color(0xFF475569),
+                        selectedLabelColor = Color.White
+                    )
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            RegionAndMultiBranchPicker(
+                branchType = branchType,
+                selectedRegion = selectedRegion,
+                selectedBranches = selectedBranches,
+                onRegionChange = onRegionChange,
+                onBranchesConfirm = onBranchesChange,
+                regionError = regionError,
+                branchError = branchError
+            )
+
+            if (branchType == "israel" && selectedBranches.isNotEmpty()) {
+                MultiGroupsPicker(
+                    allGroupsAcrossBranches = allGroupsAcrossBranches,
+                    selectedGroups = selectedGroups,
+                    onGroupsChange = onGroupsChange,
+                    groupError = groupError
+                )
+            }
+
+            if (!isCoach) {
+                BeltPicker(
+                    currentBeltId = currentBeltId,
+                    onBeltChange = onBeltChange
                 )
             }
         }
+
+        // ===== Preferences =====
+        RegistrationSectionCard(
+            title = "העדפות ואישורים"
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Checkbox(
+                    checked = subscribeSms,
+                    onCheckedChange = onSubscribeSmsChange
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("ארצה לקבל עדכונים בהודעת SMS לגבי אימונים קרובים")
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+            ) {
+                Checkbox(
+                    checked = acceptedTerms,
+                    onCheckedChange = onAcceptedTermsChange
+                )
+                Spacer(Modifier.width(8.dp))
+
+                val interaction = remember { MutableInteractionSource() }
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clickable(
+                            interactionSource = interaction,
+                            indication = null
+                        ) { onOpenTerms() }
+                ) {
+                    Text("אני מאשר את תנאי השימוש ומדיניות הפרטיות")
+                    Text(
+                        "קרא עוד",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            textDecoration = TextDecoration.Underline
+                        ),
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RegistrationSectionCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = Color(0xFFF4ECF8).copy(alpha = 0.96f),
+        tonalElevation = 0.dp,
+        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, Color(0xFFD9CCE7))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFF1F2937),
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Right,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color(0xFFD9CCE7))
+            )
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun RegistrationSectionTitle(
+    title: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = Color(0xFF1F2937),
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Right,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Color(0xFFB7A9C8).copy(alpha = 0.55f))
+        )
     }
 }
 
@@ -484,7 +659,13 @@ private fun BirthDatePicker(
                     if (v in 1..12) onMonthChange(v)
                 }
             },
-            label = { Text("חודש") },
+            label = {
+                Text(
+                    text = "חודש",
+                    maxLines = 1,
+                    softWrap = false
+                )
+            },
             singleLine = true,
             shape = shape,
             colors = fieldColors,
@@ -669,6 +850,7 @@ private class NoDividerNumberPicker(context: android.content.Context) :
 
 @Composable
 private fun RegionAndMultiBranchPicker(
+    branchType: String,
     selectedRegion: String,
     selectedBranches: List<String>,
     onRegionChange: (String) -> Unit,
@@ -677,22 +859,23 @@ private fun RegionAndMultiBranchPicker(
     branchError: Boolean,
     fieldHeight: Dp = 52.dp
 ) {
+
     val ctx = LocalContext.current
 
-    val regions = remember {
-        TrainingCatalog.activeRegions()
+    val regions = remember(branchType) {
+        if (branchType == "abroad") {
+            TrainingCatalog.abroadRegions()
+        } else {
+            TrainingCatalog.activeRegions()
+        }
     }
 
-    val allBranches = remember(selectedRegion) {
-        TrainingCatalog.branchesFor(selectedRegion)
-    }
-
-    // 🔹 סטטוס אזור (פעיל / לא פעיל) + הודעה "אין סניפים..."
-    val isRegionActive = remember(selectedRegion) {
-        selectedRegion.isNotBlank() && TrainingCatalog.isRegionActive(selectedRegion)
-    }
-    val regionStatusMessage = remember(selectedRegion) {
-        TrainingCatalog.regionStatusMessage(selectedRegion)
+    val allBranches = remember(branchType, selectedRegion) {
+        if (selectedRegion.isBlank()) {
+            emptyList()
+        } else {
+            TrainingCatalog.branchesFor(selectedRegion)
+        }
     }
 
     var regionExpanded by remember { mutableStateOf(false) }
@@ -702,30 +885,23 @@ private fun RegionAndMultiBranchPicker(
         onExpandedChange = { regionExpanded = !regionExpanded },
         modifier = Modifier.fillMaxWidth()
     ) {
+
         OutlinedTextField(
             value = selectedRegion,
-            onValueChange = { },
+            onValueChange = {},
             readOnly = true,
-            label = { Text("מחוז / אזור", color = Color.Black) },
+            label = {
+                Text(if (branchType == "abroad") "מדינה" else "מחוז / אזור")
+            },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = regionExpanded)
             },
-            isError = regionError,
             modifier = Modifier
                 .menuAnchor()
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = fieldHeight)
-                .background(Color.White, shape = MaterialTheme.shapes.medium),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                errorBorderColor = MaterialTheme.colorScheme.error
-            ),
-            placeholder = { Text("בחר/י אזור") }
+                .fillMaxWidth(),
+            placeholder = {
+                Text(if (branchType == "abroad") "בחר/י מדינה" else "בחר/י אזור")
+            }
         )
 
         ExposedDropdownMenu(
@@ -744,20 +920,6 @@ private fun RegionAndMultiBranchPicker(
         }
     }
 
-    if (regionError) {
-        Text("שדה חובה", color = MaterialTheme.colorScheme.error)
-    }
-
-    // 🔹 הודעת "אין סניפים זמינים לאזור זה"
-    if (regionStatusMessage != null) {
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = regionStatusMessage,
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodyMedium
-        )
-    }
-
     Spacer(Modifier.height(8.dp))
 
     var branchesExpanded by remember { mutableStateOf(false) }
@@ -766,57 +928,44 @@ private fun RegionAndMultiBranchPicker(
     ExposedDropdownMenuBox(
         expanded = branchesExpanded,
         onExpandedChange = { open ->
-            // אם האזור לא פעיל – במקום לפתוח רשימת סניפים מציגים הודעה
-            if (open && !isRegionActive) {
-                Toast.makeText(
-                    ctx,
-                    regionStatusMessage ?: "אין סניפים זמינים באזור זה",
-                    Toast.LENGTH_SHORT
-                ).show()
-                branchesExpanded = false
-            } else {
-                branchesExpanded = open
-                if (open) tempSelection = selectedBranches.toList()
-            }
-        },
-        modifier = Modifier.fillMaxWidth()
+            branchesExpanded = open
+            if (open) tempSelection = selectedBranches.toList()
+        }
     ) {
-        val display = if (selectedBranches.isEmpty()) "" else selectedBranches.joinToString("\n")
+
+        val display =
+            if (selectedBranches.isEmpty()) "" else selectedBranches.joinToString("\n")
 
         OutlinedTextField(
             value = display,
-            onValueChange = { },
+            onValueChange = {},
             readOnly = true,
-            label = { Text("סניפים (עד 3)", color = Color.Black) },
+            label = { Text("סניפים (עד 3)") },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = branchesExpanded)
             },
-            isError = branchError,
-            minLines = (if (selectedBranches.isEmpty()) 1 else selectedBranches.size)
-                .coerceAtMost(4),
-            maxLines = 6,
             modifier = Modifier
                 .menuAnchor()
-                .fillMaxWidth()
-                .background(Color.White, shape = MaterialTheme.shapes.medium),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                errorBorderColor = MaterialTheme.colorScheme.error
-            ),
-            placeholder = { Text("בחר/י 1–3 סניפים") }
+                .fillMaxWidth(),
+            placeholder = {
+                Text(
+                    if (branchType == "abroad")
+                        "בחר/י 1–3 סניפים בחו״ל"
+                    else
+                        "בחר/י 1–3 סניפים"
+                )
+            }
         )
 
         ExposedDropdownMenu(
             expanded = branchesExpanded,
             onDismissRequest = { branchesExpanded = false }
         ) {
+
             allBranches.forEach { branch ->
+
                 val checked = branch in tempSelection
+
                 DropdownMenuItem(
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -826,18 +975,21 @@ private fun RegionAndMultiBranchPicker(
                         }
                     },
                     onClick = {
+
                         tempSelection =
                             if (checked) {
                                 tempSelection.filterNot { it == branch }
                             } else {
-                                if (tempSelection.size < 3) {
+
+                                if (tempSelection.size < 3)
                                     tempSelection + branch
-                                } else {
+                                else {
                                     Toast.makeText(
                                         ctx,
                                         "ניתן לבחור עד 3 סניפים",
                                         Toast.LENGTH_SHORT
                                     ).show()
+
                                     tempSelection
                                 }
                             }
@@ -850,26 +1002,22 @@ private fun RegionAndMultiBranchPicker(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TextButton(onClick = { tempSelection = emptyList() }) {
-                    Text("נקה")
-                }
+
+                TextButton(
+                    onClick = { tempSelection = emptyList() }
+                ) { Text("נקה") }
+
                 Button(
                     onClick = {
                         onBranchesConfirm(tempSelection)
                         branchesExpanded = false
                     }
-                ) {
-                    Text("אישור")
-                }
+                ) { Text("אישור") }
             }
         }
-    }
-
-    if (branchError) {
-        Text("יש לבחור לפחות סניף אחד", color = MaterialTheme.colorScheme.error)
     }
 }
 

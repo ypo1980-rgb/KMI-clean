@@ -2,19 +2,14 @@ package il.kmi.app.subscription
 
 import android.content.SharedPreferences
 
-private const val KEY_TRIAL_START = "trial_start_millis"
 private const val KEY_HAS_FULL_ACCESS = "has_full_access"
 
 // ⬅️ מנהל אפליקציה
 private const val KEY_IS_ADMIN = "is_admin"
 
-// ⬅️ חדש: דגל פתיחה עם קוד סודי (ל־5 המפתחים וכו')
+// ⬅️ דגל פתיחה עם קוד סודי (למפתחים / נסיינים)
 private const val KEY_DEV_UNLOCK = "dev_unlock"
-// אפשר לשנות לקוד אחר, רק לא לשכוח לעדכן גם באפליקציה
-private const val DEV_UNLOCK_CODE = "KMI-SECRET-2025"
-
-// 3 ימים
-private const val TRIAL_DURATION_MILLIS: Long = 3L * 24 * 60 * 60 * 1000
+private const val DEV_UNLOCK_CODE = "34567@"
 
 object KmiAccess {
 
@@ -55,16 +50,15 @@ object KmiAccess {
         return ok
     }
 
-    /** לקרוא פעם אחרי רישום משתמש חדש / כניסה ראשונה */
-    fun ensureTrialStarted(sp: SharedPreferences) {
-        // לא צריך תקופת ניסיון לאדמין
-        if (isAdmin(sp)) return
+    fun clearDevUnlock(sp: SharedPreferences) {
+        sp.edit()
+            .putBoolean(KEY_DEV_UNLOCK, false)
+            .apply()
+    }
 
-        if (!sp.contains(KEY_TRIAL_START)) {
-            sp.edit()
-                .putLong(KEY_TRIAL_START, System.currentTimeMillis())
-                .apply()
-        }
+    /** כרגע לא מפעילים תקופת ניסיון */
+    fun ensureTrialStarted(sp: SharedPreferences) {
+        // מושבת זמנית – נשאיר פונקציה ריקה כדי לא לשבור קריאות קיימות
     }
 
     fun setFullAccess(sp: SharedPreferences, value: Boolean) {
@@ -72,42 +66,24 @@ object KmiAccess {
     }
 
     /**
-     * "גישה מלאה" = או מנוי רגיל, או אדמין, או פתיחה עם קוד סודי.
+     * "גישה מלאה" = מנוי פעיל, אדמין, או פתיחה עם קוד סודי.
      */
     fun hasFullAccess(sp: SharedPreferences): Boolean =
         isAdmin(sp) ||
                 hasDevUnlock(sp) ||
                 sp.getBoolean(KEY_HAS_FULL_ACCESS, false)
 
-    fun isTrialActive(sp: SharedPreferences): Boolean {
-        // ⬅️ לא צריך "ניסיון" לאדמין – תמיד פתוח
-        if (isAdmin(sp)) return false
+    /** כרגע תקופת הניסיון כבויה */
+    fun isTrialActive(sp: SharedPreferences): Boolean = false
 
-        val start = sp.getLong(KEY_TRIAL_START, 0L)
-        if (start == 0L) return false
-        val now = System.currentTimeMillis()
-        return now - start < TRIAL_DURATION_MILLIS
-    }
-
-    /** כמה ימים נשארו לניסיון (0 אם נגמר / לא התחיל) */
-    fun trialDaysLeft(sp: SharedPreferences): Int {
-        // לאדמין זה לא רלוונטי – נחזיר 0
-        if (isAdmin(sp)) return 0
-
-        val start = sp.getLong(KEY_TRIAL_START, 0L)
-        if (start == 0L) return 0
-        val now = System.currentTimeMillis()
-        val remaining = TRIAL_DURATION_MILLIS - (now - start)
-        if (remaining <= 0L) return 0
-        val dayMillis = 24L * 60 * 60 * 1000
-        return (remaining / dayMillis).toInt().coerceAtLeast(0)
-    }
+    /** כרגע אין ספירת ימי ניסיון */
+    fun trialDaysLeft(sp: SharedPreferences): Int = 0
 
     // ===== הרשאות שימוש במסכים =====
 
-    /** אימונים / תרגול רגיל – פתוח בזמן ניסיון או גישה מלאה */
+    /** אימונים / תרגול רגיל – כרגע פתוח רק בגישה מלאה */
     fun canUseTraining(sp: SharedPreferences): Boolean =
-        hasFullAccess(sp) || isTrialActive(sp)
+        hasFullAccess(sp)
 
     /** כלים נוספים – פתוח רק לגישה מלאה (מנוי / קוד / אדמין) */
     fun canUseExtras(sp: SharedPreferences): Boolean =
