@@ -12,11 +12,11 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "il.kmi.app"
+        applicationId = "il.kmi.training"
         minSdk = 23
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -110,13 +110,21 @@ dependencies {
     // -------------------------------
     // Firebase דרך BOM
     // -------------------------------
+    // ✅ נשארים כרגע על 33.3.0 כי הפרויקט עדיין משתמש במודולי firebase-*-ktx
     implementation(platform("com.google.firebase:firebase-bom:33.3.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")
-    // ✅ חדש – Firebase Storage להעלאת תמונות/וידאו בפורום
+    // ✅ Firebase Storage להעלאת תמונות/וידאו בפורום
     implementation("com.google.firebase:firebase-storage-ktx")
-    // ✅ חדש – Firebase Cloud Messaging (FCM) להתראות Push
+    // ✅ Firebase Cloud Messaging (FCM) להתראות Push
     implementation("com.google.firebase:firebase-messaging-ktx")
+
+    // -------------------------------
+    // Google Login - Credential Manager
+    // -------------------------------
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.0")
 
     // Icons / Billing
     implementation("androidx.compose.material:material-icons-extended")

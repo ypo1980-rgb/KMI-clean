@@ -838,8 +838,8 @@ fun MaterialsScreen(
                                         },
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
+                                        maxLines = 3,                      // ✔️ עכשיו 3 שורות
+                                        overflow = TextOverflow.Ellipsis   // ✔️ עדיין שומר עיצוב נקי
                                     )
 
                                     Spacer(Modifier.width(8.dp))

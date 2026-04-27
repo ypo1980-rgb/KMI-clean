@@ -125,14 +125,26 @@ fun MainApp(
 
     LaunchedEffect(Unit) {
         DrawerBridge.register(
-            onOpenDrawer = { scope.launch { drawerState.open() } },
+            onOpenDrawer = {
+                android.util.Log.e("KMI_DRAWER", "MainApp onOpenDrawer invoked")
+
+                scope.launch {
+                    drawerState.open()
+
+                    android.util.Log.e(
+                        "KMI_DRAWER",
+                        "drawerState.open() done isOpen=${drawerState.isOpen}"
+                    )
+                }
+            },
             onOpenSettings = {
-                android.util.Log.d("KMI_SETTINGS", "DrawerBridge -> settings")
+                android.util.Log.e("KMI_DRAWER", "openSettings")
                 nav.navigate(Route.Settings.route) {
                     launchSingleTop = true
                 }
             },
             onOpenHome = {
+                android.util.Log.e("KMI_DRAWER", "openHome")
                 nav.navigate(Route.Home.route) {
                     popUpTo(nav.graph.findStartDestination().id) {
                         saveState = true
@@ -283,6 +295,12 @@ fun MainApp(
                             kmiPrefs = kmiPrefs,
                             themeMode = themeMode,
                             onThemeChange = onThemeChange,
+                            onOpenDrawer = {
+                                scope.launch {
+                                    drawerState.open()
+                                }
+                            },
+
                             startDestination = Route.Intro.route
                         )
                     }

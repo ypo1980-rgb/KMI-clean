@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.app.Activity
 import android.content.ContextWrapper
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
@@ -158,7 +159,7 @@ fun KmiTopBar(
     alignTitleEnd: Boolean = false,
     showTopHome: Boolean = true,
     showTopSearch: Boolean = true,
-    // 🔵 חדש – callback לפתיחת דיאלוג AI
+    isInsideAssistant: Boolean = false,
     onOpenAi: (() -> Unit)? = null
 ) {
     // 🔴 כאן היה רינדור מוקדם של CenterAlignedTopAppBar/TopAppBar – הורדנו אותו
@@ -339,8 +340,8 @@ fun KmiTopBar(
                 val scopeOpen = rememberCoroutineScope()
                 val openDrawerClick: () -> Unit = {
                     when {
-                        providedDrawer != null -> scopeOpen.launch { providedDrawer.open() }
                         onOpenDrawer != null -> onOpenDrawer()
+                        providedDrawer != null -> scopeOpen.launch { providedDrawer.open() }
                         else -> DrawerBridge.open()
                     }
                 }
@@ -389,12 +390,19 @@ fun KmiTopBar(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 20.sp,
+                            lineHeight = 24.sp
+                        ),
+                        fontWeight = FontWeight.ExtraBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = titleTextAlign,
-                        color = MaterialTheme.colorScheme.onSurface,
+
+                        // ✅ צבע קבוע וברור לכותרות המסכים גם במצב כהה
+                        // ה-TopBar עצמו לבן, לכן לא משתמשים כאן ב-onSurface של ה-Theme.
+                        color = Color(0xFF111827),
+
                         modifier = Modifier
                             .fillMaxWidth()
                             .basicMarquee(
@@ -587,7 +595,13 @@ fun KmiTopBar(
                     },
 
                     // 🔵 פה – אייקון ה-AI בסרגל התחתון
-                    onOpenAi = { showAiDialog = true }
+                    onOpenAi = {
+                        if (isInsideAssistant) {
+                            Log.e("KMI_AI", "AI icon ignored (already inside assistant)")
+                            return@BottomActionsBarEdgeToEdge
+                        }
+                        showAiDialog = true
+                    }
                 )
             }
         }
@@ -628,6 +642,9 @@ fun KmiTopBar(
     if (showAiDialog) {
         AiAssistantDialog(
             onDismiss = { showAiDialog = false },
+            onOpenDrawer = {
+                DrawerBridge.open()
+            }
         )
     }
 
@@ -710,13 +727,6 @@ fun KmiTopBar(
                             }
                         }
                     }
-                }
-
-                // === דיאלוג עוזר חכם (AI) ===
-                if (showAiDialog) {
-                    AiAssistantDialog(
-                        onDismiss = { showAiDialog = false },
-                    )
                 }
             }
 

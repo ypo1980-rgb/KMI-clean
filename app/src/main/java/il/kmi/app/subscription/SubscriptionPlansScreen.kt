@@ -64,7 +64,6 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun SubscriptionPlansScreen(
     onBack: () -> Unit,
-    onPurchase: (productId: String) -> Unit,
     onOpenHome: () -> Unit,
     onOpenAssociationMembership: () -> Unit,
 ) {
@@ -154,31 +153,32 @@ fun SubscriptionPlansScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-// ---------- Free Trial Info ----------
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFFEF3C7)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text =
-                            if (isEnglish)
-                                "⭐ 3-day free trial. Billing is managed by Google Play / App Store. You can cancel anytime."
-                            else
-                                "⭐ ניסיון חינם ל-3 ימים. החיוב מתבצע דרך Google Play / App Store וניתן לבטל בכל עת.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF92400E),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 10.dp, horizontal = 12.dp)
-                    )
-                }
+                if (!state.connected || !state.productsLoaded || state.error != null) {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFF7ED)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (isEnglish) {
+                                "Billing status: connected=${state.connected}, productsLoaded=${state.productsLoaded}\n${state.error.orEmpty()}"
+                            } else {
+                                "סטטוס רכישה: מחובר=${state.connected}, מוצרים נטענו=${state.productsLoaded}\n${state.error.orEmpty()}"
+                            },
+                            color = Color(0xFF9A3412),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        )
+                    }
 
-                Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(12.dp))
+                }
 
                 TariffCard()
                 if (!isAssociationMember) {
@@ -221,20 +221,37 @@ fun SubscriptionPlansScreen(
                         }
                     ),
                     containerColor = Color(0xFF0EA5E9),
-                    showTrialBadge = true,
+                    showTrialBadge = false,
                     onBuy = {
                         if (activity != null && state.connected) {
-                            repo.launchPurchase(activity, monthlyProductId)
-                            onPurchase(monthlyProductId)
+                            val launched = repo.launchPurchase(activity, monthlyProductId)
+
+                            if (!launched) {
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) {
+                                        "The monthly subscription is not available for this tester yet."
+                                    } else {
+                                        "המנוי החודשי עדיין לא זמין לבודק הזה."
+                                    },
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                         } else {
                             Toast.makeText(
                                 ctx,
-                                "שירות הרכישה אינו זמין במכשיר (Billing not connected).",
+                                if (isEnglish) {
+                                    "Billing service is unavailable on this device."
+                                } else {
+                                    "שירות הרכישה אינו זמין במכשיר."
+                                },
                                 Toast.LENGTH_LONG
                             ).show()
                         }
                     }
                 )
+
+                Spacer(Modifier.height(18.dp))
 
                 // -------- מנוי שנתי --------
                 PlanCard(
@@ -268,12 +285,27 @@ fun SubscriptionPlansScreen(
                     containerColor = Color(0xFFFFA000),
                     onBuy = {
                         if (activity != null && state.connected) {
-                            repo.launchPurchase(activity, yearlyProductId)
-                            onPurchase(yearlyProductId)
+                            val launched = repo.launchPurchase(activity, yearlyProductId)
+
+                            if (!launched) {
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) {
+                                        "The yearly subscription is not available for this tester yet."
+                                    } else {
+                                        "המנוי השנתי עדיין לא זמין לבודק הזה."
+                                    },
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                         } else {
                             Toast.makeText(
                                 ctx,
-                                "שירות הרכישה אינו זמין במכשיר (Billing not connected).",
+                                if (isEnglish) {
+                                    "Billing service is unavailable on this device."
+                                } else {
+                                    "שירות הרכישה אינו זמין במכשיר."
+                                },
                                 Toast.LENGTH_LONG
                             ).show()
                         }

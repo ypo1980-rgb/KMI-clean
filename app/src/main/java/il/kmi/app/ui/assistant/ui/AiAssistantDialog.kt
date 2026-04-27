@@ -56,7 +56,7 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.filled.VolumeOff
+import il.kmi.app.ui.DrawerBridge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -415,6 +415,13 @@ private fun getExerciseAnswerWithFallback(
         ?.takeIf { it.isNotBlank() }
         ?: question.trim()
 
+    il.kmi.app.domain.ExplanationSearchIndex.findBest(
+        query = rawExercise,
+        preferredBelt = preferredBelt
+    )?.let { match ->
+        return match.explanation
+    }
+
     val partialQuery = when (resolveExerciseAlias(rawExercise)) {
         "הגנה נגד דקירה" -> "דקירה"
         else -> rawExercise
@@ -593,10 +600,15 @@ private fun normalizeForTts(text: String): String {
 // ───────────────────────────────
 // קומפוזיבל: דיאלוג העוזר החכם
 // ───────────────────────────────
+@OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class
+)
 @Composable
 fun AiAssistantDialog(
     onDismiss: () -> Unit,
     onVoiceCommand: ((VoiceNavCommand) -> Unit)? = null,
+    onOpenDrawer: (() -> Unit)? = null,
     currentLang: String = ""
 ) {
     val ctx = LocalContext.current
@@ -1305,13 +1317,8 @@ fun AiAssistantDialog(
     // ✅ גורם לשדה הקלט להופיע מעל המקלדת (ולא להיבלע)
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
-    Dialog(
-        onDismissRequest = {
-            stopListeningHard()
-            stopSpeaking()
-            onDismiss()
-        },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
         var didIntroSpeak by remember { mutableStateOf(false) }
 
@@ -1356,20 +1363,59 @@ fun AiAssistantDialog(
                         showRoleBadge = true,
                         showTopHome = false,
                         showTopSearch = false,
+                        isInsideAssistant = true,
                         useCloseIcon = false,
                         onBack = null,
                     // ✅ בית במסך הזה = סגירת הדיאלוג וחזרה למסך שמאחוריו
-                    onHome = {
-                        stopListeningHard()
-                        stopSpeaking()
-                        onDismiss()
-                    },
+                        onHome = {
+                            Log.e("KMI_DRAWER", "AI_HOME clicked")
+                            stopListeningHard()
+                            stopSpeaking()
+                            onDismiss()
+                            DrawerBridge.openHome()
+                        },
 
-                    onSearch = null,
-                    onOpenDrawer = null,
+                        onSearch = {
+                            Log.e("KMI_AI_SEARCH", "AI search opened")
+                        },
+                        onPickSearchResult = { key ->
+                            Log.e("KMI_AI_SEARCH", "AI picked search result key=$key")
+
+                            val parts = when {
+                                "|" in key -> key.split("|", limit = 3)
+                                "::" in key -> key.split("::", limit = 3)
+                                "/" in key -> key.split("/", limit = 3)
+                                else -> listOf("", "", key)
+                            }
+
+                            val rawItem = parts.getOrNull(2).orEmpty().trim()
+                            val displayName = ExerciseTitleFormatter
+                                .displayName(rawItem)
+                                .ifBlank { rawItem }
+                                .trim()
+
+                            if (displayName.isNotBlank()) {
+                                assistantMode = AssistantMode.EXERCISE
+                                input = displayName
+                                sendQuestion(displayName)
+                            }
+                        },
+                        onOpenDrawer = {
+                            Log.e("KMI_DRAWER", "AI_TOPBAR menu clicked")
+
+                            stopListeningHard()
+                            stopSpeaking()
+
+                            if (onOpenDrawer != null) {
+                                Log.e("KMI_DRAWER", "AI_TOPBAR using local onOpenDrawer")
+                                onOpenDrawer.invoke()
+                            } else {
+                                Log.e("KMI_DRAWER", "AI_TOPBAR using DrawerBridge fallback")
+                                DrawerBridge.open()
+                            }
+                        },
 
                         // ✅ לא להציג הודעת חסימה כאן
-                        lockHome = false,
                         homeDisabledToast = null
                     )
 

@@ -45,6 +45,7 @@ import il.kmi.app.ui.ext.color
 @Composable
 fun RegistrationFormContent(
     isCoach: Boolean,
+    isGoogleAuth: Boolean = false,
     fullName: String,
     onFullNameChange: (String) -> Unit,
     fullNameError: Boolean,
@@ -86,12 +87,12 @@ fun RegistrationFormContent(
     acceptedTerms: Boolean,
     onAcceptedTermsChange: (Boolean) -> Unit,
     onOpenTerms: () -> Unit,
+    branchType: String,
+    onBranchTypeChange: (String) -> Unit,
 ) {
     val scroll = rememberScrollState()
     var passwordVisible by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
-
-    var branchType by rememberSaveable { mutableStateOf("israel") } // israel / abroad
 
     val allGroupsAcrossBranches by remember(selectedBranches) {
         derivedStateOf {
@@ -291,68 +292,71 @@ fun RegistrationFormContent(
         }
 
         // ===== Account =====
-        RegistrationSectionCard(
-            title = "חשבון משתמש"
-        ) {
-            OutlinedTextField(
-                value = username,
-                onValueChange = { onUsernameChange(it) },
-                label = { Text("שם משתמש", color = Color.Black) },
-                singleLine = true,
-                isError = usernameError,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = 52.dp)
-                    .background(Color.White, shape = MaterialTheme.shapes.medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    errorBorderColor = MaterialTheme.colorScheme.error
+        // בכניסה עם Google אין צורך להציג שם משתמש / סיסמה.
+        if (!isGoogleAuth) {
+            RegistrationSectionCard(
+                title = "חשבון משתמש"
+            ) {
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { onUsernameChange(it) },
+                    label = { Text("שם משתמש", color = Color.Black) },
+                    singleLine = true,
+                    isError = usernameError,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 52.dp)
+                        .background(Color.White, shape = MaterialTheme.shapes.medium),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedTextColor = Color.Black,
+                        unfocusedTextColor = Color.Black,
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        errorBorderColor = MaterialTheme.colorScheme.error
+                    )
                 )
-            )
-            if (usernameError) {
-                Text("שדה חובה", color = MaterialTheme.colorScheme.error)
-            }
+                if (usernameError) {
+                    Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+                }
 
-            OutlinedTextField(
-                value = password,
-                onValueChange = { onPasswordChange(it) },
-                label = { Text("סיסמה", color = Color.Black) },
-                singleLine = true,
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Next
-                ),
-                trailingIcon = {
-                    val icon =
-                        if (passwordVisible) androidx.compose.material.icons.Icons.Filled.VisibilityOff
-                        else androidx.compose.material.icons.Icons.Filled.Visibility
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(icon, contentDescription = null, tint = Color.Black)
-                    }
-                },
-                isError = passwordError,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = 52.dp)
-                    .background(Color.White, shape = MaterialTheme.shapes.medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    errorBorderColor = MaterialTheme.colorScheme.error
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { onPasswordChange(it) },
+                    label = { Text("סיסמה", color = Color.Black) },
+                    singleLine = true,
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Next
+                    ),
+                    trailingIcon = {
+                        val icon =
+                            if (passwordVisible) androidx.compose.material.icons.Icons.Filled.VisibilityOff
+                            else androidx.compose.material.icons.Icons.Filled.Visibility
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(icon, contentDescription = null, tint = Color.Black)
+                        }
+                    },
+                    isError = passwordError,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 52.dp)
+                        .background(Color.White, shape = MaterialTheme.shapes.medium),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedTextColor = Color.Black,
+                        unfocusedTextColor = Color.Black,
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        errorBorderColor = MaterialTheme.colorScheme.error
+                    )
                 )
-            )
-            if (passwordError) {
-                Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+                if (passwordError) {
+                    Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+                }
             }
         }
 
@@ -374,7 +378,7 @@ fun RegistrationFormContent(
                 FilterChip(
                     selected = branchType == "israel",
                     onClick = {
-                        branchType = "israel"
+                        onBranchTypeChange("israel")
                         onRegionChange("")
                         onBranchesChange(emptyList())
                         onGroupsChange(emptyList())
@@ -407,7 +411,7 @@ fun RegistrationFormContent(
                 FilterChip(
                     selected = branchType == "abroad",
                     onClick = {
-                        branchType = "abroad"
+                        onBranchTypeChange("abroad")
                         onRegionChange("")
                         onBranchesChange(emptyList())
                         onGroupsChange(emptyList())
@@ -446,6 +450,7 @@ fun RegistrationFormContent(
                 selectedBranches = selectedBranches,
                 onRegionChange = onRegionChange,
                 onBranchesConfirm = onBranchesChange,
+                onGroupsChange = onGroupsChange,
                 regionError = regionError,
                 branchError = branchError
             )
@@ -561,6 +566,35 @@ private fun RegistrationSectionCard(
 }
 
 @Composable
+private fun registrationLightFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = Color.White,
+    unfocusedContainerColor = Color.White,
+    disabledContainerColor = Color.White,
+    errorContainerColor = Color.White,
+
+    focusedTextColor = Color.Black,
+    unfocusedTextColor = Color.Black,
+    disabledTextColor = Color.Black.copy(alpha = 0.78f),
+    errorTextColor = Color.Black,
+
+    focusedLabelColor = Color(0xFF374151),
+    unfocusedLabelColor = Color(0xFF475569),
+    disabledLabelColor = Color(0xFF64748B),
+    errorLabelColor = MaterialTheme.colorScheme.error,
+
+    focusedPlaceholderColor = Color(0xFF64748B),
+    unfocusedPlaceholderColor = Color(0xFF64748B),
+    disabledPlaceholderColor = Color(0xFF94A3B8),
+
+    focusedBorderColor = Color(0xFF7C4DFF),
+    unfocusedBorderColor = Color(0xFFD2C4E3),
+    disabledBorderColor = Color(0xFFD2C4E3),
+    errorBorderColor = MaterialTheme.colorScheme.error,
+
+    cursorColor = Color(0xFF7C4DFF)
+)
+
+@Composable
 private fun RegistrationSectionTitle(
     title: String,
     modifier: Modifier = Modifier
@@ -602,20 +636,9 @@ private fun BirthDatePicker(
     var monthText by remember(month) { mutableStateOf(month.coerceIn(1, 12).toString().padStart(2, '0')) }
     var yearText by remember(year) { mutableStateOf(year.coerceIn(1950, 2026).toString().padStart(4, '0')) }
 
-    // צבעי רקע מודרניים לכל שדה
+    // צבעים קבועים כדי שהשדות יהיו קריאים גם במצב כהה
     val shape = RoundedCornerShape(14.dp)
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedContainerColor = MaterialTheme.colorScheme.surface,
-        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-        disabledContainerColor = MaterialTheme.colorScheme.surface,
-        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
-        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-        focusedLabelColor = MaterialTheme.colorScheme.primary,
-        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        cursorColor = MaterialTheme.colorScheme.primary
-    )
+    val fieldColors = registrationLightFieldColors()
 
     Row(
         modifier = Modifier
@@ -855,12 +878,14 @@ private fun RegionAndMultiBranchPicker(
     selectedBranches: List<String>,
     onRegionChange: (String) -> Unit,
     onBranchesConfirm: (List<String>) -> Unit,
+    onGroupsChange: (List<String>) -> Unit,
     regionError: Boolean,
     branchError: Boolean,
     fieldHeight: Dp = 52.dp
 ) {
-
     val ctx = LocalContext.current
+    val fieldColors = registrationLightFieldColors()
+    val fieldShape = RoundedCornerShape(14.dp)
 
     val regions = remember(branchType) {
         if (branchType == "abroad") {
@@ -885,32 +910,55 @@ private fun RegionAndMultiBranchPicker(
         onExpandedChange = { regionExpanded = !regionExpanded },
         modifier = Modifier.fillMaxWidth()
     ) {
-
         OutlinedTextField(
             value = selectedRegion,
             onValueChange = {},
             readOnly = true,
+            singleLine = true,
+            isError = regionError,
             label = {
-                Text(if (branchType == "abroad") "מדינה" else "מחוז / אזור")
+                Text(
+                    text = if (branchType == "abroad") "מדינה" else "מחוז / אזור",
+                    color = Color(0xFF374151)
+                )
             },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = regionExpanded)
             },
             modifier = Modifier
                 .menuAnchor()
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .heightIn(min = fieldHeight)
+                .background(Color.White, shape = fieldShape),
+            colors = fieldColors,
+            shape = fieldShape,
+            textStyle = LocalTextStyle.current.copy(
+                color = Color.Black,
+                textAlign = TextAlign.Right
+            ),
             placeholder = {
-                Text(if (branchType == "abroad") "בחר/י מדינה" else "בחר/י אזור")
+                Text(
+                    text = if (branchType == "abroad") "בחר/י מדינה" else "בחר/י אזור",
+                    color = Color(0xFF64748B)
+                )
             }
         )
 
         ExposedDropdownMenu(
             expanded = regionExpanded,
-            onDismissRequest = { regionExpanded = false }
+            onDismissRequest = { regionExpanded = false },
+            containerColor = Color.White
         ) {
             regions.forEach { region ->
                 DropdownMenuItem(
-                    text = { Text(region) },
+                    text = {
+                        Text(
+                            text = region,
+                            color = Color.Black,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
                     onClick = {
                         regionExpanded = false
                         onRegionChange(region)
@@ -918,6 +966,16 @@ private fun RegionAndMultiBranchPicker(
                 )
             }
         }
+    }
+
+    if (regionError) {
+        Text(
+            text = "חובה לבחור אזור",
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Right,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 
     Spacer(Modifier.height(8.dp))
@@ -930,9 +988,9 @@ private fun RegionAndMultiBranchPicker(
         onExpandedChange = { open ->
             branchesExpanded = open
             if (open) tempSelection = selectedBranches.toList()
-        }
+        },
+        modifier = Modifier.fillMaxWidth()
     ) {
-
         val display =
             if (selectedBranches.isEmpty()) "" else selectedBranches.joinToString("\n")
 
@@ -940,56 +998,80 @@ private fun RegionAndMultiBranchPicker(
             value = display,
             onValueChange = {},
             readOnly = true,
-            label = { Text("סניפים (עד 3)") },
+            isError = branchError,
+            label = {
+                Text(
+                    text = "סניפים (עד 3)",
+                    color = Color(0xFF374151)
+                )
+            },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = branchesExpanded)
             },
             modifier = Modifier
                 .menuAnchor()
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .heightIn(min = fieldHeight)
+                .background(Color.White, shape = fieldShape),
+            colors = fieldColors,
+            shape = fieldShape,
+            textStyle = LocalTextStyle.current.copy(
+                color = Color.Black,
+                textAlign = TextAlign.Right
+            ),
             placeholder = {
                 Text(
-                    if (branchType == "abroad")
+                    text = if (branchType == "abroad")
                         "בחר/י 1–3 סניפים בחו״ל"
                     else
-                        "בחר/י 1–3 סניפים"
+                        "בחר/י 1–3 סניפים",
+                    color = Color(0xFF64748B)
                 )
             }
         )
 
         ExposedDropdownMenu(
             expanded = branchesExpanded,
-            onDismissRequest = { branchesExpanded = false }
+            onDismissRequest = { branchesExpanded = false },
+            containerColor = Color.White
         ) {
-
             allBranches.forEach { branch ->
-
                 val checked = branch in tempSelection
 
                 DropdownMenuItem(
                     text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = checked, onCheckedChange = null)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = null
+                            )
+
                             Spacer(Modifier.width(8.dp))
-                            Text(branch)
+
+                            Text(
+                                text = branch,
+                                color = Color.Black,
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     },
                     onClick = {
-
                         tempSelection =
                             if (checked) {
                                 tempSelection.filterNot { it == branch }
                             } else {
-
-                                if (tempSelection.size < 3)
+                                if (tempSelection.size < 3) {
                                     tempSelection + branch
-                                else {
+                                } else {
                                     Toast.makeText(
                                         ctx,
                                         "ניתן לבחור עד 3 סניפים",
                                         Toast.LENGTH_SHORT
                                     ).show()
-
                                     tempSelection
                                 }
                             }
@@ -997,27 +1079,48 @@ private fun RegionAndMultiBranchPicker(
                 )
             }
 
-            Divider()
+            Divider(color = Color(0xFFE5E7EB))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(Color.White)
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-
                 TextButton(
                     onClick = { tempSelection = emptyList() }
-                ) { Text("נקה") }
+                ) {
+                    Text("נקה", color = Color(0xFF374151))
+                }
 
                 Button(
                     onClick = {
                         onBranchesConfirm(tempSelection)
+
+                        if (branchType == "abroad") {
+                            onGroupsChange(
+                                if (tempSelection.isNotEmpty()) listOf("חו״ל") else emptyList()
+                            )
+                        }
+
                         branchesExpanded = false
                     }
-                ) { Text("אישור") }
+                ) {
+                    Text("אישור")
+                }
             }
         }
+    }
+
+    if (branchError) {
+        Text(
+            text = "חובה לבחור לפחות סניף אחד",
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Right,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -1029,7 +1132,9 @@ private fun MultiGroupsPicker(
     groupError: Boolean
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var tempSelection by remember { mutableStateOf(selectedGroups.toList()) }
+    var tempSelection by remember(selectedGroups) {
+        mutableStateOf(selectedGroups.toList())
+    }
     val ctx = LocalContext.current
 
     ExposedDropdownMenuBox(
@@ -1040,14 +1145,17 @@ private fun MultiGroupsPicker(
         },
         modifier = Modifier.fillMaxWidth()
     ) {
-        val display = if (selectedGroups.isEmpty()) "" else selectedGroups.joinToString("\n")
+        val display =
+            if (selectedGroups.isEmpty()) "" else selectedGroups.joinToString("\n")
 
         OutlinedTextField(
             value = display,
             onValueChange = {},
             readOnly = true,
             label = { Text("בחר/י קבוצה/ות (עד 3)", color = Color.Black) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
             isError = groupError,
             minLines = (if (selectedGroups.isEmpty()) 1 else selectedGroups.size).coerceAtMost(4),
             maxLines = 6,
@@ -1069,48 +1177,86 @@ private fun MultiGroupsPicker(
 
         ExposedDropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
+            containerColor = Color.White
         ) {
+
             allGroupsAcrossBranches.forEach { g ->
                 val checked = g in tempSelection
+
                 DropdownMenuItem(
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = checked, onCheckedChange = null)
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = null
+                            )
                             Spacer(Modifier.width(8.dp))
-                            Text(g)
+                            Text(g, color = Color.Black)
                         }
                     },
                     onClick = {
-                        tempSelection =
-                            if (checked) tempSelection.filterNot { it == g }
-                            else if (tempSelection.size < 3) tempSelection + g
-                            else {
-                                Toast.makeText(ctx, "ניתן לבחור עד 3 קבוצות", Toast.LENGTH_SHORT).show()
-                                tempSelection
+
+                        val newSelection =
+                            if (checked) {
+                                tempSelection.filterNot { it == g }
+                            } else {
+                                if (tempSelection.size < 3) {
+                                    tempSelection + g
+                                } else {
+                                    Toast.makeText(
+                                        ctx,
+                                        "ניתן לבחור עד 3 קבוצות",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    tempSelection
+                                }
                             }
+
+                        tempSelection = newSelection
+
+                        // ⭐ התיקון הקריטי — שמירה מיידית
+                        onGroupsChange(newSelection.take(3))
                     }
                 )
             }
 
-            Divider()
+            Divider(color = Color(0xFFE5E7EB))
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(Color.White)
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TextButton(onClick = { tempSelection = emptyList() }) { Text("נקה") }
-                Button(onClick = {
-                    onGroupsChange(tempSelection.take(3))
-                    expanded = false
-                }) { Text("אישור") }
+
+                TextButton(
+                    onClick = {
+                        tempSelection = emptyList()
+                        onGroupsChange(emptyList())
+                    }
+                ) {
+                    Text("נקה")
+                }
+
+                Button(
+                    onClick = {
+                        onGroupsChange(tempSelection.take(3))
+                        expanded = false
+                    }
+                ) {
+                    Text("אישור")
+                }
             }
         }
     }
 
     if (groupError) {
-        Text("חובה לבחור לפחות קבוצה אחת (עד 3)", color = MaterialTheme.colorScheme.error)
+        Text(
+            "חובה לבחור לפחות קבוצה אחת (עד 3)",
+            color = MaterialTheme.colorScheme.error
+        )
     }
 }
 
@@ -1153,7 +1299,8 @@ private fun BeltPicker(
 
         ExposedDropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
+            containerColor = Color.White
         ) {
             beltOptions.forEach { belt ->
                 DropdownMenuItem(
@@ -1166,7 +1313,7 @@ private fun BeltPicker(
                                 modifier = Modifier.size(14.dp)
                             ) {}
                             Spacer(Modifier.width(8.dp))
-                            Text(belt.heb)
+                            Text(belt.heb, color = Color.Black)
                         }
                     },
                     onClick = {

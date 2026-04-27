@@ -75,7 +75,8 @@ fun NavGraphBuilder.homeNavGraph(
     nav: NavHostController,
     vm: KmiViewModel,
     sp: SharedPreferences,
-    kmiPrefs: il.kmi.shared.prefs.KmiPrefs
+    kmiPrefs: il.kmi.shared.prefs.KmiPrefs,
+    onOpenDrawer: () -> Unit   // 🔥 חדש
 ) {
 
     fun isLockedPremiumTopic(raw: String): Boolean {
@@ -150,6 +151,7 @@ fun NavGraphBuilder.homeNavGraph(
                         }
                     }
                 },
+                onOpenDrawer = onOpenDrawer,
                 onSettings = { nav.navigate(Route.Settings.route) },
                 onOpenSubscription = {
                     nav.navigate(Route.Subscription.route) {
@@ -352,7 +354,16 @@ fun NavGraphBuilder.homeNavGraph(
 
         BeltQuestionsByTopicScreen(
 
+            onOpenSubscription = {
+                Log.e("KMI_LOCK_TRACE", "HOME_NAV -> Route.Subscription")
+                nav.navigate(Route.Subscription.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
             onOpenHardSubjectRoute = { belt, subjectId ->
+
                 vm.setSelectedBelt(belt)
 
                 Log.e(

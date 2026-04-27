@@ -67,6 +67,7 @@ import il.kmi.app.reminders.DailyReminderScheduler
 import androidx.compose.material.icons.filled.Language
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import androidx.compose.foundation.isSystemInDarkTheme
 
 //======================================================================================
 
@@ -178,8 +179,14 @@ fun SettingsScreenModern(
         )
     }
     var calendarSync by rememberSaveable { mutableStateOf(sp.getBoolean("calendar_sync_enabled", true)) }
-    var themeModeLocal by rememberSaveable {
-        mutableStateOf(sp.getString("theme_mode", "system") ?: "system")
+    var themeModeLocal by rememberSaveable(themeMode) {
+        mutableStateOf(
+            when {
+                themeMode.isNotBlank() -> themeMode
+                kmiPrefs.themeMode.isNotBlank() -> kmiPrefs.themeMode
+                else -> sp.getString("theme_mode", "system") ?: "system"
+            }
+        )
     }
 
     // (אופציונלי, נשאר לעתיד)
@@ -1314,13 +1321,38 @@ fun SettingsScreenModern(
                 }
             }
 
-            // --- נראות אפליקציה (מצב כהה/בהיר/לפי מערכת) ---
+            // --- נראות אפליקציה (לפי מכשיר / מצב בהיר / מצב כהה) ---
             SettingsCard(
                 title = tr("נראות אפליקציה", "App appearance"),
-                subtitle = tr("בחר מצב מסך עם ניגודיות נוחה לעיניים", "Choose a display mode with comfortable contrast"),
+                subtitle = tr(
+                    "ברירת המחדל היא לפי מצב המכשיר",
+                    "Default is based on the device appearance"
+                ),
                 icon = Icons.Filled.Palette,
                 iconTint = sectionIconTint
             ) {
+                val systemIsDark = isSystemInDarkTheme()
+
+                fun effectiveModeLabel(): String {
+                    return when (themeModeLocal) {
+                        "light" -> tr("מצב פעיל: בהיר", "Active mode: Light")
+                        "dark" -> tr("מצב פעיל: כהה", "Active mode: Dark")
+                        else -> {
+                            if (systemIsDark) {
+                                tr("מצב פעיל: לפי המכשיר — כהה", "Active mode: Device default — Dark")
+                            } else {
+                                tr("מצב פעיל: לפי המכשיר — בהיר", "Active mode: Device default — Light")
+                            }
+                        }
+                    }
+                }
+
+                fun applyAppearanceMode(mode: String) {
+                    themeModeLocal = mode
+                    onThemeChange(mode)
+                    kmiPrefs.themeMode = mode
+                    sp.edit().putString("theme_mode", mode).apply()
+                }
 
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -1334,23 +1366,43 @@ fun SettingsScreenModern(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // ✅ TabRow נקי – בלי לשנות state מחוץ ללחיצה
                     val themeIndex = when (themeModeLocal) {
-                        "light" -> 0
-                        "dark"  -> 1
-                        else    -> 0
+                        "system" -> 0
+                        "light" -> 1
+                        "dark" -> 2
+                        else -> 0
                     }
 
                     TabRow(selectedTabIndex = themeIndex) {
 
                         Tab(
+                            selected = themeModeLocal == "system",
+                            onClick = { applyAppearanceMode("system") },
+                            text = {
+                                Text(
+                                    text = tr("לפי\nהמכשיר", "Device\ndefault"),
+                                    minLines = 2,
+                                    maxLines = 2,
+                                    softWrap = true,
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = if (themeModeLocal == "system") {
+                                            FontWeight.Bold
+                                        } else {
+                                            FontWeight.SemiBold
+                                        }
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 52.dp)
+                                        .wrapContentHeight(Alignment.CenterVertically)
+                                )
+                            }
+                        )
+
+                        Tab(
                             selected = themeModeLocal == "light",
-                            onClick = {
-                                themeModeLocal = "light"
-                                onThemeChange("light")
-                                kmiPrefs.themeMode = "light"
-                                sp.edit().putString("theme_mode", "light").apply()
-                            },
+                            onClick = { applyAppearanceMode("light") },
                             text = {
                                 Text(
                                     text = tr("מצב\nבהיר", "Light\nmode"),
@@ -1358,10 +1410,16 @@ fun SettingsScreenModern(
                                     maxLines = 2,
                                     softWrap = true,
                                     textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelMedium,
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = if (themeModeLocal == "light") {
+                                            FontWeight.Bold
+                                        } else {
+                                            FontWeight.SemiBold
+                                        }
+                                    ),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .heightIn(min = 48.dp)
+                                        .heightIn(min = 52.dp)
                                         .wrapContentHeight(Alignment.CenterVertically)
                                 )
                             }
@@ -1369,12 +1427,7 @@ fun SettingsScreenModern(
 
                         Tab(
                             selected = themeModeLocal == "dark",
-                            onClick = {
-                                themeModeLocal = "dark"
-                                onThemeChange("dark")
-                                kmiPrefs.themeMode = "dark"
-                                sp.edit().putString("theme_mode", "dark").apply()
-                            },
+                            onClick = { applyAppearanceMode("dark") },
                             text = {
                                 Text(
                                     text = tr("מצב\nכהה", "Dark\nmode"),
@@ -1382,10 +1435,16 @@ fun SettingsScreenModern(
                                     maxLines = 2,
                                     softWrap = true,
                                     textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelMedium,
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = if (themeModeLocal == "dark") {
+                                            FontWeight.Bold
+                                        } else {
+                                            FontWeight.SemiBold
+                                        }
+                                    ),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .heightIn(min = 48.dp)
+                                        .heightIn(min = 52.dp)
                                         .wrapContentHeight(Alignment.CenterVertically)
                                 )
                             }
@@ -1393,9 +1452,19 @@ fun SettingsScreenModern(
                     }
 
                     Text(
+                        text = effectiveModeLabel(),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = textAlignPrimary,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
                         text = tr(
-                            "הטקסט והצבעים יתאימו אוטומטית למצב שבחרת (לדוגמה: טקסט לבן על רקע כהה).",
-                            "Text and colors will automatically adjust to the selected mode."
+                            "במצב לפי המכשיר, האפליקציה תעבור אוטומטית בין מצב כהה ובהיר לפי ההגדרה של Android.",
+                            "In device default mode, the app automatically follows Android light/dark appearance."
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1553,8 +1622,16 @@ fun SettingsScreenModern(
                 // ▼ הצגת הדרגה הנוכחית לפי החגורה מהרישום (קורא גם מ-sp וגם מ-kmi_user)
                 val ctxForBelt = LocalContext.current
                 val currentBelt = remember { readRegisteredBelt(ctxForBelt, sp) }
-                val beltTextColor = remember(currentBelt) {
-                    if (currentBelt == Belt.WHITE) Color(0xFF424242) else currentBelt.color
+
+// ✅ חשוב: קוראים ל-MaterialTheme מחוץ ל-remember
+                val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+
+                val beltTextColor = remember(currentBelt, onSurfaceColor) {
+                    when (currentBelt) {
+                        Belt.WHITE -> onSurfaceColor
+                        Belt.BLACK -> onSurfaceColor
+                        else -> currentBelt.color
+                    }
                 }
 
                 Text(

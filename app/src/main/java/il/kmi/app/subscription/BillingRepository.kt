@@ -21,12 +21,21 @@ data class SubscriptionState(
     val renewalDate: Long? = null,
     val monthlyPriceText: String? = null,
     val yearlyPriceText: String? = null,
+
+    // ✅ בדיקות אמיתיות מול Google Play
+    val productsLoaded: Boolean = false,
+    val loadedProductIds: List<String> = emptyList(),
+
     val error: String? = null
 )
 
 class BillingRepository(
     private val context: Context
 ) : PurchasesUpdatedListener {
+
+    private companion object {
+        const val TAG = "KMI_BILLING"
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow(SubscriptionState())
@@ -96,9 +105,20 @@ class BillingRepository(
         billingClient.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(result: BillingResult) {
                 val ok = result.responseCode == BillingClient.BillingResponseCode.OK
-                _state.update { it.copy(connected = ok, error = if (ok) null else result.debugMessage) }
-                if (ok) {
 
+                Log.e(
+                    TAG,
+                    "onBillingSetupFinished ok=$ok code=${result.responseCode} msg='${result.debugMessage}'"
+                )
+
+                _state.update {
+                    it.copy(
+                        connected = ok,
+                        error = if (ok) null else result.debugMessage
+                    )
+                }
+
+                if (ok) {
                     // שחזור מנויים מיד אחרי התחברות ל-Google Play
                     refreshPurchases()
 
@@ -134,20 +154,74 @@ class BillingRepository(
                     cachedProductDetails[details.productId] = details
                 }
 
+            val loadedIds = cachedProductDetails.keys.toList()
+
+            Log.e(
+                TAG,
+                "queryProductDetails loaded=${loadedIds.size} ids=$loadedIds expected=$productIds"
+            )
+
+            _state.update {
+                it.copy(
+                    productsLoaded = loadedIds.isNotEmpty(),
+                    loadedProductIds = loadedIds,
+                    error = if (loadedIds.isEmpty()) {
+                        "No subscription products loaded from Google Play"
+                    } else {
+                        null
+                    }
+                )
+            }
+
             refreshPriceState()
         }.onFailure {
-            Log.e("Billing", "queryProductDetails", it)
+            Log.e(TAG, "queryProductDetails failed", it)
             _state.update { s ->
-                s.copy(error = it.message)
+                s.copy(
+                    productsLoaded = false,
+                    loadedProductIds = emptyList(),
+                    error = it.message ?: "queryProductDetails failed"
+                )
             }
         }
     }
 
-    fun launchPurchase(activity: Activity, productId: String) {
-        val details = cachedProductDetails[productId] ?: return
+    fun launchPurchase(activity: Activity, productId: String): Boolean {
+        Log.e(
+            TAG,
+            "launchPurchase requested productId=$productId connected=${billingClient.isReady} loaded=${cachedProductDetails.keys}"
+        )
+
+        if (!billingClient.isReady) {
+            _state.update { it.copy(error = "Billing client is not ready") }
+            Log.e(TAG, "launchPurchase blocked: billingClient not ready")
+            return false
+        }
+
+        val details = cachedProductDetails[productId]
+        if (details == null) {
+            _state.update {
+                it.copy(
+                    error = "Product not loaded from Google Play: $productId"
+                )
+            }
+            Log.e(TAG, "launchPurchase blocked: missing ProductDetails for $productId")
+            return false
+        }
+
         val offerToken = details.subscriptionOfferDetails
             ?.firstOrNull()
-            ?.offerToken ?: return
+            ?.offerToken
+
+        if (offerToken.isNullOrBlank()) {
+            _state.update {
+                it.copy(
+                    error = "Missing offer token for product: $productId"
+                )
+            }
+            Log.e(TAG, "launchPurchase blocked: missing offerToken for $productId")
+            return false
+        }
 
         val productDetailsParams = BillingFlowParams.ProductDetailsParams
             .newBuilder()
@@ -159,7 +233,14 @@ class BillingRepository(
             .setProductDetailsParamsList(listOf(productDetailsParams))
             .build()
 
-        billingClient.launchBillingFlow(activity, flowParams)
+        val result = billingClient.launchBillingFlow(activity, flowParams)
+
+        Log.e(
+            TAG,
+            "launchBillingFlow result code=${result.responseCode} msg='${result.debugMessage}' productId=$productId"
+        )
+
+        return result.responseCode == BillingClient.BillingResponseCode.OK
     }
 
     fun refreshPurchases() {
@@ -178,11 +259,66 @@ class BillingRepository(
     }
 
     override fun onPurchasesUpdated(result: BillingResult, purchases: MutableList<Purchase>?) {
+        Log.e(
+            TAG,
+            "onPurchasesUpdated code=${result.responseCode} msg='${result.debugMessage}' purchases=${purchases?.size ?: 0}"
+        )
+
         if (result.responseCode == BillingClient.BillingResponseCode.OK && purchases != null) {
             handleOwnedPurchases(purchases)
         } else if (result.responseCode != BillingClient.BillingResponseCode.USER_CANCELED) {
             _state.update { it.copy(error = result.debugMessage) }
+        } else {
+            Log.e(TAG, "purchase canceled by user")
         }
+    }
+
+    private fun writeAccessEverywhere(
+        enabled: Boolean,
+        ownedProduct: String?,
+        purchaseToken: String?,
+        purchaseTime: Long?
+    ) {
+        val accessUntil = if (enabled) {
+            System.currentTimeMillis() + 365L * 24L * 60L * 60L * 1000L
+        } else {
+            0L
+        }
+
+        KmiAccess.setFullAccess(sp, enabled)
+        KmiAccess.setFullAccess(userSp, enabled)
+
+        sp.edit()
+            .putBoolean("full_access", enabled)
+            .putBoolean("has_full_access", enabled)
+            .putBoolean("subscription_active", enabled)
+            .putBoolean("is_subscribed", enabled)
+            .putString("sub_product", if (enabled) ownedProduct.orEmpty() else "")
+            .putString("sub_token", if (enabled) purchaseToken.orEmpty() else "")
+            .putLong("sub_purchase_time", purchaseTime ?: 0L)
+            .putLong("sub_access_until", accessUntil)
+            .putLong("access_changed_at", System.currentTimeMillis())
+            .commit()
+
+        userSp.edit()
+            .putBoolean("full_access", enabled)
+            .putBoolean("has_full_access", enabled)
+            .putBoolean("subscription_active", enabled)
+            .putBoolean("is_subscribed", enabled)
+            .putString("sub_product", if (enabled) ownedProduct.orEmpty() else "")
+            .putString("sub_token", if (enabled) purchaseToken.orEmpty() else "")
+            .putLong("sub_purchase_time", purchaseTime ?: 0L)
+            .putLong("sub_access_until", accessUntil)
+            .putLong("access_changed_at", System.currentTimeMillis())
+            .commit()
+
+        Log.e(
+            TAG,
+            "ACCESS WRITE enabled=$enabled product=$ownedProduct " +
+                    "user_has_full_access=${userSp.getBoolean("has_full_access", false)} " +
+                    "user_full_access=${userSp.getBoolean("full_access", false)} " +
+                    "user_subscription_active=${userSp.getBoolean("subscription_active", false)}"
+        )
     }
 
     private fun handleOwnedPurchases(list: List<Purchase>) {
@@ -194,17 +330,39 @@ class BillingRepository(
         }
 
         if (sub != null) {
+            val ownedProduct = sub.products.firstOrNull()
+
+            Log.e(
+                TAG,
+                "ACTIVE subscription detected product=$ownedProduct state=${sub.purchaseState} acknowledged=${sub.isAcknowledged}"
+            )
+
             // יש מנוי פעיל
             acknowledgeIfNeeded(sub)
 
             // נשמור את פרטי המנוי הטכניים
             sp.edit()
-                .putString("sub_product", sub.products.firstOrNull())
+                .putString("sub_product", ownedProduct)
                 .putString("sub_token", sub.purchaseToken)
+                .putLong("sub_purchase_time", sub.purchaseTime)
                 .apply()
 
-            // 👇 לפתוח גישה מלאה באפליקציה
-            KmiAccess.setFullAccess(userSp, true)
+            userSp.edit()
+                .putString("sub_product", ownedProduct)
+                .putLong("sub_purchase_time", sub.purchaseTime)
+                .apply()
+
+            writeAccessEverywhere(
+                enabled = true,
+                ownedProduct = ownedProduct,
+                purchaseToken = sub.purchaseToken,
+                purchaseTime = sub.purchaseTime
+            )
+
+            Log.e(
+                TAG,
+                "ACCESS OPENED VERIFIED product=$ownedProduct"
+            )
 
             _state.update {
                 it.copy(
@@ -217,14 +375,28 @@ class BillingRepository(
             }
             refreshPriceState()
         } else {
+            Log.e(TAG, "NO active subscription found")
+
             // אין מנוי פעיל
             sp.edit()
                 .remove("sub_product")
                 .remove("sub_token")
+                .remove("sub_purchase_time")
                 .apply()
 
-            // 👇 לבטל גישה מלאה (יישאר רק ניסיון אם עדיין בתוקף)
-            KmiAccess.setFullAccess(userSp, false)
+            userSp.edit()
+                .remove("sub_product")
+                .remove("sub_purchase_time")
+                .apply()
+
+            writeAccessEverywhere(
+                enabled = false,
+                ownedProduct = null,
+                purchaseToken = null,
+                purchaseTime = null
+            )
+
+            Log.e(TAG, "ACCESS CLOSED VERIFIED full_access=false subscription_active=false")
 
             _state.update {
                 it.copy(

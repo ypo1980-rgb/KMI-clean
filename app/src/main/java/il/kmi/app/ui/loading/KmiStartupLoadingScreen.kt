@@ -12,7 +12,6 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.widget.VideoView
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,7 +54,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -396,8 +394,17 @@ fun KmiStartupLoadingScreen(
         TextButton(
             onClick = onFinished,
             modifier = Modifier
-                .align(androidx.compose.ui.AbsoluteAlignment.BottomLeft)
-                .padding(start = 20.dp, bottom = 56.dp),
+                .align(
+                    if (isEnglish)
+                        androidx.compose.ui.BiasAbsoluteAlignment(1f, 1f)   // ימין מוחלט
+                    else
+                        androidx.compose.ui.BiasAbsoluteAlignment(-1f, 1f)  // שמאל מוחלט
+                )
+                .padding(
+                    start = 20.dp,
+                    end = 20.dp,
+                    bottom = 56.dp
+                ),
             colors = ButtonDefaults.textButtonColors(
                 contentColor = accent
             )

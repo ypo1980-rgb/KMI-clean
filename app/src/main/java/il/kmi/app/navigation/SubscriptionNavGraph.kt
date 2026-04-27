@@ -52,10 +52,6 @@ fun NavGraphBuilder.subscriptionNavGraph(
         SubscriptionPlansGate(
             onBack = { nav.popBackStack() },
 
-            // הרכישה עצמה מטופלת בתוך SubscriptionPlansScreen,
-            // כאן לא מבצעים ניווט אוטומטי אחרי לחיצה על "רכישה מאובטחת"
-            onPurchase = { _ /* productId */ -> },
-
             onOpenHome = {
                 // אותו לוגיקה כמו במסך ניהול מנוי
                 val popped = nav.popBackStack(

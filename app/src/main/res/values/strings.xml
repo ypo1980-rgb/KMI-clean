@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">ק.מ.י</string>
+    <string name="app_name">KMI</string>
+    <string name="default_web_client_id">1088383217233-h4krbps75uqlk4a4vdiscejfunhvvqi9.apps.googleusercontent.com</string>
 </resources>

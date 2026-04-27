@@ -319,23 +319,166 @@ object ExerciseExplanationsEn {
             else -> "$FALLBACK_PREFIX $item"
         }
     }
-
+    // ✔️ תקין
     private fun black(item: String): String {
         return when (item) {
-            "ניתור ברגל שמאל ובעיטה רגילה ברגל ימין" ->
-                "Jump from the left leg and deliver a front kick with the right leg while the left knee bends and the heel moves toward the glutes."
+            "ניתור ברגל שמאל ובעיטה רגילה ברגל ימין" -> "Leap with the left foot. Perform a regular kick with the right foot while bending the left knee and bringing the left heel toward the buttocks. Land with the left foot and the right foot joins the left on the ground."
 
-            "ניתור ברגל שמאל ובעיטה לצד ברגל ימין" ->
-                "Jump from the left leg, rotate the body sideways and deliver a side kick with the right leg."
+            "ניתור ברגל שמאל ובעיטה רגילה ברגל ימין" -> "Leap with the left foot. Perform a regular kick with the right foot while bending the left knee and bringing the left heel toward the buttocks. Land with the left foot and the right foot joins the left on the ground."
 
-            "בעיטת לצד בסיבוב מלא בניתור" ->
-                "A spinning jump followed by a side kick with the opposite leg."
+            "ניתור ברגל שמאל ובעיטה לצד ברגל ימין" -> "Leap with the left foot. Turn the toes of the left foot to the left. Turn the right side of the body to face the attacker and perforn a side-kick with the right foot while bending the left knee and bringing the left heel toward the buttocks."
 
-            "בעיטת מגל לאחור בסיבוב בניתור" ->
-                "A spinning jump followed by a backward roundhouse kick."
+            "ניתור ברגל שמאל ובעיטה לצד ברגל שמאל" -> "Leap with the left foot. Turn the toes of the left foot to the right. Turn the left side of the body to face the attacker. Perform a leg swich (scissors) and perforn a side-kick with the left foot while bending the right knee and bringing the right heel t"
 
-            "בעיטת הגנה לאחור בניתור" ->
-                "A jumping backward defensive kick."
+            "בעיטה לצד בסיבוב מלא בניתור" -> "Leaping with a spin and performing a side-kick with the rear foot."
+
+            "בעיטת מגל לאחור בסיבוב בניתור" -> "Leaping with a spin and performing a backward Magal (Circular) kick with the rear foot."
+
+            "בעיטת הגנה לאחור בניתור" -> "Leaping with a spin and performing a backward defensive kick with the rear foot."
+
+            "**הגנה פנימית נגד אגרוף שמאל - בעיטת הגנה**" -> "Perform an Internal Defence with your right hand and a defensive kick to the center of the attacker's body."
+
+            "**הגנה פנימית נגד אגרוף שמאל - בעיטה לצד**" -> "Perform an Internal Defence with your right hand, cross your legs and perform a side-kick with your right foot toward the attacker's knee."
+            "**הגנה פנימית נגד אגרוף שמאל - בעיטה רגילה לאחור**" -> "Perform an Internal Defence with your right hand, cross your legs, turn your back toward the attacker and perform a backward regular kick with your right foot."
+
+            "**הגנה פנימית נגד אגרוף שמאל - בעיטת מגל לאחור**" -> "Perform an Internal Defence with your right hand and a backward Magal (Circular) kick with your right foot."
+
+            "**הגנה פנימית נגד אגרוף שמאל - בעיטת סטירה חיצונית**" -> "Perform an Internal Defence with your right hand and an external slapping kick with your right foot."
+
+            "**הגנה פנימית נגד אגרוף שמאל - בעיטת מגל לפנים**" -> "Perform an Internal Defence with your right hand and a front Magal (Circular) kick with your right foot."
+
+            "**הגנה פנימית נגד אגרוף שמאל - גזיזה קדמית**" -> "Perform an Internal Defence with your right hand, cross your legs while rotating your body and perform a forward cutting kick."
+
+            "**הגנה נגד בעיטה רגילה - התחמקות בסיבוב**" -> "Stand either in a neutral stance or a general stance number 2. Perform an Internal Defence with your left hand and continue the movement to lift the kicking leg while evading to the Blind Side with half a spin. Step backward while lifting your left hand t"
+
+            "**הגנה נגד בעיטת מגל לפנים לראש - הדיפה באמת שמאל**" -> "From an External Defences stance perform a 360 degree defence number one with your left forearm under the attacker's leg while advancing and thrusting the leg upward to drop the attacker."
+
+            "**הגנה נגד בעיטת מגל לפנים לראש - רגל עברה מעל הראש**" -> "From an External Defences stance perform a 360 degree defence number one with your left forearm under the attacker's leg while performing an uppercut strike to the groin."
+
+            "**הגנה נגד מגל לפנים  לראש - התחמקות גוף בסיבוב בגזיזה**" -> "Evade the kick by kneeling on the left knee with a spin, place both your hands on the ground and perform a backward low Magal (Circular) kick to drop the attacker."
+
+            "**הגנה נגד בעיטת סטירה - גזיזה**" -> "Stand in a reversed general stance number 2. Cross your legs and perforn a backward cutting kick with your right leg while thrusting the attacker's kicking leg upward with your right hand."
+
+            "**שחרור מתפיסת נלסון**" -> "Lower your elbows as low as possible to grab the attacker hands with yours. Shift your hip to the side and place one foot behind the attackers foot. Push with your knee to the back of the knee of the attacker, fall backward on top of the attacker while ho"
+
+            "**שחרור מחביקת צואר מהצד - משיכה לאחור**" -> "On the sense of the pull backward one hand goes to a vital point on the attacker's head while the leg closer to the attacker goes behind his legs. Fall with the attacker to the ground, strike and get up."
+
+            "**שחרור מחביקת צואר מאחור - משיכה לאחור**" -> "לא מזהה הסבר לתרגיל"
+
+            "**שחרור מחביקת צואר מהצד - יד תפוסה**" -> "The attacker's foot is in front of the deffender's feet and the deffender's hand is in front of the attacker's legs. The attcker wears long pants: Grab with both hands in the upper shin area and lift. Fall backward with the attacker, strike and get up. Th"
+
+            "**שחרור מחביקת צואר מהצד - זריקת רגל**" -> "On the sense of falling forward send your leg between the attacker's legs while lying on your back. Strike to the groin with your free hand to throw the attacker on the back."
+
+            "**שחרור מחביקת צואר מהצד - ירידה לברך**" -> "Strike the attacker's groin with the front hand while grabbing a vital point on the attacker's head with the rear hand and pull backward to drop the attacker."
+
+            "**שחרור מחביקת צואר מהצד - מהברך**" -> "לא מזהה הסבר לתרגיל"
+
+            "**שחרור מחביקה פתוחה מהצד**" -> "Perform a knee strike to the groin, elbow strike or a head butt."
+
+            "**שחרור מחביקה סגורה מהצד - היד הרחוקה משוחררת**" -> "The head of the attacker is in front: Punch the head with the rear hand. The head of the attacker is in behind: With the hand closer to the attacker strike the groin and continue the movement toward a high elbow strike. It is possible to stomp the back of"
+
+            "**שחרור מחביקה סגורה מהצד**" -> "With the hand closer to the attacker strike the groin and continue the movement toward a high elbow strike."
+
+            "**שחרור מחביקה פתוחה מאחור - הטלה**" -> "לא מזהה הסבר לתרגיל"
+
+            "**שחרור מחביקה סגורה מאחור - הטלה**" -> "לא מזהה הסבר לתרגיל"
+
+            "**הגנה נגד מקל ארוך-התקפה לצד ימין מגן**" -> "From a neutral stance, with both hands straight and the head between the arms, burst forward with your left leg. Pull down the attacker's hand with two hooked hands while taking your right foot backward and attack with a right punch."
+
+            "**הגנה נגד מקל ארוך-התקפה לצד שמאל מגן**" -> "From a neutral stance, with both hands straight and the head between the arms, burst forward with your left leg. Step forward with your right foot placing your body at the attacker's side striking with a right punch or elbow according to range."
+            "הגנה נגד מקל ארוך מצד ימין" -> "From a neutral stance, burst forward with your left foot with your hands straight forward and close to the head. Wrap your right hand around the arms of the attacker, punch with your left hand (Some situations require a horizontal elbow strike) while spin"
+            "הגנה נגד מקל ארוך מצד שמאל" -> "From a neutral stance, burst forward with your left foot with your hands straight forward and close to the head. Wrap your left hand around the arms of the atacker, step with your right foot and perform a horizontal elbow strike with your right hand while"
+
+            "הגנה נגד מקל ארוך דקירה - צד חי" -> "Stand in a neutral stance. Deflect the rifle with your left palm. Step forward with your left while rotating the body and defend with both your forearms. Grab the rifle with both hands. Pull the rifle upward while kicking to the groin (Create leverage on"
+
+            "הגנה נגד מקל ארוך דקירה - צד מת" -> "Stand in a neutral stance. Deflect the rifle with your right palm and grab it with your left while stepping forward with your right foot and performing a kick to the groin with your left foot (Punch the back of the head of the attacker with your right han"
+
+            "הגנה נגד דקירה - צד חי ימין" -> "Perform an Internal Defence with the right forearm and kick to the attacker's knee while leaning the opposide direction."
+
+            "הגנה נגד דקירה - צד חי שמאל" -> "Perform an External Defence with the left forearm and kick to the attacker's knee while leaning the opposide direction."
+
+            "הגנה נגד דקירה - צד מת ימין" -> "Perform an External Defence with the right forearm and kick to the attacker's knee while leaning the opposide direction."
+
+            "הגנה נגד דקירה - צד מת שמאל" -> "Perform an Internal Defence with the left forearm and kick to the attacker's knee while leaning the opposide direction."
+
+            "מקל נגד סכין - דקירה רגילה" -> "Step with your right foot to the live Side of the attacker if necessary and stab with your stick to the attacker's throat."
+
+            "מקל נגד סכין - דקירה מזרחית" -> "Defend with the stick on the attacker's wrist and strike the attacker's head."
+
+            "מקל נגד סכין - דקירה ישרה" -> "Rotate your body to perform a body defence while deflecting the attack with the stick on the attacker's wrist and continue attacking to the attacker's head."
+
+            "מקל נגד סכין - דקירה מעל מצד ימין" -> "Perform 360 defence with the stick to the attacker's wrist. Step with your left foot and punch the attacker with your left."
+
+            "מקל נגד סכין - דקירה מעל מצד שמאל" -> "Perform an External Defence with your left forearm, step with your right foot and attack with the stick."
+
+            "מקל נגד סכין - דקירה מזרחית מצד ימין" -> "Defend with the stick to the attacker's wrist and strike with the stick to the attacker's throat."
+
+            "מקל נגד סכין - דקירה מזרחית מצד שמאל" -> "Perform an External Defence with your left forearm, step with your right foot and attack with the stick."
+
+            "מקל נגד סכין - דקירה ישירה מצד ימין (פנימית)" -> "Perform an Internal Defence with the stick to the attacker's wrist, step with your right to the live Side and attack with the stick."
+
+            "מקל נגד סכין - דקירה ישירה מצד ימין (חיצונית)" -> "Perform 360 defence with the stick to the attacker's wrist. Step with your left foot and punch the attacker with your left."
+
+            "מקל נגד סכין - דקירה ישירה מצד שמאל (פנימית)" -> "Deflect the attack with your left forearm. Step with your left foot to the Blind Side of the attacker and attack with the stick."
+
+            "מקל נגד סכין - דקירה ישירה מצד שמאל (חיצונית)" -> "Perform an External Defence with your left forearm. Step with your right foot and attack with the stick."
+
+            "מקל אחד וסכין אחת - המקל בצד חי" -> "Defending against the stick with a spin while establishing eye contact with the second attacker. Disarm the attacker if possible and defend against the stab of the second attacker."
+
+            "מקל אחד וסכין אחת - המקל בצד מת" -> "1. Defending against the stick with a cavalier while establishing eye contact with the second attacker. Disarm the attacker and use the stick against the second attacker. 2. Defend the stick and grab a vital spot on the attacker's head with your left hand"
+
+            "מקל אחד וסכין אחת - הסכין קרוב" -> "Defending against the knife while establishing eye contact with the second attacker and then defend against the stick."
+
+            "הגנה נגד איום אקדח לראש מלפנים" -> "Raise your left hand upward and grab the gun, deflecting it sideways and downward toward the attacker's thigh. (You should grab the barrel and the trigger guard with your hand). Step with your left foot forward to the Blind Side of the attacker and punch"
+
+            "הגנה נגד איום אקדח צמוד לראש מלפנים" -> "Raise your left hand upward and grab the gun, deflecting it sideways and downward toward the attacker's thigh. (You should grab the barrel and the trigger guard with your hand). Step with your left foot forward to the Blind Side of the attacker and punch"
+
+            "הגנה נגד איום אקדח מלפנים - קנה קצר" -> "Grab the wrist of the attacker's hand with your left hand so the back of the hand faces upward. Grab the fist holding the gun with your right hand. Twist to point the gun at the attacker and kick the groin while performing a cavalier to drop the attacker,"
+
+            "הגנה נגד איום אקדח לראש - צד ימין" -> "1. The gun is in front of the defenders arm: Raise your left hand upward and grab the gun, deflecting it sideways and downward. Step with your left foot to the Blind Side of the attacker and punch with your right hand to the attacker's face. 2. The gun is"
+
+            "הגנה נגד איום אקדח לראש - צד שמאל" -> "1. The gun is in front of the defenders arm: Raise your left hand upward and grab the gun, deflecting it sideways and downward. Step with your left foot to the Blind Side of the attacker and punch with your right hand to the attacker's face. 2. The gun is"
+
+            "הגנה נגד איום אקדח מאחור באלכסון - צד שמאל" -> "Glance to the side. Reach your left hand away from your body while rotating counterclockwise and stepping with your right foot into the live Side of the attacker. Grab the hand of the attacker between your left arm and forearm and under shoulder height. S"
+
+            "הגנה נגד איום אקדח לראש מאחור" -> "Reach your left hand away from your body while rotating counterclockwise and stepping with your left foot into the live Side of the attacker. Grab the hand of the attacker between your left arm and forearm and under shoulder height. Simultaneously, perfor"
+
+            "הגנה נגד איום אקדח מאחור בידיים מורמות" -> "Hands raised. Glance backward. Turn to the live Side. Wrap the hand with the gun close to the wrist with your left. Drop the attacker with a right horizontal elbow while stepping with your right foot to the live Side."
+
+            "הגנה נגד איום אקדח בהובלה" -> "Step with your right foot and turn left to the attacker's Blind Side. Raise your left hand to bring the gun closer to the attacker's body. Put your left ear to the attacker's back and send your right hand between the attacker's legs, raise your right hand"
+
+            "הגנה מאיום אקדח מאחור דחיפה" -> ""
+
+            "1 מקל 1 סכין – מקל בצד חי" -> "Defending against the stick with a spin while establishing eye contact with the second attacker. Disarm the attacker if possible and defend against the stab of the second attacker"
+            "1 מקל 1 סכין – מקל בצד מת" -> "Defending against the stick with a cavalier while establishing eye contact with the second attacker. Disarm the attacker and use the stick against the second attacker. 2. Defend the stick and grab a vital spot on the attacker's head with your left hand"
+            "1 מקל 1 סכין – במקרה והסכין קרוב" -> "Defending against the knife while establishing eye contact with the second attacker and then defend against the stick"
+            "הדמיה כנגד 2 תוקפים" -> "The student should assemble two simulations against two attackers (One is armed and the other is not)"
+
+            "מכת מקל לראש" -> "חסר הסבר בחוברת"
+            "מכת מקל לרקה" -> "חסר הסבר בחוברת"
+            "מכת מקל ללסת / צוואר" -> "חסר הסבר בחוברת"
+            "מכת מקל לפרקי האצבעות" -> "חסר הסבר בחוברת"
+            "מכת מקל לעצם הבריח" -> "חסר הסבר בחוברת"
+            "מכת מקל למרפק" -> "חסר הסבר בחוברת"
+            "מכת מקל לשורש כף היד" -> "חסר הסבר בחוברת"
+            "מכת מקל לברך" -> "חסר הסבר בחוברת"
+            "מכת מקל למפסעה" -> "חסר הסבר בחוברת"
+            "הצלפת מקל לצלעות" -> ""
+            "דקירת מקל חיצונית לצלעות" -> "חסר הסבר בחוברת"
+            "דקירת מקל ישרה לבטן / לגרון" -> "חסר הסבר בחוברת"
+            "דקירת מקל הפוכה" -> "חסר הסבר בחוברת"
+            "מכה אופקית לצוואר" -> "From a regular stance, step forward with your left foot and strike the neck or face using the magazine or the handle or the weapon's body."
+            "דקירה" -> "From a regular stance, stab forward with the bayonet or the front side of the stick (The body movement is similar to the one used in a straight stab with a knife)."
+            "שיסוף" -> "From a regular stance, slash with the bayonet or the front side of the stick while rotating the left heel."
+            "מכה לצד" -> "From a neutral stance, strike to the side with the butt of the weapon or the rear of the stick."
+            "מכה לאחור" -> "From a regular stance, stab backward with the butt of the weapon or the rear of the stick."
+            "מכה למפשעה" -> "From a regular stance, strike to the groin with the butt of the weapon or the rear of the stick, rotate right heel and hip."
+            "מכת סנוקרת" -> "From a regular stance, perform an uppercut strike to the attacker's chin with the butt of the weapon or the rear of the stick, rotate right heel and hip."
+            "מכה אופקית לאחור" -> "From a regular stance, strike horizontally backward with the butt of the weapon or the rear of the stick while rotating the left heel."
+            "מכה אופקית ובעיטה למפשעה" -> "From a regular stance, perform a front horizontal strike and a regular kick to the groin with the rear leg."
+            "מכה אופקית ובעיטת הגנה" -> "From a regular stance, perform a front horizontal strike and a defensive kick."
+            "מכה לצד ובעיטה לצד" -> "From a neutral stance, perform a side strike. Cross your legs and perform a side-kick to the knee."
+
             else -> "$FALLBACK_PREFIX $item"
         }
     }

@@ -50,7 +50,9 @@ import il.kmi.shared.domain.Belt
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.IconButton
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.window.DialogProperties
 
 
@@ -90,6 +92,7 @@ internal typealias ItemsByBelt =
 internal fun DefensePickModeDialogModern(
     kind: il.kmi.app.domain.DefenseKind,
     counts: Map<String, Int> = emptyMap(),
+    hasAccess: Boolean,
     onDismiss: () -> Unit,
     onPick: (String) -> Unit
 ) {
@@ -141,7 +144,7 @@ internal fun DefensePickModeDialogModern(
                 )
 
                 DrawerStylePickItem(
-                    title = tr("אגרופים", "Punches"),
+                    title = if (hasAccess) tr("אגרופים", "Punches") else tr("אגרופים 🔒", "Punches 🔒"),
                     subtitle = countLabel(punchCount),
                     accent = accent,
                     isEnglish = isEnglish,
@@ -149,7 +152,7 @@ internal fun DefensePickModeDialogModern(
                 )
 
                 DrawerStylePickItem(
-                    title = tr("בעיטות", "Kicks"),
+                    title = if (hasAccess) tr("בעיטות", "Kicks") else tr("בעיטות 🔒", "Kicks 🔒"),
                     subtitle = countLabel(kickCount),
                     accent = accent,
                     isEnglish = isEnglish,
@@ -178,6 +181,13 @@ internal fun HandsPickModeDialogModern(
 ) {
     val isEnglish = il.kmi.app.localization.rememberIsEnglish()
     val accent = Color(0xFF8E24AA)
+
+    val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val dialogBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFF7F4FB)
+    val dialogBorder = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFE3DDF0)
+    val primaryTextColor = if (isDarkMode) Color(0xFFF8FAFC) else Color(0xFF111827)
+    val secondaryTextColor = if (isDarkMode) Color(0xFFCBD5E1) else MaterialTheme.colorScheme.onSurfaceVariant
+    val dividerColor = if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
 
     val orderedPicks = picks.ifEmpty {
         listOf(
@@ -241,8 +251,8 @@ internal fun HandsPickModeDialogModern(
                         shape = RoundedCornerShape(30.dp),
                         tonalElevation = 10.dp,
                         shadowElevation = 22.dp,
-                        color = Color(0xFFF7F4FB),
-                        border = BorderStroke(1.dp, Color(0xFFE3DDF0))
+                        color = dialogBg,
+                        border = BorderStroke(1.dp, dialogBorder)
                     ) {
                         Column(
                             modifier = Modifier
@@ -266,6 +276,7 @@ internal fun HandsPickModeDialogModern(
                                     text = tr("עבודת ידיים", "Hand Techniques"),
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.ExtraBold,
+                                    color = primaryTextColor,
                                     textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -284,6 +295,8 @@ internal fun HandsPickModeDialogModern(
 
                             Text(
                                 text = tr("בחר תת־נושא:", "Choose a sub-topic:"),
+                                color = secondaryTextColor,
+                                fontWeight = FontWeight.SemiBold,
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -300,6 +313,9 @@ internal fun HandsPickModeDialogModern(
                                         subtitle = countLabel(countForDisplay(pick)),
                                         accent = accent,
                                         isEnglish = isEnglish,
+                                        titleColorOverride = primaryTextColor,
+                                        subtitleColorOverride = accent,
+                                        dividerColorOverride = dividerColor,
                                         onClick = { onPick(pick) }
                                     )
                                 }
@@ -322,6 +338,13 @@ internal fun SubTopicsPickModeDialogModern(
 ) {
     val isEnglish = il.kmi.app.localization.rememberIsEnglish()
     val accent = Color(0xFF5E35B1)
+
+    val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val dialogBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFF7F4FB)
+    val dialogBorder = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFE3DDF0)
+    val primaryTextColor = if (isDarkMode) Color(0xFFF8FAFC) else Color(0xFF111827)
+    val secondaryTextColor = if (isDarkMode) Color(0xFFCBD5E1) else MaterialTheme.colorScheme.onSurfaceVariant
+    val dividerColor = if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
 
     fun tr(he: String, en: String) = if (isEnglish) en else he
     fun countLabel(n: Int) = if (isEnglish) "exercises $n" else "$n תרגילים"
@@ -392,8 +415,8 @@ internal fun SubTopicsPickModeDialogModern(
                         shape = RoundedCornerShape(30.dp),
                         tonalElevation = 10.dp,
                         shadowElevation = 22.dp,
-                        color = Color(0xFFF7F4FB),
-                        border = BorderStroke(1.dp, Color(0xFFE3DDF0))
+                        color = dialogBg,
+                        border = BorderStroke(1.dp, dialogBorder)
                     ) {
                         Column(
                             modifier = Modifier
@@ -417,6 +440,7 @@ internal fun SubTopicsPickModeDialogModern(
                                 text = title,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.ExtraBold,
+                                color = primaryTextColor,
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                 modifier = Modifier.weight(1f)
                             )
@@ -433,11 +457,13 @@ internal fun SubTopicsPickModeDialogModern(
 
                         Spacer(Modifier.height(10.dp))
 
-                        Text(
-                            text = tr("בחר תת־נושא:", "Choose a sub-topic:"),
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                            Text(
+                                text = tr("בחר תת־נושא:", "Choose a sub-topic:"),
+                                color = secondaryTextColor,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
 
                         Spacer(Modifier.height(10.dp))
 
@@ -451,6 +477,9 @@ internal fun SubTopicsPickModeDialogModern(
                                         subtitle = countLabel(countForDisplay(pick)),
                                         accent = accent,
                                         isEnglish = isEnglish,
+                                        titleColorOverride = primaryTextColor,
+                                        subtitleColorOverride = accent,
+                                        dividerColorOverride = dividerColor,
                                         onClick = { onPick(pick) }
                                     )
                                 }
@@ -469,8 +498,17 @@ private fun DrawerStylePickItem(
     subtitle: String? = null,
     accent: Color,
     isEnglish: Boolean,
+    titleColorOverride: Color? = null,
+    subtitleColorOverride: Color? = null,
+    dividerColorOverride: Color? = null,
     onClick: () -> Unit
 ) {
+    val isLocked = title.contains("🔒")
+    val cleanTitle = title.replace(" 🔒", "").trim()
+
+    val titleColor = titleColorOverride ?: MaterialTheme.colorScheme.onSurface
+    val subtitleColor = subtitleColorOverride ?: accent
+    val dividerColor = dividerColorOverride ?: Color(0xFFD8D2E6).copy(alpha = 0.82f)
     Surface(
         color = Color.Transparent,
         modifier = Modifier
@@ -503,26 +541,43 @@ private fun DrawerStylePickItem(
                         horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text(
-                            text = title,
-                            style = if (isEnglish) {
-                                MaterialTheme.typography.titleMedium
-                            } else {
-                                MaterialTheme.typography.titleSmall
-                            },
-                            fontWeight = FontWeight.ExtraBold,
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            maxLines = if (isEnglish) 2 else 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            if (isLocked) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = Color(0xFFF59E0B),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                            }
+
+                            Text(
+                                text = cleanTitle,
+                                style = if (isEnglish) {
+                                    MaterialTheme.typography.titleMedium
+                                } else {
+                                    MaterialTheme.typography.titleSmall
+                                },
+                                fontWeight = FontWeight.ExtraBold,
+                                color = titleColor,
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                maxLines = if (isEnglish) 2 else 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
 
                         if (!subtitle.isNullOrBlank()) {
                             Spacer(Modifier.height(3.dp))
                             Text(
                                 text = subtitle,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = accent,
+                                color = subtitleColor,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                 maxLines = 1,
@@ -536,7 +591,7 @@ private fun DrawerStylePickItem(
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 8.dp),
                     thickness = 1.dp,
-                    color = Color(0xFFD8D2E6).copy(alpha = 0.82f)
+                    color = dividerColor
                 )
             }
         }
@@ -642,10 +697,18 @@ private fun ModernPickCard(
 @Composable
 internal fun DefenseCategoryPickDialogModern(
     counts: Map<String, Int> = emptyMap(),
+    hasAccess: Boolean,
     onDismiss: () -> Unit,
     onPick: (String) -> Unit
 ) {
     val isEnglish = il.kmi.app.localization.rememberIsEnglish()
+
+    val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val dialogBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFF7F4FB)
+    val dialogBorder = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFE3DDF0)
+    val primaryTextColor = if (isDarkMode) Color(0xFFF8FAFC) else Color(0xFF111827)
+    val secondaryTextColor = if (isDarkMode) Color(0xFFCBD5E1) else MaterialTheme.colorScheme.onSurfaceVariant
+    val dividerColor = if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
 
     fun tr(he: String, en: String) = if (isEnglish) en else he
     fun countLabel(n: Int) = if (isEnglish) "exercises $n" else "$n תרגילים"
@@ -687,8 +750,8 @@ internal fun DefenseCategoryPickDialogModern(
                         shape = RoundedCornerShape(30.dp),
                         tonalElevation = 10.dp,
                         shadowElevation = 22.dp,
-                        color = Color(0xFFF7F4FB),
-                        border = BorderStroke(1.dp, Color(0xFFE3DDF0))
+                        color = dialogBg,
+                        border = BorderStroke(1.dp, dialogBorder)
                     ) {
                         val scrollState = rememberScrollState()
 
@@ -714,6 +777,7 @@ internal fun DefenseCategoryPickDialogModern(
                                 text = tr("הגנות", "Defenses"),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.ExtraBold,
+                                color = primaryTextColor,
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                 modifier = Modifier.weight(1f)
                             )
@@ -743,15 +807,18 @@ internal fun DefenseCategoryPickDialogModern(
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     DrawerStylePickItem(
-                                        title = tr("הגנות פנימיות", "Internal Defenses"),
+                                        title = if (hasAccess) tr("הגנות פנימיות", "Internal Defenses") else tr("הגנות פנימיות 🔒", "Internal Defenses 🔒"),
                                         subtitle = countLabel(counts["הגנות פנימיות"] ?: 0),
                                         accent = Color(0xFF2E7D32),
                                         isEnglish = isEnglish,
+                                        titleColorOverride = primaryTextColor,
+                                        subtitleColorOverride = Color(0xFF2E7D32),
+                                        dividerColorOverride = dividerColor,
                                         onClick = { onPick("הגנות פנימיות") }
                                     )
 
                                     DrawerStylePickItem(
-                                        title = tr("הגנות חיצוניות", "External Defenses"),
+                                        title = if (hasAccess) tr("הגנות חיצוניות", "External Defenses") else tr("הגנות חיצוניות 🔒", "External Defenses 🔒"),
                                         subtitle = countLabel(counts["הגנות חיצוניות"] ?: 0),
                                         accent = Color(0xFF1565C0),
                                         isEnglish = isEnglish,
@@ -759,7 +826,7 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = tr("הגנות נגד בעיטות", "Defenses Against Kicks"),
+                                        title = if (hasAccess) tr("הגנות נגד בעיטות", "Defenses Against Kicks") else tr("הגנות נגד בעיטות 🔒", "Defenses Against Kicks 🔒"),
                                         subtitle = countLabel(counts["הגנות נגד בעיטות"] ?: 0),
                                         accent = Color(0xFFFF9800),
                                         isEnglish = isEnglish,
@@ -767,7 +834,7 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = tr("הגנות מסכין", "Knife Defenses"),
+                                        title = if (hasAccess) tr("הגנות מסכין", "Knife Defenses") else tr("הגנות מסכין 🔒", "Knife Defenses 🔒"),
                                         subtitle = countLabel(counts["הגנות מסכין"] ?: 0),
                                         accent = Color(0xFFE53935),
                                         isEnglish = isEnglish,
@@ -775,7 +842,7 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = tr("הגנות עם רובה נגד דקירות סכין", "Rifle Defenses Against Knife Stabs"),
+                                        title = if (hasAccess) tr("הגנות עם רובה נגד דקירות סכין", "Rifle Defenses Against Knife Stabs") else tr("הגנות עם רובה נגד דקירות סכין 🔒", "Rifle Defenses Against Knife Stabs 🔒"),
                                         subtitle = countLabel(counts["הגנות עם רובה נגד דקירות סכין"] ?: 0),
                                         accent = Color(0xFFEF6C00),
                                         isEnglish = isEnglish,
@@ -783,7 +850,7 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = tr("הגנות מאיום אקדח", "Gun Threat Defenses"),
+                                        title = if (hasAccess) tr("הגנות מאיום אקדח", "Gun Threat Defenses") else tr("הגנות מאיום אקדח 🔒", "Gun Threat Defenses 🔒"),
                                         subtitle = countLabel(counts["הגנות מאיום אקדח"] ?: 0),
                                         accent = Color(0xFF5E35B1),
                                         isEnglish = isEnglish,
@@ -791,7 +858,7 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = tr("הגנות נגד מספר תוקפים", "Defenses Against Multiple Attackers"),
+                                        title = if (hasAccess) tr("הגנות נגד מספר תוקפים", "Defenses Against Multiple Attackers") else tr("הגנות נגד מספר תוקפים 🔒", "Defenses Against Multiple Attackers 🔒"),
                                         subtitle = countLabel(counts["הגנות נגד מספר תוקפים"] ?: 0),
                                         accent = Color(0xFFD81B60),
                                         isEnglish = isEnglish,
@@ -799,7 +866,7 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = tr("הגנות נגד מקל", "Stick Defenses"),
+                                        title = if (hasAccess) tr("הגנות נגד מקל", "Stick Defenses") else tr("הגנות נגד מקל 🔒", "Stick Defenses 🔒"),
                                         subtitle = countLabel(counts["הגנות נגד מקל"] ?: 0),
                                         accent = Color(0xFF00897B),
                                         isEnglish = isEnglish,
@@ -813,9 +880,12 @@ internal fun DefenseCategoryPickDialogModern(
                                             .align(Alignment.BottomCenter)
                                             .padding(bottom = 4.dp),
                                         shape = RoundedCornerShape(999.dp),
-                                        color = Color.White.copy(alpha = 0.95f),
-                                        shadowElevation = 6.dp,
-                                        border = BorderStroke(1.dp, Color(0xFFE3DDF0))
+                                        color = if (isDarkMode) Color(0xFF1E293B) else Color.White.copy(alpha = 0.95f),
+                                        shadowElevation = if (isDarkMode) 0.dp else 6.dp,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFE3DDF0)
+                                        )
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),

@@ -54,6 +54,27 @@ fun NavGraphBuilder.trainingNavGraph(
                 t.startsWith("releases_")
     }
 
+    fun isLockedPremiumDefenseRoute(kindRaw: String, pickRaw: String = ""): Boolean {
+        val kind = kindRaw.trim().lowercase()
+        val pick = pickRaw.trim().lowercase()
+
+        return kind == "all" ||
+                kind == "internal" ||
+                kind == "external" ||
+                kind == "kicks_hard" ||
+                kind == "releases_hard" ||
+                kind == "knife_hard" ||
+                kind == "knife_rifle_hard" ||
+                kind == "gun_hard" ||
+                kind == "multiple_attackers_hard" ||
+                kind == "stick_hard" ||
+                pick.contains("release") ||
+                pick.contains("שחרור") ||
+                pick.contains("defense") ||
+                pick.contains("defence") ||
+                pick.contains("הגנה")
+    }
+
 // ---- בחירת חגורה (BeltQ) ----
     composable(Route.BeltQ.route) {
         val accessSp = remember(nav.context) {
@@ -61,7 +82,16 @@ fun NavGraphBuilder.trainingNavGraph(
         }
 
         fun shouldBlockPremiumTopic(raw: String): Boolean {
-            return isLockedPremiumTopic(raw) && !KmiAccess.hasFullAccess(accessSp)
+            val locked = isLockedPremiumTopic(raw)
+            val hasAccess = KmiAccess.isAdmin(accessSp)
+            val result = locked && !hasAccess
+
+            Log.e(
+                "KMI_LOCK_TRACE",
+                "shouldBlockPremiumTopic raw='$raw' locked=$locked hasAccess=$hasAccess result=$result"
+            )
+
+            return result
         }
 
         val isCoach = remember {
@@ -218,19 +248,23 @@ fun NavGraphBuilder.trainingNavGraph(
             // כל ניווט של "תפריט הגנות / תתי נושאים" עובר דרך המקור המרכזי
             onOpenDefenseMenu = { belt, topic ->
                 val cleanTopic = topic.trim()
+                val parts = cleanTopic.split(":", limit = 2)
 
-                if (shouldBlockPremiumTopic(cleanTopic)) {
+                val parentTopic = parts.getOrNull(0)?.trim().orEmpty()
+                val pickedSubTopic = parts.getOrNull(1)?.trim().orEmpty()
+
+                if (
+                    shouldBlockPremiumTopic(cleanTopic) ||
+                    shouldBlockPremiumTopic(parentTopic) ||
+                    shouldBlockPremiumTopic(pickedSubTopic) ||
+                    isLockedPremiumDefenseRoute(parentTopic, pickedSubTopic)
+                ) {
                     nav.navigate(Route.Subscription.route) {
                         launchSingleTop = true
                         restoreState = true
                     }
                 } else {
-                    val parts = cleanTopic.split(":", limit = 2)
-
                     if (parts.size == 2) {
-                        val parentTopic = parts[0].trim()
-                        val pickedSubTopic = parts[1].trim()
-
                         openChosenSubTopic(
                             belt = belt,
                             topic = parentTopic,
@@ -252,7 +286,13 @@ fun NavGraphBuilder.trainingNavGraph(
                 )
                 println("KMI_SUB BeltQuestionsByBeltScreen onOpenSubTopic belt=${belt.id} topic='$topic' sub='$subTopic'")
 
-                if (shouldBlockPremiumTopic(topic)) {
+                val hasAccessNow = KmiAccess.hasFullAccess(accessSp)
+
+                if (
+                    (shouldBlockPremiumTopic(topic) ||
+                            isLockedPremiumDefenseRoute(topic, subTopic)) &&
+                    !hasAccessNow
+                ) {
                     nav.navigate(Route.Subscription.route) {
                         launchSingleTop = true
                         restoreState = true
@@ -264,7 +304,7 @@ fun NavGraphBuilder.trainingNavGraph(
                         subTopic = subTopic
                     )
                 }
-            },
+                             },
 
             onOpenHardSubjectRoute = { belt, subjectId ->
                 vm.setSelectedBelt(belt)
@@ -370,10 +410,18 @@ fun NavGraphBuilder.trainingNavGraph(
         }
 
         fun shouldBlockPremiumTopic(raw: String): Boolean {
-            return isLockedPremiumTopic(raw) && !KmiAccess.hasFullAccess(accessSp)
+            return isLockedPremiumTopic(raw) && !KmiAccess.isAdmin(accessSp)
         }
 
         BeltQuestionsByTopicScreen(
+            onOpenSubscription = {
+                Log.e("KMI_LOCK_TRACE", "NAV -> Route.Subscription from BeltQuestionsByTopicScreen")
+                nav.navigate(Route.Subscription.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
             onOpenSubject = { belt, subject ->
                 vm.setSelectedBelt(belt)
 
@@ -414,12 +462,30 @@ fun NavGraphBuilder.trainingNavGraph(
             onOpenTopicWithSub = { belt, topic, sub ->
                 vm.setSelectedBelt(belt)
 
-                if (shouldBlockPremiumTopic(topic)) {
+                val blockTopic = shouldBlockPremiumTopic(topic)
+                val blockSub = shouldBlockPremiumTopic(sub)
+
+                Log.e(
+                    "KMI_LOCK_TRACE",
+                    "NAV onOpenTopicWithSub belt=${belt.id} topic='$topic' sub='$sub' blockTopic=$blockTopic blockSub=$blockSub"
+                )
+
+                if (blockTopic || blockSub) {
+                    Log.e(
+                        "KMI_LOCK_TRACE",
+                        "NAV BLOCKED -> Subscription from onOpenTopicWithSub topic='$topic' sub='$sub'"
+                    )
+
                     nav.navigate(Route.Subscription.route) {
                         launchSingleTop = true
                         restoreState = true
                     }
                 } else {
+                    Log.e(
+                        "KMI_LOCK_TRACE",
+                        "NAV ALLOWED -> MaterialsSub topic='$topic' sub='$sub'"
+                    )
+
                     nav.navigate(
                         Route.MaterialsSub.make(
                             belt = belt,
@@ -436,7 +502,7 @@ fun NavGraphBuilder.trainingNavGraph(
             onOpenDefenseList = { belt, kind, pick ->
                 vm.setSelectedBelt(belt)
 
-                if (shouldBlockPremiumTopic(kind)) {
+                if (shouldBlockPremiumTopic(kind) || shouldBlockPremiumTopic(pick)) {
                     nav.navigate(Route.Subscription.route) {
                         launchSingleTop = true
                         restoreState = true

@@ -17,6 +17,12 @@ import il.kmi.shared.domain.ContentRepo
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import il.kmi.app.domain.color
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,6 +36,9 @@ fun TopicExercisesScreen(
     val ctx = LocalContext.current
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
+    // ✅ לפי מצב האפליקציה בפועל, לא לפי מצב המכשיר בלבד
+    val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
     val topic = remember(topicTitle) { topicTitle.trim() }
 
@@ -122,6 +131,7 @@ fun TopicExercisesScreen(
                         }
                     },
                     style = MaterialTheme.typography.titleMedium,
+                    color = if (isDarkMode) Color.White else MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -133,18 +143,49 @@ fun TopicExercisesScreen(
                         item
                     }
 
+                    val exerciseCardColor = if (isDarkMode) {
+                        Color(0xFF111827)
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    }
+
+                    val exerciseTextColor = if (isDarkMode) {
+                        Color.White
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+
+                    val exerciseBorderColor = if (isDarkMode) {
+                        belt.color.copy(alpha = 0.42f)
+                    } else {
+                        belt.color.copy(alpha = 0.18f)
+                    }
+
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onOpenExercise(item) },
-                        shape = MaterialTheme.shapes.large,
-                        tonalElevation = 1.dp
+                        shape = RoundedCornerShape(16.dp),
+                        color = exerciseCardColor,
+                        tonalElevation = if (isDarkMode) 0.dp else 1.dp,
+                        shadowElevation = if (isDarkMode) 0.dp else 1.dp,
+                        border = BorderStroke(1.dp, exerciseBorderColor)
                     ) {
-                        Text(
-                            text = itemDisplay,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-                            textAlign = TextAlign.Right
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = itemDisplay,
+                                modifier = Modifier.weight(1f),
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                color = exerciseTextColor,
+                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
                     }
                 }
             }

@@ -39,8 +39,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import android.widget.Toast
+import il.kmi.app.auth.GoogleAuthManager
+import il.kmi.app.auth.UserProfileCompletion
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 private fun overshootEasing(tension: Float = 2f): Easing =
@@ -266,11 +271,23 @@ private fun BeltBadge(
     }
 }
 
+private const val INTRO_FLOW_LOG = "KMI_INTRO_FLOW"
+
 @Composable
-fun IntroScreen(onContinue: () -> Unit) {
+fun IntroScreen(
+    onContinue: () -> Unit,
+    onProfileComplete: () -> Unit = onContinue,
+    onProfileMissing: () -> Unit = onContinue
+) {
     var startAnim by remember { mutableStateOf(false) }
+    var isGoogleLoading by remember { mutableStateOf(false) }
+    var googleError by remember { mutableStateOf<String?>(null) }
+
+    // מונע הפעלה כפולה של Google Login בגלל לחיצה כפולה / recomposition
+    var googleFlowLocked by remember { mutableStateOf(false) }
 
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
     val currentLang = langManager.getCurrentLanguage()
     val isEnglish = currentLang == AppLanguage.ENGLISH
@@ -290,6 +307,7 @@ fun IntroScreen(onContinue: () -> Unit) {
     val legacySp = remember { ctx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
 
     LaunchedEffect(Unit) {
+        Log.e(INTRO_FLOW_LOG, "IntroScreen ENTER instance=${System.identityHashCode(this)}")
         Log.d("KMI_INTRO", "IntroScreen ACTIVE ✅ (if you see this, you're in the right file)")
         dumpPrefs("KMI_INTRO_USER", userSp)
         dumpPrefs("KMI_INTRO_LEGACY", legacySp)
@@ -434,28 +452,29 @@ fun IntroScreen(onContinue: () -> Unit) {
                 }
 
                 Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1.25f)
-                    .padding(vertical = 12.dp)
-                    .alpha(alpha),
-                contentAlignment = Alignment.Center
-            ) {
-                val imageScale = (scale * 2.42f).coerceAtMost(2.70f)
-                Image(
-                    painter = painterResource(id = R.drawable.fighters_blackbelt),
-                    contentDescription = null,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .wrapContentHeight()
-                        .graphicsLayer {
-                            scaleX = imageScale
-                            scaleY = imageScale
-                            clip = false
-                        },
-                    contentScale = ContentScale.Fit
-                )
-            }
+                        .weight(1.05f)
+                        .padding(top = 8.dp, bottom = 4.dp)
+                        .alpha(alpha),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val imageScale = (scale * 2.26f).coerceAtMost(2.52f)
+
+                    Image(
+                        painter = painterResource(id = R.drawable.fighters_blackbelt),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .graphicsLayer {
+                                scaleX = imageScale
+                                scaleY = imageScale
+                                clip = false
+                            },
+                        contentScale = ContentScale.Fit
+                    )
+                }
 
                 val buttonTransition = rememberInfiniteTransition(label = "introButtonAnim")
                 val bubbleOffset by buttonTransition.animateFloat(
@@ -468,81 +487,207 @@ fun IntroScreen(onContinue: () -> Unit) {
                     label = "introBubbleOffset"
                 )
 
-                Button(
-                    onClick = onContinue,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(58.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(),
-                    shape = RoundedCornerShape(28.dp),
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = 10.dp,
-                        pressedElevation = 14.dp
-                    )
+                        .padding(bottom = 34.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(28.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFF1E88E5),
-                                        Color(0xFF5E35B1)
-                                    )
-                                )
+                    Button(
+                        onClick = {
+                            Log.e(
+                                INTRO_FLOW_LOG,
+                                "Google button CLICK loading=$isGoogleLoading locked=$googleFlowLocked"
                             )
+
+                            if (isGoogleLoading || googleFlowLocked) {
+                                Log.e(INTRO_FLOW_LOG, "Google button SKIP duplicate click")
+                                return@Button
+                            }
+
+                            googleError = null
+                            isGoogleLoading = true
+                            googleFlowLocked = true
+
+                            scope.launch {
+                                Log.e(INTRO_FLOW_LOG, "Google signIn START")
+
+                                val loginResult = GoogleAuthManager.signInWithGoogle(ctx)
+
+                                loginResult
+                                    .onSuccess { googleUser ->
+                                        Log.e(
+                                            INTRO_FLOW_LOG,
+                                            "Google signIn SUCCESS uid=${googleUser.uid}, email=${googleUser.email}"
+                                        )
+
+                                        Log.d(
+                                            "KMI_GOOGLE_AUTH",
+                                            "Intro Google success uid=${googleUser.uid}, email=${googleUser.email}"
+                                        )
+
+                                        val profileStatus =
+                                            UserProfileCompletion.checkAndPersistProfileStatus(ctx)
+
+                                        Log.e(
+                                            INTRO_FLOW_LOG,
+                                            "Profile status complete=${profileStatus.isComplete} missing=${profileStatus.missingFields}"
+                                        )
+
+                                        isGoogleLoading = false
+
+                                        if (profileStatus.isComplete) {
+                                            Log.e(INTRO_FLOW_LOG, "NAV -> profileComplete/home")
+                                            Log.d("KMI_GOOGLE_AUTH", "Profile complete -> home")
+                                            onProfileComplete()
+                                        } else {
+                                            Log.e(INTRO_FLOW_LOG, "NAV -> profileMissing/google_profile_completion")
+                                            Log.d(
+                                                "KMI_GOOGLE_AUTH",
+                                                "Profile missing -> registration. missing=${profileStatus.missingFields}"
+                                            )
+                                            onProfileMissing()
+                                        }
+                                    }
+                                    .onFailure { error ->
+                                        Log.e(INTRO_FLOW_LOG, "Google signIn FAILURE", error)
+
+                                        isGoogleLoading = false
+                                        googleFlowLocked = false
+
+                                        googleError =
+                                            if (error is androidx.credentials.exceptions.GetCredentialCancellationException) {
+                                                if (isEnglish) {
+                                                    "Google sign-in was cancelled"
+                                                } else {
+                                                    "ההתחברות עם Google בוטלה"
+                                                }
+                                            } else {
+                                                if (isEnglish) {
+                                                    "Google sign-in failed. Please try again."
+                                                } else {
+                                                    "ההתחברות עם Google נכשלה. נסה שוב."
+                                                }
+                                            }
+
+                                        Log.e("KMI_GOOGLE_AUTH", "Intro Google login failed", error)
+                                        Toast.makeText(ctx, googleError, Toast.LENGTH_SHORT).show()
+                                    }
+                            }
+                        },
+                        enabled = !isGoogleLoading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(58.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(),
+                        shape = RoundedCornerShape(28.dp),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 10.dp,
+                            pressedElevation = 14.dp
+                        )
                     ) {
                         Box(
                             modifier = Modifier
-                                .offset(x = bubbleOffset.dp)
-                                .size(140.dp)
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(28.dp))
                                 .background(
-                                    Brush.radialGradient(
+                                    Brush.horizontalGradient(
                                         listOf(
-                                            Color.White.copy(alpha = 0.42f),
-                                            Color.Transparent
+                                            Color(0xFF1E88E5),
+                                            Color(0xFF5E35B1)
                                         )
-                                    ),
-                                    shape = CircleShape
+                                    )
                                 )
-                        )
-
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = bubbleOffset.dp)
+                                    .size(140.dp)
+                                    .background(
+                                        Brush.radialGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.42f),
+                                                Color.Transparent
+                                            )
+                                        ),
+                                        shape = CircleShape
+                                    )
+                            )
+
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Star,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                if (isGoogleLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.5.dp
+                                    )
+                                } else {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Star,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
 
-                                Spacer(Modifier.width(8.dp))
+                                        Spacer(Modifier.width(8.dp))
 
-                                Text(
-                                    text = if (isEnglish) {
-                                        "Continue to Login / Sign Up"
-                                    } else {
-                                        "מעבר למסך כניסה / רישום"
-                                    },
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.titleMedium
-                                )
+                                        Text(
+                                            text = if (isEnglish) {
+                                                "Continue with Google"
+                                            } else {
+                                                "התחברות עם Google"
+                                            },
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
+
+                    if (!googleError.isNullOrBlank()) {
+                        Spacer(Modifier.height(8.dp))
+
+                        Text(
+                            text = googleError.orEmpty(),
+                            color = Color(0xFFFFCDD2),
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+
+                    TextButton(
+                        onClick = onContinue,
+                        enabled = !isGoogleLoading,
+                        modifier = Modifier.heightIn(min = 42.dp)
+                    ) {
+                        Text(
+                            text = if (isEnglish) {
+                                "Use existing login / sign up screen"
+                            } else {
+                                "כניסה / רישום בדרך הרגילה"
+                            },
+                            color = Color.White.copy(alpha = 0.88f),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
+        }
     }
-}
 }
 
 /** איור וקטורי עם הגבלה דינמית של סקייל כדי שלא ייחתך מהמסך */

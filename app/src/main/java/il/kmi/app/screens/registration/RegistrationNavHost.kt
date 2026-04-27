@@ -4,14 +4,12 @@ package il.kmi.app.screens.registration
 
 import android.content.SharedPreferences
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
-import il.kmi.app.screens.registration.ExistingUserCoachScreen
 import il.kmi.app.screens.NewUserCoachScreen
 import il.kmi.app.screens.NewUserTraineeScreen
 import il.kmi.shared.prefs.KmiPrefs
@@ -22,6 +20,7 @@ private object RRoutes {
     const val Landing             = "registration_landing"
     // const val Auth             = "registration_auth"    // ← כבר לא בשימוש
     const val NewUserTrainee      = "new_user_trainee"
+    const val NewUserTraineeGoogle = "new_user_trainee_google"
     const val NewUserCoach        = "new_user_coach"
     const val ExistingUserTrainee = "existing_user_trainee"
     const val ExistingUserCoach   = "existing_user_coach"
@@ -36,15 +35,17 @@ fun RegistrationNavHost(
     onOpenDrawer: () -> Unit = { DrawerBridge.open() },
     onRegistrationDone: () -> Unit,
     onOpenLegal: () -> Unit,               // ← חדש
-    onOpenTerms: () -> Unit = onOpenLegal  // ← חדש (ברירת מחדל)
+    onOpenTerms: () -> Unit = onOpenLegal, // ← חדש (ברירת מחדל)
+    startAfterGoogleLogin: Boolean = false
 ) {
-
-    val ctx = LocalContext.current
-    fun go(route: String) = nav.navigate(route)
 
     NavHost(
         navController = nav,
-        startDestination = RRoutes.Landing
+        startDestination = if (startAfterGoogleLogin) {
+            RRoutes.NewUserTraineeGoogle
+        } else {
+            RRoutes.Landing
+        }
     ) {
         composable(RRoutes.Landing) {
             RegistrationLandingScreen(
@@ -64,6 +65,7 @@ fun RegistrationNavHost(
         }
 
         // ===== משתמש חדש – מתאמן =====
+        // כניסה רגילה: מגיעים לכאן אחרי מסך "לקוח חדש / קיים"
         composable(
             route = "${RRoutes.NewUserTrainee}?skipOtp={skipOtp}",
             arguments = listOf(
@@ -83,6 +85,26 @@ fun RegistrationNavHost(
                 onOpenDrawer = onOpenDrawer,
                 sp = sp,
                 skipOtp = skipOtp
+            )
+        }
+
+        // ===== Google Login – השלמת פרטים ישירה =====
+        // כאן לא שואלים "לקוח חדש / קיים", כי Google כבר זיהה את המשתמש.
+        composable(route = RRoutes.NewUserTraineeGoogle) {
+            NewUserTraineeScreen(
+                nav = nav,
+                vm = vm,
+                kmiPrefs = kmiPrefs,
+                onBack = {
+                    // חזרה מתוך השלמת פרטים אחרי Google תחזור למסך הקודם אם קיים
+                    nav.popBackStack()
+                },
+                onRegistrationComplete = { onRegistrationDone() },
+                onOpenTerms = onOpenTerms,
+                onOpenLegal = onOpenLegal,
+                onOpenDrawer = onOpenDrawer,
+                sp = sp,
+                skipOtp = true
             )
         }
 

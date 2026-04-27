@@ -1,5 +1,6 @@
 package il.kmi.app.screens.BeltQuestions
 
+import android.content.SharedPreferences
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -76,6 +77,9 @@ import android.app.Activity
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.QuickMenuTriggerMode
+import il.kmi.app.subscription.AccessMode
+import il.kmi.app.subscription.AccessModeResolver
+import il.kmi.app.subscription.LockedContentPolicy
 import il.kmi.app.subscription.KmiAccess
 
 /* ------------------------------ Helpers מקומיים למסך ------------------------------ */
@@ -330,7 +334,72 @@ internal fun BeltPangoLayout(
     val userSp = remember(ctx) {
         ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
     }
-    val hasFullAccess = KmiAccess.hasFullAccess(userSp)
+
+    var accessRefreshTick by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(userSp) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (
+                key == "has_full_access" ||
+                key == "full_access" ||
+                key == "subscription_active" ||
+                key == "is_subscribed" ||
+                key == "sub_product" ||
+                key == "access_changed_at"
+            ) {
+                accessRefreshTick++
+
+                android.util.Log.e(
+                    "KMI_ACCESS_MODE",
+                    "BY_BELT pref changed key=$key tick=$accessRefreshTick " +
+                            "isAdmin=${KmiAccess.isAdmin(userSp)} " +
+                            "hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
+                            "has_full_access=${userSp.getBoolean("has_full_access", false)} " +
+                            "full_access=${userSp.getBoolean("full_access", false)} " +
+                            "subscription_active=${userSp.getBoolean("subscription_active", false)} " +
+                            "is_subscribed=${userSp.getBoolean("is_subscribed", false)} " +
+                            "sub_product=${userSp.getString("sub_product", "")}"
+                )
+            }
+        }
+
+        userSp.registerOnSharedPreferenceChangeListener(listener)
+
+        onDispose {
+            userSp.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    val hasManagerAccess = remember(accessRefreshTick) {
+        KmiAccess.isAdmin(userSp) ||
+                KmiAccess.hasFullAccess(userSp) ||
+                userSp.getBoolean("has_full_access", false) ||
+                userSp.getBoolean("full_access", false) ||
+                userSp.getBoolean("subscription_active", false) ||
+                userSp.getBoolean("is_subscribed", false) ||
+                !userSp.getString("sub_product", "").isNullOrBlank()
+    }
+
+    val accessMode = AccessModeResolver.resolve(
+        hasManagerAccess = hasManagerAccess
+    )
+
+    val hasUnlockedAccess = accessMode == AccessMode.OPEN
+
+    LaunchedEffect(accessMode, hasManagerAccess, accessRefreshTick) {
+        android.util.Log.e(
+            "KMI_ACCESS_MODE",
+            "BY_BELT resolved hasManagerAccess=$hasManagerAccess " +
+                    "accessMode=$accessMode tick=$accessRefreshTick " +
+                    "isAdmin=${KmiAccess.isAdmin(userSp)} " +
+                    "hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
+                    "has_full_access=${userSp.getBoolean("has_full_access", false)} " +
+                    "full_access=${userSp.getBoolean("full_access", false)} " +
+                    "subscription_active=${userSp.getBoolean("subscription_active", false)} " +
+                    "is_subscribed=${userSp.getBoolean("is_subscribed", false)} " +
+                    "sub_product=${userSp.getString("sub_product", "")}"
+        )
+    }
 
     fun normalizeFavoriteId(raw: String): String =
         raw.substringAfter("::", raw)
@@ -530,6 +599,8 @@ internal fun BeltPangoLayout(
                                 TopicsCardForBelt(
                                     belt = currentBelt,
                                     lang = langManager.getCurrentLanguage(),
+                                    accessMode = accessMode,
+                                    onOpenSubscription = onOpenSubscription,
 
                                     // ✅ חובה: זה פותח את כל הנושא (במסך החדש/הנכון שלך)
                                     onOpenTopic = onOpenTopic,
@@ -544,6 +615,12 @@ internal fun BeltPangoLayout(
                             TopicsViewMode.BY_TOPIC -> {
                                 TopicsBySubjectCard(
                                     currentBelt = currentBelt,
+                                    hasAccess = hasUnlockedAccess,
+                                    onOpenSubscription = {
+                                        clickSound()
+                                        haptic(true)
+                                        onOpenSubscription()
+                                    },
 
                                     onSubjectClick = { belt, subject ->
                                         val best =
@@ -561,7 +638,9 @@ internal fun BeltPangoLayout(
                                     onOpenHardSubjectRoute = { belt, subjectId ->
                                         vm.setSelectedBelt(belt)
                                         onOpenHardSubjectRoute(belt, subjectId)
-                                    }
+                                    },
+
+                                    accessMode = accessMode
                                 )
 
                                 Spacer(Modifier.height(10.dp))
@@ -574,10 +653,18 @@ internal fun BeltPangoLayout(
                                     },
                                     shape = RoundedCornerShape(18.dp),
                                     shadowElevation = 10.dp,
-                                    color = Color.White,
+                                    color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+                                        Color(0xFF101827)
+                                    } else {
+                                        Color.White
+                                    },
                                     border = BorderStroke(
                                         1.dp,
-                                        currentBelt.color.copy(alpha = 0.22f)
+                                        if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+                                            Color.White.copy(alpha = 0.12f)
+                                        } else {
+                                            currentBelt.color.copy(alpha = 0.22f)
+                                        }
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -589,11 +676,19 @@ internal fun BeltPangoLayout(
                                             .fillMaxSize()
                                             .background(
                                                 brush = Brush.verticalGradient(
-                                                    colors = listOf(
-                                                        currentBelt.color.copy(alpha = 0.10f),
-                                                        Color.White,
-                                                        currentBelt.color.copy(alpha = 0.05f)
-                                                    )
+                                                    colors = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+                                                        listOf(
+                                                            Color(0xFF1E293B),
+                                                            currentBelt.color.copy(alpha = 0.16f),
+                                                            Color(0xFF0F172A)
+                                                        )
+                                                    } else {
+                                                        listOf(
+                                                            currentBelt.color.copy(alpha = 0.10f),
+                                                            Color.White,
+                                                            currentBelt.color.copy(alpha = 0.05f)
+                                                        )
+                                                    }
                                                 )
                                             )
                                             .padding(horizontal = 16.dp),
@@ -666,7 +761,7 @@ internal fun BeltPangoLayout(
                     onExpandedChange = { quickMenuExpanded = it },
                     triggerMode = QuickMenuTriggerMode.Fab,
                     includePractice = true,
-                    hasFullAccess = hasFullAccess,
+                    hasFullAccess = hasUnlockedAccess,
                     onLockedItemClick = {
                         clickSound(); haptic(true)
                         onOpenSubscription()
@@ -713,7 +808,7 @@ internal fun BeltPangoLayout(
                     includePractice = true,
                     includeAllLists = false,
                     includeSummary = false,
-                    hasFullAccess = hasFullAccess,
+                    hasFullAccess = hasUnlockedAccess,
                     onLockedItemClick = {
                         clickSound(); haptic(true)
                         onOpenSubscription()
@@ -1017,20 +1112,12 @@ internal fun TopicsViewModeToggle(
 
 /* ----------------------------- כרטיס “נושאים בחגורה” ---------------------------- */
 
-private fun shouldShowLockForBeltTopic(title: String): Boolean {
-    val t = title.trim().lowercase()
-
-    return t.contains("הגנות") ||
-            t.contains("שחרור") ||
-            t.contains("defense") ||
-            t.contains("defence") ||
-            t.contains("release")
-}
-
 @Composable
 private fun TopicsCardForBelt(
     belt: Belt,
     lang: AppLanguage,
+    accessMode: il.kmi.app.subscription.AccessMode,
+    onOpenSubscription: () -> Unit,
     onOpenTopic: (Belt, String) -> Unit,
     onOpenSubTopic: (Belt, String, String) -> Unit,
     onOpenDefenseMenu: (Belt, String) -> Unit,
@@ -1038,6 +1125,40 @@ private fun TopicsCardForBelt(
     clickSound: () -> Unit
 ) {
     val isEnglish = lang == AppLanguage.ENGLISH
+    val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    val cardBg = if (isDarkTheme) Color(0xFF101827) else Color.White
+    val cardBorder = if (isDarkTheme) {
+        Color.White.copy(alpha = 0.10f)
+    } else {
+        Color.White.copy(alpha = 0.92f)
+    }
+
+    val titleColor = if (isDarkTheme) Color(0xFFF8FAFC) else Color(0xFF263238)
+    val rowTitleColor = if (isDarkTheme) Color(0xFFF8FAFC) else Color(0xFF1F2937)
+    val rowSubColor = if (isDarkTheme) Color(0xFFCBD5E1) else Color(0xFF6B7280)
+
+    val rowBg = if (isDarkTheme) Color(0xFF172033) else Color(0xFFF8F5FC)
+    val rowGradient = if (isDarkTheme) {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFF1E293B).copy(alpha = 0.98f),
+                belt.color.copy(alpha = 0.18f),
+                Color(0xFF0F172A).copy(alpha = 0.96f)
+            )
+        )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.98f),
+                belt.color.copy(alpha = 0.08f),
+                Color.White.copy(alpha = 0.95f)
+            )
+        )
+    }
+
+    val subBoxBg = if (isDarkTheme) Color(0xFF0F172A).copy(alpha = 0.86f) else Color.White.copy(alpha = 0.76f)
+    val subRowBg = if (isDarkTheme) Color(0xFF1E293B).copy(alpha = 0.96f) else Color.White.copy(alpha = 0.94f)
 
     val topicTitles: List<String> = remember(belt) {
         TopicsEngine.topicTitlesFor(belt)
@@ -1063,10 +1184,14 @@ private fun TopicsCardForBelt(
     val fabClearance = desiredOverlap
 
     Surface(
-        tonalElevation = 1.dp,
-        shadowElevation = 6.dp,
+        tonalElevation = if (isDarkTheme) 0.dp else 1.dp,
+        shadowElevation = if (isDarkTheme) 0.dp else 6.dp,
         shape = RoundedCornerShape(24.dp),
-        color = Color.White,
+        color = cardBg,
+        border = BorderStroke(
+            1.dp,
+            if (isDarkTheme) Color.White.copy(alpha = 0.12f) else belt.color.copy(alpha = 0.14f)
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 6.dp)
@@ -1082,7 +1207,7 @@ private fun TopicsCardForBelt(
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp),
                 textAlign = TextAlign.Center,
-                color = Color(0xFF263238),
+                color = titleColor,
                 maxLines = 1
             )
 
@@ -1095,7 +1220,7 @@ private fun TopicsCardForBelt(
                         .fillMaxWidth()
                         .padding(20.dp),
                     textAlign = TextAlign.Center,
-                    color = Color(0xFF546E7A)
+                    color = rowSubColor
                 )
             } else {
                 val topicsScroll = rememberScrollState(0)
@@ -1140,12 +1265,12 @@ private fun TopicsCardForBelt(
 
                         val isExpanded = expandedTopic == title
                         val isDefenseTopic = title.trim().contains("הגנות")
-                        val floatingTitleColor = Color(0xFF1F2937)
-                        val floatingSubColor = Color(0xFF6B7280)
+                        val floatingTitleColor = rowTitleColor
+                        val floatingSubColor = rowSubColor
                         val floatingAccent = Brush.verticalGradient(
                             colors = listOf(
                                 belt.color.copy(alpha = 1f),
-                                belt.color.copy(alpha = 0.72f)
+                                belt.color.copy(alpha = if (isDarkTheme) 0.88f else 0.72f)
                             )
                         )
 
@@ -1158,7 +1283,11 @@ private fun TopicsCardForBelt(
                                     clickSound()
                                     haptic(true)
 
-                                    if (hasSubs) {
+                                    val canOpen = LockedContentPolicy.canOpenTopic(accessMode, title)
+
+                                    if (!canOpen) {
+                                        onOpenSubscription()
+                                    } else if (hasSubs) {
                                         expandedTopic = if (isExpanded) null else title
                                     } else {
                                         if (isDefenseTopic) {
@@ -1169,30 +1298,27 @@ private fun TopicsCardForBelt(
                                     }
                                 },
                             shape = RoundedCornerShape(18.dp),
-                            color = Color(0xFFF8F5FC),
+                            color = rowBg,
                             tonalElevation = 0.dp,
-                            shadowElevation = 6.dp,
+                            shadowElevation = if (isDarkTheme) 0.dp else 6.dp,
                             border = BorderStroke(
                                 1.dp,
-                                Color.White.copy(alpha = 0.92f)
+                                cardBorder
                             )
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(
-                                        brush = Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.98f),
-                                                belt.color.copy(alpha = 0.08f),
-                                                Color.White.copy(alpha = 0.95f)
-                                            )
-                                        ),
+                                        brush = rowGradient,
                                         shape = RoundedCornerShape(18.dp)
                                     )
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
                                 horizontalAlignment = Alignment.End
                             ) {
+                                val parentLocked =
+                                    LockedContentPolicy.shouldShowLock(accessMode, title)
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
@@ -1217,6 +1343,18 @@ private fun TopicsCardForBelt(
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f)
                                     )
+
+                                    // 🔥 המנעול החדש
+                                    if (parentLocked) {
+                                        Spacer(Modifier.width(8.dp))
+
+                                        Icon(
+                                            imageVector = Icons.Filled.Lock,
+                                            contentDescription = null,
+                                            tint = Color(0xFFF59E0B),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
 
                                     if (hasSubs) {
                                         Spacer(Modifier.width(8.dp))
@@ -1248,16 +1386,17 @@ private fun TopicsCardForBelt(
                                 if (hasSubs && isExpanded) {
                                     Spacer(Modifier.height(8.dp))
 
-                                    val parentLocked = shouldShowLockForBeltTopic(title)
+                                    val parentLocked =
+                                        LockedContentPolicy.shouldShowLock(accessMode, title)
 
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(18.dp))
-                                            .background(Color.White.copy(alpha = 0.76f))
+                                            .background(subBoxBg)
                                             .border(
                                                 width = 1.dp,
-                                                color = belt.color.copy(alpha = 0.18f),
+                                                color = if (isDarkTheme) Color.White.copy(alpha = 0.10f) else belt.color.copy(alpha = 0.18f),
                                                 shape = RoundedCornerShape(18.dp)
                                             )
                                             .padding(8.dp),
@@ -1274,14 +1413,33 @@ private fun TopicsCardForBelt(
                                                     .clickable {
                                                         clickSound()
                                                         haptic(true)
-                                                        onOpenSubTopic(belt, title, sub)
+
+                                                        val canOpenSubTopic =
+                                                            accessMode == AccessMode.OPEN ||
+                                                                    LockedContentPolicy.canOpenTopic(accessMode, title)
+
+                                                        if (!canOpenSubTopic) {
+                                                            android.util.Log.e(
+                                                                "KMI_ACCESS_MODE",
+                                                                "BY_BELT locked subTopic -> subscription: accessMode=$accessMode title=$title sub=$sub"
+                                                            )
+
+                                                            onOpenSubscription()
+                                                        } else {
+                                                            android.util.Log.e(
+                                                                "KMI_ACCESS_MODE",
+                                                                "BY_BELT open belt subTopic: accessMode=$accessMode belt=${belt.id} title=$title sub=$sub"
+                                                            )
+
+                                                            onOpenSubTopic(belt, title, sub)
+                                                        }
                                                     },
                                                 shape = RoundedCornerShape(16.dp),
-                                                color = Color.White.copy(alpha = 0.94f),
-                                                shadowElevation = 4.dp,
+                                                color = subRowBg,
+                                                shadowElevation = if (isDarkTheme) 0.dp else 4.dp,
                                                 border = BorderStroke(
                                                     1.dp,
-                                                    belt.color.copy(alpha = 0.14f)
+                                                    if (isDarkTheme) Color.White.copy(alpha = 0.10f) else belt.color.copy(alpha = 0.14f)
                                                 )
                                             ) {
                                                 Row(

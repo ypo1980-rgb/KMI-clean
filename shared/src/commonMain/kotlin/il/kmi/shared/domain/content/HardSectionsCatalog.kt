@@ -1213,31 +1213,6 @@ object HardSectionsCatalog {
 
     val defensesRoot: List<Section> = listOf(
         Section(
-            id = "def_internal_punch",
-            title = "הגנות פנימיות - אגרופים",
-            beltGroups = defensesInternalPunch.firstOrNull()?.beltGroups.orEmpty()
-        ),
-        Section(
-            id = "def_internal_kick",
-            title = "הגנות פנימיות - בעיטות",
-            beltGroups = defensesInternalKick.firstOrNull()?.beltGroups.orEmpty()
-        ),
-        Section(
-            id = "def_external_punch",
-            title = "הגנות חיצוניות - אגרופים",
-            beltGroups = defensesExternalPunch.firstOrNull()?.beltGroups.orEmpty()
-        ),
-        Section(
-            id = "def_external_kick",
-            title = "הגנות חיצוניות - בעיטות",
-            beltGroups = defensesExternalKick.firstOrNull()?.beltGroups.orEmpty()
-        ),
-        Section(
-            id = "kicks_hard",
-            title = "הגנות נגד בעיטות",
-            subSections = defensesKicks
-        ),
-        Section(
             id = "knife_defense",
             title = "הגנות מסכין",
             beltGroups = defensesKnife
@@ -1259,14 +1234,39 @@ object HardSectionsCatalog {
             beltGroups = defensesGunThreat.firstOrNull()?.beltGroups.orEmpty()
         ),
         Section(
+            id = "stick_defense",
+            title = "הגנות נגד מקל",
+            beltGroups = defensesStick.firstOrNull()?.beltGroups.orEmpty()
+        ),
+        Section(
             id = "multiple_attackers_defense",
             title = "הגנות נגד מספר תוקפים",
             beltGroups = defensesMultipleAttackers.firstOrNull()?.beltGroups.orEmpty()
         ),
         Section(
-            id = "stick_defense",
-            title = "הגנות נגד מקל",
-            beltGroups = defensesStick.firstOrNull()?.beltGroups.orEmpty()
+            id = "kicks_hard",
+            title = "הגנות נגד בעיטות",
+            subSections = defensesKicks
+        ),
+        Section(
+            id = "def_internal_punch",
+            title = "הגנות פנימיות - אגרופים",
+            beltGroups = defensesInternalPunch.firstOrNull()?.beltGroups.orEmpty()
+        ),
+        Section(
+            id = "def_internal_kick",
+            title = "הגנות פנימיות - בעיטות",
+            beltGroups = defensesInternalKick.firstOrNull()?.beltGroups.orEmpty()
+        ),
+        Section(
+            id = "def_external_punch",
+            title = "הגנות חיצוניות - אגרופים",
+            beltGroups = defensesExternalPunch.firstOrNull()?.beltGroups.orEmpty()
+        ),
+        Section(
+            id = "def_external_kick",
+            title = "הגנות חיצוניות - בעיטות",
+            beltGroups = defensesExternalKick.firstOrNull()?.beltGroups.orEmpty()
         )
     )
 

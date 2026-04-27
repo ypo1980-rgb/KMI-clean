@@ -281,6 +281,8 @@ fun SubjectExercisesScreen(
     val langManager = remember(ctx) { il.kmi.shared.localization.AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == il.kmi.shared.localization.AppLanguage.ENGLISH
 
+// ✅ בודקים את מצב ה-Theme של האפליקציה בפועל
+    val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val beltsForUi: List<Belt> = remember(effectiveAppSubject) {
         effectiveAppSubject.belts.mapNotNull { appBelt ->
             val b = toSharedBeltOrNull(appBelt.id)
@@ -561,18 +563,27 @@ fun SubjectExercisesScreen(
                 .padding(padding)
                 .background(backgroundBrush)
         ) {
-    Surface(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 8.dp),
                 shape = RoundedCornerShape(28.dp),
-                color = Color.White.copy(alpha = 0.97f),
-                tonalElevation = 4.dp,
-                shadowElevation = 10.dp
+                color = if (isDarkMode) {
+                    Color(0xFF0F172A).copy(alpha = 0.96f)
+                } else {
+                    Color.White.copy(alpha = 0.97f)
+                },
+                tonalElevation = if (isDarkMode) 0.dp else 4.dp,
+                shadowElevation = if (isDarkMode) 0.dp else 10.dp,
+                border = if (isDarkMode) {
+                    BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+                } else {
+                    null
+                }
             ) {
-    // ... כל הקוד שלך של rows.isEmpty / LazyColumn נשאר אותו דבר
+                // ... כל הקוד שלך של rows.isEmpty / LazyColumn נשאר אותו דבר
                 if (rows.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -581,7 +592,7 @@ fun SubjectExercisesScreen(
                         Text(
                             text = "לא נמצאו תרגילים לנושא זה.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF546E7A),
+                            color = if (isDarkMode) Color.White.copy(alpha = 0.86f) else Color(0xFF546E7A),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -603,6 +614,7 @@ fun SubjectExercisesScreen(
                                     item = row.displayItem,
                                     isFavorite = row.canonicalId in favIds,
                                     isEnglish = isEnglish,
+                                    isDarkMode = isDarkMode,
                                     showMeta = (effectiveAppSubject.id != "releases"),
                                     onToggleFavorite = {
                                         android.util.Log.e(
@@ -637,7 +649,8 @@ fun SubjectExercisesScreen(
                                 item(key = "belt_card_${belt.id}") {
                                     BeltSectionCardModern(
                                         belt = belt,
-                                        count = beltRows.size
+                                        count = beltRows.size,
+                                        isDarkMode = isDarkMode
                                     ) {
                                         beltRows.forEach { row ->
                                             ExerciseRowCardModern(
@@ -646,6 +659,7 @@ fun SubjectExercisesScreen(
                                                 item = row.displayItem,
                                                 isFavorite = row.canonicalId in favIds,
                                                 isEnglish = isEnglish,
+                                                isDarkMode = isDarkMode,
                                                 showMeta = (effectiveAppSubject.id != "releases"),
                                                 onToggleFavorite = {
                                                     android.util.Log.e(
@@ -741,8 +755,13 @@ fun SubjectExercisesScreen(
                             ) {
                                 Icon(
                                     imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                                    contentDescription = if (isFavorite) "הסר מהמועדפים" else "הוסף למועדפים",
-                                    tint = MaterialTheme.colorScheme.primary
+                                    contentDescription = null,
+                                    tint = if (isFavorite) {
+                                        Color(0xFFFFC107)
+                                    } else {
+                                        if (isDarkMode) Color.White.copy(alpha = 0.72f)
+                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                    }
                                 )
                             }
                         }
@@ -918,6 +937,7 @@ private fun BeltHeaderRow(
 private fun BeltSectionCardModern(
     belt: Belt,
     count: Int,
+    isDarkMode: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val onBelt = if (belt.color.luminance() < 0.5f) Color.White else Color.Black
@@ -930,10 +950,13 @@ private fun BeltSectionCardModern(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        tonalElevation = 2.dp,
-        shadowElevation = 6.dp,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, Color(0x12000000))
+        tonalElevation = if (isDarkMode) 0.dp else 2.dp,
+        shadowElevation = if (isDarkMode) 0.dp else 6.dp,
+        color = if (isDarkMode) Color(0xFF111827) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0x12000000)
+        )
     ) {
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -986,17 +1009,45 @@ private fun ExerciseRowCardModern(
     item: String,
     isFavorite: Boolean,
     isEnglish: Boolean,
+    isDarkMode: Boolean = false,
     showMeta: Boolean = false,
     onToggleFavorite: () -> Unit,
     onClick: () -> Unit
 ) {
+    val rowBgColor = if (isDarkMode) {
+        Color(0xFF1E293B)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    val rowTextColor = if (isDarkMode) {
+        Color(0xFFF8FAFC)
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
+    val rowMetaColor = if (isDarkMode) {
+        Color(0xFFCBD5E1)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    val starEmptyColor = if (isDarkMode) {
+        Color.White.copy(alpha = 0.72f)
+    } else {
+        Color(0xFF9CA3AF)
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp)),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 1.dp,
-        border = BorderStroke(1.dp, belt.color.copy(alpha = 0.35f))
+        color = rowBgColor,
+        tonalElevation = if (isDarkMode) 0.dp else 1.dp,
+        border = BorderStroke(
+            1.dp,
+            if (isDarkMode) belt.color.copy(alpha = 0.55f) else belt.color.copy(alpha = 0.35f)
+        )
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Row(
@@ -1032,8 +1083,7 @@ private fun ExerciseRowCardModern(
                     Icon(
                         imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                         contentDescription = if (isFavorite) "הסר ממועדפים" else "הוסף למועדפים",
-                        tint = if (isFavorite) Color(0xFFFFC107)
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                        tint = if (isFavorite) Color(0xFFFFC107) else starEmptyColor
                     )
                 }
 
@@ -1062,13 +1112,13 @@ private fun ExerciseRowCardModern(
                             Text(
                                 text = item,
                                 style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = rowTextColor,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
-
                             if (showMeta) {
                                 Spacer(Modifier.height(3.dp))
 
@@ -1077,7 +1127,8 @@ private fun ExerciseRowCardModern(
                                     Text(
                                         text = meta,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                        color = rowMetaColor,
+                                        fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,

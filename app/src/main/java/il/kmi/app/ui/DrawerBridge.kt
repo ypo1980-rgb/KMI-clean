@@ -45,18 +45,45 @@ object DrawerBridge {
         onOpenSettings: () -> Unit,
         onOpenHome: () -> Unit
     ) {
+        android.util.Log.e("KMI_DRAWER", "DrawerBridge.register() called")
+
         openDrawer   = onOpenDrawer
         openSettings = onOpenSettings
         openHome     = onOpenHome
     }
 
     fun clear() {
+        android.util.Log.e("KMI_DRAWER", "DrawerBridge.clear() called")
+
         openDrawer   = null
         openSettings = null
         openHome     = null
     }
 
-    fun open()         { openDrawer?.invoke() }
-    fun openSettings() { openSettings?.invoke() }
-    fun openHome()     { openHome?.invoke() }
+    fun open() {
+        android.util.Log.e(
+            "KMI_DRAWER",
+            "DrawerBridge.open() called hasOpenDrawer=${openDrawer != null}"
+        )
+
+        openDrawer?.invoke()
+    }
+
+    fun openSettings() {
+        android.util.Log.e(
+            "KMI_DRAWER",
+            "DrawerBridge.openSettings() called hasOpenSettings=${openSettings != null}"
+        )
+
+        openSettings?.invoke()
+    }
+
+    fun openHome() {
+        android.util.Log.e(
+            "KMI_DRAWER",
+            "DrawerBridge.openHome() called hasOpenHome=${openHome != null}"
+        )
+
+        openHome?.invoke()
+    }
 }

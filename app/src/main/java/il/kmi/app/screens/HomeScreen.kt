@@ -219,6 +219,7 @@ inline fun <T : AccessibleObject> T.makeAccessible(): T {
 fun HomeScreen(
     onContinue: () -> Unit,
     onSettings: () -> Unit,
+    onOpenDrawer: () -> Unit,
     onOpenSubscription: () -> Unit,
     trainings: List<TrainingData>,
     onOpenExercise: (String) -> Unit,
@@ -346,7 +347,15 @@ fun HomeScreen(
 
             val ctx = LocalContext.current
             val userSp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
-            val hasFullAccess = KmiAccess.hasFullAccess(userSp)
+
+            val hasFullAccess = KmiAccess.isAdmin(userSp)
+
+            LaunchedEffect(hasFullAccess) {
+                android.util.Log.e(
+                    "KMI_ACCESS_MODE",
+                    "HOME hasFullAccess=$hasFullAccess isAdmin=${KmiAccess.isAdmin(userSp)}"
+                )
+            }
 
             val showFab by remember(listState) {
                 derivedStateOf {
@@ -482,7 +491,14 @@ fun HomeScreen(
                 }
 
                 val selectedBranches: List<String> = remember(userSp) { readSelectedBranches(userSp) }
-                val branchesEffective = if (selectedBranches.isEmpty())
+
+                val branchTypeHome = remember(userSp) {
+                    userSp.getString("branch_type", "israel") ?: "israel"
+                }
+
+                val isAbroadBranch = branchTypeHome == "abroad"
+
+                val branchesEffective = if (selectedBranches.isEmpty() && !isAbroadBranch)
                     listOf("נתניה – מרכז קהילתי אופק")
                 else
                     selectedBranches.take(3)
@@ -786,7 +802,15 @@ fun HomeScreen(
                                         else
                                             "חג פסח / חול המועד פסח\nאין אימונים בשבוע זה"
                                     } else {
-                                        if (isEnglish) "No upcoming trainings" else "אין אימונים קרובים"
+                                        if (isAbroadBranch) {
+                                            if (isEnglish)
+                                                "Training schedule is not available for international branches this week"
+                                            else
+                                                "אין מידע על אימונים לשבוע הקרוב בסניפי חו״ל"
+                                        } else {
+                                            if (isEnglish) "No upcoming trainings" else "אין אימונים קרובים"
+                                        }
+
                                     },
                                     style = MaterialTheme.typography.titleMedium,
                                     color = Color.White,
@@ -1385,6 +1409,9 @@ fun HomeScreen(
     if (showAiDialog) {
         AiAssistantDialog(
             onDismiss = { showAiDialog = false },
+            onOpenDrawer = {
+                onOpenDrawer()
+            }
         )
     }
 }

@@ -86,7 +86,13 @@ fun NavGraphBuilder.legacyNavGraph(
 
     // -------- גרפים מודולריים --------
     trainingNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
-    homeNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+    homeNavGraph(
+        nav = nav,
+        vm = vm,
+        sp = sp,
+        kmiPrefs = kmiPrefs,
+        onOpenDrawer = {}
+    )
     topicsNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     subTopicsByBeltNavGraph(nav = nav)
     subTopicsByTopicNavGraph(nav = nav)

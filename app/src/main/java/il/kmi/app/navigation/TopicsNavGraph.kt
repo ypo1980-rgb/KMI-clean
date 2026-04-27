@@ -19,11 +19,27 @@ fun isLockedPremiumTopic(raw: String): Boolean {
 
     return t == "שחרורים" ||
             t == "הגנות" ||
-            t.contains("שחרור") ||
-            t.contains("release") ||
+
+            // 🔒 כל מה שמכיל הגנות
             t.contains("הגנה") ||
+            t.contains("הגנות") ||
             t.contains("defense") ||
             t.contains("defence") ||
+
+            // 🔒 כל מה שמכיל שחרורים
+            t.contains("שחרור") ||
+            t.contains("release") ||
+
+            // 🔒 קטגוריות נשק
+            t.contains("סכין") ||
+            t.contains("knife") ||
+            t.contains("אקדח") ||
+            t.contains("gun") ||
+            t.contains("מקל") ||
+            t.contains("stick") ||
+            t.contains("תוקפים") ||
+
+            // 🔒 מזהים פנימיים
             t.startsWith("def_") ||
             t.startsWith("releases_")
 }
@@ -109,6 +125,13 @@ fun NavGraphBuilder.topicsNavGraph(
         }
 
         BeltQuestionsByTopicScreen(
+            onOpenSubscription = {
+                nav.navigate(Route.Subscription.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
             onOpenHardSubjectRoute = { belt, subjectId ->
                 vm.setSelectedBelt(belt)
 
@@ -117,10 +140,17 @@ fun NavGraphBuilder.topicsNavGraph(
                     "topicsNavGraph onOpenHardSubjectRoute belt=${belt.id} subjectId='$subjectId'"
                 )
 
-                openSubTopics(
-                    belt = belt,
-                    topic = subjectId
-                )
+                if (shouldBlockPremiumTopic(subjectId)) {
+                    nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                } else {
+                    openSubTopics(
+                        belt = belt,
+                        topic = subjectId
+                    )
+                }
             },
 
             onOpenSubject = { belt: Belt, subject ->
@@ -152,15 +182,31 @@ fun NavGraphBuilder.topicsNavGraph(
             },
 
             onOpenTopicWithSub = { belt: Belt, topicTitle: String, subTopicTitle: String ->
-                openChosenSubTopic(
-                    belt = belt,
-                    topic = topicTitle,
-                    subTopic = subTopicTitle
-                )
+                if (
+                    shouldBlockPremiumTopic(topicTitle) ||
+                    shouldBlockPremiumTopic(subTopicTitle)
+                ) {
+                    nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                } else {
+                    openChosenSubTopic(
+                        belt = belt,
+                        topic = topicTitle,
+                        subTopic = subTopicTitle
+                    )
+                }
             },
 
             onOpenDefenseList = { belt, kind, pick ->
-                if (shouldBlockPremiumTopic(kind) || shouldBlockPremiumTopic(pick)) {
+                val blocked =
+                    shouldBlockPremiumTopic(kind) ||
+                            shouldBlockPremiumTopic(pick) ||
+                            kind.startsWith("def_") ||
+                            kind.startsWith("releases_")
+
+                if (blocked) {
                     nav.navigate(Route.Subscription.route) {
                         launchSingleTop = true
                         restoreState = true

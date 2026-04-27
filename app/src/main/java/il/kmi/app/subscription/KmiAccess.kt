@@ -11,6 +11,9 @@ private const val KEY_IS_ADMIN = "is_admin"
 private const val KEY_DEV_UNLOCK = "dev_unlock"
 private const val DEV_UNLOCK_CODE = "34567@"
 
+// 🔒 אם רוצים שהקוד הסודי יפתח הכול — חייב להיות false
+private const val FORCE_SUBSCRIPTION_LOCK = false
+
 object KmiAccess {
 
     // ----------- אדמין / מנהל אפליקציה -----------
@@ -21,6 +24,11 @@ object KmiAccess {
      */
     fun setAdmin(sp: SharedPreferences, value: Boolean) {
         sp.edit().putBoolean(KEY_IS_ADMIN, value).apply()
+
+        android.util.Log.e(
+            "KMI_ACCESS",
+            "setAdmin value=$value savedNow=${sp.getBoolean(KEY_IS_ADMIN, false)}"
+        )
     }
 
     /**
@@ -47,6 +55,12 @@ object KmiAccess {
                 .putBoolean(KEY_DEV_UNLOCK, true)
                 .apply()
         }
+
+        android.util.Log.e(
+            "KMI_ACCESS",
+            "tryDevUnlock ok=$ok savedNow=${sp.getBoolean(KEY_DEV_UNLOCK, false)}"
+        )
+
         return ok
     }
 
@@ -65,13 +79,38 @@ object KmiAccess {
         sp.edit().putBoolean(KEY_HAS_FULL_ACCESS, value).apply()
     }
 
+    fun clearAllAccessFlags(sp: SharedPreferences) {
+        sp.edit()
+            .putBoolean(KEY_IS_ADMIN, false)
+            .putBoolean(KEY_DEV_UNLOCK, false)
+            .putBoolean(KEY_HAS_FULL_ACCESS, false)
+            .apply()
+    }
+
     /**
      * "גישה מלאה" = מנוי פעיל, אדמין, או פתיחה עם קוד סודי.
+     * כרגע יש גם נעילה גלובלית זמנית לפיתוח.
      */
-    fun hasFullAccess(sp: SharedPreferences): Boolean =
-        isAdmin(sp) ||
-                hasDevUnlock(sp) ||
-                sp.getBoolean(KEY_HAS_FULL_ACCESS, false)
+    fun hasFullAccess(sp: SharedPreferences): Boolean {
+        val admin = isAdmin(sp)
+        val dev = hasDevUnlock(sp)
+        val full = sp.getBoolean(KEY_HAS_FULL_ACCESS, false)
+
+        if (FORCE_SUBSCRIPTION_LOCK && !admin && !dev) {
+            android.util.Log.e(
+                "KMI_ACCESS",
+                "hasFullAccess FORCE_SUBSCRIPTION_LOCK=true and no admin/dev unlock -> result=false"
+            )
+            return false
+        }
+
+        android.util.Log.e(
+            "KMI_ACCESS",
+            "hasFullAccess admin=$admin devUnlock=$dev fullAccess=$full result=${admin || dev || full}"
+        )
+
+        return admin || dev || full
+    }
 
     /** כרגע תקופת הניסיון כבויה */
     fun isTrialActive(sp: SharedPreferences): Boolean = false

@@ -317,6 +317,11 @@ private fun AndroidAppRoot(
         return
     }
 
+    // 🌍 בדיקה אם נבחרה שפה בפעם הראשונה
+    var initialLanguageSelected by remember {
+        mutableStateOf(userSp.getBoolean("initial_language_selected", false))
+    }
+
     // האם קיים “משתמש רשום” (קודם KMP, עם פולבאק ל-SP הישן)
     var isRegistered by remember {
         mutableStateOf(
@@ -340,43 +345,54 @@ private fun AndroidAppRoot(
         )
     }
 
-    // מסך פתיחה
-    var currentScreen by remember { mutableStateOf(if (isRegistered) "main" else "intro") }
+// מסך פתיחה
+    var currentScreen by remember {
+        mutableStateOf(
+            when {
+                !initialLanguageSelected -> "language"
+                isRegistered -> "main"
+                else -> "intro"
+            }
+        )
+    }
 
-    // מסלול פתיחה חד-פעמי ל־MainApp (כמו שהיה)
+// מסלול פתיחה חד-פעמי ל־MainApp
     var startRoute by remember { mutableStateOf<String?>(null) }
 
-    androidx.compose.foundation.layout.Box(
-        modifier = androidx.compose.ui.Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing)
-    ) {
-        when (currentScreen) {
-            "intro" -> {
-                IntroScreen(
-                    onContinue = {
-                        currentScreen = if (isRegistered) "main" else "register"
-                    }
-                )
-            }
+    when (currentScreen) {
 
-            "register" -> {
-                MainApp(
-                    sp = sp,
-                    vm = vm,
-                    startRoute = "registration",
-                    kmiPrefs = kmiPrefs
-                )
-            }
+        "language" -> {
+            il.kmi.app.screens.InitialLanguageScreen(
+                onLanguageSelected = {
+                    currentScreen = if (isRegistered) "main" else "intro"
+                }
+            )
+        }
 
-            "main" -> {
-                MainApp(
-                    sp = sp,
-                    vm = vm,
-                    startRoute = startRoute,
-                    kmiPrefs = kmiPrefs
-                )
-            }
+        "intro" -> {
+            IntroScreen(
+                onContinue = {
+                    currentScreen = if (isRegistered) "main" else "register"
+                }
+            )
+        }
+
+        "register" -> {
+            MainApp(
+                sp = sp,
+                vm = vm,
+                startRoute = "registration",
+                kmiPrefs = kmiPrefs
+            )
+        }
+
+        "main" -> {
+            MainApp(
+                sp = sp,
+                vm = vm,
+                startRoute = startRoute,
+                kmiPrefs = kmiPrefs
+            )
         }
     }
 }

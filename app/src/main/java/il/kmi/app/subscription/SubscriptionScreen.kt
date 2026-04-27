@@ -939,6 +939,9 @@ fun SubscriptionScreen(
 
                         if (activity != null) {
 
+                            // כפתור הרכישה הישירה היה מיועד לבדיקות בלבד.
+                            // כרגע מסתירים אותו כדי שמשתמשים ובודקים יעבדו רק דרך מסך המסלולים הרשמי.
+                            /*
                             PremiumActionRow(
                                 icon = "💳",
                                 text = if (isEnglish) "Direct purchase (tests)" else "רכישה ישירה (בדיקות)",
@@ -964,6 +967,7 @@ fun SubscriptionScreen(
                                     }
                                 }
                             )
+                            */
 
                             PremiumActionRow(
                                 icon = "🔄",
@@ -974,27 +978,34 @@ fun SubscriptionScreen(
                     }
                 }
 
-                // ---------- אזור נסתר: 5 הקשות לפתיחת דיאלוג קוד מנהל ----------
-                var secretTapCount by remember { mutableStateOf(0) }
-                var lastTapTime by remember { mutableStateOf(0L) }
+                // ---------- אזור נסתר: קוד מנהל ----------
+// הוסתר לגרסת בדיקות/משתמשים.
+// פתיחת תכנים מתבצעת עכשיו דרך מנוי Google Play בלבד.
+// אם בעתיד תרצה להחזיר כלי בדיקה פנימי, אפשר להפעיל את showDevUnlockOnlyForAdmin.
+                val showDevUnlockOnlyForAdmin = false
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp)
-                        .clickable {
-                            val now = System.currentTimeMillis()
+                if (showDevUnlockOnlyForAdmin) {
+                    var secretTapCount by remember { mutableStateOf(0) }
+                    var lastTapTime by remember { mutableStateOf(0L) }
 
-                            secretTapCount =
-                                if (now - lastTapTime <= 3000L) secretTapCount + 1 else 1
-                            lastTapTime = now
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clickable {
+                                val now = System.currentTimeMillis()
 
-                            if (secretTapCount >= 5) {
-                                secretTapCount = 0
-                                showDevDialog = true
+                                secretTapCount =
+                                    if (now - lastTapTime <= 3000L) secretTapCount + 1 else 1
+                                lastTapTime = now
+
+                                if (secretTapCount >= 5) {
+                                    secretTapCount = 0
+                                    showDevDialog = true
+                                }
                             }
-                        }
-                )
+                    )
+                }
 
                 // ---------- דיאלוג הסבר + כוכבית (אם פתוח) ----------
                 pickedKey?.let { key ->

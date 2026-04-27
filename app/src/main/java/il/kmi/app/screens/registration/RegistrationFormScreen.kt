@@ -7,6 +7,7 @@ package il.kmi.app.screens.registration
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import android.util.Patterns
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -28,6 +29,8 @@ import il.kmi.app.screens.admin.AdminAccess
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.shared.prefs.KmiPrefs
 
+private const val REGISTRATION_LOG = "KMI_REGISTRATION"
+
 // === רשימת מאמנים מורשים ===
 object CoachWhitelist {
     // מפה: טלפון → שם
@@ -44,9 +47,19 @@ object CoachWhitelist {
     val allowedEmails: Map<String, String> = mapOf(
         "ypo1980@gmail.com" to "יובל פולק",
         "yonatanmalesa99.com" to "יוני מלסה",
-        "coach3@example.com" to "מאמן 3"
+        "avi.abeceedon@gmail.com" to "אבי אביסדון"
         // ... תוסיף כאן עד ~20
     )
+}
+
+private fun isSuperTesterUser(
+    email: String,
+    phoneDigits: String,
+    firebaseUid: String
+): Boolean {
+    return email.trim().lowercase() == "ypo1980@gmail.com" ||
+            phoneDigits.filter { it.isDigit() } == "0526664660" ||
+            firebaseUid == "DBoyoVVpsrVUX0ukhKwNyQlKUKY2"
 }
 
 @Composable
@@ -70,6 +83,12 @@ fun RegistrationFormScreen(
     val ctx = LocalContext.current
     val userSp = remember(ctx) { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
 
+    val isGoogleAuth = remember(sp) {
+        sp.getString("authProvider", "") == "google" ||
+                sp.getBoolean("google_login", false) ||
+                sp.getBoolean("skip_otp", false)
+    }
+
     // דיאלוג קוד מאמן
     var showCodeDialog by rememberSaveable { mutableStateOf(false) }
     var coachCode by rememberSaveable { mutableStateOf("") }
@@ -78,6 +97,27 @@ fun RegistrationFormScreen(
     var fullName by rememberSaveable { mutableStateOf(sp.getString("fullName", "") ?: "") }
     var phone by rememberSaveable { mutableStateOf(sp.getString("phone", "") ?: "") }
     var email by rememberSaveable { mutableStateOf(sp.getString("email", "") ?: "") }
+
+    LaunchedEffect(isGoogleAuth) {
+        if (isGoogleAuth) {
+            val firebaseUser = FirebaseAuth.getInstance().currentUser
+
+            if (fullName.isBlank()) {
+                fullName = firebaseUser?.displayName.orEmpty()
+            }
+
+            if (email.isBlank()) {
+                email = firebaseUser?.email.orEmpty()
+            }
+
+            if (phone.isBlank()) {
+                val firebasePhone = firebaseUser?.phoneNumber.orEmpty().filter { it.isDigit() }
+                if (firebasePhone.isNotBlank()) {
+                    phone = firebasePhone
+                }
+            }
+        }
+    }
 
     // ✅ הרשאות רישום לפי whitelist
     val normalizedPhone = remember(phone) { phone.filter { it.isDigit() } }
@@ -88,24 +128,55 @@ fun RegistrationFormScreen(
                 CoachWhitelist.allowedEmails.containsKey(normalizedEmail)
     }
 
+    val firebaseUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+
+    val isSuperTester = remember(normalizedPhone, normalizedEmail, firebaseUid) {
+        isSuperTesterUser(
+            email = normalizedEmail,
+            phoneDigits = normalizedPhone,
+            firebaseUid = firebaseUid
+        )
+    }
+
     // ✅ חדש: ADMIN (Firestore: admins/{uid}.enabled)
     var isAdmin by rememberSaveable { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         isAdmin = runCatching { AdminAccess.isCurrentUserAdmin() }.getOrDefault(false)
     }
 
     // ✅ נעילה אוטומטית:
-    // - אם ADMIN → לא נועלים כלום
+    // - אם ADMIN או Super Tester → לא נועלים כלום, מאפשרים בחירה חופשית
     // - אם מורשה מאמן → מעבירים לטאב מאמן ונועלים
     // - אם לא מורשה → מעבירים לטאב מתאמן ונועלים
-    LaunchedEffect(isWhitelistedCoach, isAdmin) {
-        if (!isAdmin) {
+    LaunchedEffect(isWhitelistedCoach, isAdmin, isSuperTester) {
+        if (!isAdmin && !isSuperTester) {
             selectedTab = if (isWhitelistedCoach) 1 else 0
         }
+
+        Log.e(
+            REGISTRATION_LOG,
+            "role tabs gate isAdmin=$isAdmin isSuperTester=$isSuperTester isWhitelistedCoach=$isWhitelistedCoach selectedTab=$selectedTab"
+        )
     }
 
-    var username by rememberSaveable { mutableStateOf(sp.getString("username", "") ?: "") }
-    var password by rememberSaveable { mutableStateOf(sp.getString("password", "") ?: "") }
+    var username by rememberSaveable {
+        mutableStateOf(
+            sp.getString("username", "")?.takeIf { it.isNotBlank() }
+                ?: sp.getString("email", "")?.takeIf { it.isNotBlank() }
+                ?: ""
+        )
+    }
+
+    var password by rememberSaveable {
+        mutableStateOf(
+            if (isGoogleAuth) {
+                "GOOGLE_AUTH"
+            } else {
+                sp.getString("password", "") ?: ""
+            }
+        )
+    }
 
     // תאריך לידה
     var birthDay by rememberSaveable {
@@ -123,10 +194,15 @@ fun RegistrationFormScreen(
         mutableStateOf(sp.getString("gender", "") ?: "")
     }
 
-    // אזור / סניפים / קבוצות
+// אזור / סניפים / קבוצות
     var selectedRegion by rememberSaveable { mutableStateOf(sp.getString("region", "") ?: "") }
     var selectedBranch by rememberSaveable { mutableStateOf(sp.getString("branch", "") ?: "") }
     var selectedGroup by rememberSaveable { mutableStateOf(sp.getString("age_group", "") ?: "") }
+
+// ✅ סוג הסניף שנבחר בטופס: israel / abroad
+    var branchType by rememberSaveable {
+        mutableStateOf(sp.getString("branch_type", "israel") ?: "israel")
+    }
 
     // ✅ חדש: סניף/קבוצה פעילים (ערך יחיד)
     var activeBranch by rememberSaveable { mutableStateOf(sp.getString("active_branch", "") ?: "") }
@@ -203,7 +279,17 @@ fun RegistrationFormScreen(
         if (isCoach) currentBeltId = ""
     }
 
-    LaunchedEffect(selectedBranches.toList(), groupsByBranch) {
+    LaunchedEffect(branchType, selectedBranches.toList(), groupsByBranch) {
+        // ✅ בחו״ל אין קבוצות גיל מתוך TrainingCatalog,
+        // לכן לא מסננים את קבוצת ברירת המחדל "חו״ל".
+        if (branchType == "abroad") {
+            if (selectedBranches.isNotEmpty() && selectedGroups.isEmpty()) {
+                selectedGroups.clear()
+                selectedGroups.add("חו״ל")
+            }
+            return@LaunchedEffect
+        }
+
         val unionGroups = selectedBranches
             .flatMap { branch ->
                 val normalized = branch.trim().replace("’", "'").replace("־", "-")
@@ -237,8 +323,8 @@ fun RegistrationFormScreen(
     fun submitRegistration() {
         var valid = true
 
-        // ✅ אכיפה קשיחה רק למי שלא ADMIN
-        if (!isAdmin) {
+        // ✅ אכיפה קשיחה רק למי שלא ADMIN ולא Super Tester
+        if (!isAdmin && !isSuperTester) {
             if (isWhitelistedCoach && !isCoach) {
                 Toast.makeText(ctx, "מאמן מורשה חייב להירשם כמאמן בלבד", Toast.LENGTH_LONG).show()
                 return
@@ -258,10 +344,10 @@ fun RegistrationFormScreen(
         if (email.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
             emailError = true; valid = false
         }
-        if (username.isBlank()) {
+        if (!isGoogleAuth && username.isBlank()) {
             usernameError = true; valid = false
         }
-        if (password.isBlank()) {
+        if (!isGoogleAuth && password.isBlank()) {
             passwordError = true; valid = false
         }
         if (selectedRegion.isBlank()) {
@@ -273,8 +359,10 @@ fun RegistrationFormScreen(
             branchError = true; valid = false
         }
 
-        if (selectedGroups.isEmpty()) {
-            groupError = true; valid = false
+        // ✅ אם זה חו״ל – לא דורשים קבוצות
+        if (branchType != "abroad" && selectedGroups.isEmpty()) {
+            groupError = true
+            valid = false
         }
 
         // מין חובה
@@ -286,8 +374,8 @@ fun RegistrationFormScreen(
             termsError = true; valid = false
         }
 
-        // אימות מאמן (רק אם לא ADMIN)
-        if (isCoach && !isAdmin) {
+        // אימות מאמן (רק אם לא ADMIN ולא Super Tester)
+        if (isCoach && !isAdmin && !isSuperTester) {
             val normalizedPhoneLocal = phone.filter { it.isDigit() }
             val normalizedEmailLocal = email.trim().lowercase()
 
@@ -303,15 +391,25 @@ fun RegistrationFormScreen(
         if (!valid) return
 
         // ✅ role סופי:
-        // ADMIN בוחר לפי הטאב, אחרת לפי whitelist
-        val roleFinal = if (isAdmin) {
+        // ADMIN או Super Tester בוחרים לפי הטאב, אחרת לפי whitelist
+        val roleFinal = if (isAdmin || isSuperTester) {
             if (isCoach) "coach" else "trainee"
         } else {
             if (isWhitelistedCoach) "coach" else "trainee"
         }
 
+        // ✅ מקור אמת לטלפון: ספרות בלבד.
+        // חשוב במיוחד ב-Google Login, כי שאר המסכים קוראים גם phone וגם phone_number.
+        val phoneFinal = phone.filter { it.isDigit() }
+
         val groupsCsv = selectedGroups.joinToString(", ")
         val primaryGroup = selectedGroups.firstOrNull() ?: ""
+
+        // ✅ חגורה סופית למתאמן.
+        // אם משום מה לא נבחרה חגורה, לא נשאיר Firestore / SP עם belt ריק,
+        // כי זה עלול להחזיר את המשתמש שוב למסך השלמת פרטים בכניסה הבאה.
+        val beltFinal =
+            if (roleFinal == "trainee") currentBeltId.ifBlank { "white" } else ""
 
         val activeBranchFinal =
             (activeBranch.takeIf { it.isNotBlank() }
@@ -328,11 +426,15 @@ fun RegistrationFormScreen(
             if (selectedBranches.isNotEmpty()) selectedBranches.joinToString(", ")
             else selectedBranch.trim()
 
+        val completedUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        val completedAt = System.currentTimeMillis()
+
         // שמירה ב-SP הראשי
         sp.edit()
             .putString("fullName", fullName)
-            .putString("phone", phone)
-            .putString("email", email)
+            .putString("phone", phoneFinal)
+            .putString("phone_number", phoneFinal)
+            .putString("email", email.trim())
             .putString("region", selectedRegion)
             .putString("branch", branchesFinal)              // CSV
             .putString("active_branch", activeBranchFinal)   // ✅ חדש
@@ -340,26 +442,47 @@ fun RegistrationFormScreen(
             .putString("age_group", primaryGroup)            // תאימות
             .putString("group", primaryGroup)                // תאימות
             .putString("active_group", activeGroupFinal)     // ✅ חדש
-            .putString("username", username)
-            .putString("password", password)
+            .putString("username", if (isGoogleAuth) email.trim() else username)
+            .putString("authProvider", if (isGoogleAuth) "google" else "local")
+            .putBoolean("google_login", isGoogleAuth)
+            .putString("password", if (isGoogleAuth) "" else password)
             .putBoolean("subscribeSms", subscribeSms)
             .putString("user_role", roleFinal)
-            .putString("gender", gender)                     // 👈 חדש
+            .putString("gender", gender)
+            .putString("branch_type", branchType)
+            .putString("current_belt", beltFinal)
+            .putString("belt_current", beltFinal)
+            .putBoolean("profile_completed", true)
+            .putBoolean("registration_complete", true)
+            .putBoolean("registration_form_completed", true)
+            .putInt("registration_schema_version", 2)
+            .putString("profile_completed_uid", completedUid)
+            .putLong("profile_completed_at", completedAt)
             // תאריך לידה
             .putString("birth_day", birthDay.toString())
             .putString("birth_month", birthMonth.toString())
             .putString("birth_year", birthYear.toString())
-            .apply()
+            .commit()
+
+        Log.e(
+            REGISTRATION_LOG,
+            "saved MAIN profile_completed=true uid=$completedUid role=$roleFinal belt=$beltFinal branch=$branchesFinal group=$primaryGroup"
+        )
 
         // חגורה – רק למתאמן
-        if (roleFinal == "trainee") {
-            sp.edit().putString("current_belt", currentBeltId).apply()
-        } else {
-            sp.edit().remove("current_belt").apply()
+        if (roleFinal != "trainee") {
+            sp.edit()
+                .remove("current_belt")
+                .remove("belt_current")
+                .commit()
         }
 
         // userSp – אחידות
         userSp.edit().apply {
+            putString("fullName", fullName)
+            putString("phone", phoneFinal)
+            putString("phone_number", phoneFinal)
+            putString("email", email.trim())
             putString("user_role", roleFinal)
             putString("region", selectedRegion)
             putString("branch", branchesFinal)
@@ -371,20 +494,40 @@ fun RegistrationFormScreen(
             putString("birth_day", birthDay.toString())
             putString("birth_month", birthMonth.toString())
             putString("birth_year", birthYear.toString())
-            putString("gender", gender)                      // 👈 חדש
-            if (roleFinal == "trainee") putString("belt_current", currentBeltId) else remove("belt_current")
-            apply()
+            putString("gender", gender)
+            putString("branch_type", branchType)
+            putBoolean("profile_completed", true)
+            putBoolean("registration_complete", true)
+            putBoolean("registration_form_completed", true)
+            putInt("registration_schema_version", 2)
+            putString("profile_completed_uid", completedUid)
+            putLong("profile_completed_at", completedAt)
+
+            if (roleFinal == "trainee") {
+                putString("current_belt", beltFinal)
+                putString("belt_current", beltFinal)
+            } else {
+                remove("current_belt")
+                remove("belt_current")
+            }
+
+            commit()
         }
+
+        Log.e(
+            REGISTRATION_LOG,
+            "saved USER profile_completed=true uid=$completedUid role=$roleFinal belt=$beltFinal"
+        )
 
         // Persist – KMP
         kmiPrefs.fullName = fullName
-        kmiPrefs.phone = phone
-        kmiPrefs.email = email
+        kmiPrefs.phone = phoneFinal
+        kmiPrefs.email = email.trim()
         kmiPrefs.region = selectedRegion
         kmiPrefs.branch = branchesFinal
         kmiPrefs.ageGroup = primaryGroup
-        kmiPrefs.username = username
-        kmiPrefs.password = password
+        kmiPrefs.username = if (isGoogleAuth) email.trim() else username
+        kmiPrefs.password = if (isGoogleAuth) "" else password
 
         // --- שמירה ל-Firestore: מאגר המשתמשים המרכזי ---
         val uid = FirebaseAuth.getInstance().currentUser?.uid
@@ -404,8 +547,11 @@ fun RegistrationFormScreen(
                 "uid" to uid,
                 "role" to roleFinal,
                 "fullName" to fullName,
-                "phone" to phone,
-                "email" to email,
+                "phone" to phoneFinal,
+                "phoneNumber" to phoneFinal,
+                "phoneRaw" to phone,
+                "email" to email.trim(),
+                "authProvider" to if (isGoogleAuth) "google" else "local",
                 "region" to selectedRegion,
                 "branches" to branchesListFinal,
                 "branchesCsv" to branchesFinal,
@@ -414,8 +560,20 @@ fun RegistrationFormScreen(
                 "primaryGroup" to primaryGroup,
                 "activeGroup" to activeGroupFinal,     // ✅ חדש
                 "birthDate" to birthDate,
-                "gender" to gender,                    // 👈 חדש
-                "belt" to if (roleFinal == "trainee") currentBeltId else "",
+                "gender" to gender,
+                "belt" to beltFinal,
+                "currentBelt" to beltFinal,
+
+// ✅ דגלים ישנים — נשארים לתאימות
+                "profileCompleted" to true,
+                "registrationComplete" to true,
+                "profileCompletedAt" to System.currentTimeMillis(),
+
+// ✅ דגל חדש וקשיח: רק מי שסיים את טופס הרישום החדש יקבל אותו
+                "registrationFormCompleted" to true,
+                "registrationSchemaVersion" to 2,
+                "registrationCompletedBy" to "registration_form_v2",
+
                 "subscribeSms" to subscribeSms,
                 "isActive" to true,
                 "createdAt" to System.currentTimeMillis(),
@@ -426,6 +584,12 @@ fun RegistrationFormScreen(
                 .collection("users")
                 .document(uid)
                 .set(firestoreData, SetOptions.merge())
+
+            Log.e(
+                REGISTRATION_LOG,
+                "firestore set users/$uid profileCompleted=true registrationComplete=true " +
+                        "registrationFormCompleted=true schema=2 role=$roleFinal belt=$beltFinal phoneLen=${phoneFinal.length}"
+            )
         }
 
         Toast.makeText(ctx, "הרישום נשמר בהצלחה ✅", Toast.LENGTH_SHORT).show()
@@ -503,9 +667,13 @@ fun RegistrationFormScreen(
             RegistrationTabs(
                 selectedTab = selectedTab,
                 onTabSelected = { newTab ->
-                    // ✅ ADMIN יכול לבחור חופשי
-                    if (isAdmin) {
+                    // ✅ ADMIN או Super Tester יכולים לבחור חופשי
+                    if (isAdmin || isSuperTester) {
                         selectedTab = newTab
+                        Log.e(
+                            REGISTRATION_LOG,
+                            "role tab manually selected by elevated user newTab=$newTab isAdmin=$isAdmin isSuperTester=$isSuperTester"
+                        )
                         return@RegistrationTabs
                     }
 
@@ -534,6 +702,7 @@ fun RegistrationFormScreen(
 // כל התוכן עבר לפה:
             RegistrationFormContent(
                 isCoach = isCoach,
+                isGoogleAuth = isGoogleAuth,
                 fullName = fullName,
                 onFullNameChange = {
                     fullName = it
@@ -613,7 +782,12 @@ fun RegistrationFormScreen(
                     acceptedTerms = it
                     if (it) termsError = false
                 },
-                onOpenTerms = onOpenTerms
+                onOpenTerms = onOpenTerms,
+                branchType = branchType,
+                onBranchTypeChange = { newType ->
+                    branchType = newType
+                    sp.edit().putString("branch_type", newType).apply()
+                }
             )
 
             if (!acceptedTerms && termsError) {

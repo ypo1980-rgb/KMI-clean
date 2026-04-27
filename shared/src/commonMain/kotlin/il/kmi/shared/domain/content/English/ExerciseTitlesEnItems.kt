@@ -441,8 +441,109 @@ object ExerciseTitlesEnItems {
         "הגנה מאיום אקדח מהצד לפני הזרוע - התוקף מימין" to "Defence from a Gun Threat from the Side, in Front of the Arm, Attacker on Right Side",
         "הגנה מאיום אקדח מהצד לפני הזרוע - התוקף משמאל" to "Defence from a Gun Threat from the Side, in Front of the Arm, Attacker on Left Side",
 
+        //----------------------------------------------
+        // BLACK belt — exact English titles from the PDF
+        //---------------------------------------------------
+    "ניתור ברגל שמאל ובעיטה רגילה ברגל ימין" to "Leaping with your Left Foot and a Regular Kick with your Right foot",  // ✔️ תקין
+    "ניתור ברגל שמאל ובעיטה לצד ברגל ימין" to "Leaping with your Left Foot and a Side-Kick with your Right foot",  // ✔️ תקין
+    "ניתור ברגל שמאל ובעיטה לצד ברגל שמאל" to "Leaping with your Left Foot and a Side-Kick with your Left foot",  // ✔️ תקין
+    "בעיטה לצד בסיבוב מלא בניתור" to "Leaping Side-Kick with Spin",  // ✔️ תקין
+    "בעיטת מגל לאחור בסיבוב בניתור" to "Leaping Backward Magal (Circular) Kick with Spin", // ✔️ תקין
+    "בעיטת הגנה לאחור בניתור" to "Leaping Backward Defensive Kick",  // ✔️ תקין
 
-        // חסר חגורה שחורה - להשלים
+    "הגנה פנימית נגד אגרוף שמאל - בעיטת הגנה" to "Internal Defence Against a Left Punch- Defensive Kick",
+    "הגנה פנימית נגד אגרוף שמאל - בעיטה לצד" to "Internal Defence Against a Left Punch- Side-Kick",
+    "הגנה פנימית נגד אגרוף שמאל - בעיטה רגילה לאחור" to "Internal Defence Against a Left Punch- Regular Kick Backward",
+    "הגנה פנימית נגד אגרוף שמאל - בעיטת מגל לאחור" to "Internal Defence Against a Left Punch- Backward Magal (Circular) kick",
+    "הגנה פנימית נגד אגרוף שמאל - בעיטת סטירה חיצונית" to "Internal Defence Against a Left Punch- External Slapping Kick",
+    "הגנה פנימית נגד אגרוף שמאל - בעיטת מגל לפנים" to "Internal Defence Against a Left Punch- Front Magal (Circular) kick",
+    "הגנה פנימית נגד אגרוף שמאל - גזיזה קדמית" to "Internal Defence Against a Left Punch- Forward Cutting Kick",
+    "הגנה נגד בעיטה רגילה - התחמקות בסיבוב" to "Defence Against a Regular Kick- Evasion with a Spin",
+    "הגנה נגד בעיטת מגל לפנים לראש - הדיפה באמת שמאל" to "Defence Against Front Magal (Circular) kick- The Leg Passed Over the Head",
+    "הגנה נגד בעיטת מגל לפנים לראש - רגל עברה מעל הראש" to "Defence Against Front Magal (Circular) kick- The Leg Passed Over the Head",
+    "הגנה נגד מגל לפנים  לראש - התחמקות גוף בסיבוב בגזיזה" to "Defence Against Front Magal (Circular) Kick - Evasion with a Spin and a Cutting Kick",
+    "הגנה נגד בעיטת סטירה - גזיזה" to "Defences Against a Slap Kick - Cutting Kick",
+    "שחרור מתפיסת נלסון" to "Release From A Nelson Hold",
+    "שחרור מחביקת צואר מהצד - משיכה לאחור" to "Release from Neck Hold from the Side - Pulling Backward",
+
+    "שחרור מחביקת צואר מאחור - משיכה לאחור" to "Release from Rear Neck Hold - Pulling Backward",
+    "שחרור מחביקת צואר מהצד - יד תפוסה" to "Release from Neck Hold from the Side - One Arm Caught",
+    "שחרור מחביקת צואר מהצד - זריקת רגל" to "Release from Neck Hold from the Side - Leg Throw",
+    "שחרור מחביקת צואר מהצד - ירידה לברך" to "Release from Neck Hold from the Side - Kneeling",
+    "שחרור מחביקת צואר מהצד - מהברך" to "Release from Neck Hold from the Side - Kneeling",
+    "שחרור מחביקה פתוחה מהצד" to "Release From an Open Body Hug From the Side",
+    "שחרור מחביקה סגורה מהצד - היד הרחוקה משוחררת" to "Release From a Closed Body Hug From the Side - the rear hand is free",
+    "שחרור מחביקה סגורה מהצד" to "Release From a Closed Body Hug From the Side",
+    "שחרור מחביקה פתוחה מאחור - הטלה" to "Release From an Open Body Hug From the Rear - Falling",
+    "שחרור מחביקה סגורה מאחור - הטלה" to "Release From a Closed Body Hug From the Rear - Falling",
+    "הגנה נגד מקל ארוך-התקפה לצד ימין מגן" to "Defence Against a Long Stick to the defender's Right Side",
+    "הגנה נגד מקל ארוך-התקפה לצד שמאל מגן" to "Defence Against a Long Stick to the defender's Left Side",
+
+    "הגנה נגד מקל ארוך מצד ימין" to "Defence Against a Long Stick from the Right Side",
+    "הגנה נגד מקל ארוך מצד שמאל" to "Defence Against a Long Stick from the Left Side",
+    "הגנה נגד מקל ארוך דקירה - צד חי" to "Defence Against a Long Stick Stab - Live Side",
+    "הגנה נגד מקל ארוך דקירה - צד מת" to "Defence Against a Long Stick Stab - Blind Side",
+
+    "הגנה נגד דקירה - צד חי ימין" to "Defence Against a Slash Attack to the Live Side - Right Side",
+    "הגנה נגד דקירה - צד חי שמאל" to "Defence Against a Slash Attack to the Live Side - Left Side",
+    "הגנה נגד דקירה - צד מת ימין" to "Defence Against a Slash Attack to the Blind Side - Right Side",
+    "הגנה נגד דקירה - צד מת שמאל" to "Defence Against a Slash Attack to the Blind Side - Left Side",
+
+    "מקל נגד סכין - דקירה רגילה" to "Stick Against Knife Defence Against a Regular Stab",
+    "מקל נגד סכין - דקירה מזרחית" to "Stick Against Knife Defence Against an Eastern Stab",
+    "מקל נגד סכין - דקירה ישרה" to "Stick Against Knife Defence Against a Straight Stab",
+    "מקל נגד סכין - דקירה מעל מצד ימין" to "Stick Against Knife Defence Against an Overhead Stab from the Right Side",
+    "מקל נגד סכין - דקירה מעל מצד שמאל" to "Stick Against a Knife Against a Regular Overhead Stab from the Left Side",
+    "מקל נגד סכין - דקירה מזרחית מצד ימין" to "Stick Against a Knife Against an Eastern Stab from the Right Side",
+    "מקל נגד סכין - דקירה מזרחית מצד שמאל" to "Stick Against a Knife Against an Eastern Stab from the Left Side",
+    "מקל נגד סכין - דקירה ישירה מצד ימין (פנימית)" to "Internal Defence with a Stick Against a Direct Stab from the Right Side",
+    "מקל נגד סכין - דקירה ישירה מצד ימין (חיצונית)" to "External Defence with a Stick Against a Direct Stab from the Right Side",
+    "מקל נגד סכין - דקירה ישירה מצד שמאל (פנימית)" to "Internal Defence with a Stick Against a Direct Stab from the Left Side",
+    "מקל נגד סכין - דקירה ישירה מצד שמאל (חיצונית)" to "External Defence with a Stick Against a Direct Stab from the Left Side",
+    "מקל אחד וסכין אחת - המקל בצד חי" to "One Stick and One Knife- Stick in the Live Side",
+    "מקל אחד וסכין אחת - המקל בצד מת" to "One Stick and One Knife- Stick in the Blind Side",
+    "מקל אחד וסכין אחת - הסכין קרוב" to "One Stick and One Knife- When the Knife is Closer",
+
+    "הגנה נגד איום אקדח לראש מלפנים" to "Defence from a Gun Threat from the Front to the Head",
+    "הגנה נגד איום אקדח צמוד לראש מלפנים" to "Defence from a Gun Threat from the Front - Barrel Touching the Head",
+    "הגנה נגד איום אקדח מלפנים - קנה קצר" to "Defence from a Gun Threat from the Front- Short Barrel",
+    "הגנה נגד איום אקדח לראש - צד ימין" to "Defence from a Gun Threat to the Head- Right Side",
+    "הגנה נגד איום אקדח לראש - צד שמאל" to "Defence from a Gun Threat to the Head- Left Side",
+    "הגנה נגד איום אקדח מאחור באלכסון - צד שמאל" to "Defence from a Gun Threat to the Head Diagonally from Behind- Left Side",
+    "הגנה נגד איום אקדח לראש מאחור" to "Defence from a Gun Threat to the Head from Behind",
+    "הגנה נגד איום אקדח מאחור בידיים מורמות" to "Defence from a Gun Threat from Behind with Hands Raised",
+    "הגנה נגד איום אקדח בהובלה" to "Defence Against a Gun Threat from Behind with the Attacker Leading",
+    "הגנה מאיום אקדח מאחור דחיפה" to "Defence Against a Gun Threat from Behind with the Attacker Pushing",
+
+        "1 מקל 1 סכין – מקל בצד חי" to "One Stick and One Knife- Stick in the Live Side",
+        "1 מקל 1 סכין – מקל בצד מת" to "One Stick and One Knife- Stick in the Blind Side",
+        "1 מקל 1 סכין – במקרה והסכין קרוב" to "One Stick and One Knife- When the Knife is Closer",
+        "הדמיה כנגד 2 תוקפים" to "Simulation Against Two Attackers",
+
+    "מכת מקל לראש" to "Stick Strike to the Head",
+    "מכת מקל לרקה" to "Stick Strike to the Temple",
+    "מכת מקל ללסת / צוואר" to "Stick Strike to the Jaw or Neck",
+    "מכת מקל לפרקי האצבעות" to "Stick Strike to the Knuckles",
+        "מכת מקל לעצם הבריח" to "Stick Strike to the Clavicle Bone",
+        "מכת מקל למרפק" to "Stick Strike to the Elbow",
+        "מכת מקל לשורש כף היד" to "Stick Strike to the Wrist",
+        "מכת מקל לברך" to "Stick Strike to the Knee",
+        "מכת מקל למפסעה" to "Stick Strike to the Groin",
+        "הצלפת מקל לצלעות" to "Stick Whip to the Ribs",
+        "דקירת מקל חיצונית לצלעות" to "External Stick Stab to the Ribs",
+        "דקירת מקל ישרה לבטן / לגרון" to "Straight Stick Stab to the Abdominal or Throat",
+        "דקירת מקל הפוכה" to "Reversed Stick Stab",
+        "מכה אופקית לצוואר" to "Horizontal Strike to the Neck",
+        "דקירה" to "Stab", "מכת מגל" to "Magal (Circular) Strike",
+        "שיסוף" to "Slash", "מכה למפשעה" to "Groin Strike",
+        "מכה לצד" to "Side Strike",
+        "מכה לאחור" to "Backward Strike", "מכה אופקית לאחור" to "Backward Horizontal Strike",
+        "מכה למפשעה" to "Groin Strike",
+        "מכת סנוקרת" to "Uppercut",
+        "מכה אופקית לאחור" to "Backward Horizontal Strike",
+        "מכה אופקית ובעיטה למפשעה" to "Horizontal Strike and a Regular Kick to the Groin",
+        "מכה אופקית ובעיטת הגנה" to "Horizontal Strike and a Defensive Kick",
+        "מכה לצד ובעיטה לצד" to "Side Strike and a Side Kick",
         )
 
 }

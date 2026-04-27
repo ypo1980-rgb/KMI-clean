@@ -1,6 +1,7 @@
 package il.kmi.app.screens.BeltQuestions
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -48,10 +49,13 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.ui.graphics.vector.ImageVector
 import il.kmi.app.domain.color
-
+import il.kmi.app.subscription.KmiAccess
+import il.kmi.app.subscription.AccessMode
+import il.kmi.app.subscription.AccessModeResolver
+import il.kmi.app.subscription.LockedContentPolicy
+import androidx.compose.ui.graphics.luminance
 
 // ✅ FIX: פונקציית נרמול אחת בלבד, ברמת קובץ (נראית לכולם, אין forward-ref ואין אמביגיוטי)
 private fun normText(raw: String): String =
@@ -137,62 +141,11 @@ private fun subjectTitleForUi(
     }
 }
 
-private fun shouldShowLockOnSubject(subjectId: String, title: String): Boolean {
-    val id = subjectId.trim().lowercase()
-    val t = title.trim().lowercase()
-
-    return id == "releases" ||
-            id == "releases_hugs" ||
-            id.startsWith("releases_") ||
-            id == "defense_root" ||
-            id.startsWith("def_") ||
-            id.contains("defense") ||
-            id.contains("knife") ||
-            id.contains("gun") ||
-            id.contains("stick") ||
-            t.contains("שחרור") ||
-            t.contains("הגנות") ||
-            t.contains("release") ||
-            t.contains("defense") ||
-            t.contains("defence")
-}
-
-private fun shouldShowLockOnByTopicSubItem(
-    parentSubjectId: String,
-    parentTitle: String,
-    itemTitle: String
-): Boolean {
-    val parentId = parentSubjectId.trim().lowercase()
-    val parent = parentTitle.trim().lowercase()
-    val item = itemTitle.trim().lowercase()
-
-    val parentLocked =
-        parentId == "releases" ||
-                parentId == "releases_hugs" ||
-                parentId.startsWith("releases_") ||
-                parentId == "defense_root" ||
-                parentId.startsWith("def_") ||
-                parentId.contains("defense") ||
-                parentId.contains("knife") ||
-                parentId.contains("gun") ||
-                parentId.contains("stick") ||
-                parent.contains("שחרור") ||
-                parent.contains("הגנות") ||
-                parent.contains("release") ||
-                parent.contains("defense") ||
-                parent.contains("defence")
-
-    val itemLocked =
-        item.contains("שחרור") ||
-                item.contains("הגנה") ||
-                item.contains("release") ||
-                item.contains("defense") ||
-                item.contains("defence") ||
-                item.contains("knife") ||
-                item.contains("gun") ||
-                item.contains("stick")
-
-    return parentLocked || itemLocked
+private fun isPremiumRootSubject(subjectId: String): Boolean {
+    return when (subjectId.trim().lowercase()) {
+        "releases", "defense_root", "defenses_root" -> true
+        else -> false
+    }
 }
 
 private fun withLockSuffix(text: String, locked: Boolean): String {
@@ -269,6 +222,7 @@ fun BeltQuestionsByTopicScreen(
     onOpenTopicWithSub: (belt: Belt, topic: String, subTopic: String) -> Unit = { _, _, _ -> },
     onOpenDefenseList: (belt: Belt, kind: String, pick: String) -> Unit = { _, _, _ -> },
     onOpenHardSubjectRoute: (belt: Belt, subjectId: String) -> Unit = { _, _ -> },
+    onOpenSubscription: () -> Unit,
     onOpenWeakPoints: (Belt) -> Unit = {},
     onOpenAllLists: (Belt) -> Unit = {},
     onOpenRandomPractice: (Belt) -> Unit = {},
@@ -283,6 +237,76 @@ fun BeltQuestionsByTopicScreen(
     val isEnglish = rememberIsEnglish()
     val ctx = LocalContext.current
     val notePrefs = remember(ctx) { ctx.getSharedPreferences("kmi_exercise_notes", Context.MODE_PRIVATE) }
+    val userSp = remember(ctx) { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
+
+    var accessRefreshTick by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(userSp) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (
+                key == "has_full_access" ||
+                key == "full_access" ||
+                key == "subscription_active" ||
+                key == "is_subscribed" ||
+                key == "sub_product" ||
+                key == "access_changed_at"
+            ) {
+                accessRefreshTick++
+
+                android.util.Log.e(
+                    "KMI_ACCESS_MODE",
+                    "BY_TOPIC pref changed key=$key tick=$accessRefreshTick " +
+                            "isAdmin=${KmiAccess.isAdmin(userSp)} " +
+                            "hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
+                            "has_full_access=${userSp.getBoolean("has_full_access", false)} " +
+                            "full_access=${userSp.getBoolean("full_access", false)} " +
+                            "subscription_active=${userSp.getBoolean("subscription_active", false)} " +
+                            "is_subscribed=${userSp.getBoolean("is_subscribed", false)} " +
+                            "sub_product=${userSp.getString("sub_product", "")}"
+                )
+            }
+        }
+
+        userSp.registerOnSharedPreferenceChangeListener(listener)
+
+        onDispose {
+            userSp.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    val hasManagerAccess = remember(accessRefreshTick) {
+        KmiAccess.isAdmin(userSp) ||
+                KmiAccess.hasFullAccess(userSp) ||
+                userSp.getBoolean("has_full_access", false) ||
+                userSp.getBoolean("full_access", false) ||
+                userSp.getBoolean("subscription_active", false) ||
+                userSp.getBoolean("is_subscribed", false) ||
+                !userSp.getString("sub_product", "").isNullOrBlank()
+    }
+
+    val accessMode = AccessModeResolver.resolve(
+        hasManagerAccess = hasManagerAccess
+    )
+
+    val hasAccess = accessMode == AccessMode.OPEN
+
+    android.util.Log.e(
+        "KMI_ACCESS_MODE",
+        "BY_TOPIC resolved hasManagerAccess=$hasManagerAccess " +
+                "accessMode=$accessMode tick=$accessRefreshTick " +
+                "isAdmin=${KmiAccess.isAdmin(userSp)} " +
+                "hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
+                "has_full_access=${userSp.getBoolean("has_full_access", false)} " +
+                "full_access=${userSp.getBoolean("full_access", false)} " +
+                "subscription_active=${userSp.getBoolean("subscription_active", false)} " +
+                "is_subscribed=${userSp.getBoolean("is_subscribed", false)} " +
+                "sub_product=${userSp.getString("sub_product", "")}"
+    )
+
+    android.util.Log.e(
+        "KMI_LOCK_TRACE",
+        "BeltQuestionsByTopicScreen LIVE hasAccess=$hasAccess accessMode=$accessMode"
+    )
 
     // State לניהול התפריט המהיר
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -292,7 +316,7 @@ fun BeltQuestionsByTopicScreen(
 
     if (showPracticeMenu) {
         PracticeMenuDialog(
-            canUseExtras = true,
+            canUseExtras = hasAccess,
             defaultBelt = effectiveBelt,
             onDismiss = { showPracticeMenu = false },
             onRandomPractice = { beltArg ->
@@ -345,6 +369,15 @@ fun BeltQuestionsByTopicScreen(
             ) {
                 TopicsBySubjectCard(
                     currentBelt = effectiveBelt,
+                    accessMode = accessMode,
+                    hasAccess = hasAccess,
+                    onOpenSubscription = {
+                        android.util.Log.e(
+                            "KMI_LOCK_TRACE",
+                            "BeltQuestionsByTopicScreen -> forwarding onOpenSubscription"
+                        )
+                        onOpenSubscription()
+                    },
                     onSubjectClick = { belt, subject ->
                         effectiveBelt = belt
                         onOpenSubject(belt, subject)
@@ -422,6 +455,8 @@ fun BeltQuestionsByTopicScreen(
                 onExpandedChange = { quickMenuExpanded = it },
                 triggerMode = QuickMenuTriggerMode.BottomBar,
                 includePractice = true,
+                hasFullAccess = hasAccess,
+                onLockedItemClick = { onOpenSubscription() },
                 onWeakPoints = { onOpenWeakPoints(effectiveBelt) },
                 onAllLists = { onOpenAllLists(effectiveBelt) },
                 onPractice = { showPracticeMenu = true },
@@ -543,32 +578,46 @@ private fun SubjectRootCardPremium(
     subjectId: String,
     countText: String,
     showLeftBadge: Boolean = false,
+    isDarkMode: Boolean = false,
     onClick: () -> Unit
 ) {
     val isEnglish = rememberIsEnglish()
     val accent = remember(subjectId) { subjectAccentColor(subjectId) }
     val icon = remember(subjectId) { subjectIconFor(subjectId) }
 
+    val titleColor = if (isDarkMode) Color.White else Color(0xFF111827)
+    val subtitleColor = if (isDarkMode) {
+        Color.White.copy(alpha = 0.74f)
+    } else {
+        Color(0xFF64748B)
+    }
+    val countColor = accent.copy(alpha = 1f)
+
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        color = Color.Transparent,
+        shape = RoundedCornerShape(16.dp),
+        color = if (isDarkMode) Color.White.copy(alpha = 0.055f) else Color.Transparent,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
+        border = if (isDarkMode) {
+            BorderStroke(1.dp, Color.White.copy(alpha = 0.07f))
+        } else {
+            null
+        },
         modifier = Modifier.fillMaxWidth()
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 9.dp),
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (isEnglish) {
                     Box(
                         modifier = Modifier
-                            .width(3.dp)
-                            .height(if (showLeftBadge) 34.dp else 26.dp)
+                            .width(4.dp)
+                            .height(if (showLeftBadge) 38.dp else 30.dp)
                     ) {
                         Surface(
                             shape = RoundedCornerShape(999.dp),
@@ -579,16 +628,20 @@ private fun SubjectRootCardPremium(
 
                     Spacer(modifier = Modifier.width(10.dp))
 
-                    Box(
-                        modifier = Modifier.size(24.dp),
-                        contentAlignment = Alignment.Center
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = accent.copy(alpha = 0.18f),
+                        border = BorderStroke(1.dp, accent.copy(alpha = 0.26f)),
+                        modifier = Modifier.size(30.dp)
                     ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = accent,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = accent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(10.dp))
@@ -600,9 +653,9 @@ private fun SubjectRootCardPremium(
                         Text(
                             text = title,
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             textAlign = TextAlign.Start,
-                            color = Color(0xFF111827),
+                            color = titleColor,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
@@ -612,8 +665,9 @@ private fun SubjectRootCardPremium(
                             Text(
                                 text = subtitle,
                                 style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Start,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = subtitleColor,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 1
                             )
@@ -624,9 +678,9 @@ private fun SubjectRootCardPremium(
                         Text(
                             text = countText,
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             textAlign = TextAlign.Start,
-                            color = accent,
+                            color = countColor,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
@@ -639,9 +693,9 @@ private fun SubjectRootCardPremium(
                         Text(
                             text = title,
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             textAlign = TextAlign.Right,
-                            color = Color(0xFF111827),
+                            color = titleColor,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
@@ -651,8 +705,9 @@ private fun SubjectRootCardPremium(
                             Text(
                                 text = subtitle,
                                 style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Right,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = subtitleColor,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 1
                             )
@@ -663,9 +718,9 @@ private fun SubjectRootCardPremium(
                         Text(
                             text = countText,
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             textAlign = TextAlign.Right,
-                            color = accent,
+                            color = countColor,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
@@ -673,24 +728,28 @@ private fun SubjectRootCardPremium(
 
                     Spacer(modifier = Modifier.width(10.dp))
 
-                    Box(
-                        modifier = Modifier.size(24.dp),
-                        contentAlignment = Alignment.Center
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = accent.copy(alpha = 0.18f),
+                        border = BorderStroke(1.dp, accent.copy(alpha = 0.26f)),
+                        modifier = Modifier.size(30.dp)
                     ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = accent,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = accent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(10.dp))
 
                     Box(
                         modifier = Modifier
-                            .width(3.dp)
-                            .height(if (showLeftBadge) 34.dp else 26.dp)
+                            .width(4.dp)
+                            .height(if (showLeftBadge) 38.dp else 30.dp)
                     ) {
                         Surface(
                             shape = RoundedCornerShape(999.dp),
@@ -708,6 +767,9 @@ private fun SubjectRootCardPremium(
 internal fun TopicsBySubjectCard(
     modifier: Modifier = Modifier,
     currentBelt: Belt,
+    accessMode: AccessMode,
+    hasAccess: Boolean = true,
+    onOpenSubscription: () -> Unit,
     onSubjectClick: (Belt, SubjectTopic) -> Unit = { _, _ -> },
     onOpenTopic: (Belt, String) -> Unit = { _, _ -> },
     onOpenTopicWithSub: (belt: Belt, topic: String, subTopic: String) -> Unit = { _, _, _ -> },
@@ -717,6 +779,9 @@ internal fun TopicsBySubjectCard(
 ) {
 
     val isEnglish = rememberIsEnglish()
+
+    // בודקים את ה-Theme של האפליקציה בפועל, לא את מצב המכשיר.
+    val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
     val subjects = il.kmi.app.domain.TopicsBySubjectRegistry.allSubjects()
 
@@ -814,7 +879,8 @@ internal fun TopicsBySubjectCard(
         visibleSubjectsSplit,
         uiSectionCounts,
         subjectCounts,
-        isEnglish
+        isEnglish,
+        hasAccess
     ) {
         SubjectTopicsUiLogic.buildSubjectCardModels(
             subjects = visibleSubjectsSplit.withSubTopics,
@@ -830,21 +896,40 @@ internal fun TopicsBySubjectCard(
             )
 
             val titleWithLock =
-                if (shouldShowLockOnSubject(card.id, baseTitle)) "$baseTitle 🔒"
+                if (LockedContentPolicy.shouldShowLock(accessMode, baseTitle)) "$baseTitle 🔒"
                 else baseTitle
 
             card.copy(
                 title = titleWithLock,
                 countText = translateCardCountText(card.countText)
             )
-        }
+        }.sortedWith(
+            compareByDescending<SubjectTopicsUiLogic.SubjectCardModel> {
+                isPremiumRootSubject(it.id)
+            }.thenBy {
+                when (it.id.trim().lowercase()) {
+                    "defense_root", "defenses_root" -> 0
+                    "releases" -> 1
+                    else -> 2
+                }
+            }
+        )
+    }
+
+    val releasesRootCard = remember(subjectsWithSubTopicsCards) {
+        subjectsWithSubTopicsCards.firstOrNull { it.id == "releases" }
+    }
+
+    val otherSubjectsWithSubTopicsCards = remember(subjectsWithSubTopicsCards) {
+        subjectsWithSubTopicsCards.filter { it.id != "releases" }
     }
 
     val subjectsWithoutSubTopicsCards = remember(
         visibleSubjectsSplit,
         uiSectionCounts,
         subjectCounts,
-        isEnglish
+        isEnglish,
+        hasAccess
     ) {
         SubjectTopicsUiLogic.buildSubjectCardModels(
             subjects = visibleSubjectsSplit.withoutSubTopics,
@@ -860,7 +945,7 @@ internal fun TopicsBySubjectCard(
             )
 
             val titleWithLock =
-                if (shouldShowLockOnSubject(card.id, baseTitle)) "$baseTitle 🔒"
+                if (LockedContentPolicy.shouldShowLock(accessMode, baseTitle)) "$baseTitle 🔒"
                 else baseTitle
 
             card.copy(
@@ -870,7 +955,7 @@ internal fun TopicsBySubjectCard(
         }
     }
 
-    val defenseRootCard = remember(totalDefense, defenseDialogCountsMap, isEnglish) {
+    val defenseRootCard = remember(totalDefense, defenseDialogCountsMap, isEnglish, hasAccess) {
         val base = SubjectTopicsUiLogic.buildDefenseRootCard(
             totalDefense = totalDefense,
             formatCount = ::formatCount,
@@ -884,7 +969,7 @@ internal fun TopicsBySubjectCard(
         )
 
         base.copy(
-            title = "$baseTitle 🔒",
+            title = if (hasAccess) baseTitle else "$baseTitle 🔒",
             countText = translateCardCountText(base.countText)
         )
     }
@@ -912,8 +997,17 @@ internal fun TopicsBySubjectCard(
         Surface(
             shape = RoundedCornerShape(20.dp),
             tonalElevation = 1.dp,
-            shadowElevation = 6.dp,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+            shadowElevation = if (isDarkMode) 8.dp else 6.dp,
+            color = if (isDarkMode) {
+                Color(0xFF101827).copy(alpha = 0.98f)
+            } else {
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.97f)
+            },
+            border = if (isDarkMode) {
+                BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+            } else {
+                null
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp)
@@ -940,20 +1034,24 @@ internal fun TopicsBySubjectCard(
                 ) {
                     Text(
                         text = if (isEnglish) "Subjects (Categories)" else "נושאים (קטגוריות)",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
+                        style = if (isDarkMode) {
+                            MaterialTheme.typography.titleSmall
+                        } else {
+                            MaterialTheme.typography.labelLarge
+                        },
+                        fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 2.dp),
-                        color = Color(0xFF263238)
+                            .padding(top = 4.dp, bottom = 6.dp),
+                        color = if (isDarkMode) Color.White else Color(0xFF263238)
                     )
 
                 if (!countsReady) {
                     Text(
                         text = if (isEnglish) "Loading data..." else "טוען נתונים…",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Color.White.copy(alpha = 0.78f),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -961,64 +1059,119 @@ internal fun TopicsBySubjectCard(
 
                 Spacer(Modifier.height(4.dp))
 
-                SubjectRootCardPremium(
-                    title = defenseRootCard.title,
-                    subtitle = "",
-                    subjectId = "defense_root",
-                    countText = defenseRootCard.countText,
-                    showLeftBadge = true,
-                    onClick = {
-                        android.util.Log.e(
-                            "KMI_NAV",
-                            "TOPICS_CARD defense root -> open defense picker belt=${currentBelt.id}"
+                    val pinnedLockCards = buildList {
+                        add(
+                            Triple(
+                                "defense_root",
+                                defenseRootCard.title,
+                                defenseRootCard.countText
+                            )
                         )
-                        askDefense = true
-                    }
-                )
 
-                HorizontalDivider(
-                    thickness = 0.8.dp,
-                    color = Color(0x14000000),
-                    modifier = Modifier.padding(horizontal = 6.dp)
-                )
-
-                SubjectRootCardPremium(
-                    title = handsRootCard.title,
-                    subtitle = "",
-                    subjectId = "hands_root",
-                    countText = handsRootCard.countText,
-                    showLeftBadge = true,
-                    onClick = { askHands = true }
-                )
-
-                HorizontalDivider(
-                    thickness = 0.8.dp,
-                    color = Color(0x14000000),
-                    modifier = Modifier.padding(horizontal = 6.dp)
-                )
-
-                // ✅ מציגים נושאים עם תתי־נושאים
-                subjectsWithSubTopicsCards.forEachIndexed { index, card ->
-                    SubjectRootCardPremium(
-                        title = card.title,
-                        subtitle = "",
-                        subjectId = card.id,
-                        countText = card.countText,
-                        onClick = {
-                            if (card.id == "releases_hugs") {
-                                onOpenHardSubjectRoute(currentBelt, "releases_hugs")
-                            } else {
-                                askSubTopicsForId = card.id
-                            }
+                        releasesRootCard?.let { releasesCard ->
+                            add(
+                                Triple(
+                                    releasesCard.id,
+                                    releasesCard.title,
+                                    releasesCard.countText
+                                )
+                            )
                         }
+                    }
+
+                    pinnedLockCards.forEachIndexed { index, card ->
+                        SubjectRootCardPremium(
+                            title = card.second,
+                            subtitle = "",
+                            subjectId = card.first,
+                            countText = card.third,
+                            showLeftBadge = true,
+                            isDarkMode = isDarkMode,
+                            onClick = {
+                                when (card.first) {
+                                    "defense_root" -> {
+                                        android.util.Log.e(
+                                            "KMI_NAV",
+                                            "TOPICS_CARD defense root -> open defense dialog belt=${currentBelt.id}"
+                                        )
+                                        askDefense = true
+                                    }
+
+                                    "releases" -> {
+                                        android.util.Log.e(
+                                            "KMI_NAV",
+                                            "TOPICS_CARD releases root -> open sub-topics dialog belt=${currentBelt.id}"
+                                        )
+                                        askSubTopicsForId = "releases"
+                                    }
+                                }
+                            }
+                        )
+
+                        HorizontalDivider(
+                            thickness = 0.8.dp,
+                            color = if (isDarkMode) {
+                                Color.White.copy(alpha = 0.08f)
+                            } else {
+                                Color(0x14000000)
+                            },
+                            modifier = Modifier.padding(horizontal = if (isDarkMode) 8.dp else 6.dp)
+                        )
+                    }
+
+                    SubjectRootCardPremium(
+                        title = handsRootCard.title,
+                        subtitle = "",
+                        subjectId = "hands_root",
+                        countText = handsRootCard.countText,
+                        showLeftBadge = true,
+                        isDarkMode = isDarkMode,
+                        onClick = { askHands = true }
                     )
 
                     HorizontalDivider(
                         thickness = 0.8.dp,
-                        color = Color(0x14000000),
-                        modifier = Modifier.padding(horizontal = 6.dp)
+                        color = if (isDarkMode) {
+                            Color.White.copy(alpha = 0.08f)
+                        } else {
+                            Color(0x14000000)
+                        },
+                        modifier = Modifier.padding(horizontal = if (isDarkMode) 8.dp else 6.dp)
                     )
-                }
+
+                    // ✅ שאר הנושאים עם תתי־נושאים (בלי releases שכבר הוצג למעלה)
+                    otherSubjectsWithSubTopicsCards
+                        .filter { it.id != "defense_root" && it.id != "defenses_root" }
+                        .forEachIndexed { index, card ->
+                            SubjectRootCardPremium(
+                                title = card.title,
+                                subtitle = "",
+                                subjectId = card.id,
+                                countText = card.countText,
+                                isDarkMode = isDarkMode,
+                                onClick = {
+                                    if (card.id == "releases_hugs") {
+                                        android.util.Log.e(
+                                            "KMI_NAV",
+                                            "TOPICS_CARD releases_hugs -> open premium gate belt=${currentBelt.id}"
+                                        )
+                                        onOpenHardSubjectRoute(currentBelt, "releases_hugs")
+                                    } else {
+                                        askSubTopicsForId = card.id
+                                    }
+                                }
+                            )
+
+                            HorizontalDivider(
+                                thickness = 0.8.dp,
+                                color = if (isDarkMode) {
+                                    Color.White.copy(alpha = 0.08f)
+                                } else {
+                                    Color(0x14000000)
+                                },
+                                modifier = Modifier.padding(horizontal = if (isDarkMode) 8.dp else 6.dp)
+                            )
+                        }
 
                 // ✅ מציגים נושאים בלי תתי־נושאים
                     subjectsWithoutSubTopicsCards
@@ -1026,12 +1179,13 @@ internal fun TopicsBySubjectCard(
                         .forEachIndexed { index, card ->
 
                             val subject = subjects.firstOrNull { it.id == card.id } ?: return@forEachIndexed
-                    SubjectRootCardPremium(
-                        title = card.title,
-                        subtitle = "",
-                        subjectId = card.id,
-                        countText = card.countText,
-                        onClick = {
+                            SubjectRootCardPremium(
+                                title = card.title,
+                                subtitle = "",
+                                subjectId = card.id,
+                                countText = card.countText,
+                                isDarkMode = isDarkMode,
+                                onClick = {
                             when (card.id) {
                                 "topic_kavaler" -> {
                                     val action = SubjectTopicsUiLogic.buildOpenSubjectUiAction(
@@ -1064,8 +1218,12 @@ internal fun TopicsBySubjectCard(
                     if (index != subjectsWithoutSubTopicsCards.lastIndex) {
                         HorizontalDivider(
                             thickness = 0.8.dp,
-                            color = Color(0x14000000),
-                            modifier = Modifier.padding(horizontal = 6.dp)
+                            color = if (isDarkMode) {
+                                Color.White.copy(alpha = 0.08f)
+                            } else {
+                                Color(0x14000000)
+                            },
+                            modifier = Modifier.padding(horizontal = if (isDarkMode) 8.dp else 6.dp)
                         )
                     }
                 }
@@ -1073,25 +1231,40 @@ internal fun TopicsBySubjectCard(
                     if (askDefense) {
                         DefenseCategoryPickDialogModern(
                             counts = defenseDialogCountsMap,
+                            hasAccess = hasAccess,
                             onDismiss = { askDefense = false },
                             onPick = { picked ->
                                 askDefense = false
 
                                 when (val decision = SubjectTopicsUiLogic.resolveDefenseDialogPick(picked)) {
                                     is SubjectTopicsUiLogic.DefenseDialogDecision.AskKind -> {
-                                        askKind = decision.kind
+                                        val canOpen =
+                                            accessMode == AccessMode.OPEN
+
+                                        if (!canOpen) {
+                                            android.util.Log.e(
+                                                "KMI_LOCK_TRACE",
+                                                "DEFENSE ROOT BLOCKED -> open subscription for kind='${decision.kind}'"
+                                            )
+                                            onOpenSubscription()
+                                        } else {
+                                            askKind = decision.kind
+                                        }
                                     }
 
                                     is SubjectTopicsUiLogic.DefenseDialogDecision.OpenHardSubject -> {
-                                        android.util.Log.e(
-                                            "KMI_NAV",
-                                            "Defense dialog -> hard subject '${decision.subjectId}'"
-                                        )
-                                        android.util.Log.e(
-                                            "KMI_NAV",
-                                            "TOPICS_CARD before onOpenHardSubjectRoute belt=${currentBelt.id} subjectId='${decision.subjectId}'"
-                                        )
-                                        onOpenHardSubjectRoute(currentBelt, decision.subjectId)
+                                        val canOpen =
+                                            LockedContentPolicy.canOpenTopic(accessMode, decision.subjectId)
+
+                                        if (!canOpen) {
+                                            android.util.Log.e(
+                                                "KMI_LOCK_TRACE",
+                                                "DEFENSE ROOT BLOCKED -> open subscription for subjectId='${decision.subjectId}'"
+                                            )
+                                            onOpenSubscription()
+                                        } else {
+                                            onOpenHardSubjectRoute(currentBelt, decision.subjectId)
+                                        }
                                     }
 
                                     SubjectTopicsUiLogic.DefenseDialogDecision.None -> Unit
@@ -1104,6 +1277,7 @@ internal fun TopicsBySubjectCard(
                         DefensePickModeDialogModern(
                             kind = kind,
                             counts = defensePickCountsMap,
+                            hasAccess = hasAccess,
                             onDismiss = { askKind = null },
                             onPick = { picked ->
                                 askKind = null
@@ -1112,19 +1286,33 @@ internal fun TopicsBySubjectCard(
 
                                 when (val decision = SubjectTopicsUiLogic.resolveDefenseKindPick(kind, pickedClean)) {
                                     is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenLegacyDefenses -> {
-                                        onOpenDefenseList(
-                                            currentBelt,
-                                            decision.kind,
-                                            decision.pick
-                                        )
+                                        val canOpen =
+                                            accessMode == AccessMode.OPEN
+
+                                        if (!canOpen) {
+                                            android.util.Log.e(
+                                                "KMI_LOCK_TRACE",
+                                                "DEFENSE KIND BLOCKED -> open subscription kind='${decision.kind}' pick='${decision.pick}'"
+                                            )
+                                            onOpenSubscription()
+                                        } else {
+                                            onOpenDefenseList(
+                                                currentBelt,
+                                                decision.kind,
+                                                decision.pick
+                                            )
+                                        }
                                     }
 
                                     is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenHardSubject -> {
-                                        android.util.Log.e(
-                                            "KMI_NAV",
-                                            "TOPICS_CARD kind before onOpenHardSubjectRoute belt=${currentBelt.id} subjectId='${decision.subjectId}'"
-                                        )
-                                        onOpenHardSubjectRoute(currentBelt, decision.subjectId)
+                                        val canOpen =
+                                            LockedContentPolicy.canOpenTopic(accessMode, decision.subjectId)
+
+                                        if (!canOpen) {
+                                            onOpenSubscription()
+                                        } else {
+                                            onOpenHardSubjectRoute(currentBelt, decision.subjectId)
+                                        }
                                     }
 
                                     SubjectTopicsUiLogic.DefenseKindPickDecision.None -> Unit
@@ -1192,17 +1380,17 @@ internal fun TopicsBySubjectCard(
 
                         val counts = subTopicsPickCountsBySubjectId[id].orEmpty()
 
-                        val displayPicks = remember(dialogData.picks, dialogData.base, isEnglish) {
+                        val displayPicks = remember(dialogData.picks, dialogData.base, isEnglish, hasAccess) {
                             dialogData.picks.map { rawPick ->
                                 val uiTitle = subTopicTitleForUi(rawPick.trim(), isEnglish)
 
                                 withLockSuffix(
                                     uiTitle,
-                                    shouldShowLockOnByTopicSubItem(
-                                        parentSubjectId = dialogData.base?.id.orEmpty(),
-                                        parentTitle = dialogData.base?.titleHeb.orEmpty(),
-                                        itemTitle = rawPick
-                                    )
+                                    accessMode != AccessMode.OPEN &&
+                                            LockedContentPolicy.shouldShowLock(
+                                                accessMode,
+                                                dialogData.base?.titleHeb.orEmpty()
+                                            )
                                 )
                             }
                         }
@@ -1220,6 +1408,23 @@ internal fun TopicsBySubjectCard(
                                 val picked = dialogData.picks.firstOrNull {
                                     subTopicTitleForUi(it, isEnglish) == pickedDisplayClean
                                 } ?: pickedDisplayClean
+
+                                val isLockedPick =
+                                    accessMode != AccessMode.OPEN &&
+                                            LockedContentPolicy.shouldShowLock(
+                                                accessMode,
+                                                dialogData.base?.titleHeb.orEmpty()
+                                            )
+
+                                android.util.Log.e(
+                                    "KMI_LOCK_TRACE",
+                                    "BY_TOPIC onPick parentId='${dialogData.base?.id}' parentTitle='${dialogData.base?.titleHeb}' pickedDisplay='$pickedDisplay' picked='$picked' hasAccess=$hasAccess accessMode=$accessMode isLockedPick=$isLockedPick"
+                                )
+
+                                if (isLockedPick) {
+                                    onOpenSubscription()
+                                    return@SubTopicsPickModeDialogModern
+                                }
 
                                 val decision = SubjectTopicsUiLogic.resolveSubTopicPick(
                                     base = dialogData.base,

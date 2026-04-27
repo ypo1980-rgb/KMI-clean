@@ -275,6 +275,15 @@ fun FloatingQuickMenu(
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val accentColor = accentColorOverride ?: belt.color
+    val isMenuLocked = !hasFullAccess
+
+    LaunchedEffect(hasFullAccess) {
+        android.util.Log.e(
+            "KMI_LOCK_DEBUG",
+            "🔥 hasFullAccess=$hasFullAccess  →  LOCK SHOULD BE = ${!hasFullAccess}"
+        )
+    }
+
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
     // ✅ עוזר לסגור את הרשימה לפני פעולה (כולל ניווט)
@@ -583,6 +592,28 @@ private fun PremiumQuickMenuRow(
     isLocked: Boolean = false,
     onClick: () -> Unit
 ){
+    val lockPulse = rememberInfiniteTransition(label = "quickMenuLockPulse")
+
+    val lockScale by lockPulse.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "quickMenuLockScale"
+    )
+
+    val lockGlowAlpha by lockPulse.animateFloat(
+        initialValue = 0.10f,
+        targetValue = 0.26f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "quickMenuLockGlow"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -616,11 +647,11 @@ private fun PremiumQuickMenuRow(
 
                 if (isLocked) {
                     Spacer(Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.Filled.Lock,
-                        contentDescription = null,
-                        tint = accentColor.copy(alpha = 0.90f),
-                        modifier = Modifier.size(14.dp)
+
+                    PremiumAnimatedLockIcon(
+                        accentColor = accentColor,
+                        scale = lockScale,
+                        glowAlpha = lockGlowAlpha
                     )
                 }
             }
@@ -631,12 +662,12 @@ private fun PremiumQuickMenuRow(
                 horizontalArrangement = Arrangement.End
             ) {
                 if (isLocked) {
-                    Icon(
-                        imageVector = Icons.Filled.Lock,
-                        contentDescription = null,
-                        tint = accentColor.copy(alpha = 0.90f),
-                        modifier = Modifier.size(14.dp)
+                    PremiumAnimatedLockIcon(
+                        accentColor = accentColor,
+                        scale = lockScale,
+                        glowAlpha = lockGlowAlpha
                     )
+
                     Spacer(Modifier.width(8.dp))
                 }
 
@@ -657,6 +688,53 @@ private fun PremiumQuickMenuRow(
             PremiumQuickMenuIcon(
                 icon = icon,
                 accentColor = accentColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun PremiumAnimatedLockIcon(
+    accentColor: Color,
+    scale: Float,
+    glowAlpha: Float
+) {
+    Box(
+        modifier = Modifier
+            .size(22.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(
+                        accentColor.copy(alpha = glowAlpha),
+                        Color.Transparent
+                    ),
+                    radius = 44f
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(accentColor.copy(alpha = 0.16f))
+                .border(
+                    width = 1.dp,
+                    color = accentColor.copy(alpha = 0.38f),
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Lock,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(12.dp)
             )
         }
     }

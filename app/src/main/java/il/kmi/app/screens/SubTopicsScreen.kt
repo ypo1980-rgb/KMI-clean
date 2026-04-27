@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.StarBorder
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
@@ -264,7 +265,10 @@ fun SubTopicsScreen(
     val currentLang = langManager.getCurrentLanguage()
     val isEnglish = currentLang == AppLanguage.ENGLISH
 
-    // ✅ מפענחים את שם הנושא (למקרה שעבר דרך ה-URL Encoded)
+// ✅ לפי מצב ה-Theme של האפליקציה בפועל, לא לפי מצב המכשיר בלבד
+    val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+// ✅ מפענחים את שם הנושא (למקרה שעבר דרך ה-URL Encoded)
     val topicDecoded = remember(topic) { Uri.decode(topic).trim() }
 
     // ✅ FIX: alias-ים של שחרורים ("מתפיסות", "חניקות", "מחביקות"...)
@@ -439,6 +443,12 @@ fun SubTopicsScreen(
 
     val buttonSpacing = 12.dp
 
+// ===== QUICK MENU STATE =====
+    var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
+
+// ⛔ כרגע חוסמים גישה עד שהמנויים עובדים
+    val hasAccess = false
+
     data class OpenedExerciseRequest(
         val belt: Belt,
         val item: String
@@ -489,8 +499,8 @@ fun SubTopicsScreen(
                 verticalArrangement = Arrangement.spacedBy(buttonSpacing),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                if (isHardFlow && hardSubSections.isNotEmpty()) {
 
+                if (isHardFlow && hardSubSections.isNotEmpty()) {
                     hardSubSections.forEach { section ->
                         val totalCount = section.totalItemsCount()
 
@@ -508,6 +518,7 @@ fun SubTopicsScreen(
                         HardBeltGroupCard(
                             belt = group.belt,
                             items = group.items,
+                            isDarkMode = isDarkMode,
                             onOpenExercise = { item ->
                                 openedExerciseRequest = OpenedExerciseRequest(
                                     belt = group.belt,
@@ -669,6 +680,29 @@ fun SubTopicsScreen(
                     }
                 }
             }
+
+            // ===== QUICK MENU (FLOATING אמיתי) =====
+            il.kmi.app.ui.FloatingQuickMenu(
+                belt = belt,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 12.dp, bottom = 84.dp),
+                expanded = quickMenuExpanded,
+                onExpandedChange = { quickMenuExpanded = it },
+                triggerMode = il.kmi.app.ui.QuickMenuTriggerMode.BottomBar,
+                includePractice = true,
+                hasFullAccess = hasAccess,
+                onLockedItemClick = {
+                    Log.e("KMI_LOCK", "LOCK CLICKED → open subscription")
+                },
+                onWeakPoints = { },
+                onAllLists = { },
+                onPractice = { },
+                onSummary = { },
+                onVoice = { },
+                onPdf = { }
+            )
         }
     }
 
@@ -1006,6 +1040,7 @@ private fun HardSubTopicCategoryCard(
 private fun HardBeltGroupCard(
     belt: Belt,
     items: List<String>,
+    isDarkMode: Boolean = false,
     onOpenExercise: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -1044,9 +1079,18 @@ private fun HardBeltGroupCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        color = belt.lightColor,
-        tonalElevation = 2.dp,
-        shadowElevation = 3.dp
+        color = if (isDarkMode) {
+            Color(0xFF111827)
+        } else {
+            belt.lightColor
+        },
+        tonalElevation = if (isDarkMode) 0.dp else 2.dp,
+        shadowElevation = if (isDarkMode) 0.dp else 3.dp,
+        border = if (isDarkMode) {
+            BorderStroke(1.dp, belt.color.copy(alpha = 0.45f))
+        } else {
+            null
+        }
     ) {
         Column(
             modifier = Modifier
@@ -1086,6 +1130,7 @@ private fun HardBeltGroupCard(
                 HardExerciseLegacyRow(
                     belt = belt,
                     itemName = itemName,
+                    isDarkMode = isDarkMode,
                     onOpenExercise = onOpenExercise
                 )
 
@@ -1102,6 +1147,7 @@ private fun HardBeltGroupCard(
 private fun HardExerciseLegacyRow(
     belt: Belt,
     itemName: String,
+    isDarkMode: Boolean = false,
     onOpenExercise: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -1112,13 +1158,35 @@ private fun HardExerciseLegacyRow(
         mutableStateOf(il.kmi.app.favorites.FavoritesStore.isFavorite(itemName))
     }
 
+    val rowBgColor = if (isDarkMode) {
+        Color(0xFF1E293B)
+    } else {
+        Color.White
+    }
+
+    val rowTextColor = if (isDarkMode) {
+        Color(0xFFF8FAFC)
+    } else {
+        Color(0xFF263238)
+    }
+
+    val emptyStarColor = if (isDarkMode) {
+        Color.White.copy(alpha = 0.78f)
+    } else {
+        Color(0xFF90A4AE)
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp)),
-        color = Color.White,
-        tonalElevation = 1.dp,
-        shadowElevation = 1.dp
+        color = rowBgColor,
+        tonalElevation = if (isDarkMode) 0.dp else 1.dp,
+        shadowElevation = if (isDarkMode) 0.dp else 1.dp,
+        border = BorderStroke(
+            1.dp,
+            if (isDarkMode) belt.color.copy(alpha = 0.55f) else Color.Transparent
+        )
     ) {
         CompositionLocalProvider(
             androidx.compose.ui.platform.LocalLayoutDirection provides
@@ -1140,7 +1208,7 @@ private fun HardExerciseLegacyRow(
                     Icon(
                         imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                         contentDescription = "מועדפים",
-                        tint = if (isFavorite) Color(0xFFFFC107) else Color(0xFF90A4AE),
+                        tint = if (isFavorite) Color(0xFFFFC107) else emptyStarColor,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -1154,7 +1222,8 @@ private fun HardExerciseLegacyRow(
                     Text(
                         text = if (isEnglish) ExerciseTitlesEn.getOrSame(itemName) else itemName,
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = rowTextColor,
                         textAlign = TextAlign.Right,
                         modifier = Modifier
                             .weight(1f)
@@ -1187,6 +1256,13 @@ private fun ExerciseRowWithInfo(
     val context = LocalContext.current
     val langManager = remember(context) { AppLanguageManager(context) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    val infoRowTextColor = if (isDarkMode) {
+        Color(0xFFF8FAFC)
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
 
     Surface(
         modifier = Modifier
@@ -1225,6 +1301,8 @@ private fun ExerciseRowWithInfo(
                     Text(
                         text = if (isEnglish) ExerciseTitlesEn.getOrSame(itemName) else itemName,
                         style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = infoRowTextColor,
                         textAlign = TextAlign.Right,
                         modifier = Modifier
                             .weight(1f)
