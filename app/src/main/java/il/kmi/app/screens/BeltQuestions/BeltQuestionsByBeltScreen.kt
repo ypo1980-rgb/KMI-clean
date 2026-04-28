@@ -335,49 +335,88 @@ internal fun BeltPangoLayout(
         ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
     }
 
+    val subsSp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_subs", android.content.Context.MODE_PRIVATE)
+    }
+
     var accessRefreshTick by remember { mutableIntStateOf(0) }
 
-    DisposableEffect(userSp) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+    DisposableEffect(userSp, subsSp) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
             if (
                 key == "has_full_access" ||
                 key == "full_access" ||
                 key == "subscription_active" ||
                 key == "is_subscribed" ||
+                key == "google_subscription_verified" ||
+                key == "google_subscription_checked_at" ||
                 key == "sub_product" ||
+                key == "sub_access_until" ||
                 key == "access_changed_at"
             ) {
                 accessRefreshTick++
 
                 android.util.Log.e(
                     "KMI_ACCESS_MODE",
-                    "BY_BELT pref changed key=$key tick=$accessRefreshTick " +
-                            "isAdmin=${KmiAccess.isAdmin(userSp)} " +
-                            "hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
-                            "has_full_access=${userSp.getBoolean("has_full_access", false)} " +
-                            "full_access=${userSp.getBoolean("full_access", false)} " +
-                            "subscription_active=${userSp.getBoolean("subscription_active", false)} " +
-                            "is_subscribed=${userSp.getBoolean("is_subscribed", false)} " +
-                            "sub_product=${userSp.getString("sub_product", "")}"
+                    "BY_BELT pref changed source=${if (changedSp === userSp) "kmi_user" else "kmi_subs"} " +
+                            "key=$key tick=$accessRefreshTick " +
+                            "user_isAdmin=${KmiAccess.isAdmin(userSp)} " +
+                            "user_hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
+                            "subs_hasFullAccess=${KmiAccess.hasFullAccess(subsSp)} " +
+                            "user_has_full_access=${userSp.getBoolean("has_full_access", false)} " +
+                            "subs_has_full_access=${subsSp.getBoolean("has_full_access", false)} " +
+                            "user_subscription_active=${userSp.getBoolean("subscription_active", false)} " +
+                            "subs_subscription_active=${subsSp.getBoolean("subscription_active", false)} " +
+                            "user_google_verified=${userSp.getBoolean("google_subscription_verified", false)} " +
+                            "subs_google_verified=${subsSp.getBoolean("google_subscription_verified", false)} " +
+                            "user_sub_product=${userSp.getString("sub_product", "")} " +
+                            "subs_sub_product=${subsSp.getString("sub_product", "")} " +
+                            "user_until=${userSp.getLong("sub_access_until", 0L)} " +
+                            "subs_until=${subsSp.getLong("sub_access_until", 0L)}"
                 )
             }
         }
 
         userSp.registerOnSharedPreferenceChangeListener(listener)
+        subsSp.registerOnSharedPreferenceChangeListener(listener)
 
         onDispose {
             userSp.unregisterOnSharedPreferenceChangeListener(listener)
+            subsSp.unregisterOnSharedPreferenceChangeListener(listener)
         }
     }
 
     val hasManagerAccess = remember(accessRefreshTick) {
+        val now = System.currentTimeMillis()
+
+        val userUntil = userSp.getLong("sub_access_until", 0L)
+        val subsUntil = subsSp.getLong("sub_access_until", 0L)
+
+        val userVerifiedAndValid =
+            userSp.getBoolean("google_subscription_verified", false) && userUntil > now
+
+        val subsVerifiedAndValid =
+            subsSp.getBoolean("google_subscription_verified", false) && subsUntil > now
+
         KmiAccess.isAdmin(userSp) ||
                 KmiAccess.hasFullAccess(userSp) ||
+                KmiAccess.hasFullAccess(subsSp) ||
+
+                userVerifiedAndValid ||
+                subsVerifiedAndValid ||
+
                 userSp.getBoolean("has_full_access", false) ||
                 userSp.getBoolean("full_access", false) ||
                 userSp.getBoolean("subscription_active", false) ||
                 userSp.getBoolean("is_subscribed", false) ||
-                !userSp.getString("sub_product", "").isNullOrBlank()
+
+                subsSp.getBoolean("has_full_access", false) ||
+                subsSp.getBoolean("full_access", false) ||
+                subsSp.getBoolean("subscription_active", false) ||
+                subsSp.getBoolean("is_subscribed", false) ||
+
+                !userSp.getString("sub_product", "").isNullOrBlank() ||
+                !subsSp.getString("sub_product", "").isNullOrBlank()
     }
 
     val accessMode = AccessModeResolver.resolve(
@@ -390,14 +429,21 @@ internal fun BeltPangoLayout(
         android.util.Log.e(
             "KMI_ACCESS_MODE",
             "BY_BELT resolved hasManagerAccess=$hasManagerAccess " +
+                    "hasUnlockedAccess=$hasUnlockedAccess " +
                     "accessMode=$accessMode tick=$accessRefreshTick " +
-                    "isAdmin=${KmiAccess.isAdmin(userSp)} " +
-                    "hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
-                    "has_full_access=${userSp.getBoolean("has_full_access", false)} " +
-                    "full_access=${userSp.getBoolean("full_access", false)} " +
-                    "subscription_active=${userSp.getBoolean("subscription_active", false)} " +
-                    "is_subscribed=${userSp.getBoolean("is_subscribed", false)} " +
-                    "sub_product=${userSp.getString("sub_product", "")}"
+                    "user_isAdmin=${KmiAccess.isAdmin(userSp)} " +
+                    "user_hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
+                    "subs_hasFullAccess=${KmiAccess.hasFullAccess(subsSp)} " +
+                    "user_has_full_access=${userSp.getBoolean("has_full_access", false)} " +
+                    "subs_has_full_access=${subsSp.getBoolean("has_full_access", false)} " +
+                    "user_subscription_active=${userSp.getBoolean("subscription_active", false)} " +
+                    "subs_subscription_active=${subsSp.getBoolean("subscription_active", false)} " +
+                    "user_google_verified=${userSp.getBoolean("google_subscription_verified", false)} " +
+                    "subs_google_verified=${subsSp.getBoolean("google_subscription_verified", false)} " +
+                    "user_sub_product=${userSp.getString("sub_product", "")} " +
+                    "subs_sub_product=${subsSp.getString("sub_product", "")} " +
+                    "user_until=${userSp.getLong("sub_access_until", 0L)} " +
+                    "subs_until=${subsSp.getLong("sub_access_until", 0L)}"
         )
     }
 

@@ -212,17 +212,26 @@ fun MainApp(
                     }
                     val isCoach = roleState.value.equals("coach", true)
 
-                    il.kmi.app.screens.drawer.AppDrawerContent(
-                        onOpenAboutNetwork = { nav.navigate(Route.AboutNetwork.route) },
-                        onOpenAboutMethod = { nav.navigate(Route.AboutMethod.route) },
-                        onOpenSubscriptions = { nav.navigate(Route.Subscription.route) },
-                        onOpenMembershipPayment = {nav.navigate(Route.MembershipPayment.route) },
-                        onOpenForum = { nav.navigate(Route.Forum.route) },
-                        onOpenContactUs = { nav.navigate(Route.ContactUs.route)},
-                        onOpenAboutAvi = { nav.navigate(Route.AboutAvi.route) },
-                        onOpenMyProfile = { nav.navigate(Route.MyProfile.route) },
-                        onOpenMonthlyCalendar = { nav.navigate(Route.MonthlyCalendar.route) },
-                        onOpenAboutItzik = { nav.navigate(Route.AboutItzik.route) },
+                            il.kmi.app.screens.drawer.AppDrawerContent(
+                                onOpenAboutNetwork = { nav.navigate(Route.AboutNetwork.route) },
+                                onOpenAboutMethod = { nav.navigate(Route.AboutMethod.route) },
+                                onOpenSubscriptions = { nav.navigate(Route.Subscription.route) },
+                                onOpenMembershipPayment = { nav.navigate(Route.MembershipPayment.route) },
+                                onOpenForum = { nav.navigate(Route.Forum.route) },
+                                onOpenContactUs = { nav.navigate(Route.ContactUs.route) },
+                                onOpenAboutAvi = { nav.navigate(Route.AboutAvi.route) },
+                                onOpenMyProfile = { nav.navigate(Route.MyProfile.route) },
+
+                                // ✅ עריכת פרופיל — אותו מסך שהיה נפתח מכפתור "ערוך פרטים" בהגדרות
+                                onOpenEditProfile = {
+                                    nav.navigate("google_profile_completion") {
+                                        launchSingleTop = true
+                                        restoreState = false
+                                    }
+                                },
+
+                                onOpenMonthlyCalendar = { nav.navigate(Route.MonthlyCalendar.route) },
+                                onOpenAboutItzik = { nav.navigate(Route.AboutItzik.route) },
                         onOpenRateUs = { nav.navigate(Route.RateUs.route) },
                         onOpenTrainingSummary = {
                             nav.navigate(Route.TrainingSummary.route) {

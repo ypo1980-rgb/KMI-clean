@@ -208,6 +208,58 @@ fun RegistrationFormScreen(
     var activeBranch by rememberSaveable { mutableStateOf(sp.getString("active_branch", "") ?: "") }
     var activeGroup by rememberSaveable { mutableStateOf(sp.getString("active_group", "") ?: "") }
 
+    fun readSavedListFromPrefs(
+        vararg keys: String
+    ): List<String> {
+        fun splitCsv(raw: String): List<String> {
+            return raw
+                .split(',', ';', '|', '\n')
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+        }
+
+        fun readAnyPrefAsList(key: String): List<String> {
+            val value = sp.all[key] ?: return emptyList()
+
+            return when (value) {
+                is String -> {
+                    val raw = value.trim()
+
+                    if (raw.isBlank()) {
+                        emptyList()
+                    } else if (raw.startsWith("[")) {
+                        runCatching {
+                            val arr = org.json.JSONArray(raw)
+                            (0 until arr.length())
+                                .mapNotNull { index -> arr.optString(index, null) }
+                                .map { it.trim() }
+                                .filter { it.isNotBlank() }
+                        }.getOrDefault(emptyList())
+                    } else {
+                        splitCsv(raw)
+                    }
+                }
+
+                is Set<*> -> {
+                    value
+                        .mapNotNull { it?.toString()?.trim() }
+                        .filter { it.isNotBlank() }
+                }
+
+                else -> emptyList()
+            }
+        }
+
+        keys.forEach { key ->
+            val list = readAnyPrefAsList(key)
+            if (list.isNotEmpty()) {
+                return list.distinct().take(3)
+            }
+        }
+
+        return emptyList()
+    }
+
     // --- סניפים נבחרים (עד 3) — מקור אמת יחיד ---
     val selectedBranches = rememberSaveable(
         saver = listSaver(
@@ -215,11 +267,16 @@ fun RegistrationFormScreen(
             restore = { it.toMutableStateList() }
         )
     ) {
-        val saved = (sp.getString("branch", "") ?: "")
-            .split(",")
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-        mutableStateListOf<String>().apply { addAll(saved.take(3)) }
+        val saved = readSavedListFromPrefs(
+            "branches_json",
+            "selected_branches",
+            "branches",
+            "branch"
+        )
+
+        mutableStateListOf<String>().apply {
+            addAll(saved.take(3))
+        }
     }
 
     // קבוצות נבחרות (עד 3)
@@ -228,12 +285,33 @@ fun RegistrationFormScreen(
             save = { it.toList() },
             restore = { it.toMutableStateList() }
         )
-    ) { mutableStateListOf<String>() }
+    ) {
+        val saved = readSavedListFromPrefs(
+            "groups_json",
+            "selected_groups",
+            "groups",
+            "age_groups",
+            "age_group",
+            "group"
+        )
+
+        mutableStateListOf<String>().apply {
+            addAll(saved.take(3))
+        }
+    }
 
     // ✅ שמירה אוטומטית של activeBranch/activeGroup
     LaunchedEffect(selectedBranches.toList(), selectedGroups.toList()) {
-        if (activeBranch.isBlank()) activeBranch = selectedBranches.firstOrNull()?.trim().orEmpty()
-        if (activeGroup.isBlank()) activeGroup = selectedGroups.firstOrNull()?.trim().orEmpty()
+        val branchesNow = selectedBranches.map { it.trim() }.filter { it.isNotBlank() }
+        val groupsNow = selectedGroups.map { it.trim() }.filter { it.isNotBlank() }
+
+        if (activeBranch.isBlank() || activeBranch !in branchesNow) {
+            activeBranch = branchesNow.firstOrNull().orEmpty()
+        }
+
+        if (activeGroup.isBlank() || activeGroup !in groupsNow) {
+            activeGroup = groupsNow.firstOrNull().orEmpty()
+        }
     }
 
     // העדפות
@@ -260,11 +338,13 @@ fun RegistrationFormScreen(
     var currentBeltId by rememberSaveable { mutableStateOf(sp.getString("current_belt", "") ?: "") }
 
     // ==== התאמות ושיחזורים מה-SP ====
+    // ✅ השחזור כבר מתבצע ב־rememberSaveable דרך readSavedListFromPrefs.
+    // לא מאפסים כאן selectedGroups כדי לא לדרוס groups_json / selected_groups.
     LaunchedEffect(Unit) {
-        val raw = sp.getString("age_groups", null) ?: sp.getString("age_group", "") ?: ""
-        val saved = raw.split(",").map { it.trim() }.filter { it.isNotBlank() }
-        selectedGroups.clear()
-        selectedGroups.addAll(saved.take(3))
+        Log.e(
+            REGISTRATION_LOG,
+            "initial selectedBranches=${selectedBranches.toList()} selectedGroups=${selectedGroups.toList()}"
+        )
     }
 
     LaunchedEffect(selectedRegion) {
@@ -402,8 +482,35 @@ fun RegistrationFormScreen(
         // חשוב במיוחד ב-Google Login, כי שאר המסכים קוראים גם phone וגם phone_number.
         val phoneFinal = phone.filter { it.isDigit() }
 
-        val groupsCsv = selectedGroups.joinToString(", ")
-        val primaryGroup = selectedGroups.firstOrNull() ?: ""
+        val branchesListFinalForPrefs: List<String> =
+            if (selectedBranches.isNotEmpty()) {
+                selectedBranches.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3)
+            } else {
+                selectedBranch
+                    .split(',', ';', '|', '\n')
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .take(3)
+            }
+
+        val groupsListFinalForPrefs: List<String> =
+            if (selectedGroups.isNotEmpty()) {
+                selectedGroups.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3)
+            } else {
+                selectedGroup
+                    .split(',', ';', '|', '\n')
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .take(3)
+            }
+
+        val branchesJson = org.json.JSONArray(branchesListFinalForPrefs).toString()
+        val groupsJson = org.json.JSONArray(groupsListFinalForPrefs).toString()
+
+        val groupsCsv = groupsListFinalForPrefs.joinToString(", ")
+        val primaryGroup = groupsListFinalForPrefs.firstOrNull() ?: ""
 
         // ✅ חגורה סופית למתאמן.
         // אם משום מה לא נבחרה חגורה, לא נשאיר Firestore / SP עם belt ריק,
@@ -412,36 +519,51 @@ fun RegistrationFormScreen(
             if (roleFinal == "trainee") currentBeltId.ifBlank { "white" } else ""
 
         val activeBranchFinal =
-            (activeBranch.takeIf { it.isNotBlank() }
-                ?: selectedBranches.firstOrNull()
-                ?: selectedBranch).trim()
+            (activeBranch.takeIf { it.isNotBlank() && it in branchesListFinalForPrefs }
+                ?: branchesListFinalForPrefs.firstOrNull()
+                ?: "").trim()
 
         val activeGroupFinal =
-            (activeGroup.takeIf { it.isNotBlank() }
-                ?: selectedGroups.firstOrNull()
-                ?: primaryGroup).trim()
+            (activeGroup.takeIf { it.isNotBlank() && it in groupsListFinalForPrefs }
+                ?: groupsListFinalForPrefs.firstOrNull()
+                ?: "").trim()
 
-        // ✅ branchesFinal תמיד עקבי מול מקור האמת (selectedBranches)
-        val branchesFinal =
-            if (selectedBranches.isNotEmpty()) selectedBranches.joinToString(", ")
-            else selectedBranch.trim()
+        // ✅ branchesFinal תמיד עקבי מול מקור האמת הרשימתי
+        val branchesFinal = branchesListFinalForPrefs.joinToString(", ")
 
         val completedUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
         val completedAt = System.currentTimeMillis()
 
         // שמירה ב-SP הראשי
         sp.edit()
+            // ✅ ניקוי ערכים ישנים שאולי נשמרו בעבר כ־StringSet / HashSet
+            .remove("groups")
+            .remove("branches")
+            .remove("selected_groups")
+            .remove("selected_branches")
+
             .putString("fullName", fullName)
             .putString("phone", phoneFinal)
             .putString("phone_number", phoneFinal)
             .putString("email", email.trim())
             .putString("region", selectedRegion)
-            .putString("branch", branchesFinal)              // CSV
-            .putString("active_branch", activeBranchFinal)   // ✅ חדש
-            .putString("age_groups", groupsCsv)              // CSV
-            .putString("age_group", primaryGroup)            // תאימות
-            .putString("group", primaryGroup)                // תאימות
-            .putString("active_group", activeGroupFinal)     // ✅ חדש
+
+            // ✅ סניפים — שומרים גם CSV וגם JSON גם ב־sp הראשי
+            .putString("branch", branchesFinal)
+            .putString("branches", branchesFinal)
+            .putString("branches_json", branchesJson)
+            .putString("selected_branches", branchesFinal)
+            .putString("active_branch", activeBranchFinal)
+
+            // ✅ קבוצות — שומרים גם CSV וגם JSON גם ב־sp הראשי
+            .putString("age_groups", groupsCsv)
+            .putString("groups", groupsCsv)
+            .putString("groups_json", groupsJson)
+            .putString("selected_groups", groupsCsv)
+            .putString("age_group", primaryGroup)
+            .putString("group", primaryGroup)
+            .putString("active_group", activeGroupFinal)
+
             .putString("username", if (isGoogleAuth) email.trim() else username)
             .putString("authProvider", if (isGoogleAuth) "google" else "local")
             .putBoolean("google_login", isGoogleAuth)
@@ -479,18 +601,34 @@ fun RegistrationFormScreen(
 
         // userSp – אחידות
         userSp.edit().apply {
+            // ✅ ניקוי ערכים ישנים שאולי נשמרו בעבר כ־StringSet / HashSet
+            remove("groups")
+            remove("branches")
+            remove("selected_groups")
+            remove("selected_branches")
+
             putString("fullName", fullName)
             putString("phone", phoneFinal)
             putString("phone_number", phoneFinal)
             putString("email", email.trim())
             putString("user_role", roleFinal)
             putString("region", selectedRegion)
+
+            // ✅ סניפים — שומרים גם CSV וגם JSON
             putString("branch", branchesFinal)
-            putString("active_branch", activeBranchFinal)    // ✅ חדש
+            putString("branches", branchesFinal)
+            putString("branches_json", branchesJson)
+            putString("selected_branches", branchesFinal)
+            putString("active_branch", activeBranchFinal)
+
+            // ✅ קבוצות — שומרים גם CSV וגם JSON
             putString("age_groups", groupsCsv)
+            putString("groups", groupsCsv)
+            putString("groups_json", groupsJson)
+            putString("selected_groups", groupsCsv)
             putString("age_group", primaryGroup)
             putString("group", primaryGroup)
-            putString("active_group", activeGroupFinal)      // ✅ חדש
+            putString("active_group", activeGroupFinal)
             putString("birth_day", birthDay.toString())
             putString("birth_month", birthMonth.toString())
             putString("birth_year", birthYear.toString())
@@ -535,13 +673,9 @@ fun RegistrationFormScreen(
             // תאריך לידה בפורמט YYYY-MM-DD
             val birthDate = "%04d-%02d-%02d".format(birthYear, birthMonth, birthDay)
 
-            // ✅ מקור אמת לסניפים: קודם selectedBranches (רשימה), ואם ריק – selectedBranch (בודד)
-            val branchesListFinal: List<String> =
-                if (selectedBranches.isNotEmpty()) {
-                    selectedBranches.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-                } else {
-                    listOf(selectedBranch.trim()).filter { it.isNotBlank() }
-                }
+            // ✅ משתמשים באותה רשימה שכבר חושבה ונשמרה ל־SharedPreferences
+            val branchesListFinal = branchesListFinalForPrefs
+            val groupsListFinal = groupsListFinalForPrefs
 
             val firestoreData = hashMapOf(
                 "uid" to uid,
@@ -553,12 +687,18 @@ fun RegistrationFormScreen(
                 "email" to email.trim(),
                 "authProvider" to if (isGoogleAuth) "google" else "local",
                 "region" to selectedRegion,
+
+                // ✅ סניפים — רשימה + CSV + פעיל
                 "branches" to branchesListFinal,
                 "branchesCsv" to branchesFinal,
-                "activeBranch" to activeBranchFinal,   // ✅ חדש
-                "groups" to selectedGroups.toList(),
+                "activeBranch" to activeBranchFinal,
+
+                // ✅ קבוצות — רשימה + CSV + פעיל
+                "groups" to groupsListFinal,
+                "groupsCsv" to groupsCsv,
                 "primaryGroup" to primaryGroup,
-                "activeGroup" to activeGroupFinal,     // ✅ חדש
+                "activeGroup" to activeGroupFinal,
+
                 "birthDate" to birthDate,
                 "gender" to gender,
                 "belt" to beltFinal,
@@ -617,42 +757,7 @@ fun RegistrationFormScreen(
             )
         },
         containerColor = Color.Transparent,
-        contentWindowInsets = WindowInsets(0),
-        bottomBar = {
-            Surface(
-                tonalElevation = 3.dp,
-                shadowElevation = 6.dp,
-                color = MaterialTheme.colorScheme.surface,
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.navigationBars)
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Divider(
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-                    )
-                    Button(
-                        onClick = { submitRegistration() },
-                        enabled = acceptedTerms,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        shape = MaterialTheme.shapes.medium,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                            disabledContainerColor = Color(0xFFB0BEC5),
-                            disabledContentColor = Color.Black
-                        )
-                    ) {
-                        Text("סיום רישום")
-                    }
-                }
-            }
-        }
+        contentWindowInsets = WindowInsets(0)
     ) { padding ->
 
         Column(
@@ -758,17 +863,42 @@ fun RegistrationFormScreen(
                 },
                 selectedBranches = selectedBranches,
                 onBranchesChange = { list ->
+                    val clean = list
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                        .take(3)
+
                     selectedBranches.clear()
-                    selectedBranches.addAll(list.take(3))
+                    selectedBranches.addAll(clean)
+
                     // תאימות ישנה
-                    selectedBranch = selectedBranches.singleOrNull() ?: ""
-                    branchError = selectedBranches.isEmpty()
+                    selectedBranch = clean.joinToString(", ")
+
+                    if (activeBranch.isBlank() || activeBranch !in clean) {
+                        activeBranch = clean.firstOrNull().orEmpty()
+                    }
+
+                    branchError = clean.isEmpty()
                 },
                 selectedGroups = selectedGroups,
                 onGroupsChange = { list ->
+                    val clean = list
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                        .take(3)
+
                     selectedGroups.clear()
-                    selectedGroups.addAll(list.take(3))
-                    groupError = selectedGroups.isEmpty()
+                    selectedGroups.addAll(clean)
+
+                    selectedGroup = clean.joinToString(", ")
+
+                    if (activeGroup.isBlank() || activeGroup !in clean) {
+                        activeGroup = clean.firstOrNull().orEmpty()
+                    }
+
+                    groupError = clean.isEmpty()
                 },
                 regionError = regionError,
                 branchError = branchError,
@@ -787,6 +917,9 @@ fun RegistrationFormScreen(
                 onBranchTypeChange = { newType ->
                     branchType = newType
                     sp.edit().putString("branch_type", newType).apply()
+                },
+                onSubmitRegistration = {
+                    submitRegistration()
                 }
             )
 

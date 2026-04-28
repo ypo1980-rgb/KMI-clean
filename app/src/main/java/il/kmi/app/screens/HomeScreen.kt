@@ -181,26 +181,26 @@ private fun TrainingsWeekHeader(
 
     Box(
         modifier = modifier
-            .heightIn(min = 64.dp),
+            .heightIn(min = 52.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(top = 4.dp, bottom = 9.dp)
+            modifier = Modifier.padding(top = 2.dp, bottom = 5.dp)
         ) {
             Text(
                 text = if (isEnglish) "Trainings for the upcoming week" else "אימונים לשבוע הקרוב",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 maxLines = 1
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(1.dp))
             Text(
                 text = "(תאריכים: $startLabel–$endLabel)",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.92f),
                 textAlign = TextAlign.Center
             )
@@ -337,6 +337,7 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
+                    top    = padding.calculateTopPadding(),
                     start  = padding.calculateStartPadding(LocalLayoutDirection.current),
                     end    = padding.calculateEndPadding(LocalLayoutDirection.current),
                     bottom = padding.calculateBottomPadding()
@@ -347,13 +348,85 @@ fun HomeScreen(
 
             val ctx = LocalContext.current
             val userSp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
+            val subsSp = remember { ctx.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE) }
+            val legacySp = remember { ctx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
 
-            val hasFullAccess = KmiAccess.isAdmin(userSp)
+            var homeAccessRefreshTick by remember { mutableIntStateOf(0) }
 
-            LaunchedEffect(hasFullAccess) {
+            DisposableEffect(userSp, subsSp, legacySp) {
+                val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
+                    if (
+                        key == "has_full_access" ||
+                        key == "full_access" ||
+                        key == "subscription_active" ||
+                        key == "is_subscribed" ||
+                        key == "google_subscription_verified" ||
+                        key == "google_subscription_checked_at" ||
+                        key == "sub_product" ||
+                        key == "sub_access_until" ||
+                        key == "access_changed_at"
+                    ) {
+                        homeAccessRefreshTick++
+
+                        android.util.Log.e(
+                            "KMI_ACCESS_MODE",
+                            "HOME access pref changed source=${if (changedSp === userSp) "kmi_user" else if (changedSp === subsSp) "kmi_subs" else "kmi_prefs"} " +
+                                    "key=$key tick=$homeAccessRefreshTick"
+                        )
+                    }
+                }
+
+                userSp.registerOnSharedPreferenceChangeListener(listener)
+                subsSp.registerOnSharedPreferenceChangeListener(listener)
+                legacySp.registerOnSharedPreferenceChangeListener(listener)
+
+                onDispose {
+                    userSp.unregisterOnSharedPreferenceChangeListener(listener)
+                    subsSp.unregisterOnSharedPreferenceChangeListener(listener)
+                    legacySp.unregisterOnSharedPreferenceChangeListener(listener)
+                }
+            }
+
+            fun SharedPreferences.hasActiveSubscriptionAccess(): Boolean {
+                val now = System.currentTimeMillis()
+                val until = getLong("sub_access_until", 0L)
+
+                val verifiedAndValid =
+                    getBoolean("google_subscription_verified", false) && until > now
+
+                return KmiAccess.hasFullAccess(this) ||
+                        verifiedAndValid ||
+                        getBoolean("has_full_access", false) ||
+                        getBoolean("full_access", false) ||
+                        getBoolean("subscription_active", false) ||
+                        getBoolean("is_subscribed", false) ||
+                        !getString("sub_product", "").isNullOrBlank()
+            }
+
+            val hasFullAccess = remember(homeAccessRefreshTick) {
+                KmiAccess.isAdmin(userSp) ||
+                        userSp.hasActiveSubscriptionAccess() ||
+                        subsSp.hasActiveSubscriptionAccess() ||
+                        legacySp.hasActiveSubscriptionAccess()
+            }
+
+            LaunchedEffect(hasFullAccess, homeAccessRefreshTick) {
                 android.util.Log.e(
                     "KMI_ACCESS_MODE",
-                    "HOME hasFullAccess=$hasFullAccess isAdmin=${KmiAccess.isAdmin(userSp)}"
+                    "HOME hasFullAccess=$hasFullAccess tick=$homeAccessRefreshTick " +
+                            "isAdmin=${KmiAccess.isAdmin(userSp)} " +
+                            "user_full=${userSp.getBoolean("has_full_access", false)} " +
+                            "subs_full=${subsSp.getBoolean("has_full_access", false)} " +
+                            "legacy_full=${legacySp.getBoolean("has_full_access", false)} " +
+                            "user_active=${userSp.getBoolean("subscription_active", false)} " +
+                            "subs_active=${subsSp.getBoolean("subscription_active", false)} " +
+                            "legacy_active=${legacySp.getBoolean("subscription_active", false)} " +
+                            "user_verified=${userSp.getBoolean("google_subscription_verified", false)} " +
+                            "subs_verified=${subsSp.getBoolean("google_subscription_verified", false)} " +
+                            "legacy_verified=${legacySp.getBoolean("google_subscription_verified", false)} " +
+                            "user_product=${userSp.getString("sub_product", "")} " +
+                            "subs_product=${subsSp.getString("sub_product", "")} " +
+                            "legacy_product=${legacySp.getString("sub_product", "")}"
                 )
             }
 
@@ -370,16 +443,75 @@ fun HomeScreen(
                     .padding(top = 0.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(2.dp))
 
                 // === KMI_MULTI_GROUPS (FIX) ===
-                var groupsCsv by remember(userSp) {
-                    mutableStateOf(
-                        userSp.getString("age_groups", null)?.takeIf { it.isNotBlank() }
-                            ?: userSp.getString("age_group", null)?.takeIf { it.isNotBlank() }
-                            ?: userSp.getString("group", null).orEmpty()
+                fun readSelectedGroups(sp: SharedPreferences): List<String> {
+                    fun splitGroups(raw: String): List<String> {
+                        return raw
+                            .split(',', ';', '|', '\n')
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                    }
+
+                    fun readPrefValueAsList(key: String): List<String> {
+                        val value = sp.all[key] ?: return emptyList()
+
+                        return when (value) {
+                            is String -> {
+                                val raw = value.trim()
+                                if (raw.isBlank()) {
+                                    emptyList()
+                                } else if (raw.startsWith("[")) {
+                                    runCatching {
+                                        val arr = org.json.JSONArray(raw)
+                                        (0 until arr.length())
+                                            .mapNotNull { index -> arr.optString(index, null) }
+                                            .map { it.trim() }
+                                            .filter { it.isNotBlank() }
+                                    }.getOrDefault(emptyList())
+                                } else {
+                                    splitGroups(raw)
+                                }
+                            }
+
+                            is Set<*> -> {
+                                value
+                                    .mapNotNull { it?.toString()?.trim() }
+                                    .filter { it.isNotBlank() }
+                            }
+
+                            else -> emptyList()
+                        }
+                    }
+
+                    fun readListFromPrefs(vararg keys: String): List<String> {
+                        keys.forEach { key ->
+                            val list = readPrefValueAsList(key)
+                            if (list.isNotEmpty()) return list
+                        }
+                        return emptyList()
+                    }
+
+                    return readListFromPrefs(
+                        "groups_json",
+                        "selected_groups",
+                        "groups",
+                        "age_groups",
+                        "age_group",
+                        "group"
                     )
+                        .map {
+                            il.kmi.app.training.TrainingCatalog
+                                .normalizeGroupName(it)
+                                .ifBlank { it }
+                        }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                        .take(3)
                 }
+
+                var groupsRefreshTick by remember { mutableIntStateOf(0) }
 
                 var coachFromPrefs by remember(userSp) {
                     mutableStateOf(userSp.getString("coach_name", "") ?: "")
@@ -388,11 +520,23 @@ fun HomeScreen(
                 DisposableEffect(userSp) {
                     val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
                         when (key) {
-                            "age_groups", "age_group", "group" -> {
-                                groupsCsv =
-                                    userSp.getString("age_groups", null)?.takeIf { it.isNotBlank() }
-                                        ?: userSp.getString("age_group", null)?.takeIf { it.isNotBlank() }
-                                                ?: userSp.getString("group", null).orEmpty()
+                            "groups_json",
+                            "selected_groups",
+                            "groups",
+                            "age_groups",
+                            "age_group",
+                            "group" -> {
+                                groupsRefreshTick++
+                                android.util.Log.e(
+                                    "KMI_HOME_GROUPS",
+                                    "groups pref changed key=$key tick=$groupsRefreshTick " +
+                                            "groups_json=${userSp.getString("groups_json", "")} " +
+                                            "selected_groups=${userSp.getString("selected_groups", "")} " +
+                                            "groups=${userSp.getString("groups", "")} " +
+                                            "age_groups=${userSp.getString("age_groups", "")} " +
+                                            "age_group=${userSp.getString("age_group", "")} " +
+                                            "group=${userSp.getString("group", "")}"
+                                )
                             }
 
                             "coach_name" -> coachFromPrefs =
@@ -403,16 +547,16 @@ fun HomeScreen(
                     onDispose { userSp.unregisterOnSharedPreferenceChangeListener(l) }
                 }
 
-                val groupsEffective: List<String> = remember(groupsCsv) {
-                    val raw = groupsCsv
-                        .split(',', ';', '|', '\n')
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
+                val groupsEffective: List<String> = remember(userSp, groupsRefreshTick) {
+                    val savedGroups = readSelectedGroups(userSp)
+                    if (savedGroups.isEmpty()) listOf("בוגרים") else savedGroups
+                }
 
-                    val normalized = raw.map {
-                        il.kmi.app.training.TrainingCatalog.normalizeGroupName(it).ifBlank { it }
-                    }
-                    (if (normalized.isEmpty()) listOf("בוגרים") else normalized).distinct()
+                LaunchedEffect(groupsEffective, groupsRefreshTick) {
+                    android.util.Log.e(
+                        "KMI_HOME_GROUPS",
+                        "resolved groupsEffective=$groupsEffective tick=$groupsRefreshTick"
+                    )
                 }
                 // === KMI_MULTI_GROUPS (FIX) ===
 
@@ -464,44 +608,247 @@ fun HomeScreen(
                 // =========================
 
                 fun readSelectedBranches(sp: SharedPreferences): List<String> {
-                    val fromJsonOrCsv = runCatching {
-                        val js = sp.getString("branches_json", null) ?: sp.getString("branches", null)
-                        if (!js.isNullOrBlank()) {
-                            if (js.trim().startsWith("[")) {
-                                val arr = org.json.JSONArray(js)
-                                (0 until arr.length()).mapNotNull { arr.optString(it, null) }
-                                    .filter { it.isNotBlank() }
-                            } else {
-                                js.split(',', ';', '|', '\n').map { it.trim() }.filter { it.isNotBlank() }
+                    fun splitBranches(raw: String): List<String> {
+                        return raw
+                            .split(',', ';', '|', '\n')
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                    }
+
+                    fun readPrefValueAsList(key: String): List<String> {
+                        val value = sp.all[key] ?: return emptyList()
+
+                        return when (value) {
+                            is String -> {
+                                val raw = value.trim()
+                                if (raw.isBlank()) {
+                                    emptyList()
+                                } else if (raw.startsWith("[")) {
+                                    runCatching {
+                                        val arr = org.json.JSONArray(raw)
+                                        (0 until arr.length())
+                                            .mapNotNull { index -> arr.optString(index, null) }
+                                            .map { it.trim() }
+                                            .filter { it.isNotBlank() }
+                                    }.getOrDefault(emptyList())
+                                } else {
+                                    splitBranches(raw)
+                                }
                             }
-                        } else null
-                    }.getOrNull()
-                    if (!fromJsonOrCsv.isNullOrEmpty()) return fromJsonOrCsv
 
-                    val b1Raw = sp.getString("branch", "")?.trim().orEmpty()
-                    val fromBranchCsv =
-                        if (b1Raw.contains(',') || b1Raw.contains(';') || b1Raw.contains('|') || b1Raw.contains('\n'))
-                            b1Raw.split(',', ';', '|', '\n').map { it.trim() }.filter { it.isNotBlank() }
-                        else listOf(b1Raw).filter { it.isNotBlank() }
+                            is Set<*> -> {
+                                value
+                                    .mapNotNull { it?.toString()?.trim() }
+                                    .filter { it.isNotBlank() }
+                            }
 
-                    val b2 = sp.getString("branch2", "")?.trim().orEmpty()
-                    val b3 = sp.getString("branch3", "")?.trim().orEmpty()
+                            else -> emptyList()
+                        }
+                    }
 
-                    return (fromBranchCsv + listOf(b2, b3)).filter { it.isNotBlank() }.distinct()
+                    fun readListFromPrefs(vararg keys: String): List<String> {
+                        keys.forEach { key ->
+                            val list = readPrefValueAsList(key)
+                            if (list.isNotEmpty()) return list
+                        }
+                        return emptyList()
+                    }
+
+                    val fromCanonical = readListFromPrefs(
+                        "branches_json",
+                        "selected_branches",
+                        "branches",
+                        "branch"
+                    )
+
+                    val b2 = readPrefValueAsList("branch2")
+                    val b3 = readPrefValueAsList("branch3")
+
+                    return (fromCanonical + b2 + b3)
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                        .take(3)
                 }
 
-                val selectedBranches: List<String> = remember(userSp) { readSelectedBranches(userSp) }
+                var branchesRefreshTick by remember { mutableIntStateOf(0) }
 
-                val branchTypeHome = remember(userSp) {
+                // ✅ שכבת ביטחון:
+                // אם ה־SharedPreferences המקומי לא מכיל את כל הסניפים/קבוצות,
+                // נטען את הפרופיל מ־Firestore ונעדכן את kmi_user.
+                LaunchedEffect(currentUid) {
+                    if (currentUid.isNullOrBlank()) return@LaunchedEffect
+
+                    FirebaseFirestore.getInstance()
+                        .collection("users")
+                        .document(currentUid)
+                        .get()
+                        .addOnSuccessListener { doc ->
+
+                            fun listFromFirestoreListOrCsv(
+                                listKey: String,
+                                csvKey: String,
+                                fallbackKey: String
+                            ): List<String> {
+                                val fromList = (doc.get(listKey) as? List<*>)
+                                    ?.mapNotNull { it?.toString()?.trim() }
+                                    ?.filter { it.isNotBlank() }
+                                    ?.distinct()
+                                    .orEmpty()
+
+                                if (fromList.isNotEmpty()) return fromList.take(3)
+
+                                val csv = doc.getString(csvKey)
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?: doc.getString(fallbackKey)
+                                    ?: ""
+
+                                return csv
+                                    .split(',', ';', '|', '\n')
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() }
+                                    .distinct()
+                                    .take(3)
+                            }
+
+                            val remoteBranches = listFromFirestoreListOrCsv(
+                                listKey = "branches",
+                                csvKey = "branchesCsv",
+                                fallbackKey = "branch"
+                            )
+
+                            val remoteGroups = listFromFirestoreListOrCsv(
+                                listKey = "groups",
+                                csvKey = "groupsCsv",
+                                fallbackKey = "primaryGroup"
+                            )
+
+                            val remoteActiveBranch =
+                                doc.getString("activeBranch")
+                                    ?.takeIf { it.isNotBlank() && it in remoteBranches }
+                                    ?: remoteBranches.firstOrNull()
+                                    ?: ""
+
+                            val remoteActiveGroup =
+                                doc.getString("activeGroup")
+                                    ?.takeIf { it.isNotBlank() && it in remoteGroups }
+                                    ?: remoteGroups.firstOrNull()
+                                    ?: ""
+
+                            val branchesCsv = remoteBranches.joinToString(", ")
+                            val groupsCsv = remoteGroups.joinToString(", ")
+                            val branchesJson = org.json.JSONArray(remoteBranches).toString()
+                            val groupsJson = org.json.JSONArray(remoteGroups).toString()
+
+                            android.util.Log.e(
+                                "KMI_HOME_HYDRATE",
+                                "remoteBranches=$remoteBranches remoteGroups=$remoteGroups " +
+                                        "activeBranch=$remoteActiveBranch activeGroup=$remoteActiveGroup"
+                            )
+
+                            if (remoteBranches.isNotEmpty() || remoteGroups.isNotEmpty()) {
+                                userSp.edit()
+                                    // ✅ ניקוי טיפוסים ישנים שאולי נשמרו כ־StringSet
+                                    .remove("branches")
+                                    .remove("selected_branches")
+                                    .remove("groups")
+                                    .remove("selected_groups")
+
+                                    // ✅ סניפים
+                                    .putString("branch", branchesCsv)
+                                    .putString("branches", branchesCsv)
+                                    .putString("branches_json", branchesJson)
+                                    .putString("selected_branches", branchesCsv)
+                                    .putString("active_branch", remoteActiveBranch)
+
+                                    // ✅ קבוצות
+                                    .putString("age_groups", groupsCsv)
+                                    .putString("groups", groupsCsv)
+                                    .putString("groups_json", groupsJson)
+                                    .putString("selected_groups", groupsCsv)
+                                    .putString("age_group", remoteGroups.firstOrNull().orEmpty())
+                                    .putString("group", remoteGroups.firstOrNull().orEmpty())
+                                    .putString("active_group", remoteActiveGroup)
+                                    .apply()
+
+                                branchesRefreshTick++
+                                groupsRefreshTick++
+                            }
+                        }
+                        .addOnFailureListener { e ->
+                            android.util.Log.e(
+                                "KMI_HOME_HYDRATE",
+                                "failed to hydrate home profile from Firestore",
+                                e
+                            )
+                        }
+                }
+
+                DisposableEffect(userSp) {
+                    val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                        if (
+                            key == "branches_json" ||
+                            key == "selected_branches" ||
+                            key == "branches" ||
+                            key == "branch" ||
+                            key == "branch2" ||
+                            key == "branch3" ||
+                            key == "branch_type"
+                        ) {
+                            branchesRefreshTick++
+
+                            android.util.Log.e(
+                                "KMI_HOME_BRANCHES",
+                                "branches pref changed key=$key tick=$branchesRefreshTick " +
+                                        "branches_json=${userSp.getString("branches_json", "")} " +
+                                        "selected_branches=${userSp.getString("selected_branches", "")} " +
+                                        "branches=${userSp.getString("branches", "")} " +
+                                        "branch=${userSp.getString("branch", "")} " +
+                                        "branch2=${userSp.getString("branch2", "")} " +
+                                        "branch3=${userSp.getString("branch3", "")} " +
+                                        "branch_type=${userSp.getString("branch_type", "")}"
+                            )
+                        }
+                    }
+
+                    userSp.registerOnSharedPreferenceChangeListener(listener)
+
+                    onDispose {
+                        userSp.unregisterOnSharedPreferenceChangeListener(listener)
+                    }
+                }
+
+                val selectedBranches: List<String> = remember(userSp, branchesRefreshTick) {
+                    readSelectedBranches(userSp)
+                }
+
+                val branchTypeHome = remember(userSp, branchesRefreshTick) {
                     userSp.getString("branch_type", "israel") ?: "israel"
                 }
 
                 val isAbroadBranch = branchTypeHome == "abroad"
 
-                val branchesEffective = if (selectedBranches.isEmpty() && !isAbroadBranch)
-                    listOf("נתניה – מרכז קהילתי אופק")
-                else
-                    selectedBranches.take(3)
+                val branchesEffective = remember(selectedBranches, isAbroadBranch) {
+                    if (selectedBranches.isEmpty() && !isAbroadBranch) {
+                        listOf("נתניה – מרכז קהילתי אופק")
+                    } else {
+                        selectedBranches.take(3)
+                    }
+                }
+
+                LaunchedEffect(branchesEffective, branchTypeHome, branchesRefreshTick) {
+                    android.util.Log.e(
+                        "KMI_HOME_BRANCHES",
+                        "resolved branchesEffective=$branchesEffective " +
+                                "selectedBranches=$selectedBranches " +
+                                "branchTypeHome=$branchTypeHome tick=$branchesRefreshTick " +
+                                "branches_json=${userSp.getString("branches_json", "")} " +
+                                "selected_branches=${userSp.getString("selected_branches", "")} " +
+                                "branches=${userSp.getString("branches", "")} " +
+                                "branch=${userSp.getString("branch", "")}"
+                    )
+                }
+
                 // ✅ name להצגה + פרמטרים לניווט אימונים חופשיים (נעדכן state כדי שה-FAB יוכל להשתמש גם מחוץ ל-Column)
                 val freeName = remember(userSp) {
                     userSp.getString("full_name", null)
@@ -588,24 +935,14 @@ fun HomeScreen(
                     )
                 }
 
-                Text(
-                    text = if (isEnglish) "Home" else "מסך הבית",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                )
-
-                Spacer(Modifier.height(56.dp))
+                // הכותרת "מסך הבית" כבר מוצגת ב־KmiTopBar.
+                // לכן מסירים את הכותרת הפנימית כדי להרוויח עוד שטח תצוגה.
 
                 if (isCoach) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 10.dp)
+                            .padding(vertical = 4.dp)
                     ) {
                         TrainingsWeekHeader(
                             isEnglish = isEnglish,
@@ -623,7 +960,7 @@ fun HomeScreen(
                                     listOf(Color(0xFF7F00FF), Color(0xFF3F51B5))
                                 )
                             )
-                            .padding(vertical = 10.dp)
+                            .padding(vertical = 4.dp)
                     ) {
                         TrainingsWeekHeader(
                             isEnglish = isEnglish,
@@ -634,12 +971,12 @@ fun HomeScreen(
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(4.dp))
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(6.dp)
+                        .height(4.dp)
                         .background(
                             Brush.verticalGradient(
                                 listOf(
@@ -714,10 +1051,61 @@ fun HomeScreen(
                     return cal.timeInMillis in nowCal.timeInMillis..weekEndCal.timeInMillis
                 }
 
+                fun branchScheduleVariants(branch: String): List<String> {
+                    val clean = branch
+                        .trim()
+                        .replace("־", "-")
+                        .replace("–", "-")
+                        .replace("—", "-")
+                        .replace("  ", " ")
+
+                    val pretty = branch
+                        .trim()
+                        .replace("־", "–")
+                        .replace("-", "–")
+                        .replace("—", "–")
+                        .replace("  ", " ")
+
+                    return listOf(
+                        branch.trim(),
+                        clean,
+                        pretty,
+                        clean.replace(" - ", " – "),
+                        pretty.replace(" – ", " - ")
+                    )
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                }
+
+                fun groupScheduleVariants(group: String): List<String> {
+                    val clean = group
+                        .trim()
+                        .replace("־", "-")
+                        .replace("–", "-")
+                        .replace("—", "-")
+                        .replace("  ", " ")
+
+                    return listOf(
+                        group.trim(),
+                        clean,
+                        clean.replace("+", " + "),
+                        clean.replace(" + ", "+"),
+                        il.kmi.app.training.TrainingCatalog.normalizeGroupName(group).ifBlank { group }
+                    )
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                }
+
                 val currentWeekCandidates: List<TrainingData> =
                     remember(branchesEffective, groupsEffective, coachFromPrefs) {
-                        val all = mutableListOf<TrainingData>()
+                        android.util.Log.e(
+                            "KMI_HOME_SCHEDULE",
+                            "START branchesEffective=$branchesEffective groupsEffective=$groupsEffective"
+                        )
 
+                        val all = mutableListOf<TrainingData>()
                         branchesEffective.forEach { branchName ->
                             val parts = branchName.split('–', '-').map { it.trim() }
                             val city = parts.getOrNull(0) ?: branchName
@@ -731,8 +1119,43 @@ fun HomeScreen(
                             val place = il.kmi.app.training.TrainingCatalog.placeFor(branchName)
 
                             groupsEffective.forEach { grp ->
-                                val sched =
-                                    il.kmi.app.training.TrainingDirectory.getSchedule(branchName, grp)
+
+                                val branchVariants = branchScheduleVariants(branchName)
+                                val groupVariants = groupScheduleVariants(grp)
+
+                                var matchedBranch = ""
+                                var matchedGroup = ""
+
+                                val sched = branchVariants
+                                    .asSequence()
+                                    .flatMap { branchCandidate ->
+                                        groupVariants.asSequence().map { groupCandidate ->
+                                            branchCandidate to groupCandidate
+                                        }
+                                    }
+                                    .mapNotNull { pair ->
+                                        val found = il.kmi.app.training.TrainingDirectory.getSchedule(
+                                            pair.first,
+                                            pair.second
+                                        )
+
+                                        if (found != null) {
+                                            matchedBranch = pair.first
+                                            matchedGroup = pair.second
+                                            found
+                                        } else {
+                                            null
+                                        }
+                                    }
+                                    .firstOrNull()
+
+                                android.util.Log.e(
+                                    "KMI_HOME_SCHEDULE",
+                                    "schedule lookup originalBranch='$branchName' originalGroup='$grp' " +
+                                            "matchedBranch='$matchedBranch' matchedGroup='$matchedGroup' " +
+                                            "found=${sched != null}"
+                                )
+
                                 val coach =
                                     sched?.coachName?.takeIf { it.isNotBlank() }
                                         ?: coachFromPrefs.takeIf { it.isNotBlank() }
@@ -752,14 +1175,41 @@ fun HomeScreen(
                                         )
                                     } ?: emptyList()
 
-                                all += branchItems
+                                val validItems = branchItems
                                     .map { it.copy(cal = rollForwardIfPast(it.cal, 60)) }
                                     .filter { isWithinCurrentWeek(it.cal) }
+
+                                android.util.Log.e(
+                                    "KMI_HOME_SCHEDULE",
+                                    "items branch='$branchName' group='$grp' count=${validItems.size}"
+                                )
+
+                                all += validItems
                             }
                         }
 
-                        all.distinctBy { it.cal.timeInMillis.toString() + "|" + it.address }
+                        val result = all.distinctBy {
+                            buildString {
+                                append(it.cal.timeInMillis)
+                                append("|")
+                                append(it.place.orEmpty())
+                                append("|")
+                                append(it.address.orEmpty())
+                                append("|")
+                                append(it.coach.orEmpty())
+                            }
+                        }
                             .sortedBy { it.cal.timeInMillis }
+
+                        android.util.Log.e(
+                            "KMI_HOME_SCHEDULE",
+                            "FINAL candidates=${result.size} " +
+                                    result.joinToString(" || ") {
+                                        "${it.place} | ${it.address} | ${it.cal.time}"
+                                    }
+                        )
+
+                        result
                     }
 
                 val blockedWeekTrainings = remember(currentWeekCandidates) {
@@ -824,7 +1274,17 @@ fun HomeScreen(
                     } else {
                         items(
                             items = upcoming,
-                            key = { it.cal.timeInMillis }
+                            key = { training ->
+                                buildString {
+                                    append(training.cal.timeInMillis)
+                                    append("|")
+                                    append(training.place.orEmpty())
+                                    append("|")
+                                    append(training.address.orEmpty())
+                                    append("|")
+                                    append(training.coach.orEmpty())
+                                }
+                            }
                         ) { training ->
                             TrainingCardCompact(
                                 training = training,
@@ -1918,7 +2378,7 @@ private fun TrainingCardCompact(
                 icon()
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     maxLines = 1
                 )
                 Spacer(Modifier.weight(1f))
@@ -1930,7 +2390,7 @@ private fun TrainingCardCompact(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .heightIn(min = 72.dp),
+            .heightIn(min = 68.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
         shape = RoundedCornerShape(16.dp)
@@ -1938,7 +2398,7 @@ private fun TrainingCardCompact(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp)
+                .padding(10.dp)
         ) {
             val branchLine = remember(training.place, training.address, isEnglish) {
                 val displaySource = training.place
@@ -1954,7 +2414,7 @@ private fun TrainingCardCompact(
 
             Text(
                 text = branchLine,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
@@ -1969,14 +2429,14 @@ private fun TrainingCardCompact(
             ) {
                 Text(
                     text = dayText,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = dateText,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -1984,14 +2444,14 @@ private fun TrainingCardCompact(
 
             Text(
                 text = timeText,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2056,12 +2516,12 @@ private fun NavigationChip(
             Color.Black.copy(alpha = 0.06f)
         ),
         modifier = modifier
-            .height(44.dp)
+            .heightIn(min = 54.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // אייקון
@@ -2082,10 +2542,13 @@ private fun NavigationChip(
 
             Spacer(Modifier.width(10.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
                 Text(
                     text = if (isEnglish) "Navigate" else "ניווט",
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF0B1220),
                     maxLines = 1,
@@ -2099,10 +2562,12 @@ private fun NavigationChip(
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
+
+            Spacer(Modifier.width(8.dp))
 
             Icon(
                 imageVector = Icons.Filled.Person, // אם אתה רוצה חץ במקום, תגיד ואחליף

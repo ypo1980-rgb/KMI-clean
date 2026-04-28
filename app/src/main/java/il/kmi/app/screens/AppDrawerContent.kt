@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.WorkspacePremium
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -162,6 +163,7 @@ fun AppDrawerContent(
     onOpenSubscriptions: () -> Unit,
     onOpenForum: () -> Unit,
     onOpenMyProfile: () -> Unit,
+    onOpenEditProfile: () -> Unit,
     onOpenAboutItzik: () -> Unit,
     onOpenMonthlyCalendar: () -> Unit,
     onOpenTrainingSummary: () -> Unit,
@@ -875,6 +877,41 @@ fun AppDrawerContent(
                                 onClick = {
                                     onClose()
                                     onOpenForum()
+                                }
+                            )
+                        }
+
+                        // ✅ עריכת פרופיל — אותו מסך שהיה נפתח מכפתור "ערוך פרטים" בהגדרות
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                leading = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Person,
+                                        contentDescription = null,
+                                        tint = Color.White
+                                    )
+                                },
+                                title = "Edit Profile",
+                                subtitle = "Update your personal details",
+                                onClick = {
+                                    onClose()
+                                    onOpenEditProfile()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                leading = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Person,
+                                        contentDescription = null,
+                                        tint = Color.White
+                                    )
+                                },
+                                title = "עריכת פרופיל",
+                                subtitle = "עדכון פרטים אישיים",
+                                onClick = {
+                                    onClose()
+                                    onOpenEditProfile()
                                 }
                             )
                         }

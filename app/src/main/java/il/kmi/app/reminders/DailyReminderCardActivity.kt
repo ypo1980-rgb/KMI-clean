@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,8 +64,22 @@ class DailyReminderCardActivity : ComponentActivity() {
         val belt = intent.getStringExtra("daily_reminder_belt_id") ?: ""
         val topic = intent.getStringExtra("daily_reminder_topic") ?: ""
         val item = intent.getStringExtra("daily_reminder_item") ?: ""
-        val explanation = intent.getStringExtra("daily_reminder_explanation") ?: ""
+        val explanationFromIntent = intent.getStringExtra("daily_reminder_explanation") ?: ""
         val extraCount = intent.getIntExtra("daily_reminder_extra_count", 0)
+
+        val explanation = resolveDailyReminderExplanation(
+            beltId = belt,
+            item = item,
+            explanationFromIntent = explanationFromIntent
+        )
+
+        android.util.Log.e(
+            "KMI_REMINDER_CARD",
+            "open card belt=$belt topic=$topic item=$item " +
+                    "intentExplanationLength=${explanationFromIntent.length} " +
+                    "finalExplanationLength=${explanation.length} " +
+                    "finalIsFallback=${isDailyReminderFallbackExplanation(explanation)}"
+        )
 
         setContent {
 
@@ -107,7 +120,14 @@ class DailyReminderCardActivity : ComponentActivity() {
                         )
 
                         if (nextPicked != null) {
-                            val nextExplanation = Explanations.get(nextPicked.belt, nextPicked.item)
+                            val nextRawExplanation =
+                                Explanations.get(nextPicked.belt, nextPicked.item).trim()
+
+                            val nextExplanation = resolveDailyReminderExplanation(
+                                beltId = nextPicked.belt.id,
+                                item = nextPicked.item,
+                                explanationFromIntent = nextRawExplanation
+                            )
 
                             startActivity(
                                 Intent(this, DailyReminderCardActivity::class.java).apply {
@@ -618,6 +638,93 @@ private fun PremiumOutlinedActionButton(
             )
         }
     }
+}
+
+private fun resolveDailyReminderExplanation(
+    beltId: String,
+    item: String,
+    explanationFromIntent: String
+): String {
+    val cleanedIntentExplanation = cleanupDailyReminderExplanation(explanationFromIntent)
+
+    if (
+        cleanedIntentExplanation.isNotBlank() &&
+        !isDailyReminderFallbackExplanation(cleanedIntentExplanation)
+    ) {
+        return cleanedIntentExplanation
+    }
+
+    val belt = Belt.fromId(beltId) ?: return "אין כרגע הסבר לתרגיל הזה."
+
+    fun String.cleanExerciseName(): String {
+        return this
+            .replace('–', '-')
+            .replace('—', '-')
+            .replace('־', '-')
+            .replace("  ", " ")
+            .trim()
+    }
+
+    val baseItem = item.trim()
+
+    val candidates = buildList {
+        add(baseItem)
+        add(baseItem.cleanExerciseName())
+        add(baseItem.substringBefore("(").trim())
+        add(baseItem.substringBefore("(").trim().cleanExerciseName())
+        add(baseItem.replace("-", "–").trim())
+        add(baseItem.replace("–", "-").trim())
+        add(baseItem.replace("'", "׳").trim())
+        add(baseItem.replace("׳", "'").trim())
+    }
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+
+    candidates.forEach { candidate ->
+        val raw = Explanations.get(belt, candidate).trim()
+        val cleaned = cleanupDailyReminderExplanation(raw)
+
+        android.util.Log.e(
+            "KMI_REMINDER_CARD",
+            "explanation candidate='$candidate' length=${cleaned.length} " +
+                    "fallback=${isDailyReminderFallbackExplanation(cleaned)}"
+        )
+
+        if (
+            cleaned.isNotBlank() &&
+            !isDailyReminderFallbackExplanation(cleaned)
+        ) {
+            return cleaned
+        }
+    }
+
+    return "אין כרגע הסבר לתרגיל הזה."
+}
+
+private fun cleanupDailyReminderExplanation(raw: String): String {
+    val cleaned = raw.trim()
+
+    if (cleaned.isBlank()) return ""
+
+    return if ("::" in cleaned) {
+        cleaned
+            .split("::")
+            .map { it.trim() }
+            .lastOrNull { it.isNotBlank() }
+            ?: cleaned
+    } else {
+        cleaned
+    }
+}
+
+private fun isDailyReminderFallbackExplanation(text: String): Boolean {
+    val clean = text.trim()
+
+    return clean.isBlank() ||
+            clean.startsWith("הסבר מפורט על") ||
+            clean.startsWith("אין כרגע") ||
+            clean.startsWith("Detailed explanation for:")
 }
 
 private fun previousBeltForTarget(targetBelt: Belt): Belt {

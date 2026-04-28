@@ -5,6 +5,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import java.util.Calendar
 import il.kmi.app.halacha.ShabbatHolidayChecker
 
@@ -13,6 +16,35 @@ object DailyReminderScheduler {
     private const val REQUEST_CODE_DAILY_REMINDER = 41021
     private const val PREFS_NAME = "kmi_prefs"
     private const val KEY_USER_ROLE = "kmi.user.role"
+
+    fun canScheduleExactDailyReminder(context: Context): Boolean {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            true
+        }
+    }
+
+    fun openExactAlarmPermissionSettings(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+
+        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        runCatching {
+            context.startActivity(intent)
+        }.onFailure { error ->
+            android.util.Log.e(
+                "KMI_REMINDER",
+                "Failed to open exact alarm settings",
+                error
+            )
+        }
+    }
 
     fun schedule(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -144,7 +176,12 @@ object DailyReminderScheduler {
                     triggerAtMillis,
                     pendingIntent
                 )
-                android.util.Log.d("KMI_REMINDER", "Scheduled with setAndAllowWhileIdle fallback")
+
+                android.util.Log.e(
+                    "KMI_REMINDER",
+                    "Exact alarm permission missing. Scheduled with setAndAllowWhileIdle fallback, " +
+                            "but Android may delay the daily reminder."
+                )
             }
         } else {
             alarmManager.setExactAndAllowWhileIdle(

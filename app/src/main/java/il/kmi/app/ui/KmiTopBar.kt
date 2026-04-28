@@ -282,7 +282,10 @@ fun KmiTopBar(
         }
 
     val topBarHeight = 56.dp
-    val bottomBarHeight = 44.dp
+
+    // ✅ הסרגל התחתון כולל עכשיו אייקון + טקסט קטן מתחתיו.
+    // לכן מגדילים את הגובה כדי שהכיתוב לא ייחתך.
+    val bottomBarHeight = 86.dp
 
     // Back בטוח
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
@@ -540,6 +543,8 @@ fun KmiTopBar(
                         .background(Color.Transparent)
                 )
 
+                // ✅ הסרגל עצמו כבר כולל labels מתחת לאייקונים.
+                // אחרי הגדלת bottomBarHeight הכיתוב יופיע בצורה מלאה.
                 il.kmi.app.screens.BottomActionsBarEdgeToEdge(
                     // בית: נעול/פתוח לפי homeEnabledForBar
                     onHome = if (onHome != null) {

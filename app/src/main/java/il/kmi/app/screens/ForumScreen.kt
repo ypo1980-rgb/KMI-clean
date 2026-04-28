@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -54,7 +55,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -75,6 +79,11 @@ import kotlinx.datetime.toKotlinInstant
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.unit.sp
+
+//==================================================================
 
 // הודעה למסך (כולל מידע אם זו הודעה שלי + מדיה)
 private data class ForumUiMessage(
@@ -107,10 +116,35 @@ fun ForumScreen(
     onGoHome: () -> Unit                   // 👈 נשתמש בו באמת
 ) {
     val ctx = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    val systemDark = isSystemInDarkTheme()
+
     // 🔵 דיאלוג AI פתוח/סגור
     var showAiDialog by rememberSaveable { mutableStateOf(false) }
     val userSp = remember {
         ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+    }
+
+    // ✅ מצב כהה/בהיר לפי הגדרת האפליקציה, לא רק לפי מצב המכשיר
+    val appThemeMode = remember {
+        sp.getString("theme_mode", null)
+            ?: userSp.getString("theme_mode", null)
+            ?: ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE)
+                .getString("theme_mode", "system")
+            ?: "system"
+    }
+
+    val isDarkMode = when (appThemeMode) {
+        "dark" -> true
+        "light" -> false
+        else -> systemDark
+    }
+
+    val isCoachProfile = remember {
+        val role = userSp.getString("user_role", "trainee").orEmpty().lowercase()
+        role.contains("coach") || role.contains("מאמן")
     }
 
     // --- זיהוי מנהל / override ---
@@ -136,9 +170,10 @@ fun ForumScreen(
     val isTrial = KmiAccess.isTrialActive(userSp)
     val hasFull = KmiAccess.hasFullAccess(userSp)
 
-    // 🔒 גישת אקסטרות לפורום:
-    // רק מנוי מלא או מנהל (trial לא פותח פורום)
-    val canUseExtras = true
+    // 🔒 גישת פורום:
+    // רק מנוי חודשי / שנתי פעיל או מנהל.
+    // Trial לא פותח את הפורום.
+    val canUseExtras = isManagerOverride || hasFull
 
     // סניף + קבוצה של המשתמש (הקבוצה = "חדר" הפורום)
     val branch = remember { userSp.getString("branch", "") ?: "" }
@@ -374,6 +409,10 @@ fun ForumScreen(
             attachedUri = null
             attachedMediaType = null
 
+            // ✅ אחרי שליחה סוגרים מקלדת ומחזירים שדה ראייה למסך
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+
         } catch (e: Exception) {
             android.util.Log.e("KMI_FORUM", "sendMessageInternal failed", e)
             Toast.makeText(
@@ -390,15 +429,57 @@ fun ForumScreen(
         return df.format(date)
     }
 
-    val gradientBackground = remember {
-        Brush.verticalGradient(
-            listOf(
-                Color(0xFF0B141A),
-                Color(0xFF0F1B22),
-                Color(0xFF111B21)
+    val gradientBackground = remember(isDarkMode, isCoachProfile) {
+        if (isDarkMode) {
+            Brush.verticalGradient(
+                listOf(
+                    Color(0xFF0B141A),
+                    Color(0xFF0F1B22),
+                    Color(0xFF111B21)
+                )
             )
-        )
+        } else {
+            if (isCoachProfile) {
+                // ✅ רקע בהיר בסגנון מאמן — סגול/כחול אלגנטי
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFFF8F5FF),
+                        Color(0xFFF0E9FF),
+                        Color(0xFFEAF6FF)
+                    )
+                )
+            } else {
+                // ✅ רקע בהיר בסגנון מתאמן — כחול/טורקיז עדין
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFFF6FBFF),
+                        Color(0xFFEAF7FF),
+                        Color(0xFFEAFBF6)
+                    )
+                )
+            }
+        }
     }
+
+    val forumHeaderColor = if (isDarkMode) Color(0xFF182229) else Color.White.copy(alpha = 0.94f)
+    val forumHeaderBorder = if (isDarkMode) Color(0xFF22303A) else Color(0xFFD6E4F4)
+    val forumHeaderText = if (isDarkMode) Color(0xFFD1D7DB) else Color(0xFF1F2937)
+
+    val participantsColor = if (isDarkMode) Color(0xFF111B21) else Color.White.copy(alpha = 0.92f)
+    val participantsText = if (isDarkMode) Color(0xFFBFC8CD) else Color(0xFF334155)
+
+    val myBubbleColor = if (isDarkMode) Color(0xFF144D37) else Color(0xFFDDFBEA)
+    val otherBubbleColor = if (isDarkMode) Color(0xFF202C33) else Color.White.copy(alpha = 0.96f)
+    val myBubbleText = if (isDarkMode) Color(0xFFF7F8F8) else Color(0xFF064E3B)
+    val otherBubbleText = if (isDarkMode) Color(0xFFE9EDEF) else Color(0xFF111827)
+
+    val inputSurfaceColor = if (isDarkMode) Color(0xFF202C33) else Color.White
+    val inputTextColor = if (isDarkMode) Color.White else Color(0xFF0F172A)
+    val inputPlaceholderColor = if (isDarkMode) Color(0xFF8696A0) else Color(0xFF64748B)
+    val inputIconTint = if (isDarkMode) Color(0xFF8696A0) else Color(0xFF64748B)
+
+    val attachmentChipColor = if (isDarkMode) Color(0xFF1B2A33) else Color.White.copy(alpha = 0.94f)
+    val attachmentChipText = if (isDarkMode) Color(0xFFD8E1E6) else Color(0xFF334155)
 
     Scaffold(
         topBar = {
@@ -449,10 +530,18 @@ fun ForumScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
-                        color = Color(0xFF020617).copy(alpha = 0.92f),
+                        color = if (isDarkMode) {
+                            Color(0xFF020617).copy(alpha = 0.92f)
+                        } else {
+                            Color.White.copy(alpha = 0.94f)
+                        },
                         shape = RoundedCornerShape(20.dp),
                         tonalElevation = 4.dp,
-                        shadowElevation = 4.dp
+                        shadowElevation = 4.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            if (isDarkMode) Color.Transparent else Color(0xFFD7E3F4)
+                        )
                     ) {
                         Column(
                             modifier = Modifier
@@ -461,9 +550,30 @@ fun ForumScreen(
                             verticalArrangement = Arrangement.Center,
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
+                            Surface(
+                                shape = RoundedCornerShape(22.dp),
+                                color = Color.White.copy(alpha = if (isDarkMode) 0.08f else 0.85f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFD7E3F4)
+                                ),
+                                modifier = Modifier.size(64.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Lock,
+                                        contentDescription = null,
+                                        tint = if (isDarkMode) Color(0xFFBFDBFE) else Color(0xFF2563EB),
+                                        modifier = Modifier.size(30.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
                             Text(
-                                text = "🔒 גישה לפורום",
-                                color = Color(0xFFBFDBFE),
+                                text = "גישה לפורום",
+                                color = if (isDarkMode) Color(0xFFBFDBFE) else Color(0xFF1E3A8A),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center,
@@ -472,7 +582,7 @@ fun ForumScreen(
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 text = lockText,
-                                color = Color(0xFFE5E7EB),
+                                color = if (isDarkMode) Color(0xFFE5E7EB) else Color(0xFF334155),
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
@@ -493,7 +603,7 @@ fun ForumScreen(
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 text = "ניתן לחזור תמיד למסך זה לאחר רכישת מנוי.",
-                                color = Color(0xFF9CA3AF),
+                                color = if (isDarkMode) Color(0xFF9CA3AF) else Color(0xFF64748B),
                                 style = MaterialTheme.typography.bodySmall,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
@@ -524,14 +634,14 @@ fun ForumScreen(
                         .padding(bottom = 8.dp),
                     shape = RoundedCornerShape(16.dp),
                     tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                    color = Color(0xFF182229),
-                    border = BorderStroke(1.dp, Color(0xFF22303A))
+                    shadowElevation = if (isDarkMode) 0.dp else 3.dp,
+                    color = forumHeaderColor,
+                    border = BorderStroke(1.dp, forumHeaderBorder)
                 ) {
                     Text(
                         text = roomLabel,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFD1D7DB),
+                        color = forumHeaderText,
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier
@@ -574,14 +684,14 @@ fun ForumScreen(
                             .clickable { showParticipantsDialog = true },
                         shape = RoundedCornerShape(16.dp),
                         tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        color = Color(0xFF111B21),
-                        border = BorderStroke(1.dp, Color(0xFF22303A))
+                        shadowElevation = if (isDarkMode) 0.dp else 3.dp,
+                        color = participantsColor,
+                        border = BorderStroke(1.dp, forumHeaderBorder)
                     ) {
                         Text(
                             text = "משתתפים בפורום (${participants.size})",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Color(0xFFBFC8CD),
+                            color = participantsText,
                             fontWeight = FontWeight.Medium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier
@@ -647,9 +757,9 @@ fun ForumScreen(
                         key = { it.id }
                     ) { msg ->
                         val bubbleColor =
-                            if (msg.isMine) Color(0xFF144D37) else Color(0xFF202C33)
+                            if (msg.isMine) myBubbleColor else otherBubbleColor
                         val textColor =
-                            if (msg.isMine) Color(0xFFF7F8F8) else Color(0xFFE9EDEF)
+                            if (msg.isMine) myBubbleText else otherBubbleText
 
                         Row(
                             modifier = Modifier
@@ -855,8 +965,8 @@ fun ForumScreen(
                 if (attachedUri != null && attachedMediaType != null) {
                     Surface(
                         shape = RoundedCornerShape(18.dp),
-                        color = Color(0xFF1B2A33),
-                        border = BorderStroke(1.dp, Color(0xFF22303A)),
+                        color = attachmentChipColor,
+                        border = BorderStroke(1.dp, forumHeaderBorder),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 6.dp)
@@ -873,7 +983,7 @@ fun ForumScreen(
                                     "video" -> "סרטון מצורף לשליחה"
                                     else -> "קובץ מצורף"
                                 },
-                                color = Color(0xFFD8E1E6),
+                                color = attachmentChipText,
                                 style = MaterialTheme.typography.labelMedium
                             )
                             TextButton(onClick = {
@@ -890,29 +1000,32 @@ fun ForumScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp)
+                        .height(60.dp)
+                        .padding(top = 4.dp, bottom = 4.dp)
                         .windowInsetsPadding(
-                            WindowInsets.navigationBars
-                                .only(WindowInsetsSides.Bottom)
-                                .union(
-                                    WindowInsets.ime.only(WindowInsetsSides.Bottom)
-                                )
+                            WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
                         ),
-                    verticalAlignment = Alignment.Bottom,
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Surface(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
                         shape = RoundedCornerShape(28.dp),
-                        color = Color(0xFF202C33),
+                        color = inputSurfaceColor,
                         tonalElevation = 0.dp,
-                        shadowElevation = 1.dp
+                        shadowElevation = if (isDarkMode) 1.dp else 5.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            if (isDarkMode) Color.Transparent else Color(0xFFD6E4F4)
+                        )
                     ) {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 6.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.Bottom
+                                .fillMaxSize()
+                                .padding(horizontal = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
                                 onClick = { imagePicker.launch("image/*") },
@@ -921,37 +1034,60 @@ fun ForumScreen(
                                 Icon(
                                     Icons.Outlined.Add,
                                     contentDescription = "צרף תמונה",
-                                    tint = Color(0xFF8696A0)
+                                    tint = inputIconTint
                                 )
                             }
 
-                            OutlinedTextField(
+                            BasicTextField(
                                 value = if (editingMessage != null) editText else input,
                                 onValueChange = {
-                                    if (editingMessage != null) editText = it else input = it
+                                    if (editingMessage != null) {
+                                        editText = it
+                                    } else {
+                                        input = it
+                                    }
                                 },
-                                modifier = Modifier.weight(1f),
-                                placeholder = {
-                                    Text(
-                                        if (editingMessage != null) "עריכת הודעה..." else "הודעה",
-                                        textAlign = TextAlign.Right,
-                                        color = Color(0xFF8696A0)
-                                    )
-                                },
-                                singleLine = false,
-                                maxLines = 4,
-                                shape = RoundedCornerShape(24.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    disabledContainerColor = Color.Transparent,
-                                    focusedBorderColor = Color.Transparent,
-                                    unfocusedBorderColor = Color.Transparent,
-                                    disabledBorderColor = Color.Transparent,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White,
-                                    cursorColor = Color(0xFF25D366)
-                                )
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    color = inputTextColor,
+                                    textAlign = TextAlign.Right,
+                                    fontWeight = FontWeight.SemiBold,
+                                    lineHeight = 22.sp
+                                ),
+                                cursorBrush = SolidColor(Color(0xFF25D366)),
+                                singleLine = true,
+                                decorationBox = { innerTextField ->
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 8.dp),
+                                        contentAlignment = Alignment.CenterEnd
+                                    ) {
+                                        val currentText =
+                                            if (editingMessage != null) editText else input
+
+                                        if (currentText.isBlank()) {
+                                            Text(
+                                                text = if (editingMessage != null) "עריכת הודעה..." else "הודעה",
+                                                color = inputPlaceholderColor,
+                                                textAlign = TextAlign.Right,
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    lineHeight = 22.sp
+                                                ),
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            contentAlignment = Alignment.CenterEnd
+                                        ) {
+                                            innerTextField()
+                                        }
+                                    }
+                                }
                             )
 
                             IconButton(
@@ -961,7 +1097,7 @@ fun ForumScreen(
                                 Icon(
                                     Icons.Filled.VideoLibrary,
                                     contentDescription = "צרף וידאו",
-                                    tint = Color(0xFF8696A0)
+                                    tint = inputIconTint
                                 )
                             }
                         }
@@ -977,7 +1113,7 @@ fun ForumScreen(
                         },
                         shape = RoundedCornerShape(999.dp),
                         color = if (canSend) Color(0xFF25D366) else Color(0xFF1F3C33),
-                        modifier = Modifier.size(54.dp),
+                        modifier = Modifier.size(48.dp),
                         tonalElevation = 0.dp,
                         shadowElevation = 2.dp
                     ) {

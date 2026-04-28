@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -127,9 +128,11 @@ fun BottomActionsBarEdgeToEdge(
     val tSearch = if (isEnglish) "Search" else "חיפוש"
     val tHome = if (isEnglish) "Home" else "בית"
     val tSettings = if (isEnglish) "Settings" else "הגדרות"
-    val tAssistant = if (isEnglish) "Assistant" else "עוזר"
+
+    // ✅ כיתובים קצרים כדי שלא ייחתכו מתחת לאייקונים
+    val tAssistant = if (isEnglish) "AI" else "עוזר"
     val tShare = if (isEnglish) "Share" else "שתף"
-    val tBroadcast = if (isEnglish) "Broadcast" else "שידור"
+    val tBroadcast = if (isEnglish) "Cast" else "שידור"
 
     val tSearchLocked = if (isEnglish) {
         "Search is available after login/registration"
@@ -214,7 +217,7 @@ fun BottomActionsBarEdgeToEdge(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 72.dp),
+            .heightIn(min = 82.dp),
         shape = RectangleShape,
         color = Color.Transparent,
         tonalElevation = 0.dp,
@@ -225,15 +228,15 @@ fun BottomActionsBarEdgeToEdge(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 2.dp)
-                .clip(RoundedCornerShape(24.dp))
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .clip(RoundedCornerShape(26.dp))
                 .background(Color.White.copy(alpha = 0.96f))
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                    .height(58.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .height(68.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
@@ -620,27 +623,35 @@ fun BarAction(
 ) {
     Column(
         modifier = Modifier
-            .widthIn(min = 60.dp)
-            .padding(horizontal = 2.dp),
+            .widthIn(min = 56.dp, max = 72.dp)
+            .padding(horizontal = 1.dp)
+            .clickable(enabled = enabled) { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
-            modifier = Modifier.height(46.dp),
+            modifier = Modifier.height(44.dp),
             contentAlignment = Alignment.Center
         ) {
             content()
         }
 
         if (label.isNotBlank()) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(3.dp))
+
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                fontSize = 10.sp,
+                fontSize = 9.5.sp,
+                lineHeight = 10.sp,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.76f else 0.40f)
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface.copy(
+                    alpha = if (enabled) 0.78f else 0.40f
+                ),
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

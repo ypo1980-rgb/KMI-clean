@@ -208,6 +208,14 @@ fun SettingsScreenModern(
         mutableStateOf(reminderPrefs.getMinute().takeIf { it in 0..59 } ?: 0)
     }
 
+    fun hasNotificationPermissionForDailyReminder(): Boolean {
+        return Build.VERSION.SDK_INT < 33 ||
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    appCtx,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+    }
+
     fun applyDailyReminderSettings(
         enabled: Boolean,
         hour: Int = dailyReminderHour,
@@ -224,16 +232,58 @@ fun SettingsScreenModern(
         dailyReminderHour = safeHour
         dailyReminderMinute = safeMinute
 
-        android.util.Log.d(
+        android.util.Log.e(
             "KMI_REMINDER",
-            "applyDailyReminderSettings enabled=$enabled hour=$safeHour minute=$safeMinute isCoach=$isCoach"
+            "applyDailyReminderSettings enabled=$enabled hour=$safeHour minute=$safeMinute " +
+                    "isCoach=$isCoach hasNotificationPermission=${hasNotificationPermissionForDailyReminder()}"
         )
 
         if (enabled) {
+            if (!hasNotificationPermissionForDailyReminder()) {
+                android.util.Log.e(
+                    "KMI_REMINDER",
+                    "Daily reminder not scheduled because notification permission is missing"
+                )
+                return
+            }
+
+            if (!DailyReminderScheduler.canScheduleExactDailyReminder(appCtx)) {
+                android.util.Log.e(
+                    "KMI_REMINDER",
+                    "Exact alarm permission missing. Opening exact alarm settings."
+                )
+
+                android.widget.Toast.makeText(
+                    appCtx,
+                    "כדי לקבל תרגיל יומי בדיוק בשעה שבחרת, אשר הרשאת התראות ושעונים במסך הבא",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+
+                DailyReminderScheduler.openExactAlarmPermissionSettings(appCtx)
+
+                // משאירים fallback כדי שלא תאבד לגמרי התראה,
+                // אבל אחרי אישור ההרשאה כדאי להיכנס שוב להגדרות ולשמור שעה מחדש.
+                DailyReminderScheduler.cancel(appCtx)
+                DailyReminderScheduler.schedule(appCtx)
+                return
+            }
+
             DailyReminderScheduler.cancel(appCtx)
             DailyReminderScheduler.schedule(appCtx)
+
+            android.widget.Toast.makeText(
+                appCtx,
+                "התראה יומית נקבעה לשעה %02d:%02d".format(safeHour, safeMinute),
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
         } else {
             DailyReminderScheduler.cancel(appCtx)
+
+            android.widget.Toast.makeText(
+                appCtx,
+                "התראת התרגיל היומי בוטלה",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -276,11 +326,16 @@ fun SettingsScreenModern(
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
 
-                    // ⬇⬇ שורת כותרת — RTL: "הגדרות" בצד ימין, "ערוך פרטים" בשמאל
+                    // ⬇⬇ כותרת עם יישור אבסולוטי:
+                    // עברית = ימין אמיתי, אנגלית = שמאל אמיתי
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = rowSpaceBetween
+                        horizontalArrangement = if (isEnglish) {
+                            Arrangement.Absolute.Left
+                        } else {
+                            Arrangement.Absolute.Right
+                        }
                     ) {
                         Text(
                             text = tr("הגדרות", "Settings"),
@@ -288,38 +343,9 @@ fun SettingsScreenModern(
                                 color = Color.White,
                                 fontWeight = FontWeight.ExtraBold
                             ),
-                            textAlign = textAlignPrimary,
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier.padding(horizontal = 8.dp)
                         )
-
-                        val ctx = LocalContext.current
-                        val onOpenRegistrationState = rememberUpdatedState(newValue = onOpenRegistration)
-
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.CenterVertically)
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(MaterialTheme.colorScheme.primary)
-                                .clickable {
-                                    try {
-                                        onOpenRegistrationState.value.invoke()
-                                    } catch (t: Throwable) {
-                                        android.util.Log.e("Settings", "EditProfile click failed", t)
-                                        android.widget.Toast.makeText(
-                                            ctx,
-                                            tr("לא הצלחתי לפתוח עריכת פרטים", "Could not open profile editing"),
-                                            android.widget.Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
-                        ) {
-                            Text(
-                                tr("ערוך פרטים", "Edit profile"),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
                     }
 
                     Spacer(Modifier.height(8.dp))
@@ -385,20 +411,30 @@ fun SettingsScreenModern(
 
             // --- שפה מועדפת ---
             SettingsCard(
-                title = "שפה",
-                subtitle = "בחר שפת ממשק האפליקציה",
+                title = tr("שפה", "Language"),
+                subtitle = tr("בחר שפת ממשק האפליקציה", "Choose the app interface language"),
                 icon = Icons.Filled.Language,
                 iconTint = sectionIconTint
             ) {
 
-                val context = LocalContext.current
-                val languageManager = remember { AppLanguageManager(context) }
-
-                var currentLanguage by remember {
-                    mutableStateOf(languageManager.getCurrentLanguage())
-                }
-
                 val selectedIndex = if (currentLanguage == AppLanguage.HEBREW) 0 else 1
+
+                fun applyLanguage(newLanguage: AppLanguage) {
+                    if (currentLanguage == newLanguage) return
+
+                    languageManager.setLanguage(newLanguage)
+                    currentLanguage = newLanguage
+
+                    android.widget.Toast.makeText(
+                        appCtxLang,
+                        if (newLanguage == AppLanguage.ENGLISH) {
+                            "Language changed to English"
+                        } else {
+                            "השפה שונתה לעברית"
+                        },
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
 
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -418,9 +454,7 @@ fun SettingsScreenModern(
                         Tab(
                             selected = selectedIndex == 0,
                             onClick = {
-                                languageManager.setLanguage(AppLanguage.HEBREW)
-                                currentLanguage = AppLanguage.HEBREW
-                                (context as? android.app.Activity)?.recreate()
+                                applyLanguage(AppLanguage.HEBREW)
                             },
                             text = {
                                 Text(
@@ -433,9 +467,7 @@ fun SettingsScreenModern(
                         Tab(
                             selected = selectedIndex == 1,
                             onClick = {
-                                languageManager.setLanguage(AppLanguage.ENGLISH)
-                                currentLanguage = AppLanguage.ENGLISH
-                                (context as? android.app.Activity)?.recreate()
+                                applyLanguage(AppLanguage.ENGLISH)
                             },
                             text = {
                                 Text(
@@ -602,6 +634,12 @@ fun SettingsScreenModern(
 
                 val notifPermissionLauncher =
                     rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                        android.util.Log.e(
+                            "KMI_REMINDER",
+                            "daily reminder notification permission granted=$granted " +
+                                    "hour=$dailyReminderHour minute=$dailyReminderMinute"
+                        )
+
                         if (granted) {
                             applyDailyReminderSettings(
                                 enabled = true,
@@ -610,6 +648,15 @@ fun SettingsScreenModern(
                             )
                         } else {
                             applyDailyReminderSettings(enabled = false)
+
+                            android.widget.Toast.makeText(
+                                ctx,
+                                tr(
+                                    "לא ניתן להפעיל תרגיל יומי בלי הרשאת התראות",
+                                    "Daily exercise reminder requires notification permission"
+                                ),
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
                         }
                     }
 
@@ -683,11 +730,28 @@ fun SettingsScreenModern(
                                 TimePickerDialog(
                                     ctx,
                                     { _, hourOfDay, minute ->
-                                        applyDailyReminderSettings(
-                                            enabled = true,
-                                            hour = hourOfDay,
-                                            minute = minute
-                                        )
+
+                                        dailyReminderHour = hourOfDay
+                                        dailyReminderMinute = minute
+
+                                        reminderPrefs.setHour(hourOfDay)
+                                        reminderPrefs.setMinute(minute)
+                                        reminderPrefs.setEnabledForRole(isCoach, true)
+                                        dailyReminderEnabled = true
+
+                                        if (Build.VERSION.SDK_INT >= 33 && !hasNotificationPermissionForDailyReminder()) {
+                                            android.util.Log.e(
+                                                "KMI_REMINDER",
+                                                "Requesting notification permission after time selected hour=$hourOfDay minute=$minute"
+                                            )
+                                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            applyDailyReminderSettings(
+                                                enabled = true,
+                                                hour = hourOfDay,
+                                                minute = minute
+                                            )
+                                        }
                                     },
                                     dailyReminderHour,
                                     dailyReminderMinute,

@@ -273,14 +273,83 @@ class BillingRepository(
         }
     }
 
+    /**
+     * מצב בדיקות:
+     * חודשי = 5 דקות
+     * שנתי = 30 דקות
+     *
+     * לפני גרסה אמיתית למשתמשים:
+     * לשנות את forceShortTestExpiry ל־false.
+     */
+    private fun calculateAccessUntilForSubscription(
+        productId: String,
+        purchaseTime: Long
+    ): Long {
+        val forceShortTestExpiry = true
+        val now = System.currentTimeMillis()
+
+        if (forceShortTestExpiry) {
+            val testDurationMs = when (productId) {
+                SubscriptionProducts.REGULAR_MONTHLY,
+                SubscriptionProducts.MEMBER_MONTHLY -> 5L * 60L * 1000L
+
+                SubscriptionProducts.REGULAR_YEARLY,
+                SubscriptionProducts.MEMBER_YEARLY -> 30L * 60L * 1000L
+
+                else -> 5L * 60L * 1000L
+            }
+
+            // ✅ חשוב:
+            // בבדיקות Google Play יכול להחזיר purchaseTime ישן/משוחזר.
+            // לכן את חלון הגישה לבדיקה מחשבים מהרגע שבו Google Play אימת שהמנוי פעיל.
+            val until = now + testDurationMs
+
+            Log.e(
+                TAG,
+                "TEST ACCESS UNTIL product=$productId " +
+                        "purchaseTime=$purchaseTime now=$now until=$until " +
+                        "minutes=${testDurationMs / 60_000L}"
+            )
+
+            return until
+        }
+
+        val productionDurationMs = when (productId) {
+            SubscriptionProducts.REGULAR_MONTHLY,
+            SubscriptionProducts.MEMBER_MONTHLY -> 31L * 24L * 60L * 60L * 1000L
+
+            SubscriptionProducts.REGULAR_YEARLY,
+            SubscriptionProducts.MEMBER_YEARLY -> 370L * 24L * 60L * 60L * 1000L
+
+            else -> 31L * 24L * 60L * 60L * 1000L
+        }
+
+        // ✅ גם בפרודקשן עדיף לא להסתמך על purchaseTime בלבד,
+        // כי Google Play הוא מקור האמת לשאלה האם המנוי פעיל כרגע.
+        val until = now + productionDurationMs
+
+        Log.e(
+            TAG,
+            "PRODUCTION ACCESS UNTIL product=$productId " +
+                    "purchaseTime=$purchaseTime now=$now until=$until"
+        )
+
+        return until
+    }
+
     private fun writeAccessEverywhere(
         enabled: Boolean,
         ownedProduct: String?,
         purchaseToken: String?,
         purchaseTime: Long?
     ) {
+        val now = System.currentTimeMillis()
+
         val accessUntil = if (enabled) {
-            System.currentTimeMillis() + 365L * 24L * 60L * 60L * 1000L
+            calculateAccessUntilForSubscription(
+                productId = ownedProduct.orEmpty(),
+                purchaseTime = purchaseTime ?: now
+            )
         } else {
             0L
         }
@@ -293,11 +362,16 @@ class BillingRepository(
             .putBoolean("has_full_access", enabled)
             .putBoolean("subscription_active", enabled)
             .putBoolean("is_subscribed", enabled)
+
+            // ✅ מקור אמת נוסף למסכים: המנוי אומת מול Google Play
+            .putBoolean("google_subscription_verified", enabled)
+            .putLong("google_subscription_checked_at", now)
+
             .putString("sub_product", if (enabled) ownedProduct.orEmpty() else "")
             .putString("sub_token", if (enabled) purchaseToken.orEmpty() else "")
             .putLong("sub_purchase_time", purchaseTime ?: 0L)
             .putLong("sub_access_until", accessUntil)
-            .putLong("access_changed_at", System.currentTimeMillis())
+            .putLong("access_changed_at", now)
             .commit()
 
         userSp.edit()
@@ -305,16 +379,24 @@ class BillingRepository(
             .putBoolean("has_full_access", enabled)
             .putBoolean("subscription_active", enabled)
             .putBoolean("is_subscribed", enabled)
+
+            // ✅ מקור אמת נוסף למסכים: המנוי אומת מול Google Play
+            .putBoolean("google_subscription_verified", enabled)
+            .putLong("google_subscription_checked_at", now)
+
             .putString("sub_product", if (enabled) ownedProduct.orEmpty() else "")
             .putString("sub_token", if (enabled) purchaseToken.orEmpty() else "")
             .putLong("sub_purchase_time", purchaseTime ?: 0L)
             .putLong("sub_access_until", accessUntil)
-            .putLong("access_changed_at", System.currentTimeMillis())
+            .putLong("access_changed_at", now)
             .commit()
 
         Log.e(
             TAG,
             "ACCESS WRITE enabled=$enabled product=$ownedProduct " +
+                    "purchaseTime=${purchaseTime ?: 0L} " +
+                    "accessUntil=$accessUntil " +
+                    "accessUntilInMinutesFromNow=${if (accessUntil > now) (accessUntil - now) / 60_000L else 0L} " +
                     "user_has_full_access=${userSp.getBoolean("has_full_access", false)} " +
                     "user_full_access=${userSp.getBoolean("full_access", false)} " +
                     "user_subscription_active=${userSp.getBoolean("subscription_active", false)}"
@@ -382,11 +464,16 @@ class BillingRepository(
                 .remove("sub_product")
                 .remove("sub_token")
                 .remove("sub_purchase_time")
+                .remove("google_subscription_verified")
+                .remove("google_subscription_checked_at")
                 .apply()
 
             userSp.edit()
                 .remove("sub_product")
+                .remove("sub_token")
                 .remove("sub_purchase_time")
+                .remove("google_subscription_verified")
+                .remove("google_subscription_checked_at")
                 .apply()
 
             writeAccessEverywhere(

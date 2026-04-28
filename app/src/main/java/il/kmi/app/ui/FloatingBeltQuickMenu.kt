@@ -1,5 +1,7 @@
 package il.kmi.app.ui
 
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.SportsMma
 import androidx.compose.material.icons.filled.Warning
@@ -18,8 +19,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAbsoluteAlignment
 import androidx.compose.ui.Modifier
@@ -27,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.app.subscription.KmiAccess
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.MutableTransitionState
@@ -275,12 +279,104 @@ fun FloatingQuickMenu(
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val accentColor = accentColorOverride ?: belt.color
-    val isMenuLocked = !hasFullAccess
 
-    LaunchedEffect(hasFullAccess) {
+    val userSp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+    }
+
+    val subsSp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
+    }
+
+    // ✅ מקור ישן/כללי שחלק מהאפליקציה עדיין עשוי להשתמש בו
+    val legacySp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE)
+    }
+
+    var accessRefreshTick by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(userSp, subsSp, legacySp) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (
+                key == "has_full_access" ||
+                key == "full_access" ||
+                key == "subscription_active" ||
+                key == "is_subscribed" ||
+                key == "google_subscription_verified" ||
+                key == "google_subscription_checked_at" ||
+                key == "sub_product" ||
+                key == "sub_access_until" ||
+                key == "access_changed_at"
+            ) {
+                accessRefreshTick++
+            }
+        }
+
+        userSp.registerOnSharedPreferenceChangeListener(listener)
+        subsSp.registerOnSharedPreferenceChangeListener(listener)
+        legacySp.registerOnSharedPreferenceChangeListener(listener)
+
+        onDispose {
+            userSp.unregisterOnSharedPreferenceChangeListener(listener)
+            subsSp.unregisterOnSharedPreferenceChangeListener(listener)
+            legacySp.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    val effectiveHasFullAccess = remember(hasFullAccess, accessRefreshTick) {
+        val now = System.currentTimeMillis()
+
+        fun SharedPreferences.hasActiveAccessFlag(): Boolean {
+            val until = getLong("sub_access_until", 0L)
+
+            val verifiedAndValid =
+                getBoolean("google_subscription_verified", false) && until > now
+
+            return KmiAccess.hasFullAccess(this) ||
+                    verifiedAndValid ||
+                    getBoolean("has_full_access", false) ||
+                    getBoolean("full_access", false) ||
+                    getBoolean("subscription_active", false) ||
+                    getBoolean("is_subscribed", false) ||
+                    !getString("sub_product", "").isNullOrBlank()
+        }
+
+        hasFullAccess ||
+                KmiAccess.isAdmin(userSp) ||
+                userSp.hasActiveAccessFlag() ||
+                subsSp.hasActiveAccessFlag() ||
+                legacySp.hasActiveAccessFlag()
+    }
+
+    val isMenuLocked = !effectiveHasFullAccess
+
+    LaunchedEffect(hasFullAccess, effectiveHasFullAccess, accessRefreshTick) {
         android.util.Log.e(
             "KMI_LOCK_DEBUG",
-            "🔥 hasFullAccess=$hasFullAccess  →  LOCK SHOULD BE = ${!hasFullAccess}"
+            "FloatingQuickMenu hasFullAccessParam=$hasFullAccess " +
+                    "effectiveHasFullAccess=$effectiveHasFullAccess " +
+                    "isMenuLocked=$isMenuLocked " +
+                    "tick=$accessRefreshTick " +
+
+                    "user_full=${userSp.getBoolean("has_full_access", false)} " +
+                    "subs_full=${subsSp.getBoolean("has_full_access", false)} " +
+                    "legacy_full=${legacySp.getBoolean("has_full_access", false)} " +
+
+                    "user_active=${userSp.getBoolean("subscription_active", false)} " +
+                    "subs_active=${subsSp.getBoolean("subscription_active", false)} " +
+                    "legacy_active=${legacySp.getBoolean("subscription_active", false)} " +
+
+                    "user_verified=${userSp.getBoolean("google_subscription_verified", false)} " +
+                    "subs_verified=${subsSp.getBoolean("google_subscription_verified", false)} " +
+                    "legacy_verified=${legacySp.getBoolean("google_subscription_verified", false)} " +
+
+                    "user_product=${userSp.getString("sub_product", "")} " +
+                    "subs_product=${subsSp.getString("sub_product", "")} " +
+                    "legacy_product=${legacySp.getString("sub_product", "")} " +
+
+                    "user_until=${userSp.getLong("sub_access_until", 0L)} " +
+                    "subs_until=${subsSp.getLong("sub_access_until", 0L)} " +
+                    "legacy_until=${legacySp.getLong("sub_access_until", 0L)}"
         )
     }
 
@@ -292,13 +388,14 @@ fun FloatingQuickMenu(
         action()
     }
 
-    val items = buildList {
+    val items = remember(isMenuLocked, isEnglish, includeAllLists, includePractice, includeSummary) {
+        buildList {
         add(
             QuickMenuItemUi(
                 title = tr("נקודות תורפה", "Weak Points"),
                 icon = Icons.Filled.Warning,
                 action = onWeakPoints,
-                isLocked = !hasFullAccess
+                isLocked = isMenuLocked
             )
         )
 
@@ -308,7 +405,7 @@ fun FloatingQuickMenu(
                     title = tr("כל הרשימות", "All Lists"),
                     icon = Icons.Filled.FormatListBulleted,
                     action = onAllLists,
-                    isLocked = !hasFullAccess
+                    isLocked = isMenuLocked
                 )
             )
         }
@@ -319,7 +416,7 @@ fun FloatingQuickMenu(
                     title = tr("תרגול", "Practice"),
                     icon = Icons.Filled.SportsMma,
                     action = onPractice,
-                    isLocked = !hasFullAccess
+                    isLocked = isMenuLocked
                 )
             )
         }
@@ -330,19 +427,20 @@ fun FloatingQuickMenu(
                     title = tr("מסך סיכום", "Summary"),
                     icon = Icons.Filled.ReceiptLong,
                     action = onSummary,
-                    isLocked = !hasFullAccess
+                    isLocked = isMenuLocked
                 )
             )
         }
 
-        add(
-            QuickMenuItemUi(
-                title = tr("עוזר קולי", "Voice Assistant"),
-                icon = Icons.Filled.Mic,
-                action = onVoice,
-                isLocked = !hasFullAccess
+            add(
+                QuickMenuItemUi(
+                    title = tr("עוזר קולי", "Voice Assistant"),
+                    icon = Icons.Filled.Mic,
+                    action = onVoice,
+                    isLocked = isMenuLocked
+                )
             )
-        )
+        }
     }
 
     val menuVisibilityState = remember { MutableTransitionState(false) }
@@ -409,6 +507,7 @@ fun FloatingQuickMenu(
                         title = tr("תפריט מהיר", "Quick Menu"),
                         accentColor = accentColor,
                         isEnglish = isEnglish,
+                        menuLocked = isMenuLocked,
                         items = items,
                         onItemClick = { action -> closeThen(action) },
                         onLockedItemClick = onLockedItemClick,
@@ -452,6 +551,7 @@ fun FloatingQuickMenu(
        title: String,
        accentColor: Color,
        isEnglish: Boolean,
+       menuLocked: Boolean,
        items: List<QuickMenuItemUi>,
        onItemClick: (() -> Unit) -> Unit,
        onLockedItemClick: () -> Unit,
@@ -554,15 +654,21 @@ fun FloatingQuickMenu(
                    Spacer(Modifier.height(10.dp))
 
                    items.forEachIndexed { index, item ->
+
+                       // ✅ הגנה כפולה:
+                       // אם יש מנוי פעיל, menuLocked=false,
+                       // ולכן לא מציגים מנעול ולא שולחים למסך המנוי.
+                       val lockedForUi = menuLocked && item.isLocked
+
                        PremiumQuickMenuRow(
                            text = item.title,
                            icon = item.icon,
                            accentColor = accentColor,
                            isEnglish = isEnglish,
-                           isLocked = item.isLocked,
+                           isLocked = lockedForUi,
                            onClick = {
                                onItemClick {
-                                   if (item.isLocked) {
+                                   if (lockedForUi) {
                                        onLockedItemClick()
                                    } else {
                                        item.action()

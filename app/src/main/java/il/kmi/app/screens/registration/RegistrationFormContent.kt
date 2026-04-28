@@ -89,6 +89,7 @@ fun RegistrationFormContent(
     onOpenTerms: () -> Unit,
     branchType: String,
     onBranchTypeChange: (String) -> Unit,
+    onSubmitRegistration: () -> Unit,
 ) {
     val scroll = rememberScrollState()
     var passwordVisible by remember { mutableStateOf(false) }
@@ -108,18 +109,21 @@ fun RegistrationFormContent(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    CompositionLocalProvider(
+        LocalTextStyle provides MaterialTheme.typography.bodySmall
     ) {
-        // ===== Personal =====
-        RegistrationSectionCard(
-            title = "פרטים אישיים"
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scroll)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // ===== Personal =====
+            RegistrationSectionCard(
+                title = "פרטים אישיים"
+            ) {
             OutlinedTextField(
                 value = fullName,
                 onValueChange = { onFullNameChange(it) },
@@ -128,7 +132,7 @@ fun RegistrationFormContent(
                 isError = fullNameError,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .defaultMinSize(minHeight = 52.dp)
+                    .defaultMinSize(minHeight = 46.dp)
                     .background(Color.White, shape = MaterialTheme.shapes.medium),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = Color.White,
@@ -153,7 +157,7 @@ fun RegistrationFormContent(
                 isError = phoneError,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .defaultMinSize(minHeight = 52.dp)
+                    .defaultMinSize(minHeight = 46.dp)
                     .background(Color.White, shape = MaterialTheme.shapes.medium),
                 textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -179,7 +183,7 @@ fun RegistrationFormContent(
                 isError = emailError,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .defaultMinSize(minHeight = 52.dp)
+                    .defaultMinSize(minHeight = 46.dp)
                     .background(Color.White, shape = MaterialTheme.shapes.medium),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = Color.White,
@@ -223,7 +227,7 @@ fun RegistrationFormContent(
                     },
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp),
+                        .height(38.dp),
                     border = FilterChipDefaults.filterChipBorder(
                         enabled = true,
                         selected = gender == "male",
@@ -253,7 +257,7 @@ fun RegistrationFormContent(
                     },
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp),
+                        .height(38.dp),
                     border = FilterChipDefaults.filterChipBorder(
                         enabled = true,
                         selected = gender == "female",
@@ -305,7 +309,7 @@ fun RegistrationFormContent(
                     isError = usernameError,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .defaultMinSize(minHeight = 52.dp)
+                        .defaultMinSize(minHeight = 46.dp)
                         .background(Color.White, shape = MaterialTheme.shapes.medium),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = Color.White,
@@ -342,7 +346,7 @@ fun RegistrationFormContent(
                     isError = passwordError,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .defaultMinSize(minHeight = 52.dp)
+                        .defaultMinSize(minHeight = 46.dp)
                         .background(Color.White, shape = MaterialTheme.shapes.medium),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = Color.White,
@@ -391,7 +395,7 @@ fun RegistrationFormContent(
                     },
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp),
+                        .height(38.dp),
                     border = FilterChipDefaults.filterChipBorder(
                         enabled = true,
                         selected = branchType == "israel",
@@ -424,7 +428,7 @@ fun RegistrationFormContent(
                     },
                     modifier = Modifier
                         .weight(1f)
-                        .height(44.dp),
+                        .height(38.dp),
                     border = FilterChipDefaults.filterChipBorder(
                         enabled = true,
                         selected = branchType == "abroad",
@@ -509,11 +513,14 @@ fun RegistrationFormContent(
                             indication = null
                         ) { onOpenTerms() }
                 ) {
-                    Text("אני מאשר את תנאי השימוש ומדיניות הפרטיות")
+                    Text(
+                        text = "אני מאשר את תנאי השימוש ומדיניות הפרטיות",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Text(
                         "קרא עוד",
                         color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodyMedium.copy(
+                        style = MaterialTheme.typography.bodySmall.copy(
                             textDecoration = TextDecoration.Underline
                         ),
                         modifier = Modifier.padding(top = 2.dp)
@@ -521,37 +528,63 @@ fun RegistrationFormContent(
                 }
             }
         }
+
+            Spacer(Modifier.height(8.dp))
+
+            Button(
+                onClick = onSubmitRegistration,
+                enabled = acceptedTerms,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = Color(0xFFB0BEC5),
+                    disabledContentColor = Color.Black
+                )
+            ) {
+                Text(
+                    text = "סיום רישום",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+        }
     }
 }
 
-@Composable
-private fun RegistrationSectionCard(
-    title: String,
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = Color(0xFFF4ECF8).copy(alpha = 0.96f),
-        tonalElevation = 0.dp,
-        shadowElevation = 6.dp,
-        border = BorderStroke(1.dp, Color(0xFFD9CCE7))
+    @Composable
+    private fun RegistrationSectionCard(
+        title: String,
+        modifier: Modifier = Modifier,
+        content: @Composable ColumnScope.() -> Unit
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = Color(0xFFF4ECF8).copy(alpha = 0.96f),
+            tonalElevation = 0.dp,
+            shadowElevation = 4.dp,
+            border = BorderStroke(1.dp, Color(0xFFD9CCE7))
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFF1F2937),
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Right,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color(0xFF1F2937),
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
             Box(
                 modifier = Modifier
@@ -1283,7 +1316,7 @@ private fun BeltPicker(
             modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = 52.dp)
+                .defaultMinSize(minHeight = 46.dp)
                 .background(Color.White, shape = MaterialTheme.shapes.medium),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = Color.White,
