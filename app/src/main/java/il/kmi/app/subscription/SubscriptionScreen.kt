@@ -47,6 +47,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,6 +76,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.sp
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.layout.heightIn
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /* ------------------------------
    עזר: זיהוי משתמש מחובר (מרוכך)
@@ -349,13 +353,37 @@ private fun StatusIcon(active: Boolean) {
     }
 }
 
-private fun openGooglePlaySubscriptions(context: Context, packageName: String) {
-    val deepLink = Uri.parse("https://play.google.com/store/account/subscriptions?package=$packageName")
+private fun openGooglePlaySubscriptions(
+    context: Context,
+    packageName: String,
+    productId: String?
+) {
+    val safeProductId = productId?.takeIf { it.isNotBlank() }
+
+    val deepLink = if (safeProductId != null) {
+        Uri.parse(
+            "https://play.google.com/store/account/subscriptions" +
+                    "?sku=$safeProductId&package=$packageName"
+        )
+    } else {
+        Uri.parse(
+            "https://play.google.com/store/account/subscriptions" +
+                    "?package=$packageName"
+        )
+    }
+
     val intent = Intent(Intent.ACTION_VIEW, deepLink).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
+
     runCatching {
         context.startActivity(intent)
+    }.onFailure {
+        Toast.makeText(
+            context,
+            "לא ניתן לפתוח את מסך ניהול המנוי ב־Google Play",
+            Toast.LENGTH_LONG
+        ).show()
     }
 }
 
@@ -392,6 +420,10 @@ fun SubscriptionScreen(
         ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
     }
 
+    val subsSp = remember {
+        ctx.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
+    }
+
     var isAdmin by remember {
         mutableStateOf(KmiAccess.isAdmin(userSp))
     }
@@ -409,9 +441,9 @@ fun SubscriptionScreen(
                         title = if (isEnglish) "Subscription" else "ניהול מנוי",
                         lockSearch = true,
                         showBottomActions = true,
-                        showTopHome = true,
+                        showTopHome = false,
                         centerTitle = true,
-                        onHome = onOpenHome,      // 👈 כאן החיבור למסך הבית
+                        onHome = onOpenHome,
                         extraActions = { }
                     )
                 }
@@ -503,7 +535,82 @@ fun SubscriptionScreen(
 
     val showError = state.error?.isNotBlank() == true
 
-    val activePlanLabel = when (state.productId) {
+    val restoreScope = rememberCoroutineScope()
+    var restoreInProgress by rememberSaveable { mutableStateOf(false) }
+
+    var subscriptionUiRefreshTick by remember { mutableStateOf(0) }
+
+    DisposableEffect(userSp, subsSp) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
+            if (
+                key == "has_full_access" ||
+                key == "full_access" ||
+                key == "subscription_active" ||
+                key == "is_subscribed" ||
+                key == "sub_product" ||
+                key == "sub_access_until" ||
+                key == "sub_purchase_time" ||
+                key == "access_changed_at"
+            ) {
+                subscriptionUiRefreshTick++
+
+                android.util.Log.e(
+                    "KMI_SUB_UI",
+                    "subscription ui pref changed source=${if (changedSp === userSp) "kmi_user" else "kmi_subs"} " +
+                            "key=$key tick=$subscriptionUiRefreshTick " +
+                            "userActive=${userSp.getBoolean("subscription_active", false)} " +
+                            "subsActive=${subsSp.getBoolean("subscription_active", false)} " +
+                            "userProduct=${userSp.getString("sub_product", "")} " +
+                            "subsProduct=${subsSp.getString("sub_product", "")} " +
+                            "userUntil=${userSp.getLong("sub_access_until", 0L)} " +
+                            "subsUntil=${subsSp.getLong("sub_access_until", 0L)}"
+                )
+            }
+        }
+
+        userSp.registerOnSharedPreferenceChangeListener(listener)
+        subsSp.registerOnSharedPreferenceChangeListener(listener)
+
+        onDispose {
+            userSp.unregisterOnSharedPreferenceChangeListener(listener)
+            subsSp.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    val savedProductId = remember(subscriptionUiRefreshTick, state.productId) {
+        state.productId
+            ?: userSp.getString("sub_product", null)?.takeIf { it.isNotBlank() }
+            ?: subsSp.getString("sub_product", null)?.takeIf { it.isNotBlank() }
+    }
+
+    val savedAccessUntil = remember(subscriptionUiRefreshTick, state.renewalDate) {
+        val fromUserPrefs = userSp.getLong("sub_access_until", 0L)
+        val fromSubsPrefs = subsSp.getLong("sub_access_until", 0L)
+
+        when {
+            fromUserPrefs > 0L -> fromUserPrefs
+            fromSubsPrefs > 0L -> fromSubsPrefs
+            state.renewalDate != null -> state.renewalDate
+            else -> null
+        }
+    }
+
+    val effectiveActive = remember(subscriptionUiRefreshTick, state.active, savedAccessUntil) {
+        val now = System.currentTimeMillis()
+
+        state.active ||
+                userSp.getBoolean("has_full_access", false) ||
+                userSp.getBoolean("full_access", false) ||
+                userSp.getBoolean("subscription_active", false) ||
+                userSp.getBoolean("is_subscribed", false) ||
+                subsSp.getBoolean("has_full_access", false) ||
+                subsSp.getBoolean("full_access", false) ||
+                subsSp.getBoolean("subscription_active", false) ||
+                subsSp.getBoolean("is_subscribed", false) ||
+                ((savedAccessUntil ?: 0L) > now)
+    }
+
+    val activePlanLabel = when (savedProductId) {
 
         SubscriptionProducts.REGULAR_MONTHLY ->
             if (isEnglish) "Monthly subscription" else "מנוי חודשי"
@@ -527,7 +634,24 @@ fun SubscriptionScreen(
     val yearlyPriceLabel = state.yearlyPriceText
         ?: if (isEnglish) "Not loaded yet" else "טרם נטען"
 
-    val renewalLabel = formatDate(state.renewalDate)
+    val renewalLabel = formatDate(savedAccessUntil)
+
+    LaunchedEffect(effectiveActive, savedProductId, savedAccessUntil, subscriptionUiRefreshTick) {
+        android.util.Log.e(
+            "KMI_SUB_UI",
+            "resolved effectiveActive=$effectiveActive " +
+                    "stateActive=${state.active} " +
+                    "product=$savedProductId " +
+                    "accessUntil=$savedAccessUntil " +
+                    "tick=$subscriptionUiRefreshTick " +
+                    "userActive=${userSp.getBoolean("subscription_active", false)} " +
+                    "subsActive=${subsSp.getBoolean("subscription_active", false)} " +
+                    "userFull=${userSp.getBoolean("has_full_access", false)} " +
+                    "subsFull=${subsSp.getBoolean("has_full_access", false)} " +
+                    "userProduct=${userSp.getString("sub_product", "")} " +
+                    "subsProduct=${subsSp.getString("sub_product", "")}"
+        )
+    }
 
 // חיפוש: דיאלוג מקומי אחרי בחירה מהחיפוש (כשזמין)
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -544,7 +668,7 @@ fun SubscriptionScreen(
                     lockSearch = false,
                     onPickSearchResult = { key -> pickedKey = key },
                     showBottomActions = true,
-                    showTopHome = true,
+                    showTopHome = false,
                     centerTitle = true,
                     onHome = onOpenHome,
                     extraActions = { }
@@ -581,7 +705,7 @@ fun SubscriptionScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp)
+                        .heightIn(min = 120.dp)
                         .shadow(
                             elevation = 16.dp,
                             shape = RoundedCornerShape(28.dp)
@@ -603,19 +727,21 @@ fun SubscriptionScreen(
                                     )
                                 )
                             )
-                            .padding(horizontal = 18.dp, vertical = 20.dp)
+                            .padding(horizontal = 16.dp, vertical = 16.dp)
                     ) {
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            horizontalAlignment = Alignment.End
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
                                 text = if (isEnglish) "KMI Subscription" else "ניהול מנוי KMI",
-                                style = MaterialTheme.typography.headlineSmall,
+                                style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White,
                                 modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
                             )
 
                             Text(
@@ -624,10 +750,11 @@ fun SubscriptionScreen(
                                 } else {
                                     "כאן אפשר לבדוק סטטוס מנוי, לרכוש מנוי חדש או לשחזר רכישות קיימות."
                                 },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.90f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.92f),
                                 modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
+                                textAlign = TextAlign.Center,
+                                lineHeight = 18.sp
                             )
                         }
                     }
@@ -672,10 +799,10 @@ fun SubscriptionScreen(
                                         )
 
                                         Text(
-                                            text = if (state.active) "פעיל" else "לא פעיל",
+                                            text = if (effectiveActive) "פעיל" else "לא פעיל",
                                             style = MaterialTheme.typography.headlineSmall,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = if (state.active) Color(0xFF16A34A) else Color(0xFFDC2626),
+                                            color = if (effectiveActive) Color(0xFF16A34A) else Color(0xFFDC2626),
                                             textAlign = TextAlign.Right,
                                             modifier = Modifier.fillMaxWidth()
                                         )
@@ -683,7 +810,7 @@ fun SubscriptionScreen(
                                         Card(
                                             shape = RoundedCornerShape(20.dp),
                                             colors = CardDefaults.cardColors(
-                                                containerColor = if (state.active) {
+                                                containerColor = if (effectiveActive) {
                                                     Color(0xFFDCFCE7)
                                                 } else {
                                                     Color(0xFFFEE2E2)
@@ -691,8 +818,8 @@ fun SubscriptionScreen(
                                             )
                                         ) {
                                             Text(
-                                                text = if (state.active) "מנוי פעיל" else "אין מנוי פעיל",
-                                                color = if (state.active) Color(0xFF166534) else Color(0xFFB91C1C),
+                                                text = if (effectiveActive) "מנוי פעיל" else "אין מנוי פעיל",
+                                                color = if (effectiveActive) Color(0xFF166534) else Color(0xFFB91C1C),
                                                 style = MaterialTheme.typography.labelLarge,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -701,9 +828,9 @@ fun SubscriptionScreen(
                                         }
                                     }
 
-                                    StatusIcon(state.active)
+                                    StatusIcon(effectiveActive)
                                 } else {
-                                    StatusIcon(state.active)
+                                    StatusIcon(effectiveActive)
 
                                     Column(
                                         modifier = Modifier.weight(1f),
@@ -719,10 +846,10 @@ fun SubscriptionScreen(
                                         )
 
                                         Text(
-                                            text = if (state.active) "Active" else "Inactive",
+                                            text = if (effectiveActive) "Active" else "Inactive",
                                             style = MaterialTheme.typography.headlineSmall,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = if (state.active) Color(0xFF16A34A) else Color(0xFFDC2626),
+                                            color = if (effectiveActive) Color(0xFF16A34A) else Color(0xFFDC2626),
                                             textAlign = TextAlign.Left,
                                             modifier = Modifier.fillMaxWidth()
                                         )
@@ -730,7 +857,7 @@ fun SubscriptionScreen(
                                         Card(
                                             shape = RoundedCornerShape(20.dp),
                                             colors = CardDefaults.cardColors(
-                                                containerColor = if (state.active) {
+                                                containerColor = if (effectiveActive) {
                                                     Color(0xFFDCFCE7)
                                                 } else {
                                                     Color(0xFFFEE2E2)
@@ -738,8 +865,8 @@ fun SubscriptionScreen(
                                             )
                                         ) {
                                             Text(
-                                                text = if (state.active) "Subscription active" else "No active subscription",
-                                                color = if (state.active) Color(0xFF166534) else Color(0xFFB91C1C),
+                                                text = if (effectiveActive) "Subscription active" else "No active subscription",
+                                                color = if (effectiveActive) Color(0xFF166534) else Color(0xFFB91C1C),
                                                 style = MaterialTheme.typography.labelLarge,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -751,7 +878,7 @@ fun SubscriptionScreen(
                             }
 
                             Text(
-                                text = if (state.active) {
+                                text = if (effectiveActive) {
                                     if (isEnglish) {
                                         "All app content is currently unlocked for you."
                                     } else {
@@ -850,14 +977,20 @@ fun SubscriptionScreen(
 
                                     DetailsRow(
                                         label = if (isEnglish) "Product ID:" else "מזהה מוצר:",
-                                        value = state.productId ?: "-",
+                                        value = savedProductId ?: "-",
                                         valueStyle = MaterialTheme.typography.bodySmall
                                     )
                                 }
                             }
 
                             OutlinedButton(
-                                onClick = { openGooglePlaySubscriptions(ctx, ctx.packageName) },
+                                onClick = {
+                                    openGooglePlaySubscriptions(
+                                        context = ctx,
+                                        packageName = ctx.packageName,
+                                        productId = savedProductId
+                                    )
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(18.dp)
                             ) {
@@ -970,9 +1103,81 @@ fun SubscriptionScreen(
                             */
 
                             PremiumActionRow(
-                                icon = "🔄",
-                                text = if (isEnglish) "Restore purchases" else "שחזור רכישות",
-                                onClick = { repo?.refreshPurchases() }
+                                icon = if (restoreInProgress) "⏳" else "🔄",
+                                text = when {
+                                    restoreInProgress && isEnglish -> "Restoring purchases..."
+                                    restoreInProgress -> "משחזר רכישות..."
+                                    isEnglish -> "Restore purchases"
+                                    else -> "שחזור רכישות"
+                                },
+                                onClick = {
+                                    if (restoreInProgress) return@PremiumActionRow
+
+                                    if (repo == null) {
+                                        Toast.makeText(
+                                            ctx,
+                                            if (isEnglish) {
+                                                "Billing service is unavailable on this device."
+                                            } else {
+                                                "שירות הרכישה אינו זמין במכשיר הזה."
+                                            },
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        return@PremiumActionRow
+                                    }
+
+                                    restoreScope.launch {
+                                        restoreInProgress = true
+
+                                        Toast.makeText(
+                                            ctx,
+                                            if (isEnglish) {
+                                                "Checking Google Play purchases..."
+                                            } else {
+                                                "בודק רכישות מול Google Play..."
+                                            },
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+
+                                        runCatching {
+                                            repo.startConnection()
+                                            delay(700)
+                                            repo.refreshPurchases()
+                                            delay(900)
+
+                                            // ✅ מכריח את מסך ניהול המנוי לקרוא שוב את הנתונים שנשמרו
+                                            subscriptionUiRefreshTick++
+                                        }.onFailure { error ->
+                                            android.util.Log.e(
+                                                "KMI_BILLING",
+                                                "restore purchases failed",
+                                                error
+                                            )
+
+                                            Toast.makeText(
+                                                ctx,
+                                                if (isEnglish) {
+                                                    "Could not restore purchases. Please try again."
+                                                } else {
+                                                    "לא ניתן היה לשחזר רכישות. נסה שוב."
+                                                },
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }.onSuccess {
+                                            Toast.makeText(
+                                                ctx,
+                                                if (isEnglish) {
+                                                    "Restore completed. If an active subscription exists, it will appear here."
+                                                } else {
+                                                    "השחזור הסתיים. אם קיים מנוי פעיל, הוא יוצג כאן."
+                                                },
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+
+                                        restoreInProgress = false
+                                    }
+                                }
                             )
                         }
                     }

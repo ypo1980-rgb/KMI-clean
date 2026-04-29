@@ -787,7 +787,11 @@ internal fun BeltPangoLayout(
                         onCenterProgress = { centerProgress = it },
                         haptic = haptic,
                         clickSound = clickSound,
-                        inputEnabled = false
+                        inputEnabled = false,
+
+                        // ✅ לא הופכים את ה-drag.
+                        // בעברית זה כבר תקין, ובאנגלית זה יישר את הכיוון לאותה תחושה.
+                        reverseSwipeDirection = false
                     )
                 }
             }
@@ -1594,7 +1598,8 @@ private fun BeltArcPicker(
     onCenterProgress: (Float) -> Unit = {},
     haptic: (Boolean) -> Unit,
     clickSound: () -> Unit,
-    inputEnabled: Boolean = true
+    inputEnabled: Boolean = true,
+    reverseSwipeDirection: Boolean = false
 ) {
     val big = 120.dp
     val small = 68.dp
@@ -1665,7 +1670,7 @@ private fun BeltArcPicker(
                 )
 
             val gestures = Modifier
-                .pointerInput(belts, index) {
+                .pointerInput(belts, index, reverseSwipeDirection) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
                             val prevIndex = currentIndex
@@ -1685,7 +1690,12 @@ private fun BeltArcPicker(
                             }
                         }
                     ) { _, drag ->
-                        val delta = drag / stepPx
+                        val delta = if (reverseSwipeDirection) {
+                            -drag / stepPx
+                        } else {
+                            drag / stepPx
+                        }
+
                         val next = (center.value + delta).coerceIn(0f, belts.lastIndex.toFloat())
                         scope.launch { center.snapTo(next) }
                     }

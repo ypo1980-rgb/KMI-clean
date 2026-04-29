@@ -237,51 +237,91 @@ fun BeltQuestionsByTopicScreen(
     val isEnglish = rememberIsEnglish()
     val ctx = LocalContext.current
     val notePrefs = remember(ctx) { ctx.getSharedPreferences("kmi_exercise_notes", Context.MODE_PRIVATE) }
-    val userSp = remember(ctx) { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
+
+    val userSp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+    }
+
+    val subsSp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
+    }
+
+    val legacySp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE)
+    }
 
     var accessRefreshTick by remember { mutableIntStateOf(0) }
 
-    DisposableEffect(userSp) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+    DisposableEffect(userSp, subsSp, legacySp) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
             if (
                 key == "has_full_access" ||
                 key == "full_access" ||
                 key == "subscription_active" ||
                 key == "is_subscribed" ||
+                key == "google_subscription_verified" ||
+                key == "google_subscription_checked_at" ||
                 key == "sub_product" ||
+                key == "sub_access_until" ||
                 key == "access_changed_at"
             ) {
                 accessRefreshTick++
 
                 android.util.Log.e(
                     "KMI_ACCESS_MODE",
-                    "BY_TOPIC pref changed key=$key tick=$accessRefreshTick " +
-                            "isAdmin=${KmiAccess.isAdmin(userSp)} " +
-                            "hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
-                            "has_full_access=${userSp.getBoolean("has_full_access", false)} " +
-                            "full_access=${userSp.getBoolean("full_access", false)} " +
-                            "subscription_active=${userSp.getBoolean("subscription_active", false)} " +
-                            "is_subscribed=${userSp.getBoolean("is_subscribed", false)} " +
-                            "sub_product=${userSp.getString("sub_product", "")}"
+                    "BY_TOPIC pref changed source=${
+                        if (changedSp === userSp) "kmi_user"
+                        else if (changedSp === subsSp) "kmi_subs"
+                        else "kmi_prefs"
+                    } key=$key tick=$accessRefreshTick " +
+                            "userActive=${userSp.getBoolean("subscription_active", false)} " +
+                            "subsActive=${subsSp.getBoolean("subscription_active", false)} " +
+                            "userFull=${userSp.getBoolean("has_full_access", false)} " +
+                            "subsFull=${subsSp.getBoolean("has_full_access", false)} " +
+                            "userProduct=${userSp.getString("sub_product", "")} " +
+                            "subsProduct=${subsSp.getString("sub_product", "")} " +
+                            "userUntil=${userSp.getLong("sub_access_until", 0L)} " +
+                            "subsUntil=${subsSp.getLong("sub_access_until", 0L)}"
                 )
             }
         }
 
         userSp.registerOnSharedPreferenceChangeListener(listener)
+        subsSp.registerOnSharedPreferenceChangeListener(listener)
+        legacySp.registerOnSharedPreferenceChangeListener(listener)
 
         onDispose {
             userSp.unregisterOnSharedPreferenceChangeListener(listener)
+            subsSp.unregisterOnSharedPreferenceChangeListener(listener)
+            legacySp.unregisterOnSharedPreferenceChangeListener(listener)
         }
+    }
+
+    fun SharedPreferences.hasActiveSubscriptionAccess(): Boolean {
+        val now = System.currentTimeMillis()
+        val until = getLong("sub_access_until", 0L)
+
+        val verifiedAndValid =
+            getBoolean("google_subscription_verified", false) && until > now
+
+        val activeFlagAndValid =
+            until > now && (
+                    getBoolean("has_full_access", false) ||
+                            getBoolean("full_access", false) ||
+                            getBoolean("subscription_active", false) ||
+                            getBoolean("is_subscribed", false)
+                    )
+
+        return KmiAccess.hasFullAccess(this) ||
+                verifiedAndValid ||
+                activeFlagAndValid
     }
 
     val hasManagerAccess = remember(accessRefreshTick) {
         KmiAccess.isAdmin(userSp) ||
-                KmiAccess.hasFullAccess(userSp) ||
-                userSp.getBoolean("has_full_access", false) ||
-                userSp.getBoolean("full_access", false) ||
-                userSp.getBoolean("subscription_active", false) ||
-                userSp.getBoolean("is_subscribed", false) ||
-                !userSp.getString("sub_product", "").isNullOrBlank()
+                userSp.hasActiveSubscriptionAccess() ||
+                subsSp.hasActiveSubscriptionAccess() ||
+                legacySp.hasActiveSubscriptionAccess()
     }
 
     val accessMode = AccessModeResolver.resolve(
@@ -290,23 +330,29 @@ fun BeltQuestionsByTopicScreen(
 
     val hasAccess = accessMode == AccessMode.OPEN
 
-    android.util.Log.e(
-        "KMI_ACCESS_MODE",
-        "BY_TOPIC resolved hasManagerAccess=$hasManagerAccess " +
-                "accessMode=$accessMode tick=$accessRefreshTick " +
-                "isAdmin=${KmiAccess.isAdmin(userSp)} " +
-                "hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
-                "has_full_access=${userSp.getBoolean("has_full_access", false)} " +
-                "full_access=${userSp.getBoolean("full_access", false)} " +
-                "subscription_active=${userSp.getBoolean("subscription_active", false)} " +
-                "is_subscribed=${userSp.getBoolean("is_subscribed", false)} " +
-                "sub_product=${userSp.getString("sub_product", "")}"
-    )
+    LaunchedEffect(hasManagerAccess, hasAccess, accessMode, accessRefreshTick) {
+        android.util.Log.e(
+            "KMI_ACCESS_MODE",
+            "BY_TOPIC resolved hasManagerAccess=$hasManagerAccess " +
+                    "hasAccess=$hasAccess accessMode=$accessMode tick=$accessRefreshTick " +
+                    "userAdmin=${KmiAccess.isAdmin(userSp)} " +
+                    "userFull=${userSp.getBoolean("has_full_access", false)} " +
+                    "subsFull=${subsSp.getBoolean("has_full_access", false)} " +
+                    "userActive=${userSp.getBoolean("subscription_active", false)} " +
+                    "subsActive=${subsSp.getBoolean("subscription_active", false)} " +
+                    "userVerified=${userSp.getBoolean("google_subscription_verified", false)} " +
+                    "subsVerified=${subsSp.getBoolean("google_subscription_verified", false)} " +
+                    "userProduct=${userSp.getString("sub_product", "")} " +
+                    "subsProduct=${subsSp.getString("sub_product", "")} " +
+                    "userUntil=${userSp.getLong("sub_access_until", 0L)} " +
+                    "subsUntil=${subsSp.getLong("sub_access_until", 0L)}"
+        )
 
-    android.util.Log.e(
-        "KMI_LOCK_TRACE",
-        "BeltQuestionsByTopicScreen LIVE hasAccess=$hasAccess accessMode=$accessMode"
-    )
+        android.util.Log.e(
+            "KMI_LOCK_TRACE",
+            "BeltQuestionsByTopicScreen LIVE hasAccess=$hasAccess accessMode=$accessMode"
+        )
+    }
 
     // State לניהול התפריט המהיר
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -1099,10 +1145,23 @@ internal fun TopicsBySubjectCard(
 
                                     "releases" -> {
                                         android.util.Log.e(
-                                            "KMI_NAV",
-                                            "TOPICS_CARD releases root -> open sub-topics dialog belt=${currentBelt.id}"
+                                            "KMI_LOCK_TRACE",
+                                            "TOPICS_CARD releases clicked hasAccess=$hasAccess accessMode=$accessMode belt=${currentBelt.id}"
                                         )
-                                        askSubTopicsForId = "releases"
+
+                                        if (!hasAccess) {
+                                            android.util.Log.e(
+                                                "KMI_LOCK_TRACE",
+                                                "TOPICS_CARD releases BLOCKED -> open subscription"
+                                            )
+                                            onOpenSubscription()
+                                        } else {
+                                            android.util.Log.e(
+                                                "KMI_NAV",
+                                                "TOPICS_CARD releases root -> open sub-topics dialog belt=${currentBelt.id}"
+                                            )
+                                            askSubTopicsForId = "releases"
+                                        }
                                     }
                                 }
                             }

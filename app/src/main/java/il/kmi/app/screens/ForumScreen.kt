@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,8 +35,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -55,7 +55,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Fill
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -71,6 +70,7 @@ import com.google.firebase.storage.ktx.storage
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.Explanations
 import il.kmi.app.subscription.KmiAccess   // 👈 חדש – בדיקת גישת מנוי/ניסיון
+import il.kmi.app.privacy.DemoTrainees
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -127,19 +127,82 @@ fun ForumScreen(
         ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
     }
 
-    // ✅ מצב כהה/בהיר לפי הגדרת האפליקציה, לא רק לפי מצב המכשיר
-    val appThemeMode = remember {
-        sp.getString("theme_mode", null)
-            ?: userSp.getString("theme_mode", null)
-            ?: ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE)
-                .getString("theme_mode", "system")
-            ?: "system"
+    val settingsSp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE)
     }
 
-    val isDarkMode = when (appThemeMode) {
-        "dark" -> true
-        "light" -> false
-        else -> systemDark
+    var themeRefreshTick by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(sp, userSp, settingsSp) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (
+                key == "theme_mode" ||
+                key == "themeMode" ||
+                key == "app_theme" ||
+                key == "appTheme" ||
+                key == "dark_mode" ||
+                key == "darkMode" ||
+                key == "is_dark_mode" ||
+                key == "isDarkMode"
+            ) {
+                themeRefreshTick++
+
+                android.util.Log.e(
+                    "KMI_FORUM_THEME",
+                    "theme changed key=$key tick=$themeRefreshTick " +
+                            "sp.theme_mode=${sp.getString("theme_mode", null)} " +
+                            "user.theme_mode=${userSp.getString("theme_mode", null)} " +
+                            "settings.theme_mode=${settingsSp.getString("theme_mode", null)} " +
+                            "settings.darkMode=${settingsSp.getBoolean("darkMode", false)} " +
+                            "settings.isDarkMode=${settingsSp.getBoolean("isDarkMode", false)}"
+                )
+            }
+        }
+
+        sp.registerOnSharedPreferenceChangeListener(listener)
+        userSp.registerOnSharedPreferenceChangeListener(listener)
+        settingsSp.registerOnSharedPreferenceChangeListener(listener)
+
+        onDispose {
+            sp.unregisterOnSharedPreferenceChangeListener(listener)
+            userSp.unregisterOnSharedPreferenceChangeListener(listener)
+            settingsSp.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    val appThemeMode = remember(themeRefreshTick) {
+        sp.getString("theme_mode", null)
+            ?: sp.getString("themeMode", null)
+            ?: sp.getString("app_theme", null)
+            ?: sp.getString("appTheme", null)
+            ?: userSp.getString("theme_mode", null)
+            ?: userSp.getString("themeMode", null)
+            ?: settingsSp.getString("theme_mode", null)
+            ?: settingsSp.getString("themeMode", null)
+            ?: settingsSp.getString("app_theme", null)
+            ?: settingsSp.getString("appTheme", null)
+            ?: "light"
+    }
+
+    val isDarkMode = remember(appThemeMode, themeRefreshTick, systemDark) {
+        when (appThemeMode.lowercase()) {
+            "dark", "night", "כהה" -> true
+            "light", "day", "בהיר" -> false
+            "system" -> systemDark
+            else -> {
+                settingsSp.getBoolean("isDarkMode", false) ||
+                        settingsSp.getBoolean("darkMode", false) ||
+                        sp.getBoolean("isDarkMode", false) ||
+                        sp.getBoolean("darkMode", false)
+            }
+        }
+    }
+
+    LaunchedEffect(appThemeMode, isDarkMode, themeRefreshTick) {
+        android.util.Log.e(
+            "KMI_FORUM_THEME",
+            "resolved appThemeMode=$appThemeMode isDarkMode=$isDarkMode systemDark=$systemDark tick=$themeRefreshTick"
+        )
     }
 
     val isCoachProfile = remember {
@@ -167,13 +230,102 @@ fun ForumScreen(
 
     // --- מצב מנוי ---
 
-    val isTrial = KmiAccess.isTrialActive(userSp)
-    val hasFull = KmiAccess.hasFullAccess(userSp)
+    val subsSp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_subs", android.content.Context.MODE_PRIVATE)
+    }
+
+    val legacySp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_prefs", android.content.Context.MODE_PRIVATE)
+    }
+
+    var forumAccessRefreshTick by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(userSp, subsSp, legacySp) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
+            if (
+                key == "has_full_access" ||
+                key == "full_access" ||
+                key == "subscription_active" ||
+                key == "is_subscribed" ||
+                key == "google_subscription_verified" ||
+                key == "google_subscription_checked_at" ||
+                key == "sub_access_until" ||
+                key == "access_changed_at" ||
+                key == "sub_product"
+            ) {
+                forumAccessRefreshTick++
+
+                android.util.Log.e(
+                    "KMI_FORUM_ACCESS",
+                    "forum access pref changed source=${
+                        if (changedSp === userSp) "kmi_user"
+                        else if (changedSp === subsSp) "kmi_subs"
+                        else "kmi_prefs"
+                    } key=$key tick=$forumAccessRefreshTick"
+                )
+            }
+        }
+
+        userSp.registerOnSharedPreferenceChangeListener(listener)
+        subsSp.registerOnSharedPreferenceChangeListener(listener)
+        legacySp.registerOnSharedPreferenceChangeListener(listener)
+
+        onDispose {
+            userSp.unregisterOnSharedPreferenceChangeListener(listener)
+            subsSp.unregisterOnSharedPreferenceChangeListener(listener)
+            legacySp.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    fun SharedPreferences.hasActiveSubscriptionAccess(): Boolean {
+        val now = System.currentTimeMillis()
+        val until = getLong("sub_access_until", 0L)
+
+        val verifiedAndValid =
+            getBoolean("google_subscription_verified", false) && until > now
+
+        return KmiAccess.hasFullAccess(this) ||
+                verifiedAndValid ||
+                getBoolean("has_full_access", false) ||
+                getBoolean("full_access", false) ||
+                getBoolean("subscription_active", false) ||
+                getBoolean("is_subscribed", false)
+    }
+
+    val isTrial = remember(forumAccessRefreshTick, isManagerOverride) {
+        KmiAccess.isTrialActive(userSp) &&
+                !userSp.hasActiveSubscriptionAccess() &&
+                !subsSp.hasActiveSubscriptionAccess() &&
+                !legacySp.hasActiveSubscriptionAccess()
+    }
+
+    val hasFull = remember(forumAccessRefreshTick, isManagerOverride) {
+        isManagerOverride ||
+                userSp.hasActiveSubscriptionAccess() ||
+                subsSp.hasActiveSubscriptionAccess() ||
+                legacySp.hasActiveSubscriptionAccess()
+    }
 
     // 🔒 גישת פורום:
-    // רק מנוי חודשי / שנתי פעיל או מנהל.
-    // Trial לא פותח את הפורום.
-    val canUseExtras = isManagerOverride || hasFull
+    // פתוח רק למנהל או למנוי חודשי/שנתי פעיל.
+    // Trial לא פותח פורום.
+    val canUseExtras = hasFull
+
+    LaunchedEffect(canUseExtras, hasFull, isTrial) {
+        android.util.Log.e(
+            "KMI_FORUM_ACCESS",
+            "canUseExtras=$canUseExtras hasFull=$hasFull isTrial=$isTrial " +
+                    "user_full=${userSp.getBoolean("has_full_access", false)} " +
+                    "subs_full=${subsSp.getBoolean("has_full_access", false)} " +
+                    "legacy_full=${legacySp.getBoolean("has_full_access", false)} " +
+                    "user_active=${userSp.getBoolean("subscription_active", false)} " +
+                    "subs_active=${subsSp.getBoolean("subscription_active", false)} " +
+                    "legacy_active=${legacySp.getBoolean("subscription_active", false)} " +
+                    "user_product=${userSp.getString("sub_product", "")} " +
+                    "subs_product=${subsSp.getString("sub_product", "")} " +
+                    "legacy_product=${legacySp.getString("sub_product", "")}"
+        )
+    }
 
     // סניף + קבוצה של המשתמש (הקבוצה = "חדר" הפורום)
     val branch = remember { userSp.getString("branch", "") ?: "" }
@@ -284,43 +436,28 @@ fun ForumScreen(
             }
     }
 
-    // ================== משתתפים לפי users בסניף ==================
+    // ================== משתתפים בפורום — מחוברים לקובץ DemoTrainees ==================
+    // כרגע הפורום מציג משתתפי דמו פעילים במקום משתמשים אמיתיים מ-Firestore.
     DisposableEffect(branch) {
-        if (branch.isBlank()) {
-            participantsByUsers = emptyList()
-            onDispose { }
-        } else {
-            val registration = db.collection("users")
-                .whereArrayContains("branches", branch)   // כולם בסניף הזה
-                .whereEqualTo("isActive", true)
-                .addSnapshotListener { snap, _ ->
-                    val currentUid = FirebaseAuth.getInstance().currentUser?.uid
-                    val list = snap?.documents
-                        ?.mapNotNull { doc ->
-                            val uid = doc.getString("uid") ?: doc.id
-                            val name =
-                                doc.getString("fullName")?.takeIf { it.isNotBlank() }
-                                    ?: doc.getString("displayName")?.takeIf { it.isNotBlank() }
-                                    ?: doc.getString("name")?.takeIf { it.isNotBlank() }
-                                    ?: doc.getString("phone")?.takeIf { it.isNotBlank() }
-                                    ?: return@mapNotNull null
-
-                            ForumParticipantUi(
-                                id = uid,
-                                name = name,
-                                isMe = (uid == currentUid)
-                            )
-                        }
-                        ?.distinctBy { it.id }
-                        ?.sortedBy { it.name }
-                        ?: emptyList()
-
-                    participantsByUsers = list
-                }
-
-            onDispose {
-                registration.remove()
+        val demoParticipants = DemoTrainees.trainees
+            .mapIndexed { index, demo ->
+                ForumParticipantUi(
+                    id = demo.id.ifBlank { "demo_forum_${index + 1}" },
+                    name = demo.name.ifBlank { "מתאמן דמו ${index + 1}" },
+                    isMe = false
+                )
             }
+            .distinctBy { it.id }
+
+        participantsByUsers = demoParticipants
+
+        android.util.Log.e(
+            "KMI_FORUM_DEMO",
+            "Forum participants loaded from DemoTrainees count=${demoParticipants.size} branch=$branch"
+        )
+
+        onDispose {
+            participantsByUsers = emptyList()
         }
     }
 
