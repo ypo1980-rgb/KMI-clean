@@ -114,6 +114,9 @@ import il.kmi.app.ui.assistant.core.AssistantMemory
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 //======================================================
 
@@ -490,8 +493,204 @@ private fun getExerciseAnswerWithFallback(
     return engineAnswer
 }
 
+private fun hebrewDayName(dayIndex: Int): String {
+    return when (dayIndex) {
+        1 -> "ראשון"
+        2 -> "שני"
+        3 -> "שלישי"
+        4 -> "רביעי"
+        5 -> "חמישי"
+        6 -> "שישי"
+        7 -> "שבת"
+        else -> ""
+    }
+}
+
+private fun englishDayName(dayIndex: Int): String {
+    return when (dayIndex) {
+        1 -> "Sunday"
+        2 -> "Monday"
+        3 -> "Tuesday"
+        4 -> "Wednesday"
+        5 -> "Thursday"
+        6 -> "Friday"
+        7 -> "Saturday"
+        else -> ""
+    }
+}
+
+private fun hebrewMonthName(month: Int): String {
+    return when (month) {
+        1 -> "ינואר"
+        2 -> "פברואר"
+        3 -> "מרץ"
+        4 -> "אפריל"
+        5 -> "מאי"
+        6 -> "יוני"
+        7 -> "יולי"
+        8 -> "אוגוסט"
+        9 -> "ספטמבר"
+        10 -> "אוקטובר"
+        11 -> "נובמבר"
+        12 -> "דצמבר"
+        else -> ""
+    }
+}
+
+private fun englishMonthName(month: Int): String {
+    return when (month) {
+        1 -> "January"
+        2 -> "February"
+        3 -> "March"
+        4 -> "April"
+        5 -> "May"
+        6 -> "June"
+        7 -> "July"
+        8 -> "August"
+        9 -> "September"
+        10 -> "October"
+        11 -> "November"
+        12 -> "December"
+        else -> ""
+    }
+}
+
+private fun numberToHebrewSpeech(n: Int): String {
+    return when (n) {
+        0 -> "אפס"
+        1 -> "אחת"
+        2 -> "שתיים"
+        3 -> "שלוש"
+        4 -> "ארבע"
+        5 -> "חמש"
+        6 -> "שש"
+        7 -> "שבע"
+        8 -> "שמונה"
+        9 -> "תשע"
+        10 -> "עשר"
+        11 -> "אחת עשרה"
+        12 -> "שתים עשרה"
+        13 -> "שלוש עשרה"
+        14 -> "ארבע עשרה"
+        15 -> "חמש עשרה"
+        16 -> "שש עשרה"
+        17 -> "שבע עשרה"
+        18 -> "שמונה עשרה"
+        19 -> "תשע עשרה"
+        20 -> "עשרים"
+        21 -> "עשרים ואחת"
+        22 -> "עשרים ושתיים"
+        23 -> "עשרים ושלוש"
+        24 -> "עשרים וארבע"
+        25 -> "עשרים וחמש"
+        26 -> "עשרים ושש"
+        27 -> "עשרים ושבע"
+        28 -> "עשרים ושמונה"
+        29 -> "עשרים ותשע"
+        30 -> "שלושים"
+        31 -> "שלושים ואחת"
+        else -> n.toString()
+    }
+}
+
+private fun formatDateForTrainingSpeech(rawDate: String, isEnglish: Boolean): String {
+    val value = rawDate.trim()
+
+    val parsedDate = runCatching {
+        when {
+            value.matches(Regex("""\d{4}-\d{2}-\d{2}""")) -> {
+                LocalDate.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            }
+
+            value.matches(Regex("""\d{1,2}/\d{1,2}/\d{4}""")) -> {
+                LocalDate.parse(value, DateTimeFormatter.ofPattern("d/M/yyyy"))
+            }
+
+            value.matches(Regex("""\d{1,2}-\d{1,2}-\d{4}""")) -> {
+                LocalDate.parse(value, DateTimeFormatter.ofPattern("d-M-yyyy"))
+            }
+
+            else -> null
+        }
+    }.getOrNull() ?: return rawDate
+
+    val dayOfWeekIndex = when (parsedDate.dayOfWeek.value) {
+        1 -> 2 // Monday -> שני
+        2 -> 3 // Tuesday -> שלישי
+        3 -> 4 // Wednesday -> רביעי
+        4 -> 5 // Thursday -> חמישי
+        5 -> 6 // Friday -> שישי
+        6 -> 7 // Saturday -> שבת
+        7 -> 1 // Sunday -> ראשון
+        else -> 1
+    }
+
+    val day = parsedDate.dayOfMonth
+    val month = parsedDate.monthValue
+    val year = parsedDate.year
+
+    return if (isEnglish) {
+        "${englishDayName(dayOfWeekIndex)}, $day ${englishMonthName(month)} $year"
+    } else {
+        "${hebrewDayName(dayOfWeekIndex)}, ${numberToHebrewSpeech(day)} ב${hebrewMonthName(month)}"
+    }
+}
+
+private fun formatTimeForTrainingSpeech(rawTime: String, isEnglish: Boolean): String {
+    val parts = rawTime.trim().split(":")
+    if (parts.size != 2) return rawTime
+
+    val hour = parts[0].toIntOrNull() ?: return rawTime
+    val minute = parts[1].toIntOrNull() ?: return rawTime
+
+    if (hour !in 0..23 || minute !in 0..59) return rawTime
+
+    return if (isEnglish) {
+        when (minute) {
+            0 -> "$hour o'clock"
+            else -> "$hour ${minute.toString().padStart(2, '0')}"
+        }
+    } else {
+        when (minute) {
+            0 -> "בשעה ${numberToHebrewSpeech(hour)}"
+            else -> "בשעה ${numberToHebrewSpeech(hour)} ו${numberToHebrewSpeech(minute)} דקות"
+        }
+    }
+}
+
+private fun prepareTrainingTextForSpeech(text: String, isEnglish: Boolean): String {
+    return text
+        // תאריכים: 2026-05-11
+        .replace(Regex("""\b\d{4}-\d{2}-\d{2}\b""")) { match ->
+            formatDateForTrainingSpeech(match.value, isEnglish)
+        }
+
+        // תאריכים: 11/05/2026
+        .replace(Regex("""\b\d{1,2}/\d{1,2}/\d{4}\b""")) { match ->
+            formatDateForTrainingSpeech(match.value, isEnglish)
+        }
+
+        // תאריכים: 11-05-2026
+        .replace(Regex("""\b\d{1,2}-\d{1,2}-\d{4}\b""")) { match ->
+            formatDateForTrainingSpeech(match.value, isEnglish)
+        }
+
+        // שעות: 18:30 / 20:00
+        .replace(Regex("""\b\d{1,2}:\d{2}\b""")) { match ->
+            formatTimeForTrainingSpeech(match.value, isEnglish)
+        }
+
+        // טווח שעות אחרי המרה, כדי שלא יישמע מקוטע מדי
+        .replace(" עד בשעה ", " עד ")
+}
+
 private fun sanitizeTrainingTextForSpeech(text: String, isEnglish: Boolean): String {
-    val cleaned = text
+    val speechReadyText = prepareTrainingTextForSpeech(
+        text = text,
+        isEnglish = isEnglish
+    )
+
+    val cleaned = speechReadyText
         .lineSequence()
         .map { it.trim() }
         .filter { it.isNotBlank() }
@@ -503,8 +702,12 @@ private fun sanitizeTrainingTextForSpeech(text: String, isEnglish: Boolean): Str
                 .replace(" - ", ". ")
                 .replace(" – ", ". ")
                 .replace(":", " ")
+                .replace(Regex("""ביום\s+יום\s+"""), "ביום ")
+                .replace(Regex("""יום\s+יום\s+"""), "יום ")
+                .replace(Regex("""\s+"""), " ")
                 .replace("נוער + בוגרים", "נוער ובוגרים")
                 .replace("Youth + Adults", "Youth and Adults")
+                .trim()
         }
         .joinToString(". ")
 
@@ -594,6 +797,10 @@ private fun normalizeForTts(text: String): String {
         .replace("ק מ י", "קמי")
         .replace("K.M.I", "KAMI", ignoreCase = true)
         .replace("K M I", "KAMI", ignoreCase = true)
+        .replace("יובל", "יוּבַל")
+        .replace("שלך", "שֶלְחָה")
+
+        .replace("Yuval", "You-val", ignoreCase = true)
         .replace("קמי", "קָמִי")
 }
 
@@ -679,16 +886,26 @@ fun AiAssistantDialog(
         } catch (_: Throwable) { }
     }
 
-    // ✅ FIX: אתחול בטוח של assistantMemory כדי שלא יקרוס ב-sendQuestion
+// ✅ FIX: אתחול בטוח של assistantMemory כדי שלא יקרוס ב-sendQuestion
     val spAssistantMemory = remember {
         ctx.getSharedPreferences("kmi_assistant_memory", Context.MODE_PRIVATE)
     }
+
+// ✅ פרטי המשתמש האמיתיים: סניף / קבוצה / אזור / תפקיד
+// חשוב למצב "מידע על אימונים", כדי שלא ייפול לסניף ברירת מחדל כמו כפר סבא.
+    val spUser = remember {
+        ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+    }
+
     val assistantMemoryLocal = remember(spAssistantMemory) {
         AssistantMemory(spAssistantMemory)
     }
-    LaunchedEffect(assistantMemoryLocal, spAssistantMemory) {
+
+    LaunchedEffect(assistantMemoryLocal, spAssistantMemory, spUser) {
         assistantMemory = assistantMemoryLocal
-        TrainingsAssistantEngine.init(spAssistantMemory)
+
+        // ✅ חשוב: מנוע האימונים צריך לקבל את פרטי המשתמש, לא את זיכרון העוזר.
+        TrainingsAssistantEngine.init(spUser)
     }
 
     val unansweredPrefs = remember {
@@ -763,8 +980,8 @@ fun AiAssistantDialog(
     val inputPlaceholder = remember(assistantMode, isEnglish) {
         when (assistantMode) {
             null -> tr("אנא בחר נושא להמשך", "Please choose a topic to continue")
-            AssistantMode.EXERCISE -> tr("כתוב או אמור שם תרגיל", "Type or say an exercise name")
-            AssistantMode.TRAININGS -> tr("שאל או אמור משהו על אימונים", "Ask or say something about trainings")
+            AssistantMode.EXERCISE -> tr("אמור שם תרגיל", "Type or say an exercise name")
+            AssistantMode.TRAININGS -> tr("שאל משהו על אימונים", "Ask or say something about trainings")
             AssistantMode.KMI_MATERIAL -> tr("חפש או אמור נושא / תרגיל", "Search or say a topic / exercise")
         }
     }
@@ -823,8 +1040,8 @@ fun AiAssistantDialog(
             isSpeaking -> tr("לחץ כדי לעצור את הדיבור", "Tap to stop speaking")
             isListening -> tr("אני מקשיב...", "I'm listening...")
             assistantMode == null -> tr("אנא בחר נושא להמשך", "Please choose a topic to continue")
-            assistantMode == AssistantMode.EXERCISE -> tr("כתוב או אמור שם תרגיל", "Type or say an exercise name")
-            assistantMode == AssistantMode.TRAININGS -> tr("שאל או אמור משהו על אימונים", "Ask or say something about trainings")
+            assistantMode == AssistantMode.EXERCISE -> tr("אמור שם תרגיל", "Type or say an exercise name")
+            assistantMode == AssistantMode.TRAININGS -> tr("שאל משהו על אימונים", "Ask or say something about trainings")
             else -> tr("חפש או אמור נושא / תרגיל", "Search or say a topic / exercise")
         }
     }
@@ -1311,6 +1528,16 @@ fun AiAssistantDialog(
     LaunchedEffect(pendingSendFromStt) {
         val q = pendingSendFromStt ?: return@LaunchedEffect
         pendingSendFromStt = null
+
+        // במסך הראשי בוחרים מצב בלבד.
+        // לא שולחים שאלה קולית לפני שנבחר מצב, כדי למנוע בלבול.
+        if (assistantMode == null) {
+            input = ""
+            stopListeningHard()
+            requestHideKeyboard = true
+            return@LaunchedEffect
+        }
+
         sendQuestion(q)
     }
 
@@ -1327,8 +1554,8 @@ fun AiAssistantDialog(
                 didIntroSpeak = true
                 speakBest(
                     tr(
-                        "שַלוֹם, כאן יובל העוזר האישי שלך. אנא בחר נושא מתוך הרשימה שלפניך כדי שנוכל להתחיל",
-                        "Hello, this is Yuval, your personal assistant. Please choose a topic from the list so we can begin."
+                        "שלום. כאן יוּבַל, העוזר האישי שלך. אנא בחר נושא מתוך הרשימה שלפניך כדי שנוכל להתחיל.",
+                        "Hello. This is You-val, your personal assistant. Please choose a topic from the list so we can begin."
                     )
                 )
             }
@@ -1651,176 +1878,194 @@ fun AiAssistantDialog(
                     // (השארת ה-else כמו שהיה אצלך)
                 }
 
-                Surface(
-                    modifier = Modifier
-                        .weight(1f, fill = true)
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    shape = RoundedCornerShape(28.dp),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 8.dp,
-                    color = Color.White.copy(alpha = 0.62f)
-                ) {
-                    if (messages.isEmpty() && !isThinking) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f))
-                                .padding(12.dp),
-                            contentAlignment = Alignment.TopEnd
-                        ) {
-                            Text(
-                                text = emptyStateText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = textAlignPrimary
-                            )
-                        }
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f))
-                                .padding(10.dp)
-                                .verticalScroll(scrollState),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                    val shouldShowMessagesCard =
+                        assistantMode != null || messages.isNotEmpty() || isThinking
 
-                            messages.forEachIndexed { index, msg ->
+                    if (shouldShowMessagesCard) {
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f, fill = true)
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 10.dp,
+                            color = Color(0xFFF6F3FA)
+                        ) {
+                            if (messages.isEmpty() && !isThinking) {
                                 Box(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentAlignment = when {
-                                        msg.fromUser && !isEnglish -> Alignment.CenterEnd
-                                        msg.fromUser && isEnglish -> Alignment.CenterStart
-                                        !msg.fromUser && !isEnglish -> Alignment.CenterStart
-                                        else -> Alignment.CenterEnd
-                                    }
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    contentAlignment = Alignment.TopEnd
                                 ) {
-                                    val bubbleColor =
-                                        if (msg.fromUser) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.surface
+                                    Text(
+                                        text = emptyStateText,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = textAlignPrimary
+                                    )
+                                }
+                            } else {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                                        .verticalScroll(scrollState),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
 
-                                    val textColor =
-                                        if (msg.fromUser) Color.White
-                                        else MaterialTheme.colorScheme.onSurface
+                                    messages.forEachIndexed { index, msg ->
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            contentAlignment = when {
+                                                msg.fromUser && !isEnglish -> Alignment.CenterEnd
+                                                msg.fromUser && isEnglish -> Alignment.CenterStart
+                                                !msg.fromUser && !isEnglish -> Alignment.CenterStart
+                                                else -> Alignment.CenterEnd
+                                            }
+                                        ) {
+                                            val bubbleColor =
+                                                if (msg.fromUser) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    Color(0xFFF1EDF7)
+                                                }
 
-                                    Surface(
-                                        color = bubbleColor,
-                                        shape = RoundedCornerShape(
-                                            topStart = 18.dp,
-                                            topEnd = 18.dp,
-                                            bottomEnd = if (msg.fromUser) 2.dp else 18.dp,
-                                            bottomStart = if (msg.fromUser) 18.dp else 2.dp
-                                        ),
-                                        tonalElevation = 3.dp,
-                                        shadowElevation = 2.dp
-                                    ) {
-                                        Column {
-                                            Text(
-                                                text = msg.text,
-                                                color = textColor,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                                textAlign = textAlignPrimary,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
+                                            val textColor =
+                                                if (msg.fromUser) {
+                                                    Color.White
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurface
+                                                }
 
-                                            if (!msg.fromUser) {
-                                                Row(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(end = 4.dp, bottom = 4.dp),
-                                                    horizontalArrangement = Arrangement.End,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    IconButton(onClick = { setFeedback(index, Feedback.LIKE) }) {
-                                                        Icon(
-                                                            imageVector = Icons.Filled.ThumbUp,
-                                                            contentDescription = "Like",
-                                                            tint = when (msg.feedback) {
-                                                                Feedback.LIKE -> Color(0xFF22C55E)
-                                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                            Surface(
+                                                color = bubbleColor,
+                                                shape = RoundedCornerShape(
+                                                    topStart = 18.dp,
+                                                    topEnd = 18.dp,
+                                                    bottomEnd = if (msg.fromUser) 2.dp else 18.dp,
+                                                    bottomStart = if (msg.fromUser) 18.dp else 2.dp
+                                                ),
+                                                tonalElevation = 0.dp,
+                                                shadowElevation = 2.dp
+                                            ) {
+                                                Column {
+                                                    Text(
+                                                        text = msg.text,
+                                                        color = textColor,
+                                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                                        textAlign = textAlignPrimary,
+                                                        style = MaterialTheme.typography.bodyMedium
+                                                    )
+
+                                                    if (!msg.fromUser) {
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(end = 4.dp, bottom = 4.dp),
+                                                            horizontalArrangement = Arrangement.End,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            IconButton(onClick = { setFeedback(index, Feedback.LIKE) }) {
+                                                                Icon(
+                                                                    imageVector = Icons.Filled.ThumbUp,
+                                                                    contentDescription = "Like",
+                                                                    tint = when (msg.feedback) {
+                                                                        Feedback.LIKE -> Color(0xFF22C55E)
+                                                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                                                    }
+                                                                )
                                                             }
-                                                        )
-                                                    }
 
-                                                    IconButton(
-                                                        onClick = {
-                                                            setFeedback(index, Feedback.UNLIKE)
+                                                            IconButton(
+                                                                onClick = {
+                                                                    setFeedback(index, Feedback.UNLIKE)
 
-                                                            val questionText = messages
-                                                                .take(index)
-                                                                .lastOrNull { it.fromUser }
-                                                                ?.text
-                                                                ?.trim()
-                                                                ?: ""
+                                                                    val questionText = messages
+                                                                        .take(index)
+                                                                        .lastOrNull { it.fromUser }
+                                                                        ?.text
+                                                                        ?.trim()
+                                                                        ?: ""
 
-                                                            if (questionText.isNotBlank()) {
-                                                                logUnlikeQuestion(question = questionText, answer = msg.text)
-                                                                saveAiFeedback(questionText, msg.text)
+                                                                    if (questionText.isNotBlank()) {
+                                                                        logUnlikeQuestion(
+                                                                            question = questionText,
+                                                                            answer = msg.text
+                                                                        )
+                                                                        saveAiFeedback(questionText, msg.text)
+                                                                    }
+                                                                }
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Filled.ThumbDown,
+                                                                    contentDescription = "Unlike",
+                                                                    tint = when (msg.feedback) {
+                                                                        Feedback.UNLIKE -> Color(0xFFEF4444)
+                                                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                                                    }
+                                                                )
                                                             }
                                                         }
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Filled.ThumbDown,
-                                                            contentDescription = "Unlike",
-                                                            tint = when (msg.feedback) {
-                                                                Feedback.UNLIKE -> Color(0xFFEF4444)
-                                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                                            }
-                                                        )
                                                     }
                                                 }
                                             }
                                         }
                                     }
-                                }
-                            }
 
-                            if (isThinking) {
-                                val dotsTransition = rememberInfiniteTransition(label = "thinkingDots")
+                                    if (isThinking) {
+                                        val dotsTransition = rememberInfiniteTransition(label = "thinkingDots")
 
-                                val dotAlpha by dotsTransition.animateFloat(
-                                    initialValue = 0.25f,
-                                    targetValue = 1f,
-                                    animationSpec = infiniteRepeatable(
-                                        animation = tween(650),
-                                        repeatMode = RepeatMode.Reverse
-                                    ),
-                                    label = "dotAlpha"
-                                )
+                                        val dotAlpha by dotsTransition.animateFloat(
+                                            initialValue = 0.25f,
+                                            targetValue = 1f,
+                                            animationSpec = infiniteRepeatable(
+                                                animation = tween(650),
+                                                repeatMode = RepeatMode.Reverse
+                                            ),
+                                            label = "dotAlpha"
+                                        )
 
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 6.dp),
-                                    horizontalArrangement = Arrangement.End,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = tr("יובל חושב", "Yuval is thinking"),
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-
-                                    Spacer(Modifier.width(6.dp))
-
-                                    Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .background(
-                                                MaterialTheme.colorScheme.primary.copy(alpha = dotAlpha),
-                                                shape = RoundedCornerShape(50)
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 6.dp),
+                                            horizontalArrangement = Arrangement.End,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = tr("יובל חושב", "Yuval is thinking"),
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
-                                    )
-                                }
-                            }
 
-                            LaunchedEffect(messages.size) {
-                                scrollToBottom()
+                                            Spacer(Modifier.width(6.dp))
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .background(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = dotAlpha),
+                                                        shape = RoundedCornerShape(50)
+                                                    )
+                                            )
+                                        }
+                                    }
+
+                                    LaunchedEffect(messages.size) {
+                                        scrollToBottom()
+                                    }
+                                }
                             }
                         }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f, fill = true)
+                                .fillMaxWidth()
+                        )
                     }
-                }
 
                 if (isSpeaking) {
                     val eqTransition = rememberInfiniteTransition(label = "eq")
@@ -1950,7 +2195,8 @@ fun AiAssistantDialog(
                     )
 
                     val liveAssistantStatus = when {
-                        isSpeaking -> tr("מדבר…", "Speaking…")
+                        // ✅ בזמן דיבור כבר יש Equalizer מעל שדה ההקלדה,
+                        // לכן לא מציגים שוב מלבן נוסף עם "מדבר..."
                         isThinking -> tr("מעבד…", "Processing…")
                         isListening -> tr("מקשיב…", "Listening…")
                         else -> speechStatusMessage
@@ -1972,7 +2218,6 @@ fun AiAssistantDialog(
                                 color = when {
                                     speechStatusMessage != null -> MaterialTheme.colorScheme.error
                                     isListening -> MaterialTheme.colorScheme.primary
-                                    isSpeaking -> MaterialTheme.colorScheme.primary
                                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                                 style = MaterialTheme.typography.labelMedium,
@@ -1981,26 +2226,27 @@ fun AiAssistantDialog(
                         }
                     }
 
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 10.dp,
-                        color = Color.White.copy(alpha = 0.86f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                    Row(
-                        modifier = Modifier
-                            .background(Color.Transparent)
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-
-                        Box(
-                            modifier = Modifier.size(52.dp),
-                            contentAlignment = Alignment.Center
+                    if (assistantMode != null) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 8.dp,
+                            color = Color.White.copy(alpha = 0.86f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 3.dp)
                         ) {
+                            Row(
+                                modifier = Modifier
+                                    .background(Color.Transparent)
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+
+                            Box(
+                                modifier = Modifier.size(44.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
                             if (isListening) {
                                 Box(
                                     modifier = Modifier
@@ -2015,7 +2261,7 @@ fun AiAssistantDialog(
 
                             Box(
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(38.dp)
                                     .background(
                                         when {
                                             isSpeaking -> Color(0x22E53935)
@@ -2028,7 +2274,7 @@ fun AiAssistantDialog(
                             ) {
                                 IconButton(
                                     modifier = Modifier
-                                        .size(40.dp)
+                                        .size(36.dp)
                                         .scale(micScale),
                                     onClick = {
                                         if (isSpeaking) {
@@ -2069,24 +2315,24 @@ fun AiAssistantDialog(
 
                         val inputScrollState = rememberScrollState()
 
-                        TextField(
-                            value = input,
-                            onValueChange = {
-                                input = it
-                                scope.launch { inputScrollState.scrollTo(inputScrollState.maxValue) }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 46.dp, max = 120.dp)
-                                .verticalScroll(inputScrollState)
-                                .bringIntoViewRequester(bringIntoViewRequester)
-                                .onFocusEvent { f ->
-                                    if (f.isFocused) {
-                                        scope.launch { bringIntoViewRequester.bringIntoView() }
-                                    }
+                            TextField(
+                                value = input,
+                                onValueChange = {
+                                    input = it
+                                    scope.launch { inputScrollState.scrollTo(inputScrollState.maxValue) }
                                 },
-                            maxLines = 4,
-                            singleLine = false,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 38.dp, max = 58.dp)
+                                    .verticalScroll(inputScrollState)
+                                    .bringIntoViewRequester(bringIntoViewRequester)
+                                    .onFocusEvent { f ->
+                                        if (f.isFocused) {
+                                            scope.launch { bringIntoViewRequester.bringIntoView() }
+                                        }
+                                    },
+                                maxLines = 2,
+                                singleLine = false,
                             placeholder = {
                                 Text(
                                     text = dynamicInputPlaceholder,
@@ -2118,22 +2364,23 @@ fun AiAssistantDialog(
                             )
                         )
 
-                        IconButton(
-                            onClick = {
-                                stopListeningHard()
-                                requestHideKeyboard = true
-                                sendQuestion(input)
-                            },
-                            enabled = assistantMode != null && input.isNotBlank()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Send,
-                                contentDescription = null,
-                                tint = if (assistantMode != null && input.isNotBlank())
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                IconButton(
+                                    onClick = {
+                                        stopListeningHard()
+                                        requestHideKeyboard = true
+                                        sendQuestion(input)
+                                    },
+                                    enabled = assistantMode != null && input.isNotBlank()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Send,
+                                        contentDescription = null,
+                                        tint = if (assistantMode != null && input.isNotBlank())
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }

@@ -71,27 +71,20 @@ fun SideScreenTopBar(
     title: String,
     onClose: () -> Unit
 ) {
-    var showAiDialog by rememberSaveable { mutableStateOf(false) }
     KmiTopBar(
         title = title,
         centerTitle = true,
         showMenu = false,
-        onBack = null,
+
+        // ✅ משתמשים במנגנון הסגירה המובנה של KmiTopBar
+        // במקום extraActions, כדי לא לדחוף את סרגל האייקונים.
+        onBack = onClose,
+
         showBottomActions = true,
         showRoleBadge = false,
         showModePill = false,
         lockSearch = true,
-        lockHome = false,
-        // כפתור X בצד ימין
-        extraActions = {
-            IconButton(onClick = onClose) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = "סגור",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        lockHome = false
     )
 }
 
@@ -235,7 +228,7 @@ fun BottomActionsBarEdgeToEdge(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .padding(horizontal = 4.dp, vertical = 6.dp)
                     .height(68.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -245,7 +238,8 @@ fun BottomActionsBarEdgeToEdge(
                 BarAction(
                     label = tSearch,
                     enabled = true,
-                    onClick = {}
+                    onClick = {},
+                    modifier = Modifier.weight(1f)
                 ) {
                     PremiumBarIcon(
                         icon = Icons.Filled.Search,
@@ -268,7 +262,8 @@ fun BottomActionsBarEdgeToEdge(
                 BarAction(
                     label = tHome,
                     enabled = true,
-                    onClick = {}
+                    onClick = {},
+                    modifier = Modifier.weight(1f)
                 ) {
                     PremiumBarIcon(
                         icon = Icons.Filled.Home,
@@ -290,7 +285,8 @@ fun BottomActionsBarEdgeToEdge(
                 BarAction(
                     label = tSettings,
                     onClick = {},
-                    enabled = true
+                    enabled = true,
+                    modifier = Modifier.weight(1f)
                 ) {
                     PremiumBarIcon(
                         icon = Icons.Filled.Settings,
@@ -317,7 +313,8 @@ fun BottomActionsBarEdgeToEdge(
                     BarAction(
                         label = tAssistant,
                         onClick = {},
-                        enabled = true
+                        enabled = true,
+                        modifier = Modifier.weight(1f)
                     ) {
                         PremiumBarIcon(
                             icon = Icons.Filled.Lightbulb,
@@ -332,7 +329,8 @@ fun BottomActionsBarEdgeToEdge(
                 BarAction(
                     label = tShare,
                     onClick = {},
-                    enabled = true
+                    enabled = true,
+                    modifier = Modifier.weight(1f)
                 ) {
                     PremiumBarIcon(
                         icon = Icons.Filled.Share,
@@ -582,7 +580,7 @@ fun PremiumBarIcon(
 
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(46.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -596,7 +594,7 @@ fun PremiumBarIcon(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            modifier = Modifier.size(48.dp),
+            modifier = Modifier.size(46.dp),
             shape = CircleShape,
             color = background,
             tonalElevation = 0.dp,
@@ -607,7 +605,7 @@ fun PremiumBarIcon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = tint,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(23.dp)
                 )
             }
         }
@@ -619,12 +617,13 @@ fun BarAction(
     label: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .widthIn(min = 56.dp, max = 72.dp)
-            .padding(horizontal = 1.dp)
+        modifier = modifier
+            .widthIn(min = 48.dp, max = 64.dp)
+            .padding(horizontal = 0.dp)
             .clickable(enabled = enabled) { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center

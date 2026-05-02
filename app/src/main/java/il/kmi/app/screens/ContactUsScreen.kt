@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Person
@@ -33,7 +32,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -130,6 +128,12 @@ fun ContactUsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = if (effectiveEnglish) Alignment.Start else Alignment.End
             ) {
+                // ✅ כותרת גלובלית + סרגל אייקונים כמו בשאר האפליקציה
+                SideScreenTopBar(
+                    title = title,
+                    onClose = onClose
+                )
+
                 AnimatedVisibility(
                     visible = true,
                     enter = fadeIn() + slideInVertically { it / 4 }
@@ -148,67 +152,41 @@ fun ContactUsScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 18.dp, vertical = 16.dp)
+                                .padding(horizontal = 18.dp, vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            androidx.compose.foundation.layout.Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = title,
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        color = Color.White,
-                                        textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        text = subtitle,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White.copy(alpha = 0.78f),
-                                        textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White.copy(alpha = 0.90f),
+                                textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End,
+                                modifier = Modifier.fillMaxWidth()
+                            )
 
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = Color.White.copy(alpha = 0.10f)
-                                ) {
-                                    IconButton(onClick = onClose) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = null,
-                                            tint = Color.White
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(Modifier.height(14.dp))
                             HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
-                            Spacer(Modifier.height(14.dp))
 
                             Surface(
+                                modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(18.dp),
                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
                             ) {
-                                androidx.compose.foundation.layout.Row(
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(horizontal = 14.dp, vertical = 14.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.SupportAgent,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.align(
+                                            if (effectiveEnglish) Alignment.CenterStart else Alignment.CenterEnd
+                                        )
                                     )
-                                    Spacer(Modifier.height(0.dp))
+
                                     Text(
                                         text = if (effectiveEnglish) {
-                                            "A K.M.I representative will contact you soon."
+                                            "K.M.I representative will contact you soon."
                                         } else {
                                             "נציג מטעם ק.מ.י יחזור אליכם בהקדם."
                                         },
@@ -217,8 +195,8 @@ fun ContactUsScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(
-                                                start = if (effectiveEnglish) 10.dp else 0.dp,
-                                                end = if (!effectiveEnglish) 10.dp else 0.dp
+                                                start = if (effectiveEnglish) 38.dp else 0.dp,
+                                                end = if (effectiveEnglish) 0.dp else 38.dp
                                             )
                                     )
                                 }

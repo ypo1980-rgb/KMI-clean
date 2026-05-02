@@ -7,6 +7,7 @@ package il.kmi.app.screens.registration
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Patterns
 import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
 import androidx.activity.compose.BackHandler
@@ -26,7 +27,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.KeyboardOptions
@@ -718,88 +718,175 @@ private fun RecoveryDialog(
     onDismiss: () -> Unit
 ) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     val langManager = remember { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
     fun tr(he: String, en: String): String = if (isEnglish) en else he
-    var emailOrUser by rememberSaveable { mutableStateOf("") }
-    var extraInfo by rememberSaveable { mutableStateOf("") }
+
+    var email by rememberSaveable { mutableStateOf("") }
+    var errorText by rememberSaveable { mutableStateOf<String?>(null) }
+    var successText by rememberSaveable { mutableStateOf<String?>(null) }
+    var isSending by rememberSaveable { mutableStateOf(false) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            if (!isSending) onDismiss()
+        },
         title = {
             Text(
-                text = tr("שחזור סיסמה / שם משתמש", "Password / Username Recovery"),
+                text = tr("שחזור סיסמה", "Password Recovery"),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Right,
+                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
             )
         },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.End
+                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
             ) {
                 Text(
                     text = tr(
-                        "מלא את הפרטים הבאים כדי שנוכל לאתר את המשתמש שלך:",
-                        "Fill in the following details so we can locate your user account:"
+                        "הזן את כתובת האימייל שאיתה נרשמת לאפליקציה. נשלח אליך מייל לאיפוס הסיסמה.",
+                        "Enter the email address you used to register. We will send you a password reset email."
                     ),
                     style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Right,
+                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(14.dp))
 
                 OutlinedTextField(
-                    value = emailOrUser,
-                    onValueChange = { emailOrUser = it },
-                    label = { Text(tr("אימייל או שם משתמש", "Email or username")) },
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        errorText = null
+                        successText = null
+                    },
+                    label = { Text(tr("אימייל", "Email")) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .defaultMinSize(minHeight = 48.dp),
-                    singleLine = true
+                        .defaultMinSize(minHeight = 52.dp),
+                    singleLine = true,
+                    enabled = !isSending,
+                    isError = errorText != null,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Done
+                    )
                 )
 
-                Spacer(Modifier.height(8.dp))
+                if (!errorText.isNullOrBlank()) {
+                    Spacer(Modifier.height(8.dp))
 
-                OutlinedTextField(
-                    value = extraInfo,
-                    onValueChange = { extraInfo = it },
-                    label = { Text(tr("טלפון", "Phone")) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = 48.dp),
-                    singleLine = false,
-                    maxLines = 3
-                )
+                    Text(
+                        text = errorText.orEmpty(),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
-                Spacer(Modifier.height(8.dp))
+                if (!successText.isNullOrBlank()) {
+                    Spacer(Modifier.height(8.dp))
 
-                Text(
-                    text = tr(
-                        "בהמשך תוכל לחבר את זה לשליחת מייל / וואטסאפ למאמן או למנהל המערכת.",
-                        "Later you can connect this to send an email / WhatsApp to the coach or system admin."
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    Text(
+                        text = successText.orEmpty(),
+                        color = Color(0xFF16A34A),
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
+                enabled = !isSending,
                 onClick = {
-                    // כאן בעתיד תוסיף לוגיקה אמיתית (שרת, Firebase וכו')
-                    onDismiss()
+                    val cleanEmail = email.trim()
+
+                    when {
+                        cleanEmail.isBlank() -> {
+                            errorText = tr(
+                                "יש להזין כתובת אימייל.",
+                                "Please enter an email address."
+                            )
+                        }
+
+                        !Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches() -> {
+                            errorText = tr(
+                                "כתובת האימייל אינה תקינה.",
+                                "Invalid email address."
+                            )
+                        }
+
+                        else -> {
+                            isSending = true
+                            errorText = null
+                            successText = null
+
+                            scope.launch {
+                                runCatching {
+                                    FirebaseAuth.getInstance()
+                                        .sendPasswordResetEmail(cleanEmail)
+                                        .await()
+                                }.onSuccess {
+                                    isSending = false
+                                    successText = tr(
+                                        "נשלח מייל לשחזור הסיסמה. בדוק את תיבת הדואר שלך וגם את תיקיית הספאם / דואר זבל.",
+                                        "A password reset email was sent. Please check your inbox and also your spam or junk folder."
+                                    )
+                                }.onFailure { error ->
+                                    isSending = false
+
+                                    errorText = when {
+                                        error.message?.contains("badly formatted", ignoreCase = true) == true -> {
+                                            tr(
+                                                "כתובת האימייל אינה תקינה.",
+                                                "Invalid email address."
+                                            )
+                                        }
+
+                                        error.message?.contains("network", ignoreCase = true) == true -> {
+                                            tr(
+                                                "אין חיבור תקין לרשת. נסה שוב.",
+                                                "Network error. Please try again."
+                                            )
+                                        }
+
+                                        else -> {
+                                            tr(
+                                                "לא הצלחנו לשלוח מייל שחזור. ודא שהאימייל קיים במערכת ונסה שוב.",
+                                                "Failed to send a reset email. Make sure the email exists and try again."
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             ) {
-                Text(tr("שלח בקשה", "Send Request"))
+                Text(
+                    text = if (isSending) {
+                        tr("שולח...", "Sending...")
+                    } else {
+                        tr("שלח מייל שחזור", "Send reset email")
+                    }
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                enabled = !isSending,
+                onClick = onDismiss
+            ) {
                 Text(tr("סגור", "Close"))
             }
         }

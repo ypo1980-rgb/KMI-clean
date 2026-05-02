@@ -123,32 +123,140 @@ fun MainApp(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
+    val ctxForLanguage = LocalContext.current
+
+    // ✅ מקור אמת יחיד לשפת האפליקציה וה-Drawer.
+    // לא מחזיקים state נוסף ל-Drawer כדי שלא יהיה פער בין עברית לאנגלית.
+    var appLanguage by remember {
+        mutableStateOf(
+            il.kmi.shared.localization.AppLanguageManager(ctxForLanguage)
+                .getCurrentLanguage()
+        )
+    }
+
+    // ✅ מאזין לשינויי שפה גם אם הם בוצעו ממקום אחר באפליקציה:
+    // KmiTopBar / Settings / מסך פתיחה / כל מקום שקורא ל-AppLanguageManager.setLanguage(...)
+    DisposableEffect(ctxForLanguage) {
+        val languagePrefs = ctxForLanguage.applicationContext.getSharedPreferences(
+            "kmi_language_prefs",
+            Context.MODE_PRIVATE
+        )
+
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "app_language") {
+                val newStoredLanguage =
+                    il.kmi.shared.localization.AppLanguageManager(ctxForLanguage)
+                        .getCurrentLanguage()
+
+                android.util.Log.e(
+                    "KMI_LANG",
+                    "MAIN_PREF_LISTENER key=$key newStoredLanguage=$newStoredLanguage oldState=$appLanguage"
+                )
+
+                appLanguage = newStoredLanguage
+            }
+        }
+
+        languagePrefs.registerOnSharedPreferenceChangeListener(listener)
+
+        onDispose {
+            languagePrefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+// ✅ פונקציה מרכזית לעדכון שפה - מקור אמת יחיד
+    val onLanguageChanged: (il.kmi.shared.localization.AppLanguage) -> Unit = { newLanguage ->
+        val beforeState = appLanguage
+        val manager = il.kmi.shared.localization.AppLanguageManager(ctxForLanguage)
+
+        // קודם מעדכנים State כדי שה-Drawer יקבל מיד isEnglish נכון.
+        appLanguage = newLanguage
+
+        // אחר כך שומרים בפועל.
+        manager.setLanguage(newLanguage)
+
+        val storedAfter = manager.getCurrentLanguage()
+
+        android.util.Log.e(
+            "KMI_LANG",
+            "MAIN_onLanguageChanged requested=$newLanguage beforeState=$beforeState storedAfter=$storedAfter finalState=$appLanguage"
+        )
+    }
+
+    // ✅ פתיחת Drawer עם לוגים — בלי לדרוס את appLanguage מה-Manager.
+    // חשוב:
+    // אם AppLanguageManager מחזיר ערך ישן, אסור לתת לו להחזיר את ה-Drawer לשפה הלא נכונה.
+    fun openDrawerAfterLanguageSync(reason: String) {
+        val storedLanguage =
+            il.kmi.shared.localization.AppLanguageManager(ctxForLanguage)
+                .getCurrentLanguage()
+
+        val beforeState = appLanguage
+        val beforeIsEnglish =
+            beforeState == il.kmi.shared.localization.AppLanguage.ENGLISH
+        val storedIsEnglish =
+            storedLanguage == il.kmi.shared.localization.AppLanguage.ENGLISH
+
+        android.util.Log.e(
+            "KMI_LANG",
+            "open[$reason] BEFORE state=$beforeState stateIsEnglish=$beforeIsEnglish stored=$storedLanguage storedIsEnglish=$storedIsEnglish drawerIsOpen=${drawerState.isOpen}"
+        )
+
+        if (appLanguage != storedLanguage) {
+            android.util.Log.e(
+                "KMI_LANG",
+                "open[$reason] WARNING_STATE_AND_STORE_DIFFER state=$appLanguage stored=$storedLanguage - keeping state"
+            )
+        } else {
+            android.util.Log.e(
+                "KMI_LANG",
+                "open[$reason] STATE_AND_STORE_MATCH state=$appLanguage"
+            )
+        }
+
+        scope.launch {
+            kotlinx.coroutines.delay(80)
+
+            val latestStored =
+                il.kmi.shared.localization.AppLanguageManager(ctxForLanguage)
+                    .getCurrentLanguage()
+
+            val latestState = appLanguage
+            val latestIsEnglish =
+                latestState == il.kmi.shared.localization.AppLanguage.ENGLISH
+
+            android.util.Log.e(
+                "KMI_LANG",
+                "open[$reason] JUST_BEFORE_OPEN state=$latestState stateIsEnglish=$latestIsEnglish stored=$latestStored"
+            )
+
+            drawerState.open()
+
+            android.util.Log.e(
+                "KMI_LANG",
+                "open[$reason] AFTER_OPEN drawerIsOpen=${drawerState.isOpen}"
+            )
+        }
+    }
+
+    LaunchedEffect(appLanguage) {
+        android.util.Log.e(
+            "KMI_LANG",
+            "RECOMPOSE_LANGUAGE appLanguage=$appLanguage isEnglish=${appLanguage == il.kmi.shared.localization.AppLanguage.ENGLISH}"
+        )
+    }
+
     LaunchedEffect(Unit) {
         DrawerBridge.register(
             onOpenDrawer = {
-                android.util.Log.e("KMI_DRAWER", "MainApp onOpenDrawer invoked")
-
-                scope.launch {
-                    drawerState.open()
-
-                    android.util.Log.e(
-                        "KMI_DRAWER",
-                        "drawerState.open() done isOpen=${drawerState.isOpen}"
-                    )
-                }
+                openDrawerAfterLanguageSync("DrawerBridge.onOpenDrawer")
             },
             onOpenSettings = {
-                android.util.Log.e("KMI_DRAWER", "openSettings")
-                nav.navigate(Route.Settings.route) {
-                    launchSingleTop = true
-                }
+                nav.navigate(Route.Settings.route) { launchSingleTop = true }
             },
             onOpenHome = {
-                android.util.Log.e("KMI_DRAWER", "openHome")
                 nav.navigate(Route.Home.route) {
-                    popUpTo(nav.graph.findStartDestination().id) {
-                        saveState = true
-                    }
+                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
                     launchSingleTop = true
                     restoreState = true
                 }
@@ -156,32 +264,16 @@ fun MainApp(
         )
     }
 
-    // ✅ TTS אחיד לכל האפליקציה
-    val ctx = LocalContext.current
-    LaunchedEffect(Unit) {
-        // הכל ענן (אנושי) – לא מאתחלים TTS מקומי בכלל
-        // KmiTtsManager.init(ctx)
-    }
-
     MaterialTheme(
         typography = typography,
         colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
     ) {
+        val isEnglish = appLanguage == il.kmi.shared.localization.AppLanguage.ENGLISH
+        val layoutDirection = if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
+        else androidx.compose.ui.unit.LayoutDirection.Rtl
 
-        val ctxLang = LocalContext.current
-        val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctxLang) }
-        val isEnglish =
-            langManager.getCurrentLanguage() == il.kmi.shared.localization.AppLanguage.ENGLISH
-        val layoutDirection =
-            if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
-            else androidx.compose.ui.unit.LayoutDirection.Rtl
-
-        CompositionLocalProvider(
-            androidx.compose.ui.platform.LocalLayoutDirection provides layoutDirection
-        ) {
-            CompositionLocalProvider(
-                il.kmi.app.ui.LocalAppDrawerState provides drawerState
-            ) {
+        CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides layoutDirection) {
+            CompositionLocalProvider(il.kmi.app.ui.LocalAppDrawerState provides drawerState) {
                 ModalNavigationDrawer(
                     drawerState = drawerState,
                     gesturesEnabled = true,
@@ -189,30 +281,29 @@ fun MainApp(
                     drawerContent = {
                         ModalDrawerSheet(
                             drawerContainerColor = Color.Transparent,
-                            drawerContentColor = Color.White,
                             modifier = Modifier.fillMaxWidth(0.86f)
                         ) {
                             val ctxInner = LocalContext.current
-                            val spUser = remember {
-                                ctxInner.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+                            val spUser = remember { ctxInner.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
+                            val roleState = remember { mutableStateOf(spUser.getString("user_role", "trainee")) }
+
+                            DisposableEffect(spUser) {
+                                val l = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
+                                    if (k == "user_role") roleState.value = spUser.getString("user_role", "trainee")
+                                }
+                                spUser.registerOnSharedPreferenceChangeListener(l)
+                                onDispose { spUser.unregisterOnSharedPreferenceChangeListener(l) }
                             }
 
-                    // נעקוב אחרי תפקיד המשתמש כדי להציג פריטי מאמן
-                    val roleState = remember {
-                        mutableStateOf(spUser.getString("user_role", "trainee"))
-                    }
-                    DisposableEffect(spUser) {
-                        val l = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
-                            if (k == "user_role") {
-                                roleState.value = spUser.getString("user_role", "trainee")
-                            }
-                        }
-                        spUser.registerOnSharedPreferenceChangeListener(l)
-                        onDispose { spUser.unregisterOnSharedPreferenceChangeListener(l) }
-                    }
-                    val isCoach = roleState.value.equals("coach", true)
+                            val isCoach = roleState.value.equals("coach", true)
 
                             il.kmi.app.screens.drawer.AppDrawerContent(
+                                isEnglish = isEnglish,
+                                onLanguageChanged = { newLang ->
+                                    onLanguageChanged(newLang)
+                                    scope.launch { drawerState.close() }
+                                },
+
                                 onOpenAboutNetwork = { nav.navigate(Route.AboutNetwork.route) },
                                 onOpenAboutMethod = { nav.navigate(Route.AboutMethod.route) },
                                 onOpenSubscriptions = { nav.navigate(Route.Subscription.route) },
@@ -305,9 +396,10 @@ fun MainApp(
                             themeMode = themeMode,
                             onThemeChange = onThemeChange,
                             onOpenDrawer = {
-                                scope.launch {
-                                    drawerState.open()
-                                }
+                                // ✅ פתיחת Drawer דרך פונקציית האבחון המרכזית.
+                                // היא מסנכרנת שפה, כותבת לוגים, ממתינה קצר,
+                                // ואז פותחת את הסרגל.
+                                openDrawerAfterLanguageSync("MainNavHost.onOpenDrawer")
                             },
 
                             startDestination = Route.Intro.route

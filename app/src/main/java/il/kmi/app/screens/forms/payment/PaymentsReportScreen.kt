@@ -1,6 +1,7 @@
 package il.kmi.app.screens.admin
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,19 +13,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCard
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,12 +42,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -56,14 +54,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import il.kmi.app.privacy.DemoTrainees
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaymentsReportScreen(
     isEnglish: Boolean = false,
     onClose: () -> Unit = {},
+    onOpenDemoTrainees: () -> Unit = {},
     initialItems: List<PaymentReportItem> = demoPaymentsReportItems(),
     onSaveManualPayment: (traineeId: String, amount: Double, method: PaymentMethod, notes: String) -> Unit = { _, _, _, _ -> }
 ) {
@@ -73,9 +75,8 @@ fun PaymentsReportScreen(
     var manualDialogItem by remember { mutableStateOf<PaymentReportItem?>(null) }
 
     val title = if (isEnglish) "Payments Report" else "דו\"ח תשלומים"
-    val paidText = if (isEnglish) "Paid" else "שילמו"
-    val unpaidText = if (isEnglish) "Unpaid" else "לא שילמו"
-    val partialText = if (isEnglish) "Partial" else "חלקי"
+    val paidText = if (isEnglish) "Paid 150" else "שילמו"
+    val unpaidText = if (isEnglish) "Not paid 150" else "לא שילמו"
 
     val branchOptions = remember {
         listOf(if (isEnglish) "All Branches" else "כל הסניפים") +
@@ -94,9 +95,13 @@ fun PaymentsReportScreen(
                     item.branchName.contains(query, ignoreCase = true)
 
         val matchesFilter = when (filter) {
-            "PAID" -> item.status == PaymentStatus.PAID
-            "UNPAID" -> item.status == PaymentStatus.UNPAID
-            "PARTIAL" -> item.status == PaymentStatus.PARTIAL
+            // ✅ שילמו דמי חבר מלאים — 150 ש"ח
+            "PAID" -> item.paidAmount >= 150.0
+
+            // ✅ לא שילמו 150 מלא:
+            // כולל מי שלא שילם בכלל וגם מי ששילם חלקית.
+            "UNPAID" -> item.paidAmount < 150.0
+
             else -> true
         }
 
@@ -109,9 +114,19 @@ fun PaymentsReportScreen(
 
     val totalRequired = items.sumOf { it.requiredAmount }
     val totalPaid = items.sumOf { it.paidAmount }
-    val paidCount = items.count { it.status == PaymentStatus.PAID }
-    val unpaidCount = items.count { it.status == PaymentStatus.UNPAID }
-    val partialCount = items.count { it.status == PaymentStatus.PARTIAL }
+
+    // ✅ שילמו = שילמו 150 מלא.
+    val paidCount = items.count { it.paidAmount >= 150.0 }
+
+    // ✅ לא שילמו = כל מי שלא הגיע ל-150 מלא, כולל חלקי.
+    val unpaidCount = items.count { it.paidAmount < 150.0 }
+
+    val collectionPercent =
+        if (totalRequired > 0.0) {
+            ((totalPaid / totalRequired) * 100.0).coerceIn(0.0, 100.0)
+        } else {
+            0.0
+        }
 
     Scaffold(
         containerColor = Color.Transparent
@@ -135,40 +150,57 @@ fun PaymentsReportScreen(
                     .padding(innerPadding)
                     .statusBarsPadding()
                     .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF314875)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    shape = RoundedCornerShape(30.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2B4273)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 16.dp)
+                            .padding(horizontal = 18.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Top
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = title,
-                                    style = MaterialTheme.typography.headlineSmall,
+                                    style = MaterialTheme.typography.headlineMedium,
                                     color = Color.White
                                 )
-                                Spacer(Modifier.height(4.dp))
+
+                                Spacer(Modifier.height(6.dp))
+
                                 Text(
-                                    text = if (isEnglish) "Track who paid and update payments manually"
-                                    else "מעקב אחרי מי ששילם ועדכון תשלומים ידניים",
+                                    text = if (isEnglish)
+                                        "Premium payments dashboard for coaches and admins"
+                                    else
+                                        "דשבורד תשלומים פרימיום למאמנים ולמנהלים",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White.copy(alpha = 0.78f)
+                                    color = Color.White.copy(alpha = 0.80f)
+                                )
+
+                                Spacer(Modifier.height(10.dp))
+
+                                Text(
+                                    text = if (isEnglish)
+                                        "Collected ₪${"%.0f".format(totalPaid)} מתוך ₪${"%.0f".format(totalRequired)}"
+                                    else
+                                        "נגבה ₪${"%.0f".format(totalPaid)} מתוך ₪${"%.0f".format(totalRequired)}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.White
                                 )
                             }
 
                             Surface(
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(18.dp),
                                 color = Color.White.copy(alpha = 0.10f)
                             ) {
                                 IconButton(onClick = onClose) {
@@ -180,41 +212,152 @@ fun PaymentsReportScreen(
                                 }
                             }
                         }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(132.dp),
+                                shape = RoundedCornerShape(24.dp),
+                                color = Color(0xFF1DA1F2)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = Color.White.copy(alpha = 0.18f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.TrendingUp,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.padding(10.dp)
+                                        )
+                                    }
+
+                                    Text(
+                                        text = if (isEnglish) "Collection" else "אחוז גבייה",
+                                        color = Color.White.copy(alpha = 0.78f),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
+                                    )
+
+                                    Text(
+                                        text = "${"%.0f".format(collectionPercent)}%",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                onClick = onOpenDemoTrainees,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(132.dp),
+                                shape = RoundedCornerShape(24.dp),
+                                color = Color(0xFF8B5CF6),
+                                tonalElevation = 6.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = Color.White.copy(alpha = 0.18f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Groups,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.padding(10.dp)
+                                        )
+                                    }
+
+                                    Text(
+                                        text = if (isEnglish) "Trainees" else "מתאמנים",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
+                                    )
+
+                                    Text(
+                                        text = items.size.toString(),
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
                     }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SummaryCard(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(138.dp),
+                        title = unpaidText,
+                        value = unpaidCount.toString(),
+                        icon = Icons.Default.PersonOff,
+                        selected = filter == "UNPAID",
+                        baseColor = Color(0xFFFF7A59),
+                        selectedColor = Color(0xFFFF5A36),
+                        onClick = {
+                            filter = "UNPAID"
+                        }
+                    )
+
+                    SummaryCard(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(138.dp),
+                        title = paidText,
+                        value = paidCount.toString(),
+                        icon = Icons.Default.Paid,
+                        selected = filter == "PAID",
+                        baseColor = Color(0xFF22C55E),
+                        selectedColor = Color(0xFF16A34A),
+                        onClick = {
+                            filter = "PAID"
+                        }
+                    )
                 }
 
                 Spacer(Modifier.height(12.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    SummaryCard(
-                        modifier = Modifier.weight(1f),
-                        title = paidText,
-                        value = paidCount.toString(),
-                        icon = Icons.Default.Paid
-                    )
-                    SummaryCard(
-                        modifier = Modifier.weight(1f),
-                        title = unpaidText,
-                        value = unpaidCount.toString(),
-                        icon = Icons.Default.PersonOff
-                    )
-                    SummaryCard(
-                        modifier = Modifier.weight(1f),
-                        title = partialText,
-                        value = partialCount.toString(),
-                        icon = Icons.Default.WarningAmber
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2A3D66))
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF243A67))
                 ) {
                     Column(
                         modifier = Modifier
@@ -222,12 +365,35 @@ fun PaymentsReportScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        Text(
+                            text = if (isEnglish) "Search & filters" else "חיפוש וסינון",
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                        )
+
+                        BranchDropdown(
+                            isEnglish = isEnglish,
+                            selectedBranch = selectedBranch,
+                            branchOptions = branchOptions,
+                            onBranchSelected = { selectedBranch = it }
+                        )
+
                         OutlinedTextField(
                             value = query,
                             onValueChange = { query = it },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            label = { Text(if (isEnglish) "Search by name / phone / branch" else "חיפוש לפי שם / טלפון / סניף") },
+                            label = {
+                                Text(
+                                    if (isEnglish)
+                                        "Search by name / phone / branch"
+                                    else
+                                        "חיפוש לפי שם / טלפון / סניף"
+                                )
+                            },
                             leadingIcon = { Icon(Icons.Default.Search, null) },
                             colors = reportFieldColors()
                         )
@@ -240,28 +406,31 @@ fun PaymentsReportScreen(
 
                         Text(
                             text = if (isEnglish)
-                                "Collected: ₪${"%.0f".format(totalPaid)} / ₪${"%.0f".format(totalRequired)}"
+                                "Results: ${filteredItems.size}"
                             else
-                                "נגבה: ₪${"%.0f".format(totalPaid)} / ₪${"%.0f".format(totalRequired)}",
-                            color = Color.White,
-                            style = MaterialTheme.typography.titleMedium
+                                "תוצאות: ${filteredItems.size}",
+                            color = Color.White.copy(alpha = 0.80f),
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
 
                 Spacer(Modifier.height(12.dp))
 
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(filteredItems, key = { it.traineeId }) { item ->
+                    filteredItems.forEach { item ->
                         PaymentReportRow(
                             item = item,
                             isEnglish = isEnglish,
                             onManualUpdate = { manualDialogItem = item }
                         )
                     }
+
+                    // ✅ רווח תחתון כדי שאפשר יהיה לגלול עד סוף הרשימה בנוחות.
+                    Spacer(Modifier.height(36.dp))
                 }
             }
 
@@ -304,25 +473,60 @@ private fun SummaryCard(
     modifier: Modifier = Modifier,
     title: String,
     value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    baseColor: Color,
+    selectedColor: Color,
+    onClick: () -> Unit
 ) {
     Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF314875))
+        modifier = modifier
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) selectedColor else baseColor
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 10.dp else 6.dp)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(icon, null, tint = Color.White)
-            Text(text = title, color = Color.White.copy(alpha = 0.82f))
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = Color.White.copy(alpha = if (selected) 0.22f else 0.16f)
+            ) {
+                Box(
+                    modifier = Modifier.padding(10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = Color.White
+                    )
+                }
+            }
+
+            Text(
+                text = title,
+                color = Color.White.copy(alpha = 0.86f),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+
             Text(
                 text = value,
                 color = Color.White,
-                style = MaterialTheme.typography.headlineSmall
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+                maxLines = 1
             )
         }
     }
@@ -339,44 +543,105 @@ private fun FilterRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         FilterChipSimple(
-            text = if (isEnglish) "All" else "הכל",
+            modifier = Modifier.weight(1f),
+            text = if (isEnglish) "All\ntrainees" else "כל\nהמתאמנים",
             selected = selected == "ALL",
             onClick = { onSelect("ALL") }
         )
+
         FilterChipSimple(
-            text = if (isEnglish) "Paid" else "שילמו",
+            modifier = Modifier.weight(1f),
+            text = if (isEnglish) "Paid\n150" else "שילמו\n150",
             selected = selected == "PAID",
             onClick = { onSelect("PAID") }
         )
+
         FilterChipSimple(
-            text = if (isEnglish) "Unpaid" else "לא שילמו",
+            modifier = Modifier.weight(1f),
+            text = if (isEnglish) "Not\npaid" else "לא\nשילמו",
             selected = selected == "UNPAID",
             onClick = { onSelect("UNPAID") }
         )
-        FilterChipSimple(
-            text = if (isEnglish) "Partial" else "חלקי",
-            selected = selected == "PARTIAL",
-            onClick = { onSelect("PARTIAL") }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BranchDropdown(
+    isEnglish: Boolean,
+    selectedBranch: String,
+    branchOptions: List<String>,
+    onBranchSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
+    ) {
+        OutlinedTextField(
+            value = selectedBranch,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(),
+            label = {
+                Text(if (isEnglish) "Branch" else "סניף")
+            },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            colors = reportFieldColors()
         )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            branchOptions.forEach { branch ->
+                DropdownMenuItem(
+                    text = { Text(branch) },
+                    onClick = {
+                        onBranchSelected(branch)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 
 @Composable
 private fun FilterChipSimple(
+    modifier: Modifier = Modifier,
     text: String,
     selected: Boolean,
     onClick: () -> Unit
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.08f)
+        modifier = modifier.height(58.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = if (selected) Color(0xFF7B57D1) else Color.White.copy(alpha = 0.10f),
+        tonalElevation = if (selected) 5.dp else 0.dp
     ) {
-        Text(
-            text = text,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else Color.White,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 2
+            )
+        }
     }
 }
 
@@ -388,55 +653,84 @@ private fun PaymentReportRow(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A3D66))
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A3D66)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = item.fullName,
-                color = Color.White,
-                style = MaterialTheme.typography.titleLarge
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.fullName,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge
+                    )
 
-            Text(
-                text = if (isEnglish)
-                    "${item.branchName} • ${item.phone}"
-                else
-                    "${item.branchName} • ${item.phone}",
-                color = Color.White.copy(alpha = 0.78f)
-            )
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = "${item.branchName} • ${item.phone}",
+                        color = Color.White.copy(alpha = 0.74f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = statusColor(item.status).copy(alpha = 0.18f)
+                ) {
+                    Text(
+                        text = statusLabel(item.status),
+                        color = statusColor(item.status),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            }
 
             HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
 
             Text(
                 text = if (isEnglish)
-                    "Paid ₪${"%.0f".format(item.paidAmount)} מתוך ₪${"%.0f".format(item.requiredAmount)}"
+                    "Membership fee: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
                 else
-                    "שולם ₪${"%.0f".format(item.paidAmount)} מתוך ₪${"%.0f".format(item.requiredAmount)}",
-                color = Color.White
+                    "דמי חבר: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}",
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
 
-            Text(
-                text = if (isEnglish)
-                    "Status: ${statusLabel(item.status)}"
-                else
-                    "סטטוס: ${statusLabel(item.status)}",
-                color = statusColor(item.status)
-            )
+            if (!item.paymentDate.isNullOrBlank()) {
+                Text(
+                    text = if (isEnglish)
+                        "Last update: ${item.paymentDate}"
+                    else
+                        "עדכון אחרון: ${item.paymentDate}",
+                    color = Color.White.copy(alpha = 0.68f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
 
             Button(
                 onClick = onManualUpdate,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF7B57D1),
+                    contentColor = Color.White
+                )
             ) {
                 Icon(Icons.Default.AddCard, null)
                 Text(
-                    text = if (isEnglish) "  Add Manual Payment" else "  הוסף תשלום ידני"
+                    text = if (isEnglish) "  Add Membership Payment" else "  הוסף דמי חבר"
                 )
             }
         }
@@ -571,36 +865,54 @@ private fun statusColor(status: PaymentStatus): Color = when (status) {
     PaymentStatus.PARTIAL -> Color(0xFFFFC857)
 }
 
-private fun demoPaymentsReportItems(): List<PaymentReportItem> = listOf(
-    PaymentReportItem(
-        traineeId = "1",
-        fullName = "יובל פולק",
-        branchName = "מרכז קהילתי אופק נתניה",
-        phone = "050-1234567",
-        requiredAmount = 150.0,
-        paidAmount = 150.0,
-        status = PaymentStatus.PAID,
-        paymentMethod = PaymentMethod.CREDIT_CARD,
-        paymentDate = "09/04/2026"
-    ),
-    PaymentReportItem(
-        traineeId = "2",
-        fullName = "אופק פולק",
-        branchName = "מרכז קהילתי סוקולוב נתניה",
-        phone = "050-7654321",
-        requiredAmount = 150.0,
-        paidAmount = 0.0,
-        status = PaymentStatus.UNPAID
-    ),
-    PaymentReportItem(
-        traineeId = "3",
-        fullName = "מתאמן לדוגמה",
-        branchName = "מרכז קהילתי אופק נתניה",
-        phone = "052-1112233",
-        requiredAmount = 150.0,
-        paidAmount = 80.0,
-        status = PaymentStatus.PARTIAL,
-        paymentMethod = PaymentMethod.CASH,
-        paymentDate = "08/04/2026"
-    )
-)
+private fun demoPaymentsReportItems(): List<PaymentReportItem> {
+    val membershipFee = 150.0
+
+    // ✅ חיבור אמיתי לקובץ המתאמנים Demo הקיים באפליקציה.
+    // כאן אנחנו יוצרים דוח תשלומים מתוך DemoTrainees.trainees
+    // ולא מחזיקים יותר רשימה ידנית כפולה.
+    return DemoTrainees.trainees.mapIndexed { index, trainee ->
+
+        val paidAmount = when {
+            // חלק מהמתאמנים שילמו מלא
+            index % 3 == 0 -> membershipFee
+
+            // חלק שילמו חלקית
+            index % 3 == 1 -> 80.0
+
+            // חלק לא שילמו בכלל
+            else -> 0.0
+        }
+
+        val status = when {
+            paidAmount >= membershipFee -> PaymentStatus.PAID
+            paidAmount > 0.0 -> PaymentStatus.PARTIAL
+            else -> PaymentStatus.UNPAID
+        }
+
+        val method = when (status) {
+            PaymentStatus.PAID -> PaymentMethod.CREDIT_CARD
+            PaymentStatus.PARTIAL -> PaymentMethod.CASH
+            PaymentStatus.UNPAID -> PaymentMethod.MANUAL
+        }
+
+        PaymentReportItem(
+            traineeId = trainee.id,
+            fullName = trainee.name,
+            branchName = trainee.branch,
+            phone = "050-0000${(index + 1).toString().padStart(2, '0')}",
+            requiredAmount = membershipFee,
+            paidAmount = paidAmount,
+            status = status,
+            paymentMethod = method,
+            paymentDate = when (status) {
+                PaymentStatus.PAID -> "09/04/2026"
+                PaymentStatus.PARTIAL -> "08/04/2026"
+
+                // ✅ PaymentReportItem מצפה ל-String ולא ל-String?
+                // לכן לא מחזירים null אלא מחרוזת ריקה.
+                PaymentStatus.UNPAID -> ""
+            }
+        )
+    }
+}

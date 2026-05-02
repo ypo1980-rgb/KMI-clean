@@ -2550,6 +2550,7 @@ private fun NavigationChip(
                     text = if (isEnglish) "Navigate" else "ניווט",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
+                    // ✅ הכרטיס לבן גם במצב כהה, לכן צבע קבוע וכהה
                     color = Color(0xFF0B1220),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -2561,7 +2562,9 @@ private fun NavigationChip(
                         safeAddress
                     },
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // ✅ לא להשתמש כאן ב-onSurfaceVariant,
+                    // כי במצב כהה הוא יוצא בהיר מדי על כרטיס לבן.
+                    color = Color(0xFF475569),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2572,7 +2575,7 @@ private fun NavigationChip(
             Icon(
                 imageVector = Icons.Filled.Person, // אם אתה רוצה חץ במקום, תגיד ואחליף
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f),
+                tint = Color(0xFF2563EB).copy(alpha = 0.72f),
                 modifier = Modifier.size(18.dp)
             )
         }

@@ -73,18 +73,21 @@ fun TopicExercisesScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text(
                             text = topicDisplay,
                             fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right,
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
                         if (!subDisplay.isNullOrBlank()) {
                             Text(
                                 text = subDisplay,
                                 style = MaterialTheme.typography.labelMedium,
-                                textAlign = TextAlign.Right,
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }

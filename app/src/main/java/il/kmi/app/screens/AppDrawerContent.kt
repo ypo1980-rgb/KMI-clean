@@ -157,6 +157,9 @@ private val DEMO_VIDEOS = listOf(
 
 @Composable
 fun AppDrawerContent(
+    languageRefreshKey: Int = 0,
+    isEnglish: Boolean,
+    onLanguageChanged: (AppLanguage) -> Unit = {},
     onOpenAboutNetwork: () -> Unit,
     onOpenAboutMethod: () -> Unit,
     onOpenAboutAvi: () -> Unit,
@@ -184,9 +187,24 @@ fun AppDrawerContent(
 ) {
     val contextLang = LocalContext.current
     val scope = rememberCoroutineScope()
-    val langManager = remember { AppLanguageManager(contextLang) }
-    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-    val drawerLayoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    // ✅ לוג אבחון:
+    // אם האפליקציה באנגלית אבל כאן isEnglish=false,
+    // הבעיה לא ב-Drawer אלא ב-MainApp / החלפת השפה.
+    LaunchedEffect(isEnglish) {
+        val storedLanguage =
+            AppLanguageManager(contextLang).getCurrentLanguage()
+
+        Log.e(
+            "KMI_LANG",
+            "DRAWER_BUILD receivedIsEnglish=$isEnglish storedLanguage=$storedLanguage"
+        )
+    }
+
+    // ✅ ה-Drawer לא מחליט לבד מה השפה.
+    // הוא מקבל isEnglish ישירות מ-MainApp.
+    val drawerLayoutDirection =
+        if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
     // 🔐 בדיקת אדמין שקטה (לא "נתקעים" על false אם uid היה null בזמן הבנייה)
@@ -713,12 +731,13 @@ fun AppDrawerContent(
                     Spacer(Modifier.height(8.dp))
                 }
 
-                // ===== כפתור ראשון: אודות אבי אביסידון =====
+                        // ===== כפתור ראשון: אודות אבי אביסידון =====
                         if (isEnglish) {
                             DrawerLineItemEn(
                                 title = "About Avi Avisidon",
                                 subtitle = "Head of the method",
                                 titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+                                    color = Color.White,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = (-0.2).sp
@@ -733,6 +752,7 @@ fun AppDrawerContent(
                                 title = "אודות אבי אביסידון",
                                 subtitle = "ראש השיטה",
                                 titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+                                    color = Color.White,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = (-0.2).sp
@@ -927,29 +947,27 @@ fun AppDrawerContent(
                                 },
                                 title = "Language / שפה",
                                 onClick = {
-                                    val manager = AppLanguageManager(contextLang)
+                                    val newLang = AppLanguage.HEBREW
 
-                                    val newLang =
-                                        if (manager.getCurrentLanguage() == AppLanguage.HEBREW)
-                                            AppLanguage.ENGLISH
-                                        else
-                                            AppLanguage.HEBREW
+                                    Log.e(
+                                        "KMI_LANG",
+                                        "DRAWER_LANGUAGE_CLICK fromIsEnglish=$isEnglish request=$newLang"
+                                    )
+
+                                    // ✅ רק MainApp שומר ומעדכן את ה-State.
+                                    // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
+                                    onLanguageChanged(newLang)
 
                                     onClose()
 
                                     scope.launch {
                                         delay(180)
 
-                                        manager.setLanguage(newLang)
-
                                         Toast.makeText(
                                             contextLang,
-                                            if (newLang == AppLanguage.ENGLISH) "Language: English" else "שפה: עברית",
+                                            "שפה: עברית",
                                             Toast.LENGTH_SHORT
                                         ).show()
-
-                                        delay(120)
-                                        (contextLang as? android.app.Activity)?.recreate()
                                     }
                                 }
                             )
@@ -964,29 +982,27 @@ fun AppDrawerContent(
                                 },
                                 title = "שפה / Language",
                                 onClick = {
-                                    val manager = AppLanguageManager(contextLang)
+                                    val newLang = AppLanguage.ENGLISH
 
-                                    val newLang =
-                                        if (manager.getCurrentLanguage() == AppLanguage.HEBREW)
-                                            AppLanguage.ENGLISH
-                                        else
-                                            AppLanguage.HEBREW
+                                    Log.e(
+                                        "KMI_LANG",
+                                        "DRAWER_LANGUAGE_CLICK fromIsEnglish=$isEnglish request=$newLang"
+                                    )
+
+                                    // ✅ רק MainApp שומר ומעדכן את ה-State.
+                                    // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
+                                    onLanguageChanged(newLang)
 
                                     onClose()
 
                                     scope.launch {
                                         delay(180)
 
-                                        manager.setLanguage(newLang)
-
                                         Toast.makeText(
                                             contextLang,
-                                            if (newLang == AppLanguage.ENGLISH) "Language: English" else "שפה: עברית",
+                                            "Language: English",
                                             Toast.LENGTH_SHORT
                                         ).show()
-
-                                        delay(120)
-                                        (contextLang as? android.app.Activity)?.recreate()
                                     }
                                 }
                             )

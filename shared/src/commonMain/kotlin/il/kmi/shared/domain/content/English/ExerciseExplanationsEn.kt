@@ -1,4 +1,4 @@
-package il.kmi.shared.domain.content
+package il.kmi.shared.domain.content.English
 
 import il.kmi.shared.domain.Belt
 

@@ -38,7 +38,7 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.localization.AppLanguage
 import androidx.compose.ui.platform.LocalContext
-import il.kmi.shared.domain.content.ExerciseExplanationsEn
+import il.kmi.shared.domain.content.English.ExerciseExplanationsEn
 
 //===========================================================================
 
@@ -827,6 +827,12 @@ private fun ModernExerciseInfoDialog(
     onToggleFav: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val langManager = remember(context) { AppLanguageManager(context) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val textAlignByLang = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalByLang = if (isEnglish) Alignment.Start else Alignment.End
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color(0xFFF7F4FB),
@@ -841,13 +847,13 @@ private fun ModernExerciseInfoDialog(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    horizontalAlignment = Alignment.End
+                    horizontalAlignment = horizontalByLang
                 ) {
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.Right,
+                        textAlign = textAlignByLang,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -857,7 +863,7 @@ private fun ModernExerciseInfoDialog(
                             text = it,
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary,
-                            textAlign = TextAlign.Right,
+                            textAlign = textAlignByLang,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -900,7 +906,7 @@ private fun ModernExerciseInfoDialog(
                 Text(
                     text = explanation,
                     style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Right,
+                    textAlign = textAlignByLang,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 14.dp)
@@ -941,6 +947,16 @@ private fun HardSubTopicCategoryCard(
     count: Int,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val langManager = remember(context) { AppLanguageManager(context) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
+    val textAlignByLang = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalByLang = if (isEnglish) Alignment.Start else Alignment.End
+    val layoutByLang =
+        if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
+        else androidx.compose.ui.unit.LayoutDirection.Rtl
+
     val iconTint = belt.color
     val borderColor = belt.color.copy(alpha = 0.42f)
     val chevronColor = belt.color
@@ -987,26 +1003,21 @@ private fun HardSubTopicCategoryCard(
                 Spacer(Modifier.width(12.dp))
 
                 CompositionLocalProvider(
-                    androidx.compose.ui.platform.LocalLayoutDirection provides
-                            androidx.compose.ui.unit.LayoutDirection.Rtl
+                    androidx.compose.ui.platform.LocalLayoutDirection provides layoutByLang
                 ) {
                     Column(
                         modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End
+                        horizontalAlignment = horizontalByLang
                     ) {
                         Text(
                             text = title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right,
+                            textAlign = textAlignByLang,
                             modifier = Modifier.fillMaxWidth()
                         )
 
                         Spacer(Modifier.height(4.dp))
-
-                        val context = LocalContext.current
-                        val langManager = remember(context) { AppLanguageManager(context) }
-                        val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
                         Text(
                             text = if (isEnglish) {
@@ -1017,7 +1028,7 @@ private fun HardSubTopicCategoryCard(
                             style = MaterialTheme.typography.labelLarge,
                             color = subtitleColor,
                             fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right,
+                            textAlign = textAlignByLang,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -1293,17 +1304,21 @@ private fun ExerciseRowWithInfo(
                     )
                 }
 
-                // ✅ הטקסט עצמו RTL כדי שהעברית תישאר מיושרת לימין
+                // ✅ באנגלית הטקסט מיושר לשמאל, בעברית לימין
                 CompositionLocalProvider(
                     androidx.compose.ui.platform.LocalLayoutDirection provides
-                            androidx.compose.ui.unit.LayoutDirection.Rtl
+                            if (isEnglish) {
+                                androidx.compose.ui.unit.LayoutDirection.Ltr
+                            } else {
+                                androidx.compose.ui.unit.LayoutDirection.Rtl
+                            }
                 ) {
                     Text(
                         text = if (isEnglish) ExerciseTitlesEn.getOrSame(itemName) else itemName,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.ExtraBold,
                         color = infoRowTextColor,
-                        textAlign = TextAlign.Right,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                         modifier = Modifier
                             .weight(1f)
                             .padding(start = 18.dp)

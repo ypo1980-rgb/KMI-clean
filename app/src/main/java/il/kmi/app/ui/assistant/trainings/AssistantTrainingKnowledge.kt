@@ -25,12 +25,20 @@ class AssistantMemory(private val sp: SharedPreferences) {
 
     fun getLastBranch(): String? =
         sp.getString("branch", null)
+            ?: sp.getString("branch_name", null)
+            ?: sp.getString("selected_branch", null)
+            ?: sp.getString("user_branch", null)
+            ?: sp.getString("training_branch", null)
 
     fun setLastGroup(v: String?) =
         sp.edit().putString("group", v).apply()
 
     fun getLastGroup(): String? =
         sp.getString("group", null)
+            ?: sp.getString("group_name", null)
+            ?: sp.getString("selected_group", null)
+            ?: sp.getString("user_group", null)
+            ?: sp.getString("training_group", null)
 
     fun setLastDay(v: String?) =
         sp.edit().putString("day", v).apply()
@@ -481,6 +489,17 @@ data class TrainingRow(
 
 object AnswerBuilder {
 
+    private fun cleanDayName(dayName: String): String {
+        return dayName
+            .replace("יום", "")
+            .trim()
+    }
+
+    private fun dayPhrase(dayName: String): String {
+        val clean = cleanDayName(dayName)
+        return if (clean.isBlank()) "" else "ביום $clean"
+    }
+
     fun buildEquipment(): String {
         return """
 לאימון מומלץ להגיע עם ציוד מגן בסיסי:
@@ -634,9 +653,10 @@ object AnswerBuilder {
         val next = list.minByOrNull { it.startAtMillis }
             ?: return "לא מצאתי אימון קרוב."
 
-        val spokenTime = next.timeRange.substringBefore("–")
+        val spokenTime = next.timeRange.substringBefore("–").substringBefore("-").trim()
+        val dayText = dayPhrase(next.dayName)
 
-        return "האימון הבא הוא ביום ${next.dayName} בשעה $spokenTime, " +
+        return "האימון הבא הוא $dayText בשעה $spokenTime, " +
                 "בסניף ${next.branchName}, " +
                 "לקבוצת ${next.groupName}. " +
                 "המאמן הוא ${next.coachName}."
@@ -914,7 +934,8 @@ object AssistantTrainingKnowledge {
                 }
             }
 
-            // 2) שאלות על "שלי" בלי התאמה → הצע את האימון הקרוב מתוך הקבוצות האישיות
+            // 2) שאלות על "שלי" בלי התאמה → מחזירים תשובה נקייה עם האימון הקרוב.
+            // לא מציגים "לא מצאתי התאמה" אם בפועל כן נמצא אימון קרוב.
             if (isMyTrainingQuestion(norm)) {
                 val personalNext = nextUpcomingTraining(
                     allTrainings.filter { row ->
@@ -923,9 +944,16 @@ object AssistantTrainingKnowledge {
                 )
 
                 if (personalNext != null) {
-                    return "לא מצאתי התאמה מלאה לשאלה שלך, " +
-                            "אבל האימון הקרוב שלך הוא ביום ${personalNext.dayName} " +
-                            "בשעה ${personalNext.timeRange}, " +
+                    val cleanDay = personalNext.dayName
+                        .replace("יום", "")
+                        .trim()
+
+                    val spokenTime = personalNext.timeRange
+                        .substringBefore("–")
+                        .substringBefore("-")
+                        .trim()
+
+                    return "האימון הקרוב שלך הוא ביום $cleanDay בשעה $spokenTime, " +
                             "בסניף ${personalNext.branchName}, " +
                             "לקבוצת ${personalNext.groupName}. " +
                             "המאמן הוא ${personalNext.coachName}."
@@ -939,9 +967,16 @@ object AssistantTrainingKnowledge {
             // 4) fallback חכם כללי
             val nextAny = nextUpcomingTraining(allTrainings)
             if (nextAny != null) {
-                return AnswerBuilder.buildNoMatch(branch, group, day) + "\n\n" +
-                        "לחלופין, האימון הקרוב הבא שמצאתי הוא ביום ${nextAny.dayName} " +
-                        "בשעה ${nextAny.timeRange}, " +
+                val cleanDay = nextAny.dayName
+                    .replace("יום", "")
+                    .trim()
+
+                val spokenTime = nextAny.timeRange
+                    .substringBefore("–")
+                    .substringBefore("-")
+                    .trim()
+
+                return "האימון הקרוב הבא שמצאתי הוא ביום $cleanDay בשעה $spokenTime, " +
                         "בסניף ${nextAny.branchName}, " +
                         "לקבוצת ${nextAny.groupName}. " +
                         "המאמן הוא ${nextAny.coachName}."

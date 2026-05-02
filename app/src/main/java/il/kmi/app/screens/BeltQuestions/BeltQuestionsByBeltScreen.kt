@@ -789,8 +789,8 @@ internal fun BeltPangoLayout(
                         clickSound = clickSound,
                         inputEnabled = false,
 
-                        // ✅ לא הופכים את ה-drag.
-                        // בעברית זה כבר תקין, ובאנגלית זה יישר את הכיוון לאותה תחושה.
+                        // ✅ לא משתמשים יותר בהיפוך לפי שפה.
+                        // הכיוון ייקבע רק מתוך הגרירה עצמה בתוך BeltArcPicker.
                         reverseSwipeDirection = false
                     )
                 }
@@ -1093,7 +1093,30 @@ internal fun TopicsViewModeToggle(
     val langManager = remember { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
-    val selectedIndex = if (mode == TopicsViewMode.BY_BELT) 0 else 1
+    // ✅ סדר טאבים לפי שפה:
+    // עברית: שמאל = לפי נושא, ימין = לפי חגורה
+    // אנגלית: שמאל = By Topic, ימין = By Belt
+    //
+    // שים לב:
+    // ה-TabRow עצמו נשאר LTR כדי שהצדדים הפיזיים לא יתהפכו.
+    // לכן הפריט הראשון ברשימה = שמאל, הפריט השני = ימין.
+    val tabs = remember(isEnglish) {
+        if (isEnglish) {
+            listOf(
+                TopicsViewMode.BY_TOPIC to "By Topic",
+                TopicsViewMode.BY_BELT to "By Belt"
+            )
+        } else {
+            listOf(
+                TopicsViewMode.BY_TOPIC to "לפי נושא",
+                TopicsViewMode.BY_BELT to "לפי חגורה"
+            )
+        }
+    }
+
+    val selectedIndex = tabs
+        .indexOfFirst { it.first == mode }
+        .coerceAtLeast(0)
 
     Surface(
         modifier = Modifier
@@ -1116,45 +1139,47 @@ internal fun TopicsViewModeToggle(
                     .background(Color.White.copy(alpha = 0.95f))
             )
 
-            TabRow(
-                selectedTabIndex = selectedIndex,
-                containerColor = Color.Transparent,
-                contentColor = Color.White,
-                divider = {},
-                indicator = { positions ->
-                    TabRowDefaults.Indicator(
-                        modifier = Modifier.tabIndicatorOffset(positions[selectedIndex]),
-                        height = 3.dp,
-                        color = Color.White
-                    )
-                },
-                modifier = Modifier.matchParentSize()
+            // ✅ חשוב:
+            // מכריחים LTR רק לסידור הפיזי של שני הטאבים,
+            // כדי שצד שמאל וצד ימין יהיו קבועים ולא יתהפכו בגלל RTL.
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalLayoutDirection provides
+                        androidx.compose.ui.unit.LayoutDirection.Ltr
             ) {
-                Tab(
-                    selected = (mode == TopicsViewMode.BY_BELT),
-                    onClick = { if (mode != TopicsViewMode.BY_BELT) onModeChange(TopicsViewMode.BY_BELT) },
-                    text = {
-                        Text(
-                            if (isEnglish) "By Belt" else "לפי חגורה",
-                            fontWeight = FontWeight.Bold
+                TabRow(
+                    selectedTabIndex = selectedIndex,
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White,
+                    divider = {},
+                    indicator = { positions ->
+                        TabRowDefaults.Indicator(
+                            modifier = Modifier.tabIndicatorOffset(positions[selectedIndex]),
+                            height = 3.dp,
+                            color = Color.White
                         )
                     },
-                    selectedContentColor = Color.White,
-                    unselectedContentColor = Color.White.copy(alpha = 0.7f)
-                )
-
-                Tab(
-                    selected = (mode == TopicsViewMode.BY_TOPIC),
-                    onClick = { if (mode != TopicsViewMode.BY_TOPIC) onModeChange(TopicsViewMode.BY_TOPIC) },
-                    text = {
-                        Text(
-                            if (isEnglish) "By Topic" else "לפי נושא",
-                            fontWeight = FontWeight.Bold
+                    modifier = Modifier.matchParentSize()
+                ) {
+                    tabs.forEach { (tabMode, label) ->
+                        Tab(
+                            selected = (mode == tabMode),
+                            onClick = {
+                                if (mode != tabMode) {
+                                    onModeChange(tabMode)
+                                }
+                            },
+                            text = {
+                                Text(
+                                    text = label,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                )
+                            },
+                            selectedContentColor = Color.White,
+                            unselectedContentColor = Color.White.copy(alpha = 0.7f)
                         )
-                    },
-                    selectedContentColor = Color.White,
-                    unselectedContentColor = Color.White.copy(alpha = 0.7f)
-                )
+                    }
+                }
             }
         }
     }
@@ -1176,6 +1201,15 @@ private fun TopicsCardForBelt(
 ) {
     val isEnglish = lang == AppLanguage.ENGLISH
     val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    // ✅ חשוב:
+    // באנגלית משתמשים ב-Left פיזי ולא ב-Start,
+    // כדי שלא יתהפך אם המסך עדיין מקבל RTL.
+    val titleTextAlignByLang = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalByLang = if (isEnglish) Alignment.Start else Alignment.End
+    val layoutByLang =
+        if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
+        else androidx.compose.ui.unit.LayoutDirection.Rtl
 
     val cardBg = if (isDarkTheme) Color(0xFF101827) else Color.White
     val cardBorder = if (isDarkTheme) {
@@ -1210,7 +1244,7 @@ private fun TopicsCardForBelt(
     val subBoxBg = if (isDarkTheme) Color(0xFF0F172A).copy(alpha = 0.86f) else Color.White.copy(alpha = 0.76f)
     val subRowBg = if (isDarkTheme) Color(0xFF1E293B).copy(alpha = 0.96f) else Color.White.copy(alpha = 0.94f)
 
-    val topicTitles: List<String> = remember(belt) {
+    val rawTopicTitles: List<String> = remember(belt) {
         TopicsEngine.topicTitlesFor(belt)
             .asSequence()
             .map { it.trim() }
@@ -1219,12 +1253,78 @@ private fun TopicsCardForBelt(
             .toList()
     }
 
-    val detailsByTitle: Map<String, TopicDetails> = remember(belt, topicTitles) {
-        topicTitles.associateWith { title -> topicDetailsFor(belt, title) }
+    val detailsByTitle: Map<String, TopicDetails> = remember(belt, rawTopicTitles) {
+        rawTopicTitles.associateWith { title -> topicDetailsFor(belt, title) }
+    }
+
+    // ✅ נושאים שיש להם תתי־נושאים תמיד מופיעים למעלה.
+    // ✅ בחגורה צהובה נותנים סדר מיוחד:
+    // עבודת ידיים -> הגנות -> שחרורים.
+    // ✅ בחגורה חומה "שחרורים" נשאר נושא רגיל,
+    // כי שם יש רק תרגיל אחד והוא לא אמור להיות נעול/תת־נושאים.
+    val topicTitles: List<String> = remember(belt, rawTopicTitles, detailsByTitle) {
+
+        fun hasRealSubTopics(title: String): Boolean {
+            val topicTrim = title.trim()
+
+            return detailsByTitle[title]
+                ?.subTitles
+                .orEmpty()
+                .asSequence()
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .filter { it != topicTrim }
+                .distinct()
+                .any()
+        }
+
+        fun priorityRank(title: String): Int {
+            val clean = title.trim()
+
+            if (belt == Belt.YELLOW) {
+                return when {
+                    // ✅ בצהובה שני הנושאים האלה צריכים להיות ראשונים
+                    clean.contains("הגנות") -> 0
+                    clean.contains("שחרורים") -> 1
+
+                    // ✅ עבודת ידיים נשאר עם תתי נושאים,
+                    // אבל יורד אחרי הגנות ושחרורים
+                    clean.contains("עבודת ידיים") -> 2
+
+                    hasRealSubTopics(title) -> 3
+                    else -> 10
+                }
+            }
+
+            if (belt == Belt.BROWN && clean.contains("שחרורים")) {
+                return 10
+            }
+
+            return when {
+                hasRealSubTopics(title) -> 0
+                clean.contains("הגנות") -> 1
+                clean.contains("שחרורים") -> 2
+                else -> 10
+            }
+        }
+
+        val sorted = rawTopicTitles
+            .withIndex()
+            .sortedWith(
+                compareBy<IndexedValue<String>> { priorityRank(it.value) }
+                    .thenBy { it.index }
+            )
+            .map { it.value }
+
+        android.util.Log.e(
+            "KMI_TOPIC_ORDER",
+            "BY_BELT belt=${belt.id} final=$sorted"
+        )
+
+        sorted
     }
 
     var expandedTopic by rememberSaveable(belt.id) { mutableStateOf<String?>(null) }
-
     val rowMinHeight = 60.dp
     val visibleRows = 5
     val listHeight = rowMinHeight * visibleRows + 8.dp
@@ -1275,6 +1375,18 @@ private fun TopicsCardForBelt(
             } else {
                 val topicsScroll = rememberScrollState(0)
 
+                // ✅ חשוב:
+                // כשעוברים חגורה, ScrollState עלול להישאר באמצע הרשימה מהחגורה הקודמת.
+                // לכן מאפסים לראש הרשימה, כדי שבאמת נראה את הנושאים עם תתי־נושאים למעלה.
+                LaunchedEffect(belt.id, topicTitles) {
+                    topicsScroll.scrollTo(0)
+
+                    android.util.Log.e(
+                        "KMI_TOPIC_ORDER",
+                        "BY_BELT scroll reset to top belt=${belt.id} firstTopics=${topicTitles.take(5)}"
+                    )
+                }
+
                 Column(
                     modifier = Modifier
                         .heightIn(max = listHeight)
@@ -1315,6 +1427,16 @@ private fun TopicsCardForBelt(
 
                         val isExpanded = expandedTopic == title
                         val isDefenseTopic = title.trim().contains("הגנות")
+
+                        // ✅ חריג חשוב:
+                        // בחגורה חומה "שחרורים" הוא נושא רגיל עם תרגיל אחד,
+                        // לא תתי־נושאים ולא תוכן נעול.
+                        val isBrownSingleReleaseTopic =
+                            belt == Belt.BROWN &&
+                                    title.trim().contains("שחרורים") &&
+                                    !hasSubs &&
+                                    itemCount <= 1
+
                         val floatingTitleColor = rowTitleColor
                         val floatingSubColor = rowSubColor
                         val floatingAccent = Brush.verticalGradient(
@@ -1333,7 +1455,9 @@ private fun TopicsCardForBelt(
                                     clickSound()
                                     haptic(true)
 
-                                    val canOpen = LockedContentPolicy.canOpenTopic(accessMode, title)
+                                    val canOpen =
+                                        isBrownSingleReleaseTopic ||
+                                                LockedContentPolicy.canOpenTopic(accessMode, title)
 
                                     if (!canOpen) {
                                         onOpenSubscription()
@@ -1364,15 +1488,19 @@ private fun TopicsCardForBelt(
                                         shape = RoundedCornerShape(18.dp)
                                     )
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalAlignment = Alignment.End
+                                horizontalAlignment = horizontalByLang
                             ) {
                                 val parentLocked =
-                                    LockedContentPolicy.shouldShowLock(accessMode, title)
+                                    !isBrownSingleReleaseTopic &&
+                                            LockedContentPolicy.shouldShowLock(accessMode, title)
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
+                                CompositionLocalProvider(
+                                    androidx.compose.ui.platform.LocalLayoutDirection provides layoutByLang
                                 ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                     Box(
                                         modifier = Modifier
                                             .width(3.dp)
@@ -1383,16 +1511,16 @@ private fun TopicsCardForBelt(
 
                                     Spacer(Modifier.width(8.dp))
 
-                                    Text(
-                                        text = displayTitle,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = floatingTitleColor,
-                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                        Text(
+                                            text = displayTitle,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = floatingTitleColor,
+                                            textAlign = titleTextAlignByLang,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
 
                                     // 🔥 המנעול החדש
                                     if (parentLocked) {
@@ -1406,18 +1534,19 @@ private fun TopicsCardForBelt(
                                         )
                                     }
 
-                                    if (hasSubs) {
-                                        Spacer(Modifier.width(8.dp))
+                                        if (hasSubs) {
+                                            Spacer(Modifier.width(8.dp))
 
-                                        Icon(
-                                            imageVector = if (isExpanded) {
-                                                Icons.Filled.KeyboardArrowUp
-                                            } else {
-                                                Icons.Filled.KeyboardArrowDown
-                                            },
-                                            contentDescription = null,
-                                            tint = belt.color.copy(alpha = 0.85f)
-                                        )
+                                            Icon(
+                                                imageVector = if (isExpanded) {
+                                                    Icons.Filled.KeyboardArrowUp
+                                                } else {
+                                                    Icons.Filled.KeyboardArrowDown
+                                                },
+                                                contentDescription = null,
+                                                tint = belt.color.copy(alpha = 0.85f)
+                                            )
+                                        }
                                     }
                                 }
 
@@ -1427,7 +1556,7 @@ private fun TopicsCardForBelt(
                                     text = countsLine,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = floatingSubColor,
-                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                    textAlign = titleTextAlignByLang,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth()
@@ -1437,7 +1566,8 @@ private fun TopicsCardForBelt(
                                     Spacer(Modifier.height(8.dp))
 
                                     val parentLocked =
-                                        LockedContentPolicy.shouldShowLock(accessMode, title)
+                                        !isBrownSingleReleaseTopic &&
+                                                LockedContentPolicy.shouldShowLock(accessMode, title)
 
                                     Column(
                                         modifier = Modifier
@@ -1512,7 +1642,7 @@ private fun TopicsCardForBelt(
                                                     Text(
                                                         text = displaySub,
                                                         modifier = Modifier.weight(1f),
-                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                                        textAlign = titleTextAlignByLang,
                                                         color = floatingTitleColor,
                                                         style = MaterialTheme.typography.bodyMedium,
                                                         fontWeight = FontWeight.SemiBold
@@ -1581,6 +1711,10 @@ private fun TopicsCardForBelt(
 
                         Spacer(Modifier.height(4.dp))
                     }
+
+                    // ✅ רווח גלילה תחתון:
+                    // מונע מצב שהסרגל הצף / הקרוסלה מסתירים את הנושא האחרון.
+                    Spacer(Modifier.height(56.dp))
                 }
             }
         }
@@ -1655,7 +1789,11 @@ private fun BeltArcPicker(
             val isCenter = dist < 0.25f
 
             val base = Modifier
-                .offset(x = xDp, y = yDrop)
+                // ✅ חשוב:
+                // absoluteOffset לא מושפע מ־RTL/LTR.
+                // כך עיגול שנמצא פיזית מימין יישאר באמת מימין,
+                // ועיגול שנמצא פיזית משמאל יישאר באמת משמאל.
+                .absoluteOffset(x = xDp, y = yDrop)
                 .size(size)
                 .alpha(alpha)
                 .zIndex(if (isCenter) 2f else 1f)
@@ -1690,13 +1828,17 @@ private fun BeltArcPicker(
                             }
                         }
                     ) { _, drag ->
-                        val delta = if (reverseSwipeDirection) {
-                            -drag / stepPx
-                        } else {
-                            drag / stepPx
-                        }
+                        val rawDelta = drag / stepPx
 
-                        val next = (center.value + delta).coerceIn(0f, belts.lastIndex.toFloat())
+                        // ✅ אחרי המעבר ל־absoluteOffset:
+                        // drag חיובי = החלקה ימינה = הגדלת האינדקס.
+                        // לכן העיגול שנמצא פיזית בצד ימין נכנס למרכז.
+                        //
+                        // החלקה ימינה -> העיגול הימני נכנס למרכז.
+                        // החלקה שמאלה -> העיגול השמאלי נכנס למרכז.
+                        val next = (center.value + rawDelta)
+                            .coerceIn(0f, belts.lastIndex.toFloat())
+
                         scope.launch { center.snapTo(next) }
                     }
                 }

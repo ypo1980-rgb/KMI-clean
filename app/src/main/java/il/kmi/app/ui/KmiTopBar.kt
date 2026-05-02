@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
@@ -170,6 +171,24 @@ fun KmiTopBar(
     val currentLangResolved = languageManager.getCurrentLanguage().code
     val rootView = LocalView.current
     var hideBottomForShare by remember { mutableStateOf(false) }
+
+    fun runKmiShare() {
+        if (onShare != null) {
+            onShare()
+        } else {
+            hideBottomForShare = true
+            val root = (ctx as? Activity)?.window?.decorView?.rootView ?: rootView
+
+            root.post {
+                root.doOnPreDraw {
+                    root.post {
+                        shareCurrentScreen(context = ctx, rootView = root)
+                        hideBottomForShare = false
+                    }
+                }
+            }
+        }
+    }
 
     // מצב משתמש
     val spUser = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
@@ -480,6 +499,16 @@ fun KmiTopBar(
                             Spacer(Modifier.width(8.dp))
                         }
 
+                        // 📤 שתף — מחזיר את אייקון השיתוף לסרגל הגלובלי
+                        PremiumActionIcon(
+                            icon = Icons.Filled.Share,
+                            tint = Color(0xFF4F46E5),
+                            background = Color(0x1A4F46E5),
+                            contentDescription = "שתף",
+                            onClick = { runKmiShare() }
+                        )
+                        Spacer(Modifier.width(8.dp))
+
                         // אקשנס נוספים מהמסכים
                         extraActions()
                     }
@@ -544,70 +573,61 @@ fun KmiTopBar(
                 )
 
                 // ✅ הסרגל עצמו כבר כולל labels מתחת לאייקונים.
-                // אחרי הגדלת bottomBarHeight הכיתוב יופיע בצורה מלאה.
-                il.kmi.app.screens.BottomActionsBarEdgeToEdge(
-                    // בית: נעול/פתוח לפי homeEnabledForBar
-                    onHome = if (onHome != null) {
-                        {
-                            focusManager.clearFocus(force = true)
-                            onHome()
-                        }
-                    } else null,
-                    homeEnabled = homeEnabledForBar,
-
-                    // כדי שלא ינעל חיפוש/שאר האייקונים – תמיד true
-                    isRegistered = true,
-                    homeDisabledToast = homeToastForBar,
-
-                    // חיפוש – נעול רק אם lockSearch = true
-                    onSearch = if (lockSearch) null else { { onSearch?.invoke() } },
-
-                    onSettings = if (showSettingsAllowed) {
-                        {
-                            focusManager.clearFocus(force = true)
-                            DrawerBridge.openSettings()
-                        }
-                    } else null,
-                    currentLang = currentLangResolved,
-
-                    onShare = {
-                        if (onShare != null) {
-                            onShare()
-                        } else {
-                            hideBottomForShare = true
-                            val root = (ctx as? Activity)?.window?.decorView?.rootView ?: rootView
-                            root.post {
-                                root.doOnPreDraw {
-                                    root.post {
-                                        shareCurrentScreen(context = ctx, rootView = root)
-                                        hideBottomForShare = false
-                                    }
-                                }
+                // ✅ תיקון מצב כהה:
+                // הסרגל יושב על רקע לבן, לכן עוטפים אותו ב־KmiLightTheme
+                // כדי שהטקסטים הקטנים מתחת לאייקונים יהיו כהים וברורים גם כשהמכשיר במצב כהה.
+                KmiLightTheme {
+                    il.kmi.app.screens.BottomActionsBarEdgeToEdge(
+                        // בית: נעול/פתוח לפי homeEnabledForBar
+                        onHome = if (onHome != null) {
+                            {
+                                focusManager.clearFocus(force = true)
+                                onHome()
                             }
+                        } else null,
+                        homeEnabled = homeEnabledForBar,
+
+                        // כדי שלא ינעל חיפוש/שאר האייקונים – תמיד true
+                        isRegistered = true,
+                        homeDisabledToast = homeToastForBar,
+
+                        // חיפוש – נעול רק אם lockSearch = true
+                        onSearch = if (lockSearch) null else { { onSearch?.invoke() } },
+
+                        onSettings = if (showSettingsAllowed) {
+                            {
+                                focusManager.clearFocus(force = true)
+                                DrawerBridge.openSettings()
+                            }
+                        } else null,
+                        currentLang = currentLangResolved,
+
+                        onShare = {
+                            runKmiShare()
+                        },
+
+                        onTts = ttsHandler,
+                        onFont = fontHandler,
+                        onNext = onNext,
+                        whatsAppIconRes = whatsAppIconRes,
+                        accessibilityIconRes = accessibilityIconRes,
+
+                        // חיפוש תרגילים + בחירת תוצאה
+                        searchProvider = { q -> KmiSearchBridge.searchExercises(q) },
+                        onPickSearchResult = { id: String ->
+                            onPickSearchResult?.invoke(id) ?: onOpenExercise?.invoke(id)
+                        },
+
+                        // 🔵 פה – אייקון ה-AI בסרגל התחתון
+                        onOpenAi = {
+                            if (isInsideAssistant) {
+                                Log.e("KMI_AI", "AI icon ignored (already inside assistant)")
+                                return@BottomActionsBarEdgeToEdge
+                            }
+                            showAiDialog = true
                         }
-                    },
-
-                    onTts = ttsHandler,
-                    onFont = fontHandler,
-                    onNext = onNext,
-                    whatsAppIconRes = whatsAppIconRes,
-                    accessibilityIconRes = accessibilityIconRes,
-
-                    // חיפוש תרגילים + בחירת תוצאה
-                    searchProvider = { q -> KmiSearchBridge.searchExercises(q) },
-                    onPickSearchResult = { id: String ->
-                        onPickSearchResult?.invoke(id) ?: onOpenExercise?.invoke(id)
-                    },
-
-                    // 🔵 פה – אייקון ה-AI בסרגל התחתון
-                    onOpenAi = {
-                        if (isInsideAssistant) {
-                            Log.e("KMI_AI", "AI icon ignored (already inside assistant)")
-                            return@BottomActionsBarEdgeToEdge
-                        }
-                        showAiDialog = true
-                    }
-                )
+                    )
+                }
             }
         }
 
