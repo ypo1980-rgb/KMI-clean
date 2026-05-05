@@ -82,6 +82,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.subscription.KmiAccess
+import kotlinx.coroutines.delay
 
 //=================================================================================
 
@@ -353,6 +354,15 @@ fun HomeScreen(
 
             var homeAccessRefreshTick by remember { mutableIntStateOf(0) }
 
+            // מרענן את מצב הגישה גם בלי שינוי ב-SharedPreferences,
+            // כדי שכשה-sub_access_until עובר — המנעולים יחזרו לבד.
+            LaunchedEffect(Unit) {
+                while (true) {
+                    delay(30_000L)
+                    homeAccessRefreshTick++
+                }
+            }
+
             DisposableEffect(userSp, subsSp, legacySp) {
                 val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
                     if (
@@ -391,21 +401,43 @@ fun HomeScreen(
                 val now = System.currentTimeMillis()
                 val until = getLong("sub_access_until", 0L)
 
-                val verifiedAndValid =
-                    getBoolean("google_subscription_verified", false) && until > now
+                val hasSubscriptionFlags =
+                    getBoolean("google_subscription_verified", false) ||
+                            getBoolean("has_full_access", false) ||
+                            getBoolean("full_access", false) ||
+                            getBoolean("subscription_active", false) ||
+                            getBoolean("is_subscribed", false) ||
+                            getString("sub_product", "").orEmpty().isNotBlank()
 
-                return KmiAccess.hasFullAccess(this) ||
-                        verifiedAndValid ||
-                        getBoolean("has_full_access", false) ||
-                        getBoolean("full_access", false) ||
-                        getBoolean("subscription_active", false) ||
-                        getBoolean("is_subscribed", false) ||
-                        !getString("sub_product", "").isNullOrBlank()
+                // מנוי רגיל / בדיקות פותח רק אם יש זמן תקף.
+                val active = hasSubscriptionFlags && until > now
+
+                // אם הזמן עבר — מנקים את כל הדגלים הישנים כדי שהמנעולים יחזרו.
+                if (!active && hasSubscriptionFlags && until > 0L && until <= now) {
+                    edit()
+                        .putBoolean("google_subscription_verified", false)
+                        .putBoolean("has_full_access", false)
+                        .putBoolean("full_access", false)
+                        .putBoolean("subscription_active", false)
+                        .putBoolean("is_subscribed", false)
+                        .remove("sub_product")
+                        .remove("sub_token")
+                        .remove("sub_purchase_time")
+                        .remove("sub_access_until")
+                        .putLong("access_changed_at", System.currentTimeMillis())
+                        .apply()
+
+                    android.util.Log.e(
+                        "KMI_ACCESS_MODE",
+                        "HOME expired subscription flags cleared prefs=$this until=$until now=$now"
+                    )
+                }
+
+                return active
             }
 
             val hasFullAccess = remember(homeAccessRefreshTick) {
-                KmiAccess.isAdmin(userSp) ||
-                        userSp.hasActiveSubscriptionAccess() ||
+                userSp.hasActiveSubscriptionAccess() ||
                         subsSp.hasActiveSubscriptionAccess() ||
                         legacySp.hasActiveSubscriptionAccess()
             }
@@ -430,10 +462,11 @@ fun HomeScreen(
                 )
             }
 
+            // הסרגל הצף מופיע רק אחרי גלילה קטנה למטה.
             val showFab by remember(listState) {
                 derivedStateOf {
                     listState.firstVisibleItemIndex > 0 ||
-                            listState.firstVisibleItemScrollOffset > 120
+                            listState.firstVisibleItemScrollOffset > 24
                 }
             }
 
@@ -1234,7 +1267,7 @@ fun HomeScreen(
                         .weight(1f)
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = 8.dp)
+                    contentPadding = PaddingValues(top = 6.dp, bottom = 104.dp)
                 ) {
 
                     if (upcoming.isEmpty()) {
@@ -1654,7 +1687,7 @@ fun HomeScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 18.dp, end = 18.dp, bottom = 72.dp),
+                        .padding(start = 18.dp, end = 18.dp, bottom = 88.dp),
                     horizontalArrangement =
                         if (isEnglish) Arrangement.Absolute.Right
                         else Arrangement.Absolute.Left

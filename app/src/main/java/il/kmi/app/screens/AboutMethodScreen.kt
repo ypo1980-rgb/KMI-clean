@@ -345,39 +345,6 @@ Unlike traditional martial arts, K.M.I adapts itself to the changing reality of 
                         Spacer(Modifier.height(12.dp))
 
                         Text(
-                            text = amText(
-                                "הסמכות והכשרות המדריכים ברשת נוקאאוט",
-                                "Instructor Qualifications in the Knockout Network",
-                                isEnglish
-                            ),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = amAlign(isEnglish),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(Modifier.height(6.dp))
-
-                        AMBullet(
-                            text = amText("תואר ראשון/שני בחינוך גופני; תנועה לגיל הרך.", "Bachelor's/Master's degree in physical education; movement training for early childhood.", isEnglish),
-                            isEnglish = isEnglish
-                        )
-                        AMBullet(
-                            text = amText("קורסי מדריכי ירי; אבטחת אישים; לחימה ופיקוד בזרועות הביטחון.", "Firearms instruction courses; personal security; combat and command experience in security branches.", isEnglish),
-                            isEnglish = isEnglish
-                        )
-                        AMBullet(
-                            text = amText("ידע בשיטות לחימה שונות; סדנאות ופעילות ייעודית לנשים.", "Knowledge of various fighting systems; workshops and dedicated activity for women.", isEnglish),
-                            isEnglish = isEnglish
-                        )
-                        AMBullet(
-                            text = amText("מועדונים בארץ ובעולם; אימונים מגיל 4 ומעלה; התאמות למוגבלויות.", "Clubs in Israel and abroad; training from age 4 and up; adaptations for disabilities.", isEnglish),
-                            isEnglish = isEnglish
-                        )
-
-                        Spacer(Modifier.height(12.dp))
-
-                        Text(
                             text = amText("השפעה חינוכית וחברתית", "Educational and Social Impact", isEnglish),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,

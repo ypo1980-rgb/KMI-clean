@@ -41,6 +41,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,7 +58,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,6 +84,65 @@ fun ContactUsScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    // מילוי אוטומטי מפרופיל המשתמש בשרת.
+    // נשמרים כמה שמות שדות אפשריים כדי להתאים גם לגרסאות שונות של Firestore.
+    LaunchedEffect(Unit) {
+        val authUser = FirebaseAuth.getInstance().currentUser
+        val uid = authUser?.uid
+
+        if (email.isBlank()) {
+            email = authUser?.email.orEmpty()
+        }
+
+        if (!uid.isNullOrBlank()) {
+            runCatching {
+                FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document(uid)
+                    .get()
+                    .await()
+            }.onSuccess { doc ->
+                val serverFullName =
+                    doc.getString("fullName")
+                        ?: doc.getString("full_name")
+                        ?: doc.getString("name")
+                        ?: doc.getString("displayName")
+                        ?: authUser?.displayName
+                        ?: ""
+
+                val serverPhone =
+                    doc.getString("phone")
+                        ?: doc.getString("phoneNumber")
+                        ?: doc.getString("mobile")
+                        ?: doc.getString("mobilePhone")
+                        ?: ""
+
+                val serverEmail =
+                    doc.getString("email")
+                        ?: authUser?.email
+                        ?: ""
+
+                if (fullName.isBlank() && serverFullName.isNotBlank()) {
+                    fullName = serverFullName
+                }
+
+                if (phone.isBlank() && serverPhone.isNotBlank()) {
+                    phone = serverPhone
+                }
+
+                if (email.isBlank() && serverEmail.isNotBlank()) {
+                    email = serverEmail
+                }
+            }.onFailure { error ->
+                android.util.Log.e(
+                    "KMI_CONTACT",
+                    "Failed to load contact profile from Firestore: ${error.message}",
+                    error
+                )
+            }
+        }
+    }
 
     val ctx = LocalContext.current
     val langManager = remember { AppLanguageManager(ctx) }
@@ -128,7 +191,7 @@ fun ContactUsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = if (effectiveEnglish) Alignment.Start else Alignment.End
             ) {
-                // ✅ כותרת גלובלית + סרגל אייקונים כמו בשאר האפליקציה
+                // כותרת גלובלית + סרגל אייקונים כמו בשאר האפליקציה
                 SideScreenTopBar(
                     title = title,
                     onClose = onClose
@@ -153,13 +216,14 @@ fun ContactUsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 18.dp, vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            horizontalAlignment = if (effectiveEnglish) Alignment.Start else Alignment.End
                         ) {
                             Text(
                                 text = subtitle,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color.White.copy(alpha = 0.90f),
-                                textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End,
+                                textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -191,7 +255,7 @@ fun ContactUsScreen(
                                             "נציג מטעם ק.מ.י יחזור אליכם בהקדם."
                                         },
                                         color = Color.White,
-                                        textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End,
+                                        textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(

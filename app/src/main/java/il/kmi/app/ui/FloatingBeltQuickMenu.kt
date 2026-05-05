@@ -324,28 +324,10 @@ fun FloatingQuickMenu(
     }
 
     val effectiveHasFullAccess = remember(hasFullAccess, accessRefreshTick) {
-        val now = System.currentTimeMillis()
-
-        fun SharedPreferences.hasActiveAccessFlag(): Boolean {
-            val until = getLong("sub_access_until", 0L)
-
-            val verifiedAndValid =
-                getBoolean("google_subscription_verified", false) && until > now
-
-            return KmiAccess.hasFullAccess(this) ||
-                    verifiedAndValid ||
-                    getBoolean("has_full_access", false) ||
-                    getBoolean("full_access", false) ||
-                    getBoolean("subscription_active", false) ||
-                    getBoolean("is_subscribed", false) ||
-                    !getString("sub_product", "").isNullOrBlank()
-        }
-
         hasFullAccess ||
-                KmiAccess.isAdmin(userSp) ||
-                userSp.hasActiveAccessFlag() ||
-                subsSp.hasActiveAccessFlag() ||
-                legacySp.hasActiveAccessFlag()
+                KmiAccess.hasFullAccess(userSp) ||
+                KmiAccess.hasFullAccess(subsSp) ||
+                KmiAccess.hasFullAccess(legacySp)
     }
 
     val isMenuLocked = !effectiveHasFullAccess

@@ -496,9 +496,7 @@ fun TrainingSummaryScreen(
                                 SelectedExerciseEditor(
                                     item = ex,
                                     onRemove = { vm.removeExercise(ex.exerciseId) },
-                                    onDifficulty = { vm.setDifficulty(ex.exerciseId, it) },
-                                    onHighlight = { vm.setHighlight(ex.exerciseId, it) },
-                                    onHomePractice = { vm.setHomePractice(ex.exerciseId, it) }
+                                    onHighlight = { vm.setHighlight(ex.exerciseId, it) }
                                 )
                             }
                         }
@@ -572,19 +570,21 @@ fun TrainingSummaryScreen(
                             icon = Icons.Filled.Check
                         )
 
-                    FilledTonalButton(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(58.dp),
-                        onClick = {
-                            vm.save()
+                        FilledTonalButton(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(58.dp),
+                            onClick = {
+                                vm.save()
 
-                            val key = "training_summary_days"
-                            val cur = sp.getStringSet(key, emptySet())?.toMutableSet() ?: mutableSetOf()
-                            cur.add(state.dateIso.trim())
-                            sp.edit().putStringSet(key, cur).apply()
-                        },
-                        enabled = !state.isSaving,
+                                val key = "training_summary_days"
+                                val cur = sp.getStringSet(key, emptySet())?.toMutableSet() ?: mutableSetOf()
+                                cur.add(state.dateIso.trim())
+                                sp.edit().putStringSet(key, cur).apply()
+
+                                onBack?.invoke()
+                            },
+                            enabled = !state.isSaving,
                         shape = RoundedCornerShape(999.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = Color(0xFF2563EB).copy(alpha = 0.90f),
@@ -1764,16 +1764,21 @@ private fun ExercisePickRow(
 private fun SelectedExerciseEditor(
     item: SelectedExerciseUi,
     onRemove: () -> Unit,
-    onDifficulty: (Int?) -> Unit,
-    onHighlight: (String) -> Unit,
-    onHomePractice: (Boolean) -> Unit
+    onHighlight: (String) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val languageManager = remember { AppLanguageManager(context) }
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
     fun tr(he: String, en: String): String = if (isEnglish) en else he
+
     val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
+    val titleDirectionStyle = if (isEnglish) {
+        TextStyle(textDirection = TextDirection.Ltr)
+    } else {
+        TextStyle(textDirection = TextDirection.Rtl)
+    }
 
     var notesOpen by rememberSaveable(item.exerciseId) {
         mutableStateOf(item.highlight.isNotBlank())
@@ -1792,78 +1797,61 @@ private fun SelectedExerciseEditor(
         )
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.End
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = horizontalEnd
         ) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.titleLarge.merge(titleDirectionStyle),
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
+                textAlign = textAlignPrimary,
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+
             Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.End
-                ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = horizontalEnd
-                ) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White,
-                        textAlign = textAlignPrimary,
-                        modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilledTonalIconButton(
+                    onClick = { notesOpen = !notesOpen },
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                        contentColor = Color.White
                     )
-
-                        Spacer(Modifier.height(6.dp))
-
-                        AssistChip(
-                            onClick = { },
-                            label = {
-                                Text(
-                                    text = item.topic.ifBlank { tr("ללא נושא", "No topic") },
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = Color.White
-                                )
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = SummaryChip,
-                                labelColor = Color.White,
-                                leadingIconContentColor = Color.White
-                            )
-                        )
-                    }
-
-                    Spacer(Modifier.width(10.dp))
-
-                    FilledTonalIconButton(
-                        onClick = { notesOpen = !notesOpen },                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.EditNote,
-                            contentDescription = if (notesOpen) tr("סגור הערות", "Close notes") else tr("פתח הערות", "Open notes")
-                        )
-                    }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    OutlinedIconButton(
-                        onClick = onRemove,
-                        border = BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.error.copy(alpha = 0.60f)
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = tr("מחק תרגיל", "Delete exercise"),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.EditNote,
+                        contentDescription = if (notesOpen) {
+                            tr("סגור הערות", "Close notes")
+                        } else {
+                            tr("פתח הערות", "Open notes")
+                        }
+                    )
                 }
+
+                Spacer(Modifier.width(8.dp))
+
+                OutlinedIconButton(
+                    onClick = onRemove,
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.error.copy(alpha = 0.60f)
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = tr("מחק תרגיל", "Delete exercise"),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -1873,72 +1861,34 @@ private fun SelectedExerciseEditor(
                 Spacer(Modifier.height(1.5.dp))
             }
 
-            Text(
-                text = tr("רמת קושי", "Difficulty"),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = textAlignPrimary,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                AssistChip(
-                    onClick = { onHomePractice(!item.homePractice) },
-                    label = {
-                        Text(
-                            if (item.homePractice)
-                                tr("סומן לעבודה בבית", "Marked for home practice")
-                            else
-                                tr("סמן לעבודה בבית", "Mark for home practice")
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = null
-                        )
-                    },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = if (item.homePractice)
-                            SummaryChipSelected
-                        else
-                            SummaryChip,
-                        labelColor = Color.White,
-                        leadingIconContentColor = Color.White
-                    )
-                )
-            }
-
             if (!notesOpen && item.highlight.isNotBlank()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
                     color = SummaryChip
                 ) {
-                        Text(
-                            text = item.highlight,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White,
-                            textAlign = textAlignPrimary,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Text(
+                        text = item.highlight,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                        textAlign = textAlignPrimary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
+            }
 
             if (notesOpen) {
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
                     value = item.highlight,
                     onValueChange = { onHighlight(it) },
-                    label = { Text(tr("דגשים והערות לתרגיל", "Exercise notes and highlights")) },
+                    label = {
+                        Text(tr("דגשים והערות לתרגיל", "Exercise notes and highlights"))
+                    },
                     minLines = 3,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(
                         color = Color.White

@@ -182,9 +182,18 @@ fun SettingsScreenModern(
     var themeModeLocal by rememberSaveable(themeMode) {
         mutableStateOf(
             when {
-                themeMode.isNotBlank() -> themeMode
-                kmiPrefs.themeMode.isNotBlank() -> kmiPrefs.themeMode
-                else -> sp.getString("theme_mode", "system") ?: "system"
+                themeMode == "dark" -> "dark"
+                themeMode == "light" -> "light"
+                themeMode == "system" -> "system"
+
+                kmiPrefs.themeMode == "dark" -> "dark"
+                kmiPrefs.themeMode == "light" -> "light"
+                kmiPrefs.themeMode == "system" -> "system"
+
+                sp.getString("theme_mode", "") == "dark" -> "dark"
+                sp.getString("theme_mode", "") == "system" -> "system"
+
+                else -> "light"
             }
         )
     }
@@ -1389,8 +1398,8 @@ fun SettingsScreenModern(
             SettingsCard(
                 title = tr("נראות אפליקציה", "App appearance"),
                 subtitle = tr(
-                    "ברירת המחדל היא לפי מצב המכשיר",
-                    "Default is based on the device appearance"
+                    "ברירת המחדל היא מצב בהיר",
+                    "Default is light mode"
                 ),
                 icon = Icons.Filled.Palette,
                 iconTint = sectionIconTint
@@ -1434,7 +1443,7 @@ fun SettingsScreenModern(
                         "system" -> 0
                         "light" -> 1
                         "dark" -> 2
-                        else -> 0
+                        else -> 1
                     }
 
                     TabRow(selectedTabIndex = themeIndex) {

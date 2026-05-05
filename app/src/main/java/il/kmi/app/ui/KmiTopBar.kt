@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
@@ -160,6 +161,11 @@ fun KmiTopBar(
     alignTitleEnd: Boolean = false,
     showTopHome: Boolean = true,
     showTopSearch: Boolean = true,
+
+    // ברירת מחדל: לא מציגים אייקון שיתוף בכותרת העליונה.
+    // השיתוף עדיין קיים בסרגל האייקונים התחתון.
+    showTopShare: Boolean = false,
+
     isInsideAssistant: Boolean = false,
     onOpenAi: (() -> Unit)? = null
 ) {
@@ -390,10 +396,14 @@ fun KmiTopBar(
 
                     if (onBack != null) {
                         PremiumActionIcon(
-                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            icon = if (useCloseIcon) {
+                                Icons.Filled.Close
+                            } else {
+                                Icons.AutoMirrored.Filled.ArrowBack
+                            },
                             tint = Color(0xFF2563EB),
                             background = Color(0x1A2563EB),
-                            contentDescription = "חזור",
+                            contentDescription = if (useCloseIcon) "סגור" else "חזור",
                             onClick = { performBackSafe() }
                         )
                     } else {
@@ -499,15 +509,17 @@ fun KmiTopBar(
                             Spacer(Modifier.width(8.dp))
                         }
 
-                        // 📤 שתף — מחזיר את אייקון השיתוף לסרגל הגלובלי
-                        PremiumActionIcon(
-                            icon = Icons.Filled.Share,
-                            tint = Color(0xFF4F46E5),
-                            background = Color(0x1A4F46E5),
-                            contentDescription = "שתף",
-                            onClick = { runKmiShare() }
-                        )
-                        Spacer(Modifier.width(8.dp))
+                        // 📤 שתף — אייקון שיתוף עליון, ניתן להסתרה במסכים מסוימים
+                        if (showTopShare) {
+                            PremiumActionIcon(
+                                icon = Icons.Filled.Share,
+                                tint = Color(0xFF4F46E5),
+                                background = Color(0x1A4F46E5),
+                                contentDescription = "שתף",
+                                onClick = { runKmiShare() }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
 
                         // אקשנס נוספים מהמסכים
                         extraActions()

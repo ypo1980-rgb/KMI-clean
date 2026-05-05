@@ -272,6 +272,7 @@ private fun BeltBadge(
 }
 
 private const val INTRO_FLOW_LOG = "KMI_INTRO_FLOW"
+private const val SUPPRESS_NEXT_DRAWER_OPEN_KEY = "kmi_suppress_next_drawer_open"
 
 @Composable
 fun IntroScreen(
@@ -670,7 +671,20 @@ fun IntroScreen(
                     Spacer(Modifier.height(4.dp))
 
                     TextButton(
-                        onClick = onContinue,
+                        onClick = {
+                            Log.e(INTRO_FLOW_LOG, "regular login button CLICK -> onContinue only")
+
+                            // מונע פתיחת סרגל צד בטעות בזמן המעבר למסך כניסה / רישום
+                            userSp.edit()
+                                .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                                .apply()
+
+                            legacySp.edit()
+                                .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                                .apply()
+
+                            onContinue()
+                        },
                         enabled = !isGoogleLoading,
                         modifier = Modifier.heightIn(min = 42.dp)
                     ) {

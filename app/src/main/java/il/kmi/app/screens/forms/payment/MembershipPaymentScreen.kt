@@ -70,6 +70,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
 
 private const val MISSING_BRANCH_HE = "הסניף שלי לא מופיע"
 private const val MISSING_BRANCH_EN = "My branch is not listed"
@@ -107,6 +110,269 @@ data class MembershipPaymentFormData(
     val amount: Double
 )
 
+private fun MembershipPaymentPrefill.hasAnyValue(): Boolean {
+    return traineeFirstName.isNotBlank() ||
+            traineeLastName.isNotBlank() ||
+            traineeIdNumber.isNotBlank() ||
+            traineeBirthDate.isNotBlank() ||
+            traineeEmail.isNotBlank() ||
+            traineePhone.isNotBlank() ||
+            traineeBranch.isNotBlank() ||
+            traineeOtherBranch.isNotBlank() ||
+            payerFirstName.isNotBlank() ||
+            payerLastName.isNotBlank() ||
+            payerEmail.isNotBlank() ||
+            payerPhone.isNotBlank()
+}
+
+private fun String?.orFallback(fallback: String): String {
+    return this?.takeIf { it.isNotBlank() } ?: fallback
+}
+
+private fun Map<String, Any?>.stringValue(vararg keys: String): String {
+    for (key in keys) {
+        val value = this[key]
+        if (value is String && value.isNotBlank()) return value
+    }
+    return ""
+}
+
+private fun Map<String, Any?>.nestedStringValue(
+    nestedKey: String,
+    vararg keys: String
+): String {
+    val nested = this[nestedKey] as? Map<*, *> ?: return ""
+    for (key in keys) {
+        val value = nested[key]
+        if (value is String && value.isNotBlank()) return value
+    }
+    return ""
+}
+
+private fun splitFullName(fullName: String): Pair<String, String> {
+    val parts = fullName
+        .trim()
+        .split(" ")
+        .filter { it.isNotBlank() }
+
+    if (parts.isEmpty()) return "" to ""
+    if (parts.size == 1) return parts.first() to ""
+
+    val firstName = parts.first()
+    val lastName = parts.drop(1).joinToString(" ")
+
+    return firstName to lastName
+}
+
+private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentPrefill {
+    val currentUser = FirebaseAuth.getInstance().currentUser ?: return MembershipPaymentPrefill()
+    val uid = currentUser.uid
+    val authEmail = currentUser.email.orEmpty()
+    val authPhone = currentUser.phoneNumber.orEmpty()
+    val authDisplayName = currentUser.displayName.orEmpty()
+    val authNameParts = splitFullName(authDisplayName)
+
+    val firestore = FirebaseFirestore.getInstance()
+
+    val possibleDocuments = listOf(
+        firestore.collection("users").document(uid),
+        firestore.collection("trainees").document(uid),
+        firestore.collection("members").document(uid)
+    )
+
+    for (documentRef in possibleDocuments) {
+        val snapshot = runCatching { documentRef.get().await() }.getOrNull()
+        val data = snapshot?.data ?: continue
+
+        val serverFullName = data.stringValue(
+            "fullName",
+            "full_name",
+            "displayName",
+            "display_name",
+            "name",
+            "traineeName",
+            "trainee_name"
+        ).ifBlank {
+            data.nestedStringValue(
+                "profile",
+                "fullName",
+                "full_name",
+                "displayName",
+                "display_name",
+                "name",
+                "traineeName",
+                "trainee_name"
+            )
+        }
+
+        val serverNameParts = splitFullName(serverFullName)
+
+        val firstName = data.stringValue(
+            "firstName",
+            "first_name",
+            "traineeFirstName",
+            "trainee_first_name"
+        ).ifBlank {
+            data.nestedStringValue(
+                "profile",
+                "firstName",
+                "first_name",
+                "traineeFirstName",
+                "trainee_first_name"
+            )
+        }.ifBlank {
+            serverNameParts.first
+        }.ifBlank {
+            authNameParts.first
+        }
+
+        val lastName = data.stringValue(
+            "lastName",
+            "last_name",
+            "traineeLastName",
+            "trainee_last_name",
+            "familyName",
+            "family_name"
+        ).ifBlank {
+            data.nestedStringValue(
+                "profile",
+                "lastName",
+                "last_name",
+                "traineeLastName",
+                "trainee_last_name",
+                "familyName",
+                "family_name"
+            )
+        }.ifBlank {
+            serverNameParts.second
+        }.ifBlank {
+            authNameParts.second
+        }
+
+        val idNumber = data.stringValue(
+            "idNumber",
+            "id_number",
+            "identityNumber",
+            "identity_number",
+            "tz",
+            "teudatZehut",
+            "traineeIdNumber"
+        ).ifBlank {
+            data.nestedStringValue(
+                "profile",
+                "idNumber",
+                "id_number",
+                "identityNumber",
+                "identity_number",
+                "tz",
+                "teudatZehut"
+            )
+        }
+
+        val birthDate = data.stringValue(
+            "birthDate",
+            "birth_date",
+            "dateOfBirth",
+            "date_of_birth",
+            "dob",
+            "traineeBirthDate"
+        ).ifBlank {
+            data.nestedStringValue(
+                "profile",
+                "birthDate",
+                "birth_date",
+                "dateOfBirth",
+                "date_of_birth",
+                "dob"
+            )
+        }
+
+        val email = data.stringValue(
+            "email",
+            "emailAddress",
+            "email_address",
+            "traineeEmail"
+        ).ifBlank {
+            data.nestedStringValue(
+                "profile",
+                "email",
+                "emailAddress",
+                "email_address"
+            )
+        }.ifBlank {
+            authEmail
+        }
+
+        val phone = data.stringValue(
+            "phone",
+            "phoneNumber",
+            "phone_number",
+            "mobile",
+            "mobilePhone",
+            "traineePhone"
+        ).ifBlank {
+            data.nestedStringValue(
+                "profile",
+                "phone",
+                "phoneNumber",
+                "phone_number",
+                "mobile",
+                "mobilePhone"
+            )
+        }.ifBlank {
+            authPhone
+        }
+
+        val branch = data.stringValue(
+            "branch",
+            "branchName",
+            "branch_name",
+            "selectedBranch",
+            "selected_branch",
+            "traineeBranch"
+        ).ifBlank {
+            data.nestedStringValue(
+                "profile",
+                "branch",
+                "branchName",
+                "branch_name",
+                "selectedBranch",
+                "selected_branch"
+            )
+        }
+
+        val prefill = MembershipPaymentPrefill(
+            traineeFirstName = firstName,
+            traineeLastName = lastName,
+            traineeIdNumber = idNumber,
+            traineeBirthDate = birthDate,
+            traineeEmail = email,
+            traineePhone = phone,
+            traineeBranch = branch,
+            traineeOtherBranch = "",
+            payerFirstName = firstName,
+            payerLastName = lastName,
+            payerEmail = email,
+            payerPhone = phone
+        )
+
+        if (prefill.hasAnyValue()) {
+            return prefill
+        }
+    }
+
+    return MembershipPaymentPrefill(
+        traineeFirstName = authNameParts.first,
+        traineeLastName = authNameParts.second,
+        traineeEmail = authEmail,
+        traineePhone = authPhone,
+        payerFirstName = authNameParts.first,
+        payerLastName = authNameParts.second,
+        payerEmail = authEmail,
+        payerPhone = authPhone
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MembershipPaymentScreen(
@@ -116,6 +382,28 @@ fun MembershipPaymentScreen(
     onReadFullPolicy: () -> Unit = {},
     onContinueToPayment: (MembershipPaymentFormData) -> Unit = {}
 ) {
+    var serverPrefill by remember { mutableStateOf(prefill) }
+    var didApplyServerPrefill by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val loadedPrefill = loadMembershipPaymentPrefillFromServer()
+
+        serverPrefill = MembershipPaymentPrefill(
+            traineeFirstName = loadedPrefill.traineeFirstName.orFallback(prefill.traineeFirstName),
+            traineeLastName = loadedPrefill.traineeLastName.orFallback(prefill.traineeLastName),
+            traineeIdNumber = loadedPrefill.traineeIdNumber.orFallback(prefill.traineeIdNumber),
+            traineeBirthDate = loadedPrefill.traineeBirthDate.orFallback(prefill.traineeBirthDate),
+            traineeEmail = loadedPrefill.traineeEmail.orFallback(prefill.traineeEmail),
+            traineePhone = loadedPrefill.traineePhone.orFallback(prefill.traineePhone),
+            traineeBranch = loadedPrefill.traineeBranch.orFallback(prefill.traineeBranch),
+            traineeOtherBranch = loadedPrefill.traineeOtherBranch.orFallback(prefill.traineeOtherBranch),
+            payerFirstName = loadedPrefill.payerFirstName.orFallback(prefill.payerFirstName),
+            payerLastName = loadedPrefill.payerLastName.orFallback(prefill.payerLastName),
+            payerEmail = loadedPrefill.payerEmail.orFallback(prefill.payerEmail),
+            payerPhone = loadedPrefill.payerPhone.orFallback(prefill.payerPhone)
+        )
+    }
+
     val title = if (isEnglish) "Membership Payment" else "תשלום דמי חבר"
     val traineeTitle = if (isEnglish) "Trainee Details" else "פרטי חניך"
     val payerTitle = if (isEnglish) "Payer Details for Invoice" else "פרטי המשלם לשליחת חשבונית"
@@ -173,6 +461,36 @@ fun MembershipPaymentScreen(
 
     val missingBranchValue = if (isEnglish) MISSING_BRANCH_EN else MISSING_BRANCH_HE
     val shouldShowOtherBranch = traineeBranch == missingBranchValue
+
+    LaunchedEffect(serverPrefill, branchOptions) {
+        if (!didApplyServerPrefill && serverPrefill.hasAnyValue()) {
+            traineeFirstName = serverPrefill.traineeFirstName
+            traineeLastName = serverPrefill.traineeLastName
+            traineeIdNumber = serverPrefill.traineeIdNumber
+            traineeBirthDate = serverPrefill.traineeBirthDate
+            traineeEmail = serverPrefill.traineeEmail
+            traineePhone = serverPrefill.traineePhone
+
+            val loadedBranch = serverPrefill.traineeBranch.trim()
+            if (loadedBranch.isBlank()) {
+                traineeBranch = branchOptions.first()
+                traineeOtherBranch = ""
+            } else if (branchOptions.contains(loadedBranch)) {
+                traineeBranch = loadedBranch
+                traineeOtherBranch = ""
+            } else {
+                traineeBranch = missingBranchValue
+                traineeOtherBranch = loadedBranch
+            }
+
+            payerFirstName = serverPrefill.payerFirstName.ifBlank { serverPrefill.traineeFirstName }
+            payerLastName = serverPrefill.payerLastName.ifBlank { serverPrefill.traineeLastName }
+            payerEmail = serverPrefill.payerEmail.ifBlank { serverPrefill.traineeEmail }
+            payerPhone = serverPrefill.payerPhone.ifBlank { serverPrefill.traineePhone }
+
+            didApplyServerPrefill = true
+        }
+    }
 
     LaunchedEffect(
         payerSameAsTrainee,

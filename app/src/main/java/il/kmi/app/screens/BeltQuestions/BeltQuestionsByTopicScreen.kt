@@ -40,6 +40,7 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -252,6 +253,14 @@ fun BeltQuestionsByTopicScreen(
 
     var accessRefreshTick by remember { mutableIntStateOf(0) }
 
+    // מרענן מצב גישה גם בלי שינוי ב-SharedPreferences.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000L)
+            accessRefreshTick++
+        }
+    }
+
     DisposableEffect(userSp, subsSp, legacySp) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
             if (
@@ -297,31 +306,10 @@ fun BeltQuestionsByTopicScreen(
         }
     }
 
-    fun SharedPreferences.hasActiveSubscriptionAccess(): Boolean {
-        val now = System.currentTimeMillis()
-        val until = getLong("sub_access_until", 0L)
-
-        val verifiedAndValid =
-            getBoolean("google_subscription_verified", false) && until > now
-
-        val activeFlagAndValid =
-            until > now && (
-                    getBoolean("has_full_access", false) ||
-                            getBoolean("full_access", false) ||
-                            getBoolean("subscription_active", false) ||
-                            getBoolean("is_subscribed", false)
-                    )
-
-        return KmiAccess.hasFullAccess(this) ||
-                verifiedAndValid ||
-                activeFlagAndValid
-    }
-
     val hasManagerAccess = remember(accessRefreshTick) {
-        KmiAccess.isAdmin(userSp) ||
-                userSp.hasActiveSubscriptionAccess() ||
-                subsSp.hasActiveSubscriptionAccess() ||
-                legacySp.hasActiveSubscriptionAccess()
+        KmiAccess.hasFullAccess(userSp) ||
+                KmiAccess.hasFullAccess(subsSp) ||
+                KmiAccess.hasFullAccess(legacySp)
     }
 
     val accessMode = AccessModeResolver.resolve(

@@ -5,8 +5,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,7 +28,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.material3.Icon
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
@@ -756,7 +753,7 @@ fun MaterialsScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scroll),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
                         horizontalAlignment = Alignment.End
                     ) {
 
@@ -803,7 +800,8 @@ fun MaterialsScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                                        .heightIn(min = 58.dp)
+                                        .padding(horizontal = 8.dp, vertical = 5.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     ItemFloatingActions(
@@ -838,8 +836,8 @@ fun MaterialsScreen(
                                         },
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
-                                        maxLines = 3,                      // ✔️ עכשיו 3 שורות
-                                        overflow = TextOverflow.Ellipsis   // ✔️ עדיין שומר עיצוב נקי
+                                        maxLines = 4,
+                                        overflow = TextOverflow.Ellipsis
                                     )
 
                                     Spacer(Modifier.width(8.dp))
@@ -917,7 +915,7 @@ fun MaterialsScreen(
                                 )
                             }
 
-                            Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.height(0.dp))
                         }
                     }
                 }
@@ -1019,43 +1017,31 @@ private fun ItemFloatingActions(
         Surface(
             onClick = { expanded = true },
             shape = CircleShape,
-            color = Color.White.copy(alpha = 0.94f),
-            shadowElevation = 6.dp,
+            color = Color(0xFF60717A),
+            shadowElevation = 3.dp,
             border = BorderStroke(
                 1.dp,
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                Color.White.copy(alpha = 0.22f)
             ),
             modifier = Modifier
-                .size(38.dp)
+                .size(27.dp)
                 .graphicsLayer {
                     scaleX = infoScale
                     scaleY = infoScale
                 }
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.98f),
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
-                                Color.White.copy(alpha = 0.94f)
-                            )
-                        ),
-                        shape = CircleShape
-                    ),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Info,
-                    contentDescription = "פעולות לתרגיל",
-                    tint = Color(0xFF455A64),
-                    modifier = Modifier
-                        .size(18.dp)
-                        .graphicsLayer {
-                            rotationZ = infoRotation
-                        }
+                Text(
+                    text = "i",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier.graphicsLayer {
+                        rotationZ = infoRotation
+                    }
                 )
             }
         }

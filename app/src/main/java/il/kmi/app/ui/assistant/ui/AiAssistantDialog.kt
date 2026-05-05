@@ -56,11 +56,11 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import il.kmi.app.ui.DrawerBridge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -95,7 +95,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
@@ -116,7 +115,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 
 //======================================================
 
@@ -763,11 +761,58 @@ private fun sanitizeAssistantTextForSpeech(text: String, isEnglish: Boolean): St
         return false
     }
 
+    var spokenSubTopicIndex = 0
+
     val cleaned = text
         .lineSequence()
         .map { line ->
-            line.trim()
+            val originalLine = line.trim()
+            val startsWithSubTopicBullet =
+                originalLine.startsWith("•") ||
+                        originalLine.startsWith("●") ||
+                        originalLine.startsWith("▪") ||
+                        originalLine.startsWith("◦")
+
+            val cleanedLine = originalLine
+                // מסיר bullets / נקודות רשימה לפני כותרות
+                .replace(Regex("""^[•●▪◦]\s*"""), "")
+                .replace(Regex("""^[-–—]\s*"""), "")
+
+                // מסיר מספור בתחילת שורה: 1. / 2. / 10.
                 .replace(Regex("""^\d+\.\s*"""), "")
+
+                // במקום להגיד מקף / סימן — עושים הפסקה טבעית בדיבור
+                .replace(Regex("""\s+[-–—]\s+"""), ". ")
+                .replace(Regex("""[-–—]"""), ". ")
+
+                // מנקה תווים שלא צריכים להיקרא בקול
+                .replace("•", "")
+                .replace("●", "")
+                .replace("▪", "")
+                .replace("◦", "")
+                .replace("`", "")
+                .replace(Regex("""\s+"""), " ")
+                .trim()
+
+            if (startsWithSubTopicBullet && cleanedLine.isNotBlank()) {
+                spokenSubTopicIndex++
+
+                when {
+                    spokenSubTopicIndex == 1 && isEnglish ->
+                        "First sub-topic. $cleanedLine"
+
+                    spokenSubTopicIndex == 1 && !isEnglish ->
+                        "תת נושא ראשון. $cleanedLine"
+
+                    isEnglish ->
+                        "Next sub-topic. $cleanedLine"
+
+                    else ->
+                        "תת נושא הבא. $cleanedLine"
+                }
+            } else {
+                cleanedLine
+            }
         }
         .filter { it.isNotBlank() }
         .filterNot { line -> isCodeLikeLine(line) }
@@ -788,6 +833,61 @@ private fun sanitizeAssistantTextForSpeech(text: String, isEnglish: Boolean): St
             .replace(Regex("""[A-Za-z_]{2,}[A-Za-z0-9_().]*"""), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
+    }
+}
+
+private fun shortMaterialSpeech(isEnglish: Boolean): String {
+    return if (isEnglish) {
+        "I found the list you asked for. It is shown on the screen."
+    } else {
+        "מצאתי את הרשימה שביקשת. היא מופיעה על המסך."
+    }
+}
+
+private fun shortTrainingSpeech(
+    question: String,
+    answer: String,
+    isEnglish: Boolean
+): String {
+    val q = question.lowercase().trim()
+    val a = answer.lowercase().trim()
+
+    val looksLikeNextTraining =
+        q.contains("האימון הבא") ||
+                q.contains("אימון הבא") ||
+                q.contains("מתי האימון") ||
+                q.contains("next training") ||
+                q.contains("next workout") ||
+                a.contains("האימון הבא") ||
+                a.contains("next training")
+
+    val looksLikeTrainingList =
+        q.contains("רשימת") ||
+                q.contains("אימונים לשבוע") ||
+                q.contains("שבוע הקרוב") ||
+                q.contains("האימונים הקרובים") ||
+                q.contains("show me") ||
+                q.contains("upcoming") ||
+                q.contains("this week")
+
+    return when {
+        looksLikeNextTraining && isEnglish ->
+            "I found your next training. The details are shown on the screen."
+
+        looksLikeNextTraining && !isEnglish ->
+            "מצאתי את האימון הבא שלך. הפרטים מופיעים על המסך."
+
+        looksLikeTrainingList && isEnglish ->
+            "Here is the training list you asked for. The full details are shown on the screen."
+
+        looksLikeTrainingList && !isEnglish ->
+            "הנה רשימת האימונים שביקשת. הפרטים המלאים מופיעים על המסך."
+
+        isEnglish ->
+            "I found the training information you asked for. The details are shown on the screen."
+
+        else ->
+            "מצאתי את פרטי האימונים שביקשת. הם מופיעים על המסך."
     }
 }
 
@@ -1013,6 +1113,39 @@ fun AiAssistantDialog(
     }
 
     val scrollState = rememberScrollState()
+    val latestUserMessage = messages.lastOrNull { it.fromUser }
+    val latestAssistantMessage = messages.lastOrNull { !it.fromUser }
+
+    val showExerciseAnswerLayout =
+        assistantMode == AssistantMode.EXERCISE &&
+                (latestUserMessage != null || latestAssistantMessage != null || isThinking)
+
+    val showMaterialAnswerLayout =
+        assistantMode == AssistantMode.KMI_MATERIAL &&
+                (latestUserMessage != null || latestAssistantMessage != null || isThinking)
+
+    val showPremiumAnswerLayout =
+        showExerciseAnswerLayout || showMaterialAnswerLayout
+
+    val explanationScrollState = rememberScrollState()
+
+    val rawExerciseQuestion = latestUserMessage?.text?.trim().orEmpty()
+
+    val cleanedExerciseName = remember(rawExerciseQuestion) {
+        extractExerciseNameFromQuestion(rawExerciseQuestion)
+            ?.replace("\"", "")
+            ?.replace("'", "")
+            ?.replace(Regex("\\s+"), " ")
+            ?.trim()
+            .orEmpty()
+    }
+
+    // הכרטיס העליון: כל מה שהמשתמש אמר
+    val displayTopRequestText = rawExerciseQuestion
+
+    // הכרטיס התחתון / שימוש פנימי: שם תרגיל נקי בלבד
+    val displayExerciseName = cleanedExerciseName.ifBlank { rawExerciseQuestion }
+
     var pendingNavAfterSpeak by remember { mutableStateOf<VoiceNavCommand?>(null) }
 
     // ✅ חובה: אתחול בטוח של ה-TTS Manager גם מתוך הדיאלוג (idempotent)
@@ -1107,18 +1240,21 @@ fun AiAssistantDialog(
         }
 
         speakJob = scope.launch {
-            // fallback הגנתי בלבד - רק לנקות UI אם משהו נתקע,
-            // בלי להפסיק דיבור ובלי להפעיל מיקרופון מחדש
+            // fallback הגנתי בלבד.
+            // ברשימות חומר ק.מ.י הטקסט ארוך, לכן אסור לכבות isSpeaking אחרי 16 שניות.
+            // אם נכבה מוקדם מדי — האייקון יחזור למיקרופון למרות שה-TTS עדיין מדבר.
             val fallbackMs = when {
-                ttsText.length <= 80 -> 7000L
-                ttsText.length <= 180 -> 11000L
-                else -> 16000L
+                ttsText.length <= 80 -> 10_000L
+                ttsText.length <= 180 -> 18_000L
+                ttsText.length <= 350 -> 30_000L
+                ttsText.length <= 700 -> 55_000L
+                else -> 90_000L
             }
 
             delay(fallbackMs)
 
             if (isSpeaking) {
-                Log.w("KMI_TTS", "speakBest fallback timeout -> clearing speaking UI only")
+                Log.w("KMI_TTS", "speakBest fallback timeout after ${fallbackMs}ms -> clearing speaking UI only")
                 isSpeaking = false
                 // בכוונה לא נוגעים ב-TTS ולא מפעילים STT מכאן
             }
@@ -1342,6 +1478,12 @@ fun AiAssistantDialog(
         }
     }
 
+    fun scrollToTop() {
+        scope.launch {
+            scrollState.scrollTo(0)
+        }
+    }
+
     fun scrollToBottom() {
         scope.launch {
             scrollState.animateScrollTo(scrollState.maxValue)
@@ -1438,7 +1580,16 @@ fun AiAssistantDialog(
         requestHideKeyboard = true
 
         // UI: הודעת משתמש
-        messages = messages + AiMessage(fromUser = true, text = question)
+        messages = if (
+            assistantMode == AssistantMode.EXERCISE ||
+            assistantMode == AssistantMode.KMI_MATERIAL
+        ) {
+            listOf(
+                AiMessage(fromUser = true, text = question)
+            )
+        } else {
+            messages + AiMessage(fromUser = true, text = question)
+        }
 
         // שמירת התרגיל האחרון בזיכרון העוזר
         assistantMemory.saveLastQuestion(question)
@@ -1449,7 +1600,12 @@ fun AiAssistantDialog(
 
         input = ""
         isThinking = true
-        scrollToBottom()
+
+        if (assistantMode == AssistantMode.EXERCISE) {
+            scrollToTop()
+        } else {
+            scrollToBottom()
+        }
 
         val preferredBelt = detectBeltEnum(resolvedQuestion)
         val answer: String = try {
@@ -1496,29 +1652,71 @@ fun AiAssistantDialog(
 
         val finalAnswer = when (assistantMode) {
             AssistantMode.TRAININGS -> answer
+            AssistantMode.EXERCISE -> answer.trim()
+            AssistantMode.KMI_MATERIAL -> answer.trim()
             else -> answer.trimEnd() + "\n\n" + tr("אני יכול לעזור לך בעוד משהו?", "Can I help you with anything else?")
         }
 
         isThinking = false
-        messages = messages + AiMessage(
+
+        val aiMessage = AiMessage(
             fromUser = false,
             text = finalAnswer,
             relatedQuestion = question
         )
-        lastAiAnswer = finalAnswer
-        scrollToBottom()
 
-        // ✅ חשוב: להקריא רק טקסט נקי שמתאים לדיבור
-        val spokenAnswer = if (assistantMode == AssistantMode.TRAININGS) {
-            sanitizeTrainingTextForSpeech(
-                text = finalAnswer,
-                isEnglish = isEnglish
+        messages = if (
+            assistantMode == AssistantMode.EXERCISE ||
+            assistantMode == AssistantMode.KMI_MATERIAL
+        ) {
+            listOf(
+                AiMessage(fromUser = true, text = question),
+                aiMessage
             )
         } else {
-            sanitizeAssistantTextForSpeech(
-                text = finalAnswer,
-                isEnglish = isEnglish
-            )
+            messages + aiMessage
+        }
+
+        lastAiAnswer = finalAnswer
+
+        if (
+            assistantMode == AssistantMode.EXERCISE ||
+            assistantMode == AssistantMode.KMI_MATERIAL
+        ) {
+            scrollToTop()
+        } else {
+            scrollToBottom()
+        }
+
+        // ✅ חשוב:
+        // במסכים עם רשימות ארוכות לא מקריאים את כל התוכן.
+        // מציגים את הכל על המסך, ומקריאים רק הודעה קצרה.
+        val spokenAnswer = when (assistantMode) {
+            AssistantMode.KMI_MATERIAL -> {
+                shortMaterialSpeech(isEnglish)
+            }
+
+            AssistantMode.TRAININGS -> {
+                shortTrainingSpeech(
+                    question = question,
+                    answer = finalAnswer,
+                    isEnglish = isEnglish
+                )
+            }
+
+            AssistantMode.EXERCISE -> {
+                sanitizeAssistantTextForSpeech(
+                    text = finalAnswer,
+                    isEnglish = isEnglish
+                )
+            }
+
+            null -> {
+                sanitizeAssistantTextForSpeech(
+                    text = finalAnswer,
+                    isEnglish = isEnglish
+                )
+            }
         }
 
         speakBest(spokenAnswer)
@@ -1905,6 +2103,206 @@ fun AiAssistantDialog(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = textAlignPrimary
                                     )
+                                }
+
+                            } else if (showPremiumAnswerLayout) {
+                                val answerText = latestAssistantMessage?.text?.trim().orEmpty()
+                                val answerIndex = latestAssistantMessage?.let { messages.indexOf(it) } ?: -1
+                                val answerFeedback = latestAssistantMessage?.feedback ?: Feedback.NONE
+
+                                val feedbackQuestionText = if (showMaterialAnswerLayout) {
+                                    displayTopRequestText
+                                } else {
+                                    displayExerciseName
+                                }
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 10.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    if (displayTopRequestText.isNotBlank()) {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(22.dp),
+                                            color = Color(0xFF6C55B8),
+                                            tonalElevation = 0.dp,
+                                            shadowElevation = 5.dp
+                                        ) {
+                                            Text(
+                                                text = displayTopRequestText,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                                color = Color.White,
+                                                textAlign = textAlignPrimary,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                lineHeight = 17.sp
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f, fill = true),
+                                        shape = RoundedCornerShape(22.dp),
+                                        color = Color(0xFFF1EDF7),
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 4.dp
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .verticalScroll(explanationScrollState)
+                                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                                                    .padding(bottom = 30.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                if (isThinking && answerText.isBlank()) {
+                                                    val dotsTransition = rememberInfiniteTransition(label = "thinkingDotsExercise")
+
+                                                    val dotAlpha by dotsTransition.animateFloat(
+                                                        initialValue = 0.25f,
+                                                        targetValue = 1f,
+                                                        animationSpec = infiniteRepeatable(
+                                                            animation = tween(650),
+                                                            repeatMode = RepeatMode.Reverse
+                                                        ),
+                                                        label = "dotAlphaExercise"
+                                                    )
+
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.End,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = tr("יובל חושב", "Yuval is thinking"),
+                                                            fontSize = 11.sp,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+
+                                                        Spacer(Modifier.width(6.dp))
+
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(6.dp)
+                                                                .background(
+                                                                    MaterialTheme.colorScheme.primary.copy(alpha = dotAlpha),
+                                                                    shape = RoundedCornerShape(50)
+                                                                )
+                                                        )
+                                                    }
+                                                }
+
+                                                if (answerText.isNotBlank()) {
+                                                    Text(
+                                                        text = answerText,
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        textAlign = textAlignPrimary,
+                                                        fontSize = 10.sp,
+                                                        lineHeight = 14.sp,
+                                                        fontWeight = FontWeight.Normal
+                                                    )
+                                                }
+
+                                                if (answerIndex >= 0) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.Start,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        IconButton(
+                                                            onClick = { setFeedback(answerIndex, Feedback.UNLIKE) }
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Filled.ThumbDown,
+                                                                contentDescription = "Unlike",
+                                                                tint = when (answerFeedback) {
+                                                                    Feedback.UNLIKE -> Color(0xFFEF4444)
+                                                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                                                }
+                                                            )
+                                                        }
+
+                                                        IconButton(
+                                                            onClick = { setFeedback(answerIndex, Feedback.LIKE) }
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Filled.ThumbUp,
+                                                                contentDescription = "Like",
+                                                                tint = when (answerFeedback) {
+                                                                    Feedback.LIKE -> Color(0xFF22C55E)
+                                                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                                                }
+                                                            )
+                                                        }
+
+                                                        if (answerFeedback == Feedback.UNLIKE &&
+                                                            feedbackQuestionText.isNotBlank() &&
+                                                            answerText.isNotBlank()
+                                                        ) {
+                                                            LaunchedEffect(feedbackQuestionText, answerText) {
+                                                                logUnlikeQuestion(
+                                                                    question = feedbackQuestionText,
+                                                                    answer = answerText
+                                                                )
+                                                                saveAiFeedback(feedbackQuestionText, answerText)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            if (
+                                                answerText.isNotBlank() &&
+                                                explanationScrollState.maxValue > explanationScrollState.value
+                                            ) {
+                                                Surface(
+                                                    modifier = Modifier
+                                                        .align(Alignment.BottomCenter)
+                                                        .padding(bottom = 8.dp),
+                                                    shape = RoundedCornerShape(50),
+                                                    color = Color.White.copy(alpha = 0.88f),
+                                                    shadowElevation = 4.dp
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.Center
+                                                    ) {
+                                                        Text(
+                                                            text = if (isEnglish) "More" else "עוד",
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
+
+                                                        Spacer(Modifier.width(2.dp))
+
+                                                        Icon(
+                                                            imageVector = Icons.Filled.KeyboardArrowDown,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    
+
+                                        LaunchedEffect(displayTopRequestText, answerText, isThinking) {
+                                            explanationScrollState.scrollTo(0)
+                                        }
+                                    }
                                 }
                             } else {
                                 Column(

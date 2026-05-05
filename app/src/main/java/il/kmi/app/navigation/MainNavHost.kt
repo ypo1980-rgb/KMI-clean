@@ -139,6 +139,30 @@ fun MainNavHost(
         )
     }
 
+    // ✅ אם MainApp ביקש לפתוח מסך ספציפי, למשל registration_landing,
+    // לא עוברים דרך app_entry / splash כדי למנוע מסך לבן ומעבר מיותר.
+    val actualStartDestination = remember(startDestination) {
+        when (startDestination) {
+            Route.Home.route,
+            GOOGLE_PROFILE_COMPLETION_ROUTE,
+            Route.RegistrationLanding.route,
+            Route.Registration.route,
+            Route.NewUserTrainee.route,
+            Route.NewUserCoach.route,
+            Route.ExistingUserTrainee.route,
+            Route.ExistingUserCoach.route -> startDestination
+
+            else -> APP_ENTRY_ROUTE
+        }
+    }
+
+    LaunchedEffect(actualStartDestination, startDestination) {
+        Log.e(
+            NAV_LOG,
+            "MainNavHost startDestination requested=$startDestination actual=$actualStartDestination"
+        )
+    }
+
     // מונע שני ניווטים רצופים אל אותו מסך כניסה בגלל recomposition / Activity recreation
     var entryNavigationLocked by remember { mutableStateOf(false) }
 
@@ -224,7 +248,7 @@ fun MainNavHost(
 
         NavHost(
             navController = nav,
-            startDestination = APP_ENTRY_ROUTE,
+            startDestination = actualStartDestination,
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -411,7 +435,7 @@ fun MainNavHost(
                             Log.e(
                                 NAV_LOG,
                                 "splash remote not completed -> google_profile_completion. " +
-                                        "No bypass without registrationFormCompleted=true/schema>=2"
+                                        "missing required core profile fields"
                             )
 
                             nav.navigate(GOOGLE_PROFILE_COMPLETION_ROUTE) {
@@ -654,7 +678,7 @@ fun MainNavHost(
                     vm = vm,
                     sp = sp,
                     kmiPrefs = kmiPrefs,
-                    onOpenDrawer = { DrawerBridge.open() },
+                    onOpenDrawer = {},
                     onOpenLegal = { nav.navigate(Route.Legal.route) },
                     onOpenTerms = { nav.navigate(Route.Legal.route) },
                     onRegistrationDone = {
@@ -675,7 +699,11 @@ fun MainNavHost(
                     vm = vm,
                     sp = sp,
                     kmiPrefs = kmiPrefs,
-                    onOpenDrawer = { DrawerBridge.open() },
+
+                    // במסכי רישום / השלמת פרופיל אין פתיחת Drawer.
+                    // זה מונע קפיצה של הסרגל אחרי מעבר למסך הבית.
+                    onOpenDrawer = {},
+
                     onOpenLegal = { nav.navigate(Route.Legal.route) },
                     onOpenTerms = { nav.navigate(Route.Legal.route) },
                     onRegistrationDone = {
@@ -724,7 +752,9 @@ fun MainNavHost(
                 summaryVm = trainingSummaryVm,
                 sp = sp,
                 kmiPrefs = kmiPrefs,
-                onBack = null
+                onBack = {
+                    nav.popBackStack()
+                }
             )
 
             // --- NEW: Topics graph ---
@@ -1200,8 +1230,9 @@ private suspend fun isProfileCompletedRemotely(uid: String): Boolean {
     val profileCompleted = doc.getBoolean("profileCompleted") == true
     val registrationComplete = doc.getBoolean("registrationComplete") == true
 
-// ✅ דגל חדש: לא מספיק profileCompleted ישן.
-// רק משתמש שעבר את טופס הרישום החדש מקבל אישור לדלג על הטופס.
+    // משתמשים חדשים יקבלו את הדגלים החדשים.
+    // משתמשים קיימים יכולים לדלג גם אם יש להם profileCompleted / registrationComplete
+    // וכל שדות הליבה קיימים.
     val registrationFormCompleted = doc.getBoolean("registrationFormCompleted") == true
     val registrationSchemaVersion = (doc.getLong("registrationSchemaVersion") ?: 0L).toInt()
     val hasNewRegistrationCompletion =
@@ -1252,19 +1283,51 @@ private suspend fun isProfileCompletedRemotely(uid: String): Boolean {
                 gender.isNotBlank() &&
                 hasBeltIfNeeded
 
-    val completedFlag = (profileCompleted || registrationComplete) && hasNewRegistrationCompletion
-    val finalResult = completedFlag && hasCoreProfile
+    val hasLegacyCompletion =
+        (profileCompleted || registrationComplete) && hasCoreProfile
+
+    val finalResult =
+        hasCoreProfile && (hasNewRegistrationCompletion || hasLegacyCompletion)
 
     Log.e(
         NAV_LOG,
         "isProfileCompletedRemotely uid=$uid exists=true " +
                 "profileCompleted=$profileCompleted registrationComplete=$registrationComplete " +
                 "registrationFormCompleted=$registrationFormCompleted registrationSchemaVersion=$registrationSchemaVersion " +
+                "hasNewRegistrationCompletion=$hasNewRegistrationCompletion " +
+                "hasLegacyCompletion=$hasLegacyCompletion " +
                 "role=$role fullName=${fullName.isNotBlank()} email=${email.isNotBlank()} " +
                 "phoneLen=${phone.length} region=${region.isNotBlank()} " +
                 "hasBranch=$hasBranch hasGroup=$hasGroup gender=${gender.isNotBlank()} " +
                 "belt=$belt hasBeltIfNeeded=$hasBeltIfNeeded finalResult=$finalResult"
     )
+
+    if (finalResult && !hasNewRegistrationCompletion) {
+        runCatching {
+            Firebase.firestore.collection("users")
+                .document(uid)
+                .update(
+                    mapOf(
+                        "registrationFormCompleted" to true,
+                        "registrationSchemaVersion" to 2,
+                        "profileCompleted" to true,
+                        "registrationComplete" to true
+                    )
+                )
+                .await()
+        }.onSuccess {
+            Log.e(
+                NAV_LOG,
+                "isProfileCompletedRemotely upgraded legacy profile flags uid=$uid"
+            )
+        }.onFailure {
+            Log.e(
+                NAV_LOG,
+                "isProfileCompletedRemotely failed to upgrade legacy flags uid=$uid",
+                it
+            )
+        }
+    }
 
     return finalResult
 }

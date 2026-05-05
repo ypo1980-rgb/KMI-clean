@@ -298,8 +298,26 @@ fun NavGraphBuilder.homeNavGraph(
             nav.context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
         }
 
+        val subsSp = remember(nav.context) {
+            nav.context.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
+        }
+
+        fun hasPremiumAccessNow(): Boolean {
+            return KmiAccess.hasFullAccess(accessSp) ||
+                    KmiAccess.hasFullAccess(subsSp)
+        }
+
         fun shouldBlockPremiumTopic(raw: String): Boolean {
-            return isLockedPremiumTopic(raw) && !KmiAccess.hasFullAccess(accessSp)
+            val locked = isLockedPremiumTopic(raw)
+            val hasAccess = hasPremiumAccessNow()
+            val result = locked && !hasAccess
+
+            Log.e(
+                "KMI_LOCK_TRACE",
+                "HomeNavGraph shouldBlockPremiumTopic raw='$raw' locked=$locked hasAccess=$hasAccess result=$result"
+            )
+
+            return result
         }
 
         Log.e("KMI_WHERE", "ENTER HomeNavGraph -> Route.BeltQByTopic")

@@ -3,6 +3,7 @@ package il.kmi.app.ui.training
 import androidx.compose.foundation.BorderStroke
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,7 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -66,15 +66,28 @@ fun ExerciseRowCard(
                     .padding(horizontal = 10.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = { onInfo(belt, canonicalId) },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = "מידע",
-                        tint = accent.copy(alpha = 0.95f)
+                Surface(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clickable { onInfo(belt, canonicalId) },
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF60717A),
+                    shadowElevation = 2.dp,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.14f)
                     )
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = "מידע",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
                 }
 
                 Spacer(Modifier.width(6.dp))

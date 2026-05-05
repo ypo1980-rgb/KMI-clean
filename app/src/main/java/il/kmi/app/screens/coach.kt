@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
@@ -59,7 +60,6 @@ import il.kmi.app.ui.KmiTopBar
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 import java.util.Locale
@@ -70,8 +70,13 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.ui.text.style.TextAlign
 import kotlin.math.roundToInt
 
 //=========================================================================
@@ -162,6 +167,9 @@ fun CoachTraineesScreen(
     onOpenHome: () -> Unit = onBack
 ) {
     val ctx = LocalContext.current
+    val density = LocalDensity.current
+    val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
+
     val sp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
     val role = sp.getString("user_role", "trainee").orEmpty()
 
@@ -682,7 +690,7 @@ fun CoachTraineesScreen(
             )
         },
         bottomBar = {
-            if (!showStatsSheet) {
+            if (!showStatsSheet && !isKeyboardVisible) {
                 var statsBubbleOffset by remember { mutableStateOf(0f) }
 
                 LaunchedEffect(Unit) {
@@ -800,7 +808,7 @@ fun CoachTraineesScreen(
                     .padding(horizontal = 12.dp),
                 contentPadding = PaddingValues(
                     top = 12.dp,
-                    bottom = if (showStatsSheet) 16.dp else 96.dp
+                    bottom = if (showStatsSheet || isKeyboardVisible) 16.dp else 96.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -964,19 +972,71 @@ fun CoachTraineesScreen(
                                                 .padding(horizontal = 14.dp, vertical = 14.dp),
                                             verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
-                                            Text(
-                                                text = "תאריכי קבלת חגורות",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = Color(0xFF1E293B)
-                                            )
+                                            var isBeltDatesSectionExpanded by remember(selected.id) {
+                                                mutableStateOf(false)
+                                            }
 
-                                            Text(
-                                                text = "היסטוריית דרגות המתאמן",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = Color(0xFF64748B)
-                                            )
+                                            Surface(
+                                                color = Color.White,
+                                                shape = RoundedCornerShape(18.dp),
+                                                shadowElevation = 3.dp,
+                                                border = BorderStroke(
+                                                    width = 1.dp,
+                                                    color = Color(0xFFD8E6FF)
+                                                ),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        isBeltDatesSectionExpanded = !isBeltDatesSectionExpanded
+                                                    }
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (isBeltDatesSectionExpanded) {
+                                                            Icons.Default.KeyboardArrowUp
+                                                        } else {
+                                                            Icons.Default.KeyboardArrowDown
+                                                        },
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF64748B)
+                                                    )
 
+                                                    Spacer(Modifier.width(8.dp))
+
+                                                    Column(
+                                                        modifier = Modifier.weight(1f),
+                                                        horizontalAlignment = Alignment.End
+                                                    ) {
+                                                        Text(
+                                                            text = "תאריכי קבלת חגורות",
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            textAlign = TextAlign.Right,
+                                                            style = MaterialTheme.typography.titleMedium,
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            color = Color(0xFF1E293B)
+                                                        )
+
+                                                        Text(
+                                                            text = if (isBeltDatesSectionExpanded) {
+                                                                "לחצו על חגורה כדי להציג או לעדכן תאריך"
+                                                            } else {
+                                                                "לחצו לפתיחת רשימת החגורות"
+                                                            },
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            textAlign = TextAlign.Right,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = Color(0xFF64748B)
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            if (isBeltDatesSectionExpanded) {
                                             val beltOrder = listOf(
                                                 "צהובה",
                                                 "כתומה",
@@ -996,9 +1056,13 @@ fun CoachTraineesScreen(
                                             )
 
                                             val selectedDates = beltAwardDatesState[selected.id] ?: emptyMap()
+                                            var expandedBelt by remember(selected.id) { mutableStateOf<String?>(null) }
 
                                             beltOrder.forEach { beltName ->
                                                 val beltAccent = beltAccentMap[beltName] ?: Color(0xFF6366F1)
+                                                val currentDate = selectedDates[beltName].orEmpty()
+                                                val hasDate = currentDate.isNotBlank()
+                                                val isExpanded = expandedBelt == beltName
 
                                                 Surface(
                                                     color = Color.White,
@@ -1008,7 +1072,11 @@ fun CoachTraineesScreen(
                                                         1.dp,
                                                         beltAccent.copy(alpha = 0.18f)
                                                     ),
-                                                    modifier = Modifier.fillMaxWidth()
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            expandedBelt = if (isExpanded) null else beltName
+                                                        }
                                                 ) {
                                                     Column(
                                                         modifier = Modifier
@@ -1029,27 +1097,61 @@ fun CoachTraineesScreen(
 
                                                             Spacer(Modifier.width(8.dp))
 
-                                                            Text(
-                                                                text = "חגורה $beltName",
-                                                                style = MaterialTheme.typography.titleSmall,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = Color(0xFF1F2937)
+                                                            Column(
+                                                                modifier = Modifier.weight(1f),
+                                                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = "חגורה $beltName",
+                                                                    style = MaterialTheme.typography.titleSmall,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color(0xFF1F2937)
+                                                                )
+
+                                                                Text(
+                                                                    text = if (hasDate) {
+                                                                        "תאריך קבלה: $currentDate"
+                                                                    } else {
+                                                                        "אין תאריך קבלה"
+                                                                    },
+                                                                    style = MaterialTheme.typography.bodySmall,
+                                                                    color = if (hasDate) Color(0xFF0F766E) else Color(0xFF94A3B8)
+                                                                )
+                                                            }
+
+                                                            Icon(
+                                                                imageVector = if (hasDate) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                                                contentDescription = null,
+                                                                tint = if (hasDate) Color(0xFF16A34A) else Color(0xFFDC2626)
+                                                            )
+
+                                                            Spacer(Modifier.width(6.dp))
+
+                                                            Icon(
+                                                                imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                                contentDescription = null,
+                                                                tint = Color(0xFF64748B)
                                                             )
                                                         }
 
-                                                        OutlinedTextField(
-                                                            value = selectedDates[beltName].orEmpty(),
-                                                            onValueChange = { newValue ->
-                                                                val current = beltAwardDatesState[selected.id].orEmpty().toMutableMap()
-                                                                current[beltName] = newValue
-                                                                beltAwardDatesState[selected.id] = current
-                                                            },
-                                                            label = { Text("תאריך קבלה") },
-                                                            placeholder = { Text("YYYY-MM-DD") },
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            singleLine = true,
-                                                            shape = RoundedCornerShape(16.dp)
-                                                        )
+                                                        if (isExpanded) {
+                                                            OutlinedTextField(
+                                                                value = currentDate,
+                                                                onValueChange = { newValue ->
+                                                                    val current = beltAwardDatesState[selected.id]
+                                                                        .orEmpty()
+                                                                        .toMutableMap()
+
+                                                                    current[beltName] = newValue
+                                                                    beltAwardDatesState[selected.id] = current
+                                                                },
+                                                                label = { Text("תאריך קבלה") },
+                                                                placeholder = { Text("YYYY-MM-DD") },
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                singleLine = true,
+                                                                shape = RoundedCornerShape(16.dp)
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1130,6 +1232,7 @@ fun CoachTraineesScreen(
                                                     )
                                                 }
                                             }
+                                            }
                                         }
                                     }
 
@@ -1147,16 +1250,17 @@ fun CoachTraineesScreen(
                 }
             }
 
-            if (showStatsSheet) {
-                CoachGroupStatsPremiumScreen(
-                    stats = groupStats,
-                    profiles = uiProfiles,
-                    onClose = { showStatsSheet = false }
-                )
+                if (showStatsSheet) {
+                    CoachGroupStatsPremiumScreen(
+                        stats = groupStats,
+                        profiles = uiProfiles,
+                        onClose = { showStatsSheet = false }
+                    )
+                }
             }
         }
     }
-}
+
 
 @Composable
 private fun LabeledField(label: String, value: String) {

@@ -430,94 +430,8 @@ fun SubscriptionScreen(
 
     val isAuthed by rememberAuthState(ctx)
 
-    // ---------- אם זה אתה (מנהל) – בלי Billing, בלי רכישה ----------
-    if (isAdmin) {
-        Scaffold(
-            topBar = {
-                if (!isAuthed) {
-                    TopAppBar(title = { Text("ניהול מנוי") })
-                } else {
-                    il.kmi.app.ui.KmiTopBar(
-                        title = if (isEnglish) "Subscription" else "ניהול מנוי",
-                        lockSearch = true,
-                        showBottomActions = true,
-                        showTopHome = false,
-                        centerTitle = true,
-                        onHome = onOpenHome,
-                        extraActions = { }
-                    )
-                }
-            }
-        ) { padding ->
-            Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .padding(16.dp)
-                    .fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF6D4CC2)
-                    )
-                ) {
-                    Column(
-                        Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        Text(
-                            "מצב מנוי: מנהל מערכת",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Right
-                        )
-                        Text(
-                            "כמנהל מערכת כל התכנים באפליקציה פתוחים עבורך ואין צורך ברכישת מנוי.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.92f),
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Right
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = onOpenHome,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("חזרה למסך הבית")
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        // יציאה ממצב מנהל
-                        KmiAccess.setAdmin(userSp, false)
-                        isAdmin = false
-                        Toast.makeText(
-                            ctx,
-                            "יצאת ממצב מנהל.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("יציאה ממצב מנהל")
-                }
-            }
-        }
-
-        // 👈 אין המשך – לא מריצים Billing בכלל למנהל
-        return
-    }
-
-    // ---------- מכאן והלאה – התנהגות רגילה למשתמשים רגילים ----------
+    // גם במצב אדמין אנחנו ממשיכים למסך המנוי הרגיל.
+    // בזמן בדיקות אדמין לא עוקף מנוי, כדי שנוכל לבדוק נעילה/פתיחה לפי Google Play.
 
     // עטיפה ב-runCatching כדי שלא יפיל את האפליקציה במקרה של שגיאה
     val repo = remember {
@@ -598,16 +512,27 @@ fun SubscriptionScreen(
     val effectiveActive = remember(subscriptionUiRefreshTick, state.active, savedAccessUntil) {
         val now = System.currentTimeMillis()
 
-        state.active ||
-                userSp.getBoolean("has_full_access", false) ||
-                userSp.getBoolean("full_access", false) ||
-                userSp.getBoolean("subscription_active", false) ||
-                userSp.getBoolean("is_subscribed", false) ||
-                subsSp.getBoolean("has_full_access", false) ||
-                subsSp.getBoolean("full_access", false) ||
-                subsSp.getBoolean("subscription_active", false) ||
-                subsSp.getBoolean("is_subscribed", false) ||
-                ((savedAccessUntil ?: 0L) > now)
+        val userActive = KmiAccess.hasFullAccess(userSp)
+        val subsActive = KmiAccess.hasFullAccess(subsSp)
+        val timeActive = (savedAccessUntil ?: 0L) > now
+
+        val active =
+            state.active &&
+                    timeActive &&
+                    (userActive || subsActive || savedProductId != null)
+
+        android.util.Log.e(
+            "KMI_SUB_UI",
+            "effectiveActive resolved active=$active " +
+                    "stateActive=${state.active} " +
+                    "timeActive=$timeActive " +
+                    "userActive=$userActive " +
+                    "subsActive=$subsActive " +
+                    "savedProductId=$savedProductId " +
+                    "savedAccessUntil=$savedAccessUntil now=$now"
+        )
+
+        active
     }
 
     val activePlanLabel = when (savedProductId) {
@@ -1318,7 +1243,7 @@ fun SubscriptionScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "ניתן להזין קוד אדמין או קוד גישה לבודקים כדי לפתוח את האפליקציה ללא מנוי.",
+                                    text = "קוד אדמין מסמן את המשתמש כמנהל, אך בזמן בדיקות פתיחת התכנים מתבצעת לפי מנוי Google Play פעיל בלבד.",
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                                 OutlinedTextField(
@@ -1344,7 +1269,7 @@ fun SubscriptionScreen(
                                             devCode = ""
                                             Toast.makeText(
                                                 ctx,
-                                                "מצב מנהל הופעל – כל התכנים כעת פתוחים.",
+                                                "מצב מנהל הופעל. פתיחת תכנים עדיין תלויה במנוי פעיל בזמן בדיקות.",
                                                 Toast.LENGTH_LONG
                                             ).show()
                                         }
@@ -1354,7 +1279,7 @@ fun SubscriptionScreen(
                                             devCode = ""
                                             Toast.makeText(
                                                 ctx,
-                                                "גישה מלאה לבודק הופעלה במכשיר זה.",
+                                                "קוד בודק הופעל במכשיר זה.",
                                                 Toast.LENGTH_LONG
                                             ).show()
                                         }

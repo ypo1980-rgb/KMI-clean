@@ -49,6 +49,7 @@ import il.kmi.app.ui.rememberClickSound
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.shared.prefs.KmiPrefs
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -341,6 +342,15 @@ internal fun BeltPangoLayout(
 
     var accessRefreshTick by remember { mutableIntStateOf(0) }
 
+    // מרענן מצב גישה גם בלי שינוי ב-SharedPreferences,
+    // כדי שמנוי שפג יחזיר מנעולים גם כשהמשתמש נשאר במסך.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000L)
+            accessRefreshTick++
+        }
+    }
+
     DisposableEffect(userSp, subsSp) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
             if (
@@ -387,36 +397,8 @@ internal fun BeltPangoLayout(
     }
 
     val hasManagerAccess = remember(accessRefreshTick) {
-        val now = System.currentTimeMillis()
-
-        val userUntil = userSp.getLong("sub_access_until", 0L)
-        val subsUntil = subsSp.getLong("sub_access_until", 0L)
-
-        val userVerifiedAndValid =
-            userSp.getBoolean("google_subscription_verified", false) && userUntil > now
-
-        val subsVerifiedAndValid =
-            subsSp.getBoolean("google_subscription_verified", false) && subsUntil > now
-
-        KmiAccess.isAdmin(userSp) ||
-                KmiAccess.hasFullAccess(userSp) ||
-                KmiAccess.hasFullAccess(subsSp) ||
-
-                userVerifiedAndValid ||
-                subsVerifiedAndValid ||
-
-                userSp.getBoolean("has_full_access", false) ||
-                userSp.getBoolean("full_access", false) ||
-                userSp.getBoolean("subscription_active", false) ||
-                userSp.getBoolean("is_subscribed", false) ||
-
-                subsSp.getBoolean("has_full_access", false) ||
-                subsSp.getBoolean("full_access", false) ||
-                subsSp.getBoolean("subscription_active", false) ||
-                subsSp.getBoolean("is_subscribed", false) ||
-
-                !userSp.getString("sub_product", "").isNullOrBlank() ||
-                !subsSp.getString("sub_product", "").isNullOrBlank()
+        KmiAccess.hasFullAccess(userSp) ||
+                KmiAccess.hasFullAccess(subsSp)
     }
 
     val accessMode = AccessModeResolver.resolve(

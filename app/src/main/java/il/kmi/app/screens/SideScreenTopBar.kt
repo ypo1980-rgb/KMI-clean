@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.DrawerBridge
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -71,20 +72,47 @@ fun SideScreenTopBar(
     title: String,
     onClose: () -> Unit
 ) {
+    val ctx = LocalContext.current
+    val languageManager = remember { AppLanguageManager(ctx) }
+    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
     KmiTopBar(
         title = title,
         centerTitle = true,
         showMenu = false,
 
-        // ✅ משתמשים במנגנון הסגירה המובנה של KmiTopBar
-        // במקום extraActions, כדי לא לדחוף את סרגל האייקונים.
-        onBack = onClose,
+        // לא משתמשים ב-onBack כדי שלא יופיע חץ ולא יתהפך צד ב-RTL.
+        // ה-X מוצג דרך actions:
+        // עברית -> צד שמאל
+        // אנגלית -> צד ימין
+        onBack = null,
+        useCloseIcon = false,
 
         showBottomActions = true,
         showRoleBadge = false,
         showModePill = false,
         lockSearch = true,
-        lockHome = false
+        lockHome = false,
+
+        // מפעיל את אייקון הבית בסרגל האייקונים התחתון.
+        // מסתירים את הבית מהכותרת העליונה כדי שלא יופיע אייקון נוסף ליד ה-X.
+        onHome = { DrawerBridge.openHome() },
+        showTopHome = false,
+
+        // במסכי צד לא מציגים שיתוף בכותרת העליונה.
+        // השיתוף נשאר בסרגל האייקונים התחתון.
+        showTopShare = false,
+
+        extraActions = {
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = if (isEnglish) "Close" else "סגור",
+                    tint = Color(0xFF4B478F)
+                )
+            }
+            Spacer(Modifier.width(4.dp))
+        }
     )
 }
 

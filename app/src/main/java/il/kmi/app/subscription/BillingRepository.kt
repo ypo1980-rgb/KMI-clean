@@ -337,6 +337,60 @@ class BillingRepository(
         return until
     }
 
+    private fun closeExpiredAccessForToken(
+        expiredToken: String,
+        expiredUntil: Long,
+        ownedProduct: String?
+    ) {
+        val now = System.currentTimeMillis()
+
+        sp.edit()
+            .putBoolean("full_access", false)
+            .putBoolean("has_full_access", false)
+            .putBoolean("subscription_active", false)
+            .putBoolean("is_subscribed", false)
+            .putBoolean("google_subscription_verified", false)
+            .putLong("google_subscription_checked_at", now)
+            .putString("expired_sub_token", expiredToken)
+            .putLong("expired_sub_access_until", expiredUntil)
+            .putString("expired_sub_product", ownedProduct.orEmpty())
+            .putString("last_sub_token", expiredToken)
+            .putString("last_sub_product", ownedProduct.orEmpty())
+            .remove("sub_product")
+            .remove("sub_token")
+            .remove("sub_purchase_time")
+            .remove("sub_access_until")
+            .putLong("access_changed_at", now)
+            .commit()
+
+        userSp.edit()
+            .putBoolean("full_access", false)
+            .putBoolean("has_full_access", false)
+            .putBoolean("subscription_active", false)
+            .putBoolean("is_subscribed", false)
+            .putBoolean("google_subscription_verified", false)
+            .putLong("google_subscription_checked_at", now)
+            .putString("expired_sub_token", expiredToken)
+            .putLong("expired_sub_access_until", expiredUntil)
+            .putString("expired_sub_product", ownedProduct.orEmpty())
+            .putString("last_sub_token", expiredToken)
+            .putString("last_sub_product", ownedProduct.orEmpty())
+            .remove("sub_product")
+            .remove("sub_token")
+            .remove("sub_purchase_time")
+            .remove("sub_access_until")
+            .putLong("access_changed_at", now)
+            .commit()
+
+        KmiAccess.setFullAccess(sp, false)
+        KmiAccess.setFullAccess(userSp, false)
+
+        Log.e(
+            TAG,
+            "ACCESS CLOSED EXPIRED TOKEN token=$expiredToken product=$ownedProduct expiredUntil=$expiredUntil now=$now"
+        )
+    }
+
     private fun writeAccessEverywhere(
         enabled: Boolean,
         ownedProduct: String?,
@@ -345,58 +399,137 @@ class BillingRepository(
     ) {
         val now = System.currentTimeMillis()
 
+        val existingAccessUntil = maxOf(
+            sp.getLong("sub_access_until", 0L),
+            userSp.getLong("sub_access_until", 0L)
+        )
+
+        val existingToken =
+            sp.getString("sub_token", "").orEmpty()
+                .ifBlank { userSp.getString("sub_token", "").orEmpty() }
+
+        val expiredToken =
+            sp.getString("expired_sub_token", "").orEmpty()
+                .ifBlank { userSp.getString("expired_sub_token", "").orEmpty() }
+
+        val lastToken =
+            sp.getString("last_sub_token", "").orEmpty()
+                .ifBlank { userSp.getString("last_sub_token", "").orEmpty() }
+
+        val currentToken = purchaseToken.orEmpty()
+
+        val isSamePurchaseToken =
+            enabled &&
+                    currentToken.isNotBlank() &&
+                    existingToken == currentToken
+
+        val isExpiredPurchaseToken =
+            enabled &&
+                    currentToken.isNotBlank() &&
+                    expiredToken == currentToken
+
+        val wasLastTokenAlreadyClosed =
+            enabled &&
+                    currentToken.isNotBlank() &&
+                    lastToken == currentToken &&
+                    existingToken.isBlank() &&
+                    existingAccessUntil == 0L
+
         val accessUntil = if (enabled) {
-            calculateAccessUntilForSubscription(
-                productId = ownedProduct.orEmpty(),
-                purchaseTime = purchaseTime ?: now
-            )
+            when {
+                isExpiredPurchaseToken -> {
+                    Log.e(
+                        TAG,
+                        "ACCESS WRITE BLOCKED expired token cannot reopen token=$currentToken"
+                    )
+                    0L
+                }
+
+                wasLastTokenAlreadyClosed -> {
+                    Log.e(
+                        TAG,
+                        "ACCESS WRITE BLOCKED last token was already closed token=$currentToken"
+                    )
+                    0L
+                }
+
+                isSamePurchaseToken && existingAccessUntil > now -> {
+                    Log.e(
+                        TAG,
+                        "ACCESS UNTIL REUSED sameToken=true existingUntil=$existingAccessUntil now=$now"
+                    )
+                    existingAccessUntil
+                }
+
+                isSamePurchaseToken && existingAccessUntil > 0L && existingAccessUntil <= now -> {
+                    closeExpiredAccessForToken(
+                        expiredToken = currentToken,
+                        expiredUntil = existingAccessUntil,
+                        ownedProduct = ownedProduct
+                    )
+
+                    Log.e(
+                        TAG,
+                        "ACCESS WRITE BLOCKED same token expired existingUntil=$existingAccessUntil now=$now"
+                    )
+                    0L
+                }
+
+                else -> {
+                    calculateAccessUntilForSubscription(
+                        productId = ownedProduct.orEmpty(),
+                        purchaseTime = purchaseTime ?: now
+                    )
+                }
+            }
         } else {
             0L
         }
 
-        KmiAccess.setFullAccess(sp, enabled)
-        KmiAccess.setFullAccess(userSp, enabled)
+        val finalEnabled = enabled && accessUntil > now
+
+        KmiAccess.setFullAccess(sp, finalEnabled)
+        KmiAccess.setFullAccess(userSp, finalEnabled)
 
         sp.edit()
-            .putBoolean("full_access", enabled)
-            .putBoolean("has_full_access", enabled)
-            .putBoolean("subscription_active", enabled)
-            .putBoolean("is_subscribed", enabled)
-
-            // ✅ מקור אמת נוסף למסכים: המנוי אומת מול Google Play
-            .putBoolean("google_subscription_verified", enabled)
+            .putBoolean("full_access", finalEnabled)
+            .putBoolean("has_full_access", finalEnabled)
+            .putBoolean("subscription_active", finalEnabled)
+            .putBoolean("is_subscribed", finalEnabled)
+            .putBoolean("google_subscription_verified", finalEnabled)
             .putLong("google_subscription_checked_at", now)
-
-            .putString("sub_product", if (enabled) ownedProduct.orEmpty() else "")
-            .putString("sub_token", if (enabled) purchaseToken.orEmpty() else "")
-            .putLong("sub_purchase_time", purchaseTime ?: 0L)
-            .putLong("sub_access_until", accessUntil)
+            .putString("sub_product", if (finalEnabled) ownedProduct.orEmpty() else "")
+            .putString("sub_token", if (finalEnabled) currentToken else "")
+            .putLong("sub_purchase_time", if (finalEnabled) purchaseTime ?: 0L else 0L)
+            .putLong("sub_access_until", if (finalEnabled) accessUntil else 0L)
+            .putString("last_sub_token", if (currentToken.isNotBlank()) currentToken else sp.getString("last_sub_token", "").orEmpty())
+            .putString("last_sub_product", ownedProduct.orEmpty())
             .putLong("access_changed_at", now)
             .commit()
 
         userSp.edit()
-            .putBoolean("full_access", enabled)
-            .putBoolean("has_full_access", enabled)
-            .putBoolean("subscription_active", enabled)
-            .putBoolean("is_subscribed", enabled)
-
-            // ✅ מקור אמת נוסף למסכים: המנוי אומת מול Google Play
-            .putBoolean("google_subscription_verified", enabled)
+            .putBoolean("full_access", finalEnabled)
+            .putBoolean("has_full_access", finalEnabled)
+            .putBoolean("subscription_active", finalEnabled)
+            .putBoolean("is_subscribed", finalEnabled)
+            .putBoolean("google_subscription_verified", finalEnabled)
             .putLong("google_subscription_checked_at", now)
-
-            .putString("sub_product", if (enabled) ownedProduct.orEmpty() else "")
-            .putString("sub_token", if (enabled) purchaseToken.orEmpty() else "")
-            .putLong("sub_purchase_time", purchaseTime ?: 0L)
-            .putLong("sub_access_until", accessUntil)
+            .putString("sub_product", if (finalEnabled) ownedProduct.orEmpty() else "")
+            .putString("sub_token", if (finalEnabled) currentToken else "")
+            .putLong("sub_purchase_time", if (finalEnabled) purchaseTime ?: 0L else 0L)
+            .putLong("sub_access_until", if (finalEnabled) accessUntil else 0L)
+            .putString("last_sub_token", if (currentToken.isNotBlank()) currentToken else userSp.getString("last_sub_token", "").orEmpty())
+            .putString("last_sub_product", ownedProduct.orEmpty())
             .putLong("access_changed_at", now)
             .commit()
 
         Log.e(
             TAG,
-            "ACCESS WRITE enabled=$enabled product=$ownedProduct " +
+            "ACCESS WRITE requestedEnabled=$enabled finalEnabled=$finalEnabled product=$ownedProduct " +
                     "purchaseTime=${purchaseTime ?: 0L} " +
                     "accessUntil=$accessUntil " +
                     "accessUntilInMinutesFromNow=${if (accessUntil > now) (accessUntil - now) / 60_000L else 0L} " +
+                    "existingToken=$existingToken lastToken=$lastToken expiredToken=$expiredToken currentToken=$currentToken " +
                     "user_has_full_access=${userSp.getBoolean("has_full_access", false)} " +
                     "user_full_access=${userSp.getBoolean("full_access", false)} " +
                     "user_subscription_active=${userSp.getBoolean("subscription_active", false)}"
@@ -413,27 +546,86 @@ class BillingRepository(
 
         if (sub != null) {
             val ownedProduct = sub.products.firstOrNull()
+            val now = System.currentTimeMillis()
+            val currentToken = sub.purchaseToken
+
+            val existingToken =
+                sp.getString("sub_token", "").orEmpty()
+                    .ifBlank { userSp.getString("sub_token", "").orEmpty() }
+
+            val existingAccessUntil = maxOf(
+                sp.getLong("sub_access_until", 0L),
+                userSp.getLong("sub_access_until", 0L)
+            )
+
+            val expiredToken =
+                sp.getString("expired_sub_token", "").orEmpty()
+                    .ifBlank { userSp.getString("expired_sub_token", "").orEmpty() }
+
+            val expiredUntil = maxOf(
+                sp.getLong("expired_sub_access_until", 0L),
+                userSp.getLong("expired_sub_access_until", 0L)
+            )
+
+            val lastToken =
+                sp.getString("last_sub_token", "").orEmpty()
+                    .ifBlank { userSp.getString("last_sub_token", "").orEmpty() }
+
+            val isSameToken = existingToken == currentToken
+
+            val isExpiredSameToken =
+                isSameToken && existingAccessUntil > 0L && existingAccessUntil <= now
+
+            val isAlreadyMarkedExpired =
+                expiredToken == currentToken
+
+            val wasLastTokenAlreadyClosed =
+                lastToken == currentToken &&
+                        existingToken.isBlank() &&
+                        existingAccessUntil == 0L
 
             Log.e(
                 TAG,
-                "ACTIVE subscription detected product=$ownedProduct state=${sub.purchaseState} acknowledged=${sub.isAcknowledged}"
+                "ACTIVE subscription detected product=$ownedProduct state=${sub.purchaseState} " +
+                        "acknowledged=${sub.isAcknowledged} " +
+                        "isSameToken=$isSameToken existingUntil=$existingAccessUntil now=$now " +
+                        "expiredToken=$expiredToken expiredUntil=$expiredUntil lastToken=$lastToken " +
+                        "isExpiredSameToken=$isExpiredSameToken isAlreadyMarkedExpired=$isAlreadyMarkedExpired " +
+                        "wasLastTokenAlreadyClosed=$wasLastTokenAlreadyClosed"
             )
 
-            // יש מנוי פעיל
+            if (isExpiredSameToken || isAlreadyMarkedExpired || wasLastTokenAlreadyClosed) {
+                val closeUntil = when {
+                    existingAccessUntil > 0L -> existingAccessUntil
+                    expiredUntil > 0L -> expiredUntil
+                    else -> now
+                }
+
+                closeExpiredAccessForToken(
+                    expiredToken = currentToken,
+                    expiredUntil = closeUntil,
+                    ownedProduct = ownedProduct
+                )
+
+                _state.update {
+                    it.copy(
+                        active = false,
+                        productId = null,
+                        purchaseToken = null,
+                        renewalDate = null,
+                        error = null
+                    )
+                }
+
+                refreshPriceState()
+                return
+            }
+
+            // יש מנוי פעיל חדש/תקף
             acknowledgeIfNeeded(sub)
 
-            // נשמור את פרטי המנוי הטכניים
-            sp.edit()
-                .putString("sub_product", ownedProduct)
-                .putString("sub_token", sub.purchaseToken)
-                .putLong("sub_purchase_time", sub.purchaseTime)
-                .apply()
-
-            userSp.edit()
-                .putString("sub_product", ownedProduct)
-                .putLong("sub_purchase_time", sub.purchaseTime)
-                .apply()
-
+            // את פרטי המנוי שומרים רק בתוך writeAccessEverywhere,
+            // כדי שלא נייצר בטעות "אותו טוקן פעיל" לפני בדיקת תוקף.
             writeAccessEverywhere(
                 enabled = true,
                 ownedProduct = ownedProduct,
@@ -441,17 +633,24 @@ class BillingRepository(
                 purchaseTime = sub.purchaseTime
             )
 
+            val activeAccessUntil = maxOf(
+                sp.getLong("sub_access_until", 0L),
+                userSp.getLong("sub_access_until", 0L)
+            )
+
+            val activeNow = activeAccessUntil > System.currentTimeMillis()
+
             Log.e(
                 TAG,
-                "ACCESS OPENED VERIFIED product=$ownedProduct"
+                "ACCESS OPENED VERIFIED product=$ownedProduct activeNow=$activeNow activeAccessUntil=$activeAccessUntil"
             )
 
             _state.update {
                 it.copy(
-                    active = true,
-                    productId = sub.products.firstOrNull(),
-                    purchaseToken = sub.purchaseToken,
-                    renewalDate = sub.purchaseTime,
+                    active = activeNow,
+                    productId = if (activeNow) sub.products.firstOrNull() else null,
+                    purchaseToken = if (activeNow) sub.purchaseToken else null,
+                    renewalDate = if (activeNow) activeAccessUntil else null,
                     error = null
                 )
             }
@@ -464,6 +663,7 @@ class BillingRepository(
                 .remove("sub_product")
                 .remove("sub_token")
                 .remove("sub_purchase_time")
+                .remove("sub_access_until")
                 .remove("google_subscription_verified")
                 .remove("google_subscription_checked_at")
                 .apply()
@@ -472,6 +672,7 @@ class BillingRepository(
                 .remove("sub_product")
                 .remove("sub_token")
                 .remove("sub_purchase_time")
+                .remove("sub_access_until")
                 .remove("google_subscription_verified")
                 .remove("google_subscription_checked_at")
                 .apply()

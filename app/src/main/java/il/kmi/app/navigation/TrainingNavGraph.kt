@@ -81,9 +81,18 @@ fun NavGraphBuilder.trainingNavGraph(
             nav.context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
         }
 
+        val subsSp = remember(nav.context) {
+            nav.context.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
+        }
+
+        fun hasPremiumAccessNow(): Boolean {
+            return KmiAccess.hasFullAccess(accessSp) ||
+                    KmiAccess.hasFullAccess(subsSp)
+        }
+
         fun shouldBlockPremiumTopic(raw: String): Boolean {
             val locked = isLockedPremiumTopic(raw)
-            val hasAccess = KmiAccess.isAdmin(accessSp)
+            val hasAccess = hasPremiumAccessNow()
             val result = locked && !hasAccess
 
             Log.e(
@@ -286,7 +295,7 @@ fun NavGraphBuilder.trainingNavGraph(
                 )
                 println("KMI_SUB BeltQuestionsByBeltScreen onOpenSubTopic belt=${belt.id} topic='$topic' sub='$subTopic'")
 
-                val hasAccessNow = KmiAccess.hasFullAccess(accessSp)
+                val hasAccessNow = hasPremiumAccessNow()
 
                 if (
                     (shouldBlockPremiumTopic(topic) ||
@@ -309,19 +318,31 @@ fun NavGraphBuilder.trainingNavGraph(
             onOpenHardSubjectRoute = { belt, subjectId ->
                 vm.setSelectedBelt(belt)
 
-                val route = il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
-                    belt = belt,
-                    topic = subjectId
-                )
+                if (shouldBlockPremiumTopic(subjectId) || isLockedPremiumDefenseRoute(subjectId)) {
+                    Log.e(
+                        "KMI_LOCK_TRACE",
+                        "BeltQ onOpenHardSubjectRoute BLOCKED -> Subscription subjectId='$subjectId'"
+                    )
 
-                Log.e(
-                    "KMI_SUB",
-                    "training onOpenHardSubjectRoute belt=${belt.id} subjectId='$subjectId' route='$route'"
-                )
+                    nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                } else {
+                    val route = il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
+                        belt = belt,
+                        topic = subjectId
+                    )
 
-                nav.navigate(route) {
-                    launchSingleTop = true
-                    restoreState = true
+                    Log.e(
+                        "KMI_SUB",
+                        "training onOpenHardSubjectRoute belt=${belt.id} subjectId='$subjectId' route='$route'"
+                    )
+
+                    nav.navigate(route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             },
 
@@ -409,8 +430,17 @@ fun NavGraphBuilder.trainingNavGraph(
             nav.context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
         }
 
+        val subsSp = remember(nav.context) {
+            nav.context.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
+        }
+
+        fun hasPremiumAccessNow(): Boolean {
+            return KmiAccess.hasFullAccess(accessSp) ||
+                    KmiAccess.hasFullAccess(subsSp)
+        }
+
         fun shouldBlockPremiumTopic(raw: String): Boolean {
-            return isLockedPremiumTopic(raw) && !KmiAccess.isAdmin(accessSp)
+            return isLockedPremiumTopic(raw) && !hasPremiumAccessNow()
         }
 
         BeltQuestionsByTopicScreen(
@@ -502,7 +532,11 @@ fun NavGraphBuilder.trainingNavGraph(
             onOpenDefenseList = { belt, kind, pick ->
                 vm.setSelectedBelt(belt)
 
-                if (shouldBlockPremiumTopic(kind) || shouldBlockPremiumTopic(pick)) {
+                if (
+                    shouldBlockPremiumTopic(kind) ||
+                    shouldBlockPremiumTopic(pick) ||
+                    isLockedPremiumDefenseRoute(kind, pick)
+                ) {
                     nav.navigate(Route.Subscription.route) {
                         launchSingleTop = true
                         restoreState = true

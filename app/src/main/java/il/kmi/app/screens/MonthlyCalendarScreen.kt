@@ -37,8 +37,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import il.kmi.app.training.TrainingCatalog
@@ -47,6 +50,12 @@ import il.kmi.shared.prefs.KmiPrefs
 import java.io.BufferedReader
 import java.time.*
 import java.util.Locale
+
+private data class CalendarTrainingItem(
+    val branch: String,
+    val group: String,
+    val timeText: String
+)
 
 /* -------------------------------------------------------------------------- */
 /*                              Debug banner                                  */
@@ -176,6 +185,24 @@ fun MonthlyCalendarScreen(
                     ym = ym,
                     branches = normBranchKeys,
                     groups   = normGroupKeys,
+                    skipDates = holidayDates
+                )
+            }
+        }
+
+        // פירוט אימונים לפי תאריך — להצגה בכרטיס התחתון של היום הנבחר
+        val trainingsByDate: Map<LocalDate, List<CalendarTrainingItem>> = remember(
+            ym, region, normBranchKeys, normGroupKeys, holidayDates
+        ) {
+            if (region.isBlank() || normBranchKeys.isEmpty() || normGroupKeys.isEmpty()) {
+                emptyMap()
+            } else if (!TrainingCatalog.isRegionActive(region)) {
+                emptyMap()
+            } else {
+                mergeMonthlyTrainingItems(
+                    ym = ym,
+                    branches = normBranchKeys,
+                    groups = normGroupKeys,
                     skipDates = holidayDates
                 )
             }
@@ -403,10 +430,15 @@ fun MonthlyCalendarScreen(
                     },
                     label = "month-transition"
                 ) { animatedYm ->
+                    val calendarScrollState = rememberScrollState()
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
+                            .verticalScroll(calendarScrollState)
+                            .navigationBarsPadding()
                             .padding(horizontal = 12.dp, vertical = 12.dp)
+                            .padding(bottom = 28.dp)
                     ) {
 
                         // כותרות ימי השבוע
@@ -465,8 +497,11 @@ fun MonthlyCalendarScreen(
                                         text = shortWeekdayLabel(dow),
                                         modifier = Modifier.weight(1f),
                                         textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontWeight = FontWeight.ExtraBold
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = if (isEnglish) 12.sp else 14.sp
                                         ),
                                         color = Color.White.copy(alpha = 0.92f)
                                     )
@@ -474,29 +509,34 @@ fun MonthlyCalendarScreen(
                             }
                         }
 
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(6.dp))
 
-                        // דיאגנוסטיקה
-                        DebugBanner(
-                            region = region,
-                            normBranchKey = primaryBranch,
-                            normGroupKey = primaryGroup,
-                            ym = animatedYm,
-                            holidaysByDate = holidaysByDate,
-                            trainingsCountByDate = trainingsCountByDate,
-                            missingReason = missingReason
-                        )
-
+                        // הודעה נקייה למשתמש אם חסרים פרטי סניף / אזור / קבוצה.
+                        // לא מציגים יותר באנר דיאגנוסטיקה במסך עצמו.
                         if (missingReason != null) {
-                            Text(
-                                text = missingReason,
-                                color = Color.Red,
-                                style = MaterialTheme.typography.bodyMedium,
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = Color.White.copy(alpha = 0.10f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.12f)
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 6.dp),
-                                textAlign = TextAlign.Center
-                            )
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = tr(
+                                        "לא נמצאו אימונים להצגה. יש להשלים אזור, סניף וקבוצה בפרופיל.",
+                                        "No trainings found. Please complete region, branch, and group in your profile."
+                                    ),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
 
                         // גריד החודש
@@ -543,11 +583,12 @@ fun MonthlyCalendarScreen(
                                 }
                             }
 
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(4.dp))
 
                             // אינדיקציה ל"יום הנבחר"
                             selectedDate?.let { sel ->
                                 val selTrainings = trainingsCountByDate[sel] ?: 0
+                                val selectedTrainingItems = trainingsByDate[sel].orEmpty()
                                 val selHoliday = holidaysByDate[sel]
                                 val dowName = sel.dayOfWeek.getDisplayName(
                                     java.time.format.TextStyle.FULL,
@@ -582,7 +623,7 @@ fun MonthlyCalendarScreen(
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(160.dp)
+                                            .heightIn(min = 132.dp)
                                             .background(
                                                 Brush.verticalGradient(
                                                     colors = listOf(
@@ -613,13 +654,43 @@ fun MonthlyCalendarScreen(
                                             Spacer(Modifier.height(10.dp))
 
                                             Text(
-                                                text = if (infoParts.isEmpty()) {
-                                                    tr("אין אירועים ביום זה.", "No events on this day.")
-                                                } else {
-                                                    infoParts.joinToString(" • ")
+                                                text = when {
+                                                    selectedTrainingItems.isNotEmpty() -> {
+                                                        val title = tr("פירוט אימונים:", "Training details:")
+                                                        val rows = selectedTrainingItems
+                                                            .sortedBy { it.timeText }
+                                                            .joinToString("\n") { item ->
+                                                                tr(
+                                                                    "• ${item.timeText} · ${item.branch} · ${item.group}",
+                                                                    "• ${item.timeText} · ${item.branch} · ${item.group}"
+                                                                )
+                                                            }
+
+                                                        buildString {
+                                                            append(title)
+                                                            append("\n")
+                                                            append(rows)
+
+                                                            if (!selHoliday.isNullOrBlank()) {
+                                                                append("\n")
+                                                                append(tr("חג / מועד: $selHoliday", "Holiday: $selHoliday"))
+                                                            }
+                                                        }
+                                                    }
+
+                                                    infoParts.isEmpty() -> {
+                                                        tr("אין אירועים ביום זה.", "No events on this day.")
+                                                    }
+
+                                                    else -> {
+                                                        infoParts.joinToString(" • ")
+                                                    }
                                                 },
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = Color.White.copy(alpha = 0.90f),
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    fontSize = 13.sp,
+                                                    lineHeight = 18.sp
+                                                ),
+                                                color = Color.White.copy(alpha = 0.92f),
                                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -667,6 +738,52 @@ fun MonthlyCalendarScreen(
 /*                             helpers                                         */
 /* -------------------------------------------------------------------------- */
 /** יוצר מיפוי לכל המופעים החודשיים לפי לו״ז שבועי */
+private fun buildMonthlyTrainingItems(
+    ym: YearMonth,
+    branch: String,
+    group: String,
+    skipDates: Set<LocalDate> = emptySet()
+): Map<LocalDate, List<CalendarTrainingItem>> {
+    val base = TrainingCatalog.trainingsFor(branch, group)
+    if (base.isEmpty()) return emptyMap()
+
+    val startOfMonth = ym.atDay(1)
+    val endOfMonth = ym.atEndOfMonth()
+
+    val out = linkedMapOf<LocalDate, MutableList<CalendarTrainingItem>>()
+
+    base.forEach { td ->
+        val cal = td.cal
+        val dow = cal.get(java.util.Calendar.DAY_OF_WEEK)
+        val first = firstDateInMonthForDow(startOfMonth, dow)
+
+        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val minute = cal.get(java.util.Calendar.MINUTE)
+        val timeText = "%02d:%02d".format(hour, minute)
+
+        var d = first
+        while (!d.isAfter(endOfMonth)) {
+            if (d !in skipDates) {
+                out.getOrPut(d) { mutableListOf() }
+                    .add(
+                        CalendarTrainingItem(
+                            branch = branch,
+                            group = group,
+                            timeText = timeText
+                        )
+                    )
+            }
+
+            d = d.plusDays(7)
+        }
+    }
+
+    return out.mapValues { (_, items) ->
+        items.sortedBy { it.timeText }
+    }
+}
+
+/** יוצר ספירה חודשית של אימונים לפי תאריך */
 private fun buildMonthlyTrainingCount(
     ym: YearMonth,
     branch: String,
@@ -680,6 +797,7 @@ private fun buildMonthlyTrainingCount(
     val endOfMonth = ym.atEndOfMonth()
 
     val counts = HashMap<LocalDate, Int>()
+
     base.forEach { td ->
         val cal = td.cal
         val dow = cal.get(java.util.Calendar.DAY_OF_WEEK)
@@ -690,10 +808,40 @@ private fun buildMonthlyTrainingCount(
             if (d !in skipDates) {
                 counts[d] = (counts[d] ?: 0) + 1
             }
+
             d = d.plusDays(7)
         }
     }
+
     return counts
+}
+
+private fun mergeMonthlyTrainingItems(
+    ym: YearMonth,
+    branches: List<String>,
+    groups: List<String>,
+    skipDates: Set<LocalDate> = emptySet()
+): Map<LocalDate, List<CalendarTrainingItem>> {
+    val out = linkedMapOf<LocalDate, MutableList<CalendarTrainingItem>>()
+
+    for (b in branches) {
+        for (g in groups) {
+            val m = buildMonthlyTrainingItems(
+                ym = ym,
+                branch = b,
+                group = g,
+                skipDates = skipDates
+            )
+
+            m.forEach { (date, items) ->
+                out.getOrPut(date) { mutableListOf() }.addAll(items)
+            }
+        }
+    }
+
+    return out.mapValues { (_, items) ->
+        items.sortedBy { it.timeText }
+    }
 }
 
 /** איחוד של כמה סניפים * כמה קבוצות */
@@ -843,8 +991,8 @@ private fun DayCell(
 
     Box(
         modifier = modifier
-            .aspectRatio(0.82f)
-            .padding(3.dp)
+            .aspectRatio(0.74f)
+            .padding(2.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale

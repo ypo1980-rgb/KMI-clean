@@ -11,9 +11,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.*
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import il.kmi.shared.localization.AppLanguageManager
@@ -34,6 +31,8 @@ import il.yuval.ui.theme.AppTheme
 import il.kmi.shared.prefs.LegacyPrefsMigration
 
 // --------------------------------------------------------------
+
+private const val SUPPRESS_NEXT_DRAWER_OPEN_KEY = "kmi_suppress_next_drawer_open"
 
 /**
  * אנדרואיד-נטו: נקודת כניסה דקה שמפעילה UI.
@@ -104,24 +103,55 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         // -------------------- UI --------------------
         setContent {
 
-            // 1) טוענים את המצב הראשוני מ־SharedPreferences
+            // 1) טוענים את המצב הראשוני.
+            // ברירת מחדל חדשה: מצב בהיר.
+            // כל ערך ישן כמו "system" מומר ל-light כדי לא ללכת לפי מצב המכשיר.
+            val rawThemeMode = kmiPrefs.themeMode
+                .ifBlank { sp.getString("theme_mode", "") ?: "" }
+                .ifBlank { "light" }
+
+            val normalizedThemeMode = when (rawThemeMode) {
+                "dark" -> "dark"
+                "light" -> "light"
+                else -> "light"
+            }
+
             var themeMode by remember {
-                mutableStateOf(kmiPrefs.themeMode.ifBlank {
-                    sp.getString("theme_mode", "system") ?: "system"
-                })
+                mutableStateOf(normalizedThemeMode)
             }
 
-            // 2) פונקציה שמשנה גם את ה־State וגם נשמרת ב-SP
+            LaunchedEffect(Unit) {
+                if (
+                    kmiPrefs.themeMode != normalizedThemeMode ||
+                    sp.getString("theme_mode", "") != normalizedThemeMode
+                ) {
+                    kmiPrefs.themeMode = normalizedThemeMode
+                    sp.edit()
+                        .putString("theme_mode", normalizedThemeMode)
+                        .apply()
+                }
+            }
+
+            // 2) פונקציה שמשנה גם את ה־State וגם נשמרת ב-SP וב-KMP
             fun onThemeChange(mode: String) {
-                themeMode = mode
-                sp.edit().putString("theme_mode", mode).apply()
+                val normalized = when (mode) {
+                    "dark" -> "dark"
+                    "light" -> "light"
+                    "system" -> "system"
+                    else -> "light"
+                }
+
+                themeMode = normalized
+                kmiPrefs.themeMode = normalized
+                sp.edit().putString("theme_mode", normalized).apply()
             }
 
-            // 3) מחשבים darkTheme אמיתי
+            // 3) מחשבים darkTheme אמיתי.
+            // ברירת המחדל היא light; רק בחירה מפורשת dark מפעילה מצב כהה.
             val darkTheme = when (themeMode) {
-                "light" -> false
-                "dark"  -> true
-                else    -> isSystemInDarkTheme()
+                "dark" -> true
+                "system" -> isSystemInDarkTheme()
+                else -> false
             }
 
             // 4) נותנים לערכת הנושא את darkTheme
@@ -371,8 +401,38 @@ private fun AndroidAppRoot(
 
         "intro" -> {
             IntroScreen(
+                // כניסה רגילה / רישום בדרך הרגילה
                 onContinue = {
+                    android.util.Log.e(
+                        "KMI_INTRO_FLOW",
+                        "regular login / register button clicked"
+                    )
+
                     currentScreen = if (isRegistered) "main" else "register"
+                },
+
+                // Google Login הצליח והפרופיל מלא
+                // מדלגים על מסך משתמש חדש / משתמש קיים ונכנסים לבית
+                onProfileComplete = {
+                    android.util.Log.e(
+                        "KMI_INTRO_FLOW",
+                        "google profile complete -> main/home"
+                    )
+
+                    startRoute = Route.Home.route
+                    currentScreen = "main"
+                },
+
+                // Google Login הצליח אבל חסרים פרטי KMI
+                // מדלגים על מסך משתמש חדש / משתמש קיים ונכנסים ישר להשלמת פרטים
+                onProfileMissing = {
+                    android.util.Log.e(
+                        "KMI_INTRO_FLOW",
+                        "google profile missing -> google_profile_completion"
+                    )
+
+                    startRoute = "google_profile_completion"
+                    currentScreen = "main"
                 }
             )
         }
@@ -381,12 +441,19 @@ private fun AndroidAppRoot(
             MainApp(
                 sp = sp,
                 vm = vm,
-                startRoute = "registration",
+                startRoute = Route.RegistrationLanding.route,
                 kmiPrefs = kmiPrefs
             )
         }
 
         "main" -> {
+            LaunchedEffect(Unit) {
+                android.util.Log.e(
+                    "KMI_INTRO_FLOW",
+                    "entered main from intro - drawer open should be suppressed"
+                )
+            }
+
             MainApp(
                 sp = sp,
                 vm = vm,

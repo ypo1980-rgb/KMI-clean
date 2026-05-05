@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -51,6 +52,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import il.kmi.app.FcmTokenManager
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
@@ -85,6 +87,11 @@ fun ExistingUserTraineeScreen(
     val scroll = rememberScrollState()
     val appCtx = LocalContext.current
     val view = LocalView.current
+    val density = LocalDensity.current
+
+    // כשהמקלדת פתוחה, מסתירים את הקרדיט הקבוע בתחתית
+    // כדי שלא יעלה מעל המקלדת ויכסה את שדות ההתחברות.
+    val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
 
     val langManager = remember { AppLanguageManager(appCtx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
@@ -498,8 +505,16 @@ fun ExistingUserTraineeScreen(
 
                         val savedUsername = sp.getString("username", "") ?: ""
                         val savedPassword = sp.getString("password", "") ?: ""
-                        val credsOk = username.isNotBlank() &&
-                                username == savedUsername && password == savedPassword
+
+                        // אסור לאפשר התחברות עם סיסמה ריקה.
+                        // בעבר אם הסיסמה השמורה הייתה ריקה, המשתמש היה יכול להיכנס בלי להקליד סיסמה.
+                        val credsOk =
+                            username.isNotBlank() &&
+                                    password.isNotBlank() &&
+                                    savedUsername.isNotBlank() &&
+                                    savedPassword.isNotBlank() &&
+                                    username.trim().equals(savedUsername.trim(), ignoreCase = true) &&
+                                    password == savedPassword
 
                         val coachOk = if (isCoach) {
                             val cc = coachCode.normalizeCoachCode()
@@ -534,10 +549,10 @@ fun ExistingUserTraineeScreen(
                         if (credsOk && coachOk) {
                             loginError = false
 
-                            if (rememberMe) {
+                            if (rememberMe && password.isNotBlank()) {
                                 sp.edit()
                                     .putBoolean("remember_me_login", true)
-                                    .putString("remember_username", username)
+                                    .putString("remember_username", username.trim())
                                     .putString("remember_password", password)
                                     .apply()
                             } else {
@@ -673,34 +688,38 @@ fun ExistingUserTraineeScreen(
             }
 
             // ===== קרדיט קבוע בתחתית המסך =====
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(bottom = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-
-                Divider(
+            // מוצג רק כשהמקלדת סגורה.
+            // כשהמקלדת פתוחה הוא מוסתר כדי לא לכסות את שדות ההתחברות.
+            if (!isKeyboardVisible) {
+                Column(
                     modifier = Modifier
+                        .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                )
+                        .navigationBarsPadding()
+                        .padding(bottom = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
 
-                Spacer(Modifier.height(6.dp))
+                    Divider(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    )
 
-                Text(
-                    text = tr(
-                        "❤️ פותח באהבה ע\"י יובל פולק ❤️",
-                        "❤️ Developed with love by Yuval Polak ❤️"
-                    ),
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = if (LocalConfiguration.current.screenWidthDp <= 360) 14.sp else 16.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    textAlign = TextAlign.Center
-                )
+                    Spacer(Modifier.height(6.dp))
+
+                    Text(
+                        text = tr(
+                            "❤️ פותח באהבה ע\"י יובל פולק ❤️",
+                            "❤️ Developed with love by Yuval Polak ❤️"
+                        ),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = if (LocalConfiguration.current.screenWidthDp <= 360) 14.sp else 16.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
 
             // דיאלוג שחזור סיסמה / שם משתמש
@@ -833,16 +852,38 @@ private fun RecoveryDialog(
 
                             scope.launch {
                                 runCatching {
+                                    val resetUrl = "https://app-1c22cc8d.web.app/reset-password.html"
+
+                                    android.util.Log.e(
+                                        "KMI_RESET_EMAIL",
+                                        "Sending password reset email. email=$cleanEmail resetUrl=$resetUrl"
+                                    )
+
+                                    val actionCodeSettings = ActionCodeSettings.newBuilder()
+                                        .setUrl(resetUrl)
+                                        .setHandleCodeInApp(false)
+                                        .build()
+
                                     FirebaseAuth.getInstance()
-                                        .sendPasswordResetEmail(cleanEmail)
+                                        .sendPasswordResetEmail(cleanEmail, actionCodeSettings)
                                         .await()
                                 }.onSuccess {
+                                    android.util.Log.e(
+                                        "KMI_RESET_EMAIL",
+                                        "Password reset email sent successfully with ActionCodeSettings"
+                                    )
+
                                     isSending = false
                                     successText = tr(
                                         "נשלח מייל לשחזור הסיסמה. בדוק את תיבת הדואר שלך וגם את תיקיית הספאם / דואר זבל.",
                                         "A password reset email was sent. Please check your inbox and also your spam or junk folder."
                                     )
                                 }.onFailure { error ->
+                                    android.util.Log.e(
+                                        "KMI_RESET_EMAIL",
+                                        "Password reset email failed: ${error.message}",
+                                        error
+                                    )
                                     isSending = false
 
                                     errorText = when {
