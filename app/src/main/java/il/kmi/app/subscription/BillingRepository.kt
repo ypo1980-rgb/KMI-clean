@@ -264,74 +264,70 @@ class BillingRepository(
             "onPurchasesUpdated code=${result.responseCode} msg='${result.debugMessage}' purchases=${purchases?.size ?: 0}"
         )
 
-        if (result.responseCode == BillingClient.BillingResponseCode.OK && purchases != null) {
-            handleOwnedPurchases(purchases)
-        } else if (result.responseCode != BillingClient.BillingResponseCode.USER_CANCELED) {
-            _state.update { it.copy(error = result.debugMessage) }
-        } else {
-            Log.e(TAG, "purchase canceled by user")
+        when (result.responseCode) {
+            BillingClient.BillingResponseCode.OK -> {
+                if (purchases != null) {
+                    handleOwnedPurchases(purchases)
+                } else {
+                    refreshPurchases()
+                }
+            }
+
+            BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> {
+                Log.e(
+                    TAG,
+                    "purchase result ITEM_ALREADY_OWNED - refreshing owned subscriptions from Google Play"
+                )
+
+                refreshPurchases()
+            }
+
+            BillingClient.BillingResponseCode.USER_CANCELED -> {
+                Log.e(TAG, "purchase canceled by user")
+            }
+
+            else -> {
+                _state.update { it.copy(error = result.debugMessage) }
+            }
         }
     }
 
     /**
-     * מצב בדיקות:
+     * מצב בדיקות Google Play:
+     *
      * חודשי = 5 דקות
      * שנתי = 30 דקות
      *
-     * לפני גרסה אמיתית למשתמשים:
-     * לשנות את forceShortTestExpiry ל־false.
+     * חשוב:
+     * מחשבים את הסיום לפי purchaseTime ולא לפי now.
+     * כך רענון רכישות לא מאריך את המנוי שוב ושוב.
      */
     private fun calculateAccessUntilForSubscription(
         productId: String,
         purchaseTime: Long
     ): Long {
-        val forceShortTestExpiry = true
         val now = System.currentTimeMillis()
+        val safePurchaseTime = purchaseTime.takeIf { it > 0L } ?: now
 
-        if (forceShortTestExpiry) {
-            val testDurationMs = when (productId) {
-                SubscriptionProducts.REGULAR_MONTHLY,
-                SubscriptionProducts.MEMBER_MONTHLY -> 5L * 60L * 1000L
-
-                SubscriptionProducts.REGULAR_YEARLY,
-                SubscriptionProducts.MEMBER_YEARLY -> 30L * 60L * 1000L
-
-                else -> 5L * 60L * 1000L
-            }
-
-            // ✅ חשוב:
-            // בבדיקות Google Play יכול להחזיר purchaseTime ישן/משוחזר.
-            // לכן את חלון הגישה לבדיקה מחשבים מהרגע שבו Google Play אימת שהמנוי פעיל.
-            val until = now + testDurationMs
-
-            Log.e(
-                TAG,
-                "TEST ACCESS UNTIL product=$productId " +
-                        "purchaseTime=$purchaseTime now=$now until=$until " +
-                        "minutes=${testDurationMs / 60_000L}"
-            )
-
-            return until
-        }
-
-        val productionDurationMs = when (productId) {
+        val testDurationMs = when (productId) {
             SubscriptionProducts.REGULAR_MONTHLY,
-            SubscriptionProducts.MEMBER_MONTHLY -> 31L * 24L * 60L * 60L * 1000L
+            SubscriptionProducts.MEMBER_MONTHLY -> 5L * 60L * 1000L
 
             SubscriptionProducts.REGULAR_YEARLY,
-            SubscriptionProducts.MEMBER_YEARLY -> 370L * 24L * 60L * 60L * 1000L
+            SubscriptionProducts.MEMBER_YEARLY -> 30L * 60L * 1000L
 
-            else -> 31L * 24L * 60L * 60L * 1000L
+            else -> 5L * 60L * 1000L
         }
 
-        // ✅ גם בפרודקשן עדיף לא להסתמך על purchaseTime בלבד,
-        // כי Google Play הוא מקור האמת לשאלה האם המנוי פעיל כרגע.
-        val until = now + productionDurationMs
+        val until = safePurchaseTime + testDurationMs
 
         Log.e(
             TAG,
-            "PRODUCTION ACCESS UNTIL product=$productId " +
-                    "purchaseTime=$purchaseTime now=$now until=$until"
+            "TEST ACCESS UNTIL product=$productId " +
+                    "purchaseTime=$purchaseTime safePurchaseTime=$safePurchaseTime " +
+                    "now=$now until=$until " +
+                    "minutes=${testDurationMs / 60_000L} " +
+                    "remainingMinutes=${if (until > now) (until - now) / 60_000L else 0L}"
         )
 
         return until
@@ -537,11 +533,19 @@ class BillingRepository(
     }
 
     private fun handleOwnedPurchases(list: List<Purchase>) {
+        Log.e(
+            TAG,
+            "handleOwnedPurchases count=${list.size} " +
+                    list.joinToString(prefix = "[", postfix = "]") { purchase ->
+                        "products=${purchase.products}, state=${purchase.purchaseState}, acknowledged=${purchase.isAcknowledged}"
+                    }
+        )
+
         val sub = list.firstOrNull { purchase ->
             purchase.products.any { product ->
                 product in productIds
             } &&
-                    purchase.purchaseState != Purchase.PurchaseState.UNSPECIFIED_STATE
+                    purchase.purchaseState == Purchase.PurchaseState.PURCHASED
         }
 
         if (sub != null) {
@@ -618,6 +622,14 @@ class BillingRepository(
                 }
 
                 refreshPriceState()
+
+                Log.e(
+                    TAG,
+                    "ACCESS CLOSED AND BLOCKED expired/closed token. " +
+                            "token=$currentToken product=$ownedProduct existingUntil=$existingAccessUntil " +
+                            "expiredToken=$expiredToken expiredUntil=$expiredUntil lastToken=$lastToken"
+                )
+
                 return
             }
 

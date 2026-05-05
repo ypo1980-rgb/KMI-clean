@@ -3,6 +3,7 @@
 package il.kmi.app.screens
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -169,6 +170,42 @@ fun MonthlyCalendarScreen(
         }
         val holidayDates: Set<LocalDate> = remember(holidaysByDate) { holidaysByDate.keys }
 
+        // ✅ SharedPreferences של הסיכומים
+        val summarySp = remember(ctx) {
+            ctx.getSharedPreferences("kmi_training_summary", Context.MODE_PRIVATE)
+        }
+
+        // ✅ גרסת רענון כדי שהלוח יתעדכן מיד אחרי שמירה / חזרה מהמסך
+        var summaryVersion by remember { mutableStateOf(0) }
+
+        DisposableEffect(summarySp) {
+            val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                if (key == "training_summary_days") {
+                    summaryVersion++
+                }
+            }
+            summarySp.registerOnSharedPreferenceChangeListener(listener)
+            onDispose {
+                summarySp.unregisterOnSharedPreferenceChangeListener(listener)
+            }
+        }
+
+        // ✅ ימים שיש להם כבר סיכום שמור
+        val summaryDatesThisMonth: Set<LocalDate> = remember(ym, summaryVersion, summarySp, ctx) {
+            val legacyUserSp = ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+
+            val allMarks =
+                summarySp.getStringSet("training_summary_days", emptySet()).orEmpty() +
+                        legacyUserSp.getStringSet("training_summary_days", emptySet()).orEmpty()
+
+            allMarks
+                .mapNotNull { raw ->
+                    runCatching { LocalDate.parse(raw.trim().take(10)) }.getOrNull()
+                }
+                .filter { YearMonth.from(it) == ym }
+                .toSet()
+        }
+
 // ✅ האם יש חגים בחודש הזה?
         val hasHolidaysThisMonth = remember(holidaysByDate) { holidaysByDate.isNotEmpty() }
 
@@ -230,7 +267,8 @@ fun MonthlyCalendarScreen(
             trainingsCountByDate,
             region,
             primaryBranch,
-            primaryGroup
+            primaryGroup,
+            summaryDatesThisMonth
         ) {
             if (missingReason != null) {
                 android.util.Log.w("CalendarDebug", "NO TRAININGS: $missingReason")
@@ -238,7 +276,8 @@ fun MonthlyCalendarScreen(
                 android.util.Log.d(
                     "CalendarDebug",
                     "ym=$ym holidays=${holidaysByDate.size} trainings=${trainingsCountByDate.size} " +
-                            "region=$region branchKey=$primaryBranch groupKey=$primaryGroup"
+                            "region=$region branchKey=$primaryBranch groupKey=$primaryGroup " +
+                            "summaryDates=$summaryDatesThisMonth"
                 )
             }
         }
@@ -572,6 +611,7 @@ fun MonthlyCalendarScreen(
                                                 isSelected = (selectedDate == date),
                                                 trainingCount = trainingCount,
                                                 holidayName = holidayName,
+                                                hasSummary = date in summaryDatesThisMonth,
                                                 modifier = Modifier.weight(1f),
                                                 onClick = {
                                                     selectedDate = date
@@ -623,7 +663,7 @@ fun MonthlyCalendarScreen(
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .heightIn(min = 132.dp)
+                                            .heightIn(min = 156.dp)
                                             .background(
                                                 Brush.verticalGradient(
                                                     colors = listOf(
@@ -632,12 +672,13 @@ fun MonthlyCalendarScreen(
                                                     )
                                                 )
                                             )
-                                            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp)
+                                            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 18.dp)
                                     ) {
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .align(Alignment.TopStart)
+                                                .padding(bottom = 76.dp)
                                         ) {
                                             Text(
                                                 text = tr(
@@ -699,9 +740,12 @@ fun MonthlyCalendarScreen(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .align(if (isEnglish) Alignment.BottomStart else Alignment.BottomEnd),
+                                                .align(if (isEnglish) Alignment.BottomStart else Alignment.BottomEnd)
+                                                .padding(top = 8.dp),
                                             horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
                                         ) {
+                                            val hasSummaryForSelectedDate = sel in summaryDatesThisMonth
+
                                             Button(
                                                 onClick = { onDateClick(sel) },
                                                 shape = RoundedCornerShape(16.dp),
@@ -716,7 +760,11 @@ fun MonthlyCalendarScreen(
                                                 )
                                             ) {
                                                 Text(
-                                                    text = tr("+ סיכום", "+ Summary"),
+                                                    text = if (hasSummaryForSelectedDate) {
+                                                        tr("קריאת סיכום", "Read summary")
+                                                    } else {
+                                                        tr("הוספת סיכום", "Add summary")
+                                                    },
                                                     fontWeight = FontWeight.ExtraBold
                                                 )
                                             }
@@ -923,12 +971,78 @@ private fun anyToLocalDate(v: Any?): LocalDate? {
 /* -------------------------------------------------------------------------- */
 
 @Composable
-private fun Dot(color: Color, size: Dp = 6.dp) {
+private fun SummaryBadge(
+    modifier: Modifier = Modifier
+) {
     Box(
-        modifier = Modifier
-            .size(size)
-            .background(color, CircleShape)
-    )
+        modifier = modifier
+            .size(18.dp)
+            .shadow(
+                elevation = 8.dp,
+                shape = CircleShape,
+                clip = false
+            )
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFFCBB8FF),
+                        Color(0xFF9A7BFF),
+                        Color(0xFF7C4DFF)
+                    )
+                ),
+                shape = CircleShape
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.28f),
+                shape = CircleShape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .width(9.dp)
+                .height(11.dp),
+            shape = RoundedCornerShape(2.5.dp),
+            color = Color.White.copy(alpha = 0.98f),
+            tonalElevation = 0.dp
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // "קיפול" קטן של הדף
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(3.dp)
+                        .background(
+                            Color(0xFFDCD2FF),
+                            shape = RoundedCornerShape(bottomStart = 2.dp)
+                        )
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 1.5.dp, vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(1.dp, Alignment.CenterVertically),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    repeat(2) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(
+                                    Color(0xFF8B5CF6).copy(alpha = 0.78f),
+                                    RoundedCornerShape(99.dp)
+                                )
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -938,12 +1052,16 @@ private fun DayCell(
     isSelected: Boolean,
     trainingCount: Int,
     holidayName: String?,
+    hasSummary: Boolean,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null
 ) {
     val trainingColor = Color(0xFF3FA7FF)
     val holidayColor = Color(0xFFFF4D6D)
     val todayRingColor = Color(0xFF9A7BFF)
+    val summaryBadgeColor = Color(0xFF8B5CF6)
+    val summaryGlowOuter = Color(0xFFC4AEFF)
+    val summaryGlowInner = Color(0xFF8B5CF6)
 
     val haptics = rememberHapticsGlobal()
     val interactionSource = remember { MutableInteractionSource() }
@@ -971,6 +1089,7 @@ private fun DayCell(
 
     val borderColor = when {
         isSelected -> Color.White.copy(alpha = 0.90f)
+        hasSummary -> summaryGlowOuter.copy(alpha = 0.88f)
         holidayName != null || trainingCount > 0 -> Color.White.copy(alpha = 0.14f)
         else -> Color.White.copy(alpha = 0.08f)
     }
@@ -1000,6 +1119,7 @@ private fun DayCell(
             .shadow(
                 elevation = when {
                     isSelected -> 12.dp
+                    hasSummary -> 11.dp
                     trainingCount > 0 -> 8.dp
                     else -> 4.dp
                 },
@@ -1027,7 +1147,11 @@ private fun DayCell(
                 shape = RoundedCornerShape(14.dp)
             )
             .border(
-                width = if (isSelected) 1.4.dp else 0.8.dp,
+                width = when {
+                    isSelected -> 1.4.dp
+                    hasSummary -> 1.25.dp
+                    else -> 0.8.dp
+                },
                 color = borderColor,
                 shape = RoundedCornerShape(14.dp)
             )
@@ -1057,6 +1181,27 @@ private fun DayCell(
                     shape = RoundedCornerShape(14.dp)
                 )
         )
+
+        if (hasSummary) {
+            // ✅ inner glow עדין – מסגרת פנימית זוהרת
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(1.4.dp)
+                    .border(
+                        width = 1.15.dp,
+                        color = summaryGlowInner.copy(alpha = 0.42f),
+                        shape = RoundedCornerShape(13.dp)
+                    )
+            )
+
+            // ✅ אייקון מסמך קטן בפינה העליונה
+            SummaryBadge(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 5.dp, top = 5.dp)
+            )
+        }
 
         if (isToday) {
             Box(

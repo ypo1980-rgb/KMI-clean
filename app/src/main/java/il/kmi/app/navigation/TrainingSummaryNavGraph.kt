@@ -1,6 +1,7 @@
 // TrainingSummaryNavGraph.kt
 package il.kmi.app.navigation
 
+import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.collectAsState
 import androidx.navigation.NavGraphBuilder
@@ -38,9 +39,17 @@ fun NavGraphBuilder.trainingSummaryNavGraph(
             else Belt.values().firstOrNull { it.id == id } ?: Belt.GREEN
         }
 
+        // ✅ מקור אמת לסימוני סיכומים בלוח השנה.
+        // MonthlyCalendarScreen קורא מכאן את training_summary_days,
+        // ולכן גם TrainingSummaryScreen חייב לשמור לאותו מקום.
+        val summarySp = nav.context.getSharedPreferences(
+            "kmi_training_summary",
+            Context.MODE_PRIVATE
+        )
+
         TrainingSummaryScreen(
             vm = summaryVm,
-            sp = sp,
+            sp = summarySp,
             kmiPrefs = kmiPrefs,
             belt = belt,
             pickedDateIso = pickedDateIso.ifBlank { null },

@@ -1,5 +1,6 @@
 package il.kmi.app.ui.training
 
+import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -68,7 +69,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -78,7 +78,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material3.FilledTonalIconButton
@@ -289,20 +288,11 @@ fun TrainingSummaryScreen(
     Scaffold(
         topBar = {
             Surface(color = Color(0xFF0B1020)) {
-                if (onBack == null) {
-                    KmiTopBar(
-                        title = tr("סיכום אימון", "Training summary"),
-                        showTopHome = false,
-                        lockSearch = true
-                    )
-                } else {
-                    KmiTopBar(
-                        title = tr("סיכום אימון", "Training summary"),
-                        showTopHome = false,
-                        onBack = onBack,
-                        lockSearch = true
-                    )
-                }
+                KmiTopBar(
+                    title = tr("סיכום אימון", "Training summary"),
+                    showTopHome = false,
+                    lockSearch = true
+                )
             }
         },
         contentWindowInsets = WindowInsets(0),
@@ -575,14 +565,71 @@ fun TrainingSummaryScreen(
                                 .fillMaxWidth()
                                 .height(58.dp),
                             onClick = {
-                                vm.save()
-
                                 val key = "training_summary_days"
-                                val cur = sp.getStringSet(key, emptySet())?.toMutableSet() ?: mutableSetOf()
-                                cur.add(state.dateIso.trim())
-                                sp.edit().putStringSet(key, cur).apply()
+                                val cleanIso = state.dateIso.trim().take(10)
 
-                                onBack?.invoke()
+                                fun markSummaryDayLocally() {
+                                    if (cleanIso.isBlank()) return
+
+                                    // ✅ שמירה ב-SharedPreferences שהמסך קיבל
+                                    val cur = sp.getStringSet(key, emptySet())
+                                        ?.toMutableSet()
+                                        ?: mutableSetOf()
+
+                                    cur.add(cleanIso)
+
+                                    sp.edit()
+                                        .putStringSet(key, cur)
+                                        .putLong(
+                                            "training_summary_days_updated_at",
+                                            System.currentTimeMillis()
+                                        )
+                                        .apply()
+
+                                    // ✅ שמירה גם במקום הקבוע של לוח השנה
+                                    val summarySp = ctx.getSharedPreferences(
+                                        "kmi_training_summary",
+                                        Context.MODE_PRIVATE
+                                    )
+
+                                    val summaryCur = summarySp.getStringSet(key, emptySet())
+                                        ?.toMutableSet()
+                                        ?: mutableSetOf()
+
+                                    summaryCur.add(cleanIso)
+
+                                    summarySp.edit()
+                                        .putStringSet(key, summaryCur)
+                                        .putLong(
+                                            "training_summary_days_updated_at",
+                                            System.currentTimeMillis()
+                                        )
+                                        .apply()
+
+                                    android.util.Log.d(
+                                        "KMI_SUMMARY_MARK",
+                                        "summary day marked locally cleanIso=$cleanIso local=$cur calendar=$summaryCur"
+                                    )
+                                }
+
+                                vm.save(
+                                    onSuccess = {
+                                        markSummaryDayLocally()
+                                        onBack?.invoke()
+                                    },
+                                    onError = { t ->
+                                        android.util.Log.e(
+                                            "KMI_SUMMARY_MARK",
+                                            "summary remote save failed - returning anyway and marking locally",
+                                            t
+                                        )
+
+                                        // כרגע Firestore חסום בהרשאות.
+                                        // כדי שה-UX לא ייתקע, נסמן מקומית ונחזור למסך הקודם.
+                                        markSummaryDayLocally()
+                                        onBack?.invoke()
+                                    }
+                                )
                             },
                             enabled = !state.isSaving,
                         shape = RoundedCornerShape(999.dp),
@@ -824,22 +871,24 @@ private fun AddExercisesBottomSheet(
                             onDismissRequest = { beltOpen = false },
                             containerColor = Color(0xFF182545)
                         ) {
-                            Belt.values().forEach { b ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = beltHebLabel(b),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = Color.White
-                                        )
-                                    },
-                                    onClick = {
-                                        selectedBelt = b
-                                        beltOpen = false
-                                    }
-                                )
-                            }
+                            Belt.values()
+                                .filterNot { it == Belt.WHITE }
+                                .forEach { b ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = beltHebLabel(b),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = Color.White
+                                            )
+                                        },
+                                        onClick = {
+                                            selectedBelt = b
+                                            beltOpen = false
+                                        }
+                                    )
+                                }
                         }
                     }
                 }
@@ -1088,7 +1137,6 @@ private fun TrainingInfoCard(
         }.getOrNull()
     }
 
-    var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var initialMillis by rememberSaveable {
         mutableLongStateOf(isoToMillis(dateIso) ?: System.currentTimeMillis())
     }
@@ -1193,31 +1241,6 @@ private fun TrainingInfoCard(
                     }
                 }
 
-                FilledTonalButton(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    onClick = { showDatePicker = true },
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        contentColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(999.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.CalendarMonth,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = Color.White
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = tr("קריאת סיכומים", "Read summaries"),
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
-                    )
-                }
-
                 if (!errorText.isNullOrBlank()) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -1237,142 +1260,6 @@ private fun TrainingInfoCard(
                 }
             }
         }
-    }
-
-    if (showDatePicker) {
-        val initDate = remember(dateIso) {
-            runCatching { LocalDate.parse(dateIso.trim()) }.getOrNull() ?: LocalDate.now()
-        }
-
-        var viewYear by rememberSaveable(initDate) { mutableStateOf(initDate.year) }
-        var viewMonth by rememberSaveable(initDate) { mutableStateOf(initDate.monthValue) }
-        var pickedDay by rememberSaveable(initDate) { mutableStateOf(initDate.dayOfMonth) }
-
-        LaunchedEffect(viewYear, viewMonth, showDatePicker) {
-            if (showDatePicker) onRequestMonthMarks(viewYear, viewMonth)
-        }
-
-        AlertDialog(
-            onDismissRequest = { showDatePicker = false },
-            title = {
-                Text(
-                    text = tr("בחירת תאריך", "Choose date"),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            text = {
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 1.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 360.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(
-                                onClick = {
-                                    val next = LocalDate.of(viewYear, viewMonth, 1).plusMonths(1)
-                                    viewYear = next.year
-                                    viewMonth = next.monthValue
-                                    pickedDay = 1
-                                }
-                            ) { Text(tr("הבא", "Next")) }
-
-                            Spacer(Modifier.weight(1f))
-
-                            val monthTitle = remember(viewYear, viewMonth, isEnglish) {
-                                val d = LocalDate.of(viewYear, viewMonth, 1)
-                                val fmt = DateTimeFormatter.ofPattern(
-                                    "MMMM yyyy",
-                                    if (isEnglish) Locale.US else Locale("he", "IL")
-                                )
-                                d.format(fmt)
-                            }
-
-                            Text(
-                                text = monthTitle,
-                                fontWeight = FontWeight.ExtraBold,
-                                textAlign = TextAlign.Center
-                            )
-
-                            Spacer(Modifier.weight(1f))
-
-                            TextButton(
-                                onClick = {
-                                    val prev = LocalDate.of(viewYear, viewMonth, 1).minusMonths(1)
-                                    viewYear = prev.year
-                                    viewMonth = prev.monthValue
-                                    pickedDay = 1
-                                }
-                            ) { Text(tr("הקודם", "Previous")) }
-                        }
-
-                        val week = if (isEnglish)
-                            listOf("S", "M", "T", "W", "T", "F", "S")
-                        else
-                            listOf("א", "ב", "ג", "ד", "ה", "ו", "ש")
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            week.forEach { wd ->
-                                Text(
-                                    text = wd,
-                                    modifier = Modifier.weight(1f),
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        MonthGridWithMarks(
-                            year = viewYear,
-                            month1to12 = viewMonth,
-                            pickedDay = pickedDay,
-                            markedDateIsos = markedDateIsos,
-                            onPickDay = { pickedDay = it }
-                        )
-
-                        val chosenIso = remember(viewYear, viewMonth, pickedDay) {
-                            LocalDate.of(viewYear, viewMonth, pickedDay)
-                                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US))
-                        }
-
-                        Text(
-                            text = tr("נבחר: $chosenIso", "Selected: $chosenIso"),
-                            style = MaterialTheme.typography.labelLarge,
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val picked = LocalDate.of(viewYear, viewMonth, pickedDay)
-                        onDateChange(
-                            picked.format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US))
-                        )
-                        showDatePicker = false
-                    }
-                ) { Text(tr("בחר", "Select")) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text(tr("ביטול", "Cancel")) }
-            }
-        )
     }
 }
 

@@ -14,6 +14,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.app.subscription.BillingRepository
+
 
 // Firebase
 import com.google.firebase.auth.FirebaseAuth
@@ -42,6 +44,8 @@ private const val SUPPRESS_NEXT_DRAWER_OPEN_KEY = "kmi_suppress_next_drawer_open
  * 3) ליצור בעתיד נקודת כניסה מקבילה ל־iOS שקוראת לאותה לוגיקה משותפת.
  */
 class MainActivity : androidx.fragment.app.FragmentActivity() {
+
+    private var billingRepository: BillingRepository? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
 
@@ -72,6 +76,10 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
         // 👇 אתחול שכבת הפלטפורמה (expect/actual)
         il.kmi.shared.Platform.init(appContext = applicationContext)
+
+        // ✅ בזמן בדיקות לא מפעילים Billing אוטומטית בכניסה לאפליקציה.
+        // מנוי ייבדק רק בלחיצה מפורשת על רכישה / שחזור רכישות.
+        billingRepository = null
 
         // ---- Side effects אנדרואידיים (אפשר יהיה לארוז לשכבת Platform בהמשך) ----
 
@@ -229,6 +237,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
      */
     override fun onResume() {
         super.onResume()
+
+        // בזמן בדיקות לא מרעננים מנוי אוטומטית בחזרה לאפליקציה.
+        // רענון יתבצע רק בלחיצה מפורשת על שחזור רכישות.
         enforceAppLockIfNeeded(force = false)
     }
 

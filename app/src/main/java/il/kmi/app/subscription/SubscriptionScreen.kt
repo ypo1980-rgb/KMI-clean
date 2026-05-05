@@ -433,14 +433,14 @@ fun SubscriptionScreen(
     // גם במצב אדמין אנחנו ממשיכים למסך המנוי הרגיל.
     // בזמן בדיקות אדמין לא עוקף מנוי, כדי שנוכל לבדוק נעילה/פתיחה לפי Google Play.
 
-    // עטיפה ב-runCatching כדי שלא יפיל את האפליקציה במקרה של שגיאה
+    // עטיפה ב-runCatching כדי שלא יפיל את האפליקציה במקרה של שגיאה.
+    // חשוב:
+    // לא מפעילים כאן startConnection אוטומטית.
+    // אחרת כניסה למסך מנוי משחזרת מנוי פעיל מ-Google Play
+    // ופותחת נעילה בלי שהמשתמש לחץ על רכישה.
     val repo = remember {
         runCatching { BillingRepository(ctx) }
             .getOrNull()
-    }
-
-    LaunchedEffect(repo) {
-        repo?.startConnection()
     }
 
     // state תמיד מסוג SubscriptionState, עם ברירת מחדל כשאין repo
@@ -509,16 +509,24 @@ fun SubscriptionScreen(
         }
     }
 
-    val effectiveActive = remember(subscriptionUiRefreshTick, state.active, savedAccessUntil) {
+    val effectiveActive = remember(subscriptionUiRefreshTick, state.active, savedAccessUntil, savedProductId) {
         val now = System.currentTimeMillis()
 
         val userActive = KmiAccess.hasFullAccess(userSp)
         val subsActive = KmiAccess.hasFullAccess(subsSp)
         val timeActive = (savedAccessUntil ?: 0L) > now
 
+        /*
+         * חשוב:
+         * SubscriptionScreen כבר לא מפעיל Billing אוטומטית בכניסה למסך.
+         * לכן state.active יכול להיות false גם כש-BillingRepository אחר כבר כתב
+         * מנוי פעיל ל-SharedPreferences.
+         *
+         * מקור האמת לתצוגה כאן הוא:
+         * sub_access_until בתוקף + דגלי גישה שנשמרו.
+         */
         val active =
-            state.active &&
-                    timeActive &&
+            timeActive &&
                     (userActive || subsActive || savedProductId != null)
 
         android.util.Log.e(
