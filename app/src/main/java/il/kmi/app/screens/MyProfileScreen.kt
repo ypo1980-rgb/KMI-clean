@@ -58,6 +58,60 @@ data class UserProfileInfo(
     val password: String = "••••••••"
 )
 
+private fun traineeRankDisplayName(rawId: String?): String {
+    return when (rawId?.trim().orEmpty()) {
+        "white" -> "לבנה"
+        "yellow" -> "צהובה"
+        "orange" -> "כתומה"
+        "green" -> "ירוקה"
+        "blue" -> "כחולה"
+        "brown" -> "חומה"
+
+        "black",
+        "שחורה",
+        "שחורה דאן 1" -> "שחורה דאן 1"
+
+        "black_dan_2" -> "שחורה דאן 2"
+        "black_dan_3" -> "שחורה דאן 3"
+        "black_dan_4" -> "שחורה דאן 4"
+        "black_dan_5" -> "שחורה דאן 5"
+        "black_dan_6" -> "שחורה דאן 6"
+        "black_dan_7" -> "שחורה דאן 7"
+        "black_dan_8" -> "שחורה דאן 8"
+        "black_dan_9" -> "שחורה דאן 9"
+        "black_dan_10" -> "שחורה דאן 10"
+
+        else -> ""
+    }
+}
+
+private fun nextTraineeRankDisplayName(rawId: String?): String {
+    return when (rawId?.trim().orEmpty()) {
+        "white" -> "צהובה"
+        "yellow" -> "כתומה"
+        "orange" -> "ירוקה"
+        "green" -> "כחולה"
+        "blue" -> "חומה"
+        "brown" -> "שחורה דאן 1"
+
+        "black",
+        "שחורה",
+        "שחורה דאן 1" -> "שחורה דאן 2"
+
+        "black_dan_2" -> "שחורה דאן 3"
+        "black_dan_3" -> "שחורה דאן 4"
+        "black_dan_4" -> "שחורה דאן 5"
+        "black_dan_5" -> "שחורה דאן 6"
+        "black_dan_6" -> "שחורה דאן 7"
+        "black_dan_7" -> "שחורה דאן 8"
+        "black_dan_8" -> "שחורה דאן 9"
+        "black_dan_9" -> "שחורה דאן 10"
+        "black_dan_10" -> "—"
+
+        else -> "—"
+    }
+}
+
 /**
  * מסך פרופיל – בונה את המידע מתוך ה־Prefs ומציג כרטיס יוקרתי
  */
@@ -97,9 +151,28 @@ fun MyProfileScreen(
             prefStr(kmiPrefs.ageGroup, sp.getString("age_group", ""), sp.getString("group", ""))
         )
 
-        val beltId = prefStr(null, sp.getString("current_belt", ""), userSp.getString("belt_current", ""))
-        val currentBelt = Belt.fromAny(beltId)
-        val beltHeb = currentBelt?.heb ?: beltId.ifBlank { "לא הוגדר" }
+        val beltId = prefStr(
+            null,
+            sp.getString("current_belt", ""),
+            sp.getString("belt_current", ""),
+            sp.getString("belt", ""),
+            userSp.getString("current_belt", ""),
+            userSp.getString("belt_current", ""),
+            userSp.getString("belt", "")
+        )
+
+        val currentBelt = Belt.fromAny(
+            when {
+                beltId.startsWith("black_dan_") -> "black"
+                beltId == "שחורה דאן 1" -> "black"
+                else -> beltId
+            }
+        )
+
+        val beltHeb = traineeRankDisplayName(beltId)
+            .ifBlank {
+                currentBelt?.heb ?: beltId.ifBlank { "לא הוגדר" }
+            }
 
         // ✅ אימון הבא + מאמן – משתמשים בסניף הראשי בלבד
         val upcoming = if (primaryBranch.isNotBlank())
@@ -114,11 +187,8 @@ fun MyProfileScreen(
             "${fmtDay.format(upcoming.cal.time)} • ${fmtTime.format(upcoming.cal.time)}\n${upcoming.place}"
         } else "—"
 
-        // ✅ החגורה הבאה בתור (בלי המילה "חגורה" כי השורה למטה כבר אומרת "מתאמן לחגורה")
-        val nextBeltText: String = Belt.nextOf(currentBelt ?: Belt.WHITE)
-            ?.heb
-            ?.removePrefix("חגורה ")
-            ?: "—"
+        // ✅ הדרגה הבאה בתור, כולל דאן 2–10
+        val nextBeltText: String = nextTraineeRankDisplayName(beltId)
 
         // --- תיקון: כתובות לסניפים מרובים (שורה לכל סניף) ---
         fun fallbackCityVenue(b: String): String {

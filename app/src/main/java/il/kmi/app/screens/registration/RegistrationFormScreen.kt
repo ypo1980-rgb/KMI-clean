@@ -355,9 +355,8 @@ fun RegistrationFormScreen(
         }
     }
 
-    LaunchedEffect(isCoach) {
-        if (isCoach) currentBeltId = ""
-    }
+    // ✅ גם מאמן בוחר דרגת חגורה.
+    // לכן לא מאפסים currentBeltId במעבר לטאב מאמן.
 
     LaunchedEffect(branchType, selectedBranches.toList(), groupsByBranch) {
         // ✅ בחו״ל אין קבוצות גיל מתוך TrainingCatalog,
@@ -450,6 +449,12 @@ fun RegistrationFormScreen(
             genderError = true; valid = false
         }
 
+        // ✅ דרגת חגורה חובה גם למתאמן וגם למאמן
+        if (currentBeltId.isBlank()) {
+            Toast.makeText(ctx, "חובה לבחור דרגת חגורה", Toast.LENGTH_LONG).show()
+            valid = false
+        }
+
         if (!acceptedTerms) {
             termsError = true; valid = false
         }
@@ -512,11 +517,10 @@ fun RegistrationFormScreen(
         val groupsCsv = groupsListFinalForPrefs.joinToString(", ")
         val primaryGroup = groupsListFinalForPrefs.firstOrNull() ?: ""
 
-        // ✅ חגורה סופית למתאמן.
+        // ✅ חגורה סופית גם למתאמן וגם למאמן.
         // אם משום מה לא נבחרה חגורה, לא נשאיר Firestore / SP עם belt ריק,
         // כי זה עלול להחזיר את המשתמש שוב למסך השלמת פרטים בכניסה הבאה.
-        val beltFinal =
-            if (roleFinal == "trainee") currentBeltId.ifBlank { "white" } else ""
+        val beltFinal = currentBeltId.ifBlank { "white" }
 
         val activeBranchFinal =
             (activeBranch.takeIf { it.isNotBlank() && it in branchesListFinalForPrefs }
@@ -591,13 +595,7 @@ fun RegistrationFormScreen(
             "saved MAIN profile_completed=true uid=$completedUid role=$roleFinal belt=$beltFinal branch=$branchesFinal group=$primaryGroup"
         )
 
-        // חגורה – רק למתאמן
-        if (roleFinal != "trainee") {
-            sp.edit()
-                .remove("current_belt")
-                .remove("belt_current")
-                .commit()
-        }
+        // ✅ חגורה נשמרת גם למתאמן וגם למאמן.
 
         // userSp – אחידות
         userSp.edit().apply {
@@ -641,13 +639,9 @@ fun RegistrationFormScreen(
             putString("profile_completed_uid", completedUid)
             putLong("profile_completed_at", completedAt)
 
-            if (roleFinal == "trainee") {
-                putString("current_belt", beltFinal)
-                putString("belt_current", beltFinal)
-            } else {
-                remove("current_belt")
-                remove("belt_current")
-            }
+            // ✅ גם מתאמן וגם מאמן שומרים דרגת חגורה
+            putString("current_belt", beltFinal)
+            putString("belt_current", beltFinal)
 
             commit()
         }

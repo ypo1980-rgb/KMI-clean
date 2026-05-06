@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -185,19 +186,31 @@ fun ContactUsScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = if (effectiveEnglish) Alignment.Start else Alignment.End
             ) {
-                // כותרת גלובלית + סרגל אייקונים כמו בשאר האפליקציה
-                SideScreenTopBar(
-                    title = title,
-                    onClose = onClose
-                )
+                // ✅ כותרת גלובלית + סרגל אייקונים נשארים קבועים ולא נגללים
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    SideScreenTopBar(
+                        title = title,
+                        onClose = onClose
+                    )
+                }
 
-                AnimatedVisibility(
+                // ✅ רק התוכן שמתחת לכותרת נגלל
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .navigationBarsPadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = if (effectiveEnglish) Alignment.Start else Alignment.End
+                ) {
+                    AnimatedVisibility(
                     visible = true,
                     enter = fadeIn() + slideInVertically { it / 4 }
                 ) {
@@ -295,7 +308,7 @@ fun ContactUsScreen(
                                 onValueChange = { fullName = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                label = { Text(if (effectiveEnglish) "Full Name" else "שם מלא") },
+                                label = { contactFieldLabel(if (effectiveEnglish) "Full Name" else "שם מלא") },
                                 leadingIcon = {
                                     Icon(Icons.Default.Person, contentDescription = null)
                                 },
@@ -307,7 +320,7 @@ fun ContactUsScreen(
                                 onValueChange = { phone = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                label = { Text(if (effectiveEnglish) "Phone Number" else "טלפון") },
+                                label = { contactFieldLabel(if (effectiveEnglish) "Phone Number" else "טלפון") },
                                 leadingIcon = {
                                     Icon(Icons.Default.Phone, contentDescription = null)
                                 },
@@ -320,7 +333,7 @@ fun ContactUsScreen(
                                 onValueChange = { email = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                label = { Text(if (effectiveEnglish) "Email" else "אימייל") },
+                                label = { contactFieldLabel(if (effectiveEnglish) "Email" else "אימייל") },
                                 leadingIcon = {
                                     Icon(Icons.Default.Email, contentDescription = null)
                                 },
@@ -333,7 +346,12 @@ fun ContactUsScreen(
                                 onValueChange = { subject = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                label = { Text(if (effectiveEnglish) "Subject" else "נושא הפנייה") },
+                                label = {
+                                    contactFieldLabel(
+                                        text = if (effectiveEnglish) "Subject" else "נושא הפנייה",
+                                        color = Color(0xFF52627A)
+                                    )
+                                },
                                 leadingIcon = {
                                     Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null)
                                 },
@@ -345,7 +363,12 @@ fun ContactUsScreen(
                                 onValueChange = { message = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 minLines = 4,
-                                label = { Text(if (effectiveEnglish) "Message" else "הודעה") },
+                                label = {
+                                    contactFieldLabel(
+                                        text = if (effectiveEnglish) "Message" else "הודעה",
+                                        color = Color(0xFF52627A)
+                                    )
+                                },
                                 colors = contactFieldColors()
                             )
 
@@ -407,32 +430,53 @@ fun ContactUsScreen(
                             }
                         }
                     }
-                }
+                } // ✅ סוף התוכן הנגלל
+                } // ✅ סוף המסך עם TopBar קבוע
             }
         }
     }
 }
 
 @Composable
+private fun contactFieldLabel(
+    text: String,
+    color: Color = Color.White
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge.copy(
+            fontWeight = FontWeight.ExtraBold,
+            color = color
+        )
+    )
+}
+
+@Composable
 private fun contactFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = Color(0xFF24365E),
-    unfocusedContainerColor = Color(0xFF24365E),
-    disabledContainerColor = Color(0xFF24365E),
+    // ✅ רקע בהיר יותר מהכרטיס כדי שהשדות יבלטו ולא ייבלעו ברקע
+    focusedContainerColor = Color(0xFFF4F7FF),
+    unfocusedContainerColor = Color(0xFFEAF0FF),
+    disabledContainerColor = Color(0xFFD8E0F5),
 
-    focusedBorderColor = Color(0xFF5E7CE2),
-    unfocusedBorderColor = Color(0xFF3A4A7A),
-    disabledBorderColor = Color(0xFF2A355A),
+    // ✅ מסגרת ברורה יותר במצב רגיל ובפוקוס
+    focusedBorderColor = Color(0xFF8EA7FF),
+    unfocusedBorderColor = Color.White.copy(alpha = 0.72f),
+    disabledBorderColor = Color.White.copy(alpha = 0.35f),
 
-    focusedTextColor = Color.White,
-    unfocusedTextColor = Color.White,
-    disabledTextColor = Color.White.copy(alpha = 0.55f),
+    // ✅ טקסט כהה על רקע בהיר
+    focusedTextColor = Color(0xFF111827),
+    unfocusedTextColor = Color(0xFF111827),
+    disabledTextColor = Color(0xFF111827).copy(alpha = 0.55f),
 
-    focusedLabelColor = Color.White.copy(alpha = 0.82f),
-    unfocusedLabelColor = Color.White.copy(alpha = 0.62f),
-    disabledLabelColor = Color.White.copy(alpha = 0.42f),
+    // ✅ תוויות ברורות ונקיות
+    focusedLabelColor = Color.White,
+    unfocusedLabelColor = Color.White.copy(alpha = 0.92f),
+    disabledLabelColor = Color.White.copy(alpha = 0.55f),
 
-    focusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
-    unfocusedLeadingIconColor = Color.White.copy(alpha = 0.62f),
+    // ✅ אייקונים כהים יותר כדי שיבלטו על הרקע החדש
+    focusedLeadingIconColor = Color(0xFF1E3A8A),
+    unfocusedLeadingIconColor = Color(0xFF52627A),
+    disabledLeadingIconColor = Color(0xFF52627A).copy(alpha = 0.55f),
 
-    cursorColor = Color.White
+    cursorColor = Color(0xFF1E3A8A)
 )

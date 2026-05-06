@@ -51,6 +51,14 @@ import kotlinx.coroutines.tasks.await
 private fun overshootEasing(tension: Float = 2f): Easing =
     Easing { t -> OvershootInterpolator(tension).getInterpolation(t) }
 
+private data class IntroRankDisplay(
+    val id: String,
+    val he: String,
+    val en: String,
+    val baseBelt: Belt,
+    val color: Color
+)
+
 /** ✅ NEW: צבע חגורה (כדי לצייר בלי "רקע לבן" מהתמונה) */
 private fun beltColor(belt: Belt): Color = when (belt) {
     Belt.WHITE  -> Color(0xFFF5F5F5)
@@ -61,6 +69,34 @@ private fun beltColor(belt: Belt): Color = when (belt) {
     Belt.BROWN  -> Color(0xFF6D4C41)
     Belt.BLACK  -> Color(0xFF111111)
 }
+
+private fun introRankFromId(rawId: String?): IntroRankDisplay? {
+    return when (rawId?.trim().orEmpty()) {
+        "white" -> IntroRankDisplay("white", "לבנה", "White belt", Belt.WHITE, beltColor(Belt.WHITE))
+        "yellow" -> IntroRankDisplay("yellow", "צהובה", "Yellow belt", Belt.YELLOW, beltColor(Belt.YELLOW))
+        "orange" -> IntroRankDisplay("orange", "כתומה", "Orange belt", Belt.ORANGE, beltColor(Belt.ORANGE))
+        "green" -> IntroRankDisplay("green", "ירוקה", "Green belt", Belt.GREEN, beltColor(Belt.GREEN))
+        "blue" -> IntroRankDisplay("blue", "כחולה", "Blue belt", Belt.BLUE, beltColor(Belt.BLUE))
+        "brown" -> IntroRankDisplay("brown", "חומה", "Brown belt", Belt.BROWN, beltColor(Belt.BROWN))
+
+        "black",
+        "שחורה",
+        "שחורה דאן 1" -> IntroRankDisplay("black", "שחורה דאן 1", "Black belt Dan 1", Belt.BLACK, beltColor(Belt.BLACK))
+
+        "black_dan_2" -> IntroRankDisplay("black_dan_2", "שחורה דאן 2", "Black belt Dan 2", Belt.BLACK, beltColor(Belt.BLACK))
+        "black_dan_3" -> IntroRankDisplay("black_dan_3", "שחורה דאן 3", "Black belt Dan 3", Belt.BLACK, beltColor(Belt.BLACK))
+        "black_dan_4" -> IntroRankDisplay("black_dan_4", "שחורה דאן 4", "Black belt Dan 4", Belt.BLACK, beltColor(Belt.BLACK))
+        "black_dan_5" -> IntroRankDisplay("black_dan_5", "שחורה דאן 5", "Black belt Dan 5", Belt.BLACK, beltColor(Belt.BLACK))
+        "black_dan_6" -> IntroRankDisplay("black_dan_6", "שחורה דאן 6", "Black belt Dan 6", Belt.BLACK, beltColor(Belt.BLACK))
+        "black_dan_7" -> IntroRankDisplay("black_dan_7", "שחורה דאן 7", "Black belt Dan 7", Belt.BLACK, beltColor(Belt.BLACK))
+        "black_dan_8" -> IntroRankDisplay("black_dan_8", "שחורה דאן 8", "Black belt Dan 8", Belt.BLACK, beltColor(Belt.BLACK))
+        "black_dan_9" -> IntroRankDisplay("black_dan_9", "שחורה דאן 9", "Black belt Dan 9", Belt.BLACK, beltColor(Belt.BLACK))
+        "black_dan_10" -> IntroRankDisplay("black_dan_10", "שחורה דאן 10", "Black belt Dan 10", Belt.BLACK, beltColor(Belt.BLACK))
+
+        else -> null
+    }
+}
+
 // -------------------- prefs -> greeting + belt --------------------
 
 private fun loadFirstName(sp: SharedPreferences): String? {
@@ -98,9 +134,10 @@ private fun loadFirstName(sp: SharedPreferences): String? {
 }
 
 private fun loadBeltId(sp: SharedPreferences): String? {
-    // ✅ לפי הלוג שלך: belt_current = yellow
     return listOf(
-        sp.getString("belt_current", null), // ✅ FIRST
+        sp.getString("current_belt", null),
+        sp.getString("belt_current", null),
+        sp.getString("currentBelt", null),
         sp.getString("beltId", null),
         sp.getString("belt_id", null),
         sp.getString("belt", null),
@@ -111,14 +148,15 @@ private fun loadBeltId(sp: SharedPreferences): String? {
 }
 
 @Composable
-private fun rememberGreetingAndBelt(
+private fun rememberGreetingAndRank(
     userSp: SharedPreferences,
     lang: AppLanguage
-): Pair<String, Belt?> {
+): Pair<String, IntroRankDisplay?> {
     val firstName = remember { loadFirstName(userSp) }
     val beltId = remember { loadBeltId(userSp) }
 
-    val belt = remember(beltId) { beltId?.let { Belt.fromId(it) } }
+    val rank = remember(beltId) { introRankFromId(beltId) }
+
     val greeting = remember(firstName, lang) {
         if (lang == AppLanguage.ENGLISH) {
             if (firstName.isNullOrBlank()) "Hello" else "Hello, $firstName"
@@ -126,7 +164,8 @@ private fun rememberGreetingAndBelt(
             if (firstName.isNullOrBlank()) "שלום" else "שלום $firstName"
         }
     }
-    return greeting to belt
+
+    return greeting to rank
 }
 
 private suspend fun fetchAndPersistFullNameIfMissing(
@@ -186,14 +225,15 @@ private fun dumpPrefs(tag: String, sp: SharedPreferences) {
 /** ✅ REPLACE: חגורה מצוירת על הרקע (בלי תמונה עם לבן) */
 @Composable
 private fun BeltBadge(
-    belt: Belt,
+    rank: IntroRankDisplay,
     lang: AppLanguage,
     modifier: Modifier = Modifier
 ) {
-    // ✅ טקסט "חגורה XXX" בצבע החגורה הרלוונטי
+    val belt = rank.baseBelt
+
     val beltTextColor = when (belt) {
-        Belt.WHITE -> Color(0xFFE0E0E0) // לבן-אפרפר, נראה על רקע בהיר
-        else -> beltColor(belt)
+        Belt.WHITE -> Color(0xFFE0E0E0)
+        else -> rank.color
     }
 
     fun beltDrawableResOrNull(b: Belt): Int? = when (b) {
@@ -212,9 +252,8 @@ private fun BeltBadge(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // ✅ 1) מחליפים סדר: קודם "חגורה צהובה" ואז התמונה
         Text(
-            text = if (lang == AppLanguage.ENGLISH) belt.en else belt.heb,
+            text = if (lang == AppLanguage.ENGLISH) rank.en else rank.he,
             color = beltTextColor,
             fontSize = 25.sp,
             fontWeight = FontWeight.Bold
@@ -223,23 +262,15 @@ private fun BeltBadge(
         Spacer(Modifier.width(8.dp))
 
         if (res != null) {
-            // ✅ 2) “מורידים” רקע לבן מהתמונה (BlendMode.Modulate)
-            // לבן ≈ נהיה רקע המסך; צבעים נשארים אבל יכולים להיות מעט "מושפעים" מהרקע.
             Image(
                 painter = painterResource(id = res),
-                contentDescription = if (lang == AppLanguage.ENGLISH) {
-                    "Belt ${belt.en}"
-                } else {
-                    "חגורה ${belt.heb}"
-                },
+                contentDescription = if (lang == AppLanguage.ENGLISH) rank.en else rank.he,
                 modifier = Modifier
                     .size(64.dp)
                     .graphicsLayer {
                         compositingStrategy =
                             androidx.compose.ui.graphics.CompositingStrategy.Offscreen
 
-                        // ✅ פתרון ייעודי לחגורה לבנה:
-                        // מוסיף outline / צל עדין כדי שתיראה על רקע בהיר
                         if (belt == Belt.WHITE) {
                             shadowElevation = 6f
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
@@ -247,7 +278,6 @@ private fun BeltBadge(
                         }
                     },
                 contentScale = ContentScale.Fit,
-                // ❗ לא משתמשים ב-tint לחגורה לבנה
                 colorFilter = if (belt == Belt.WHITE) null
                 else androidx.compose.ui.graphics.ColorFilter.tint(
                     Color.White,
@@ -255,13 +285,11 @@ private fun BeltBadge(
                 )
             )
         } else {
-            // fallback: פס מצויר
-            val c = beltColor(belt)
             Canvas(modifier = Modifier.size(width = 92.dp, height = 26.dp)) {
                 val w = size.width
                 val h = size.height
                 drawRoundRect(
-                    color = c,
+                    color = rank.color,
                     topLeft = Offset(0f, 0f),
                     size = Size(w, h),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.45f, h * 0.45f)
@@ -343,7 +371,7 @@ fun IntroScreen(
     }
 
     // ✅ FIX: משתמשים באותו userSp שממנו אתה מתחיל Trial ושבו נשמר המשתמש
-    val (dynamicGreeting0, traineeBeltOrNull) = rememberGreetingAndBelt(
+    val (dynamicGreeting0, traineeRankOrNull) = rememberGreetingAndRank(
         userSp = userSp,
         lang = currentLang
     )
@@ -441,10 +469,10 @@ fun IntroScreen(
                         .scale(scale)
                 )
 
-                if (traineeBeltOrNull != null) {
+                if (traineeRankOrNull != null) {
                     Spacer(Modifier.height(10.dp))
                     BeltBadge(
-                        belt = traineeBeltOrNull,
+                        rank = traineeRankOrNull,
                         lang = currentLang,
                         modifier = Modifier
                             .alpha(alpha)

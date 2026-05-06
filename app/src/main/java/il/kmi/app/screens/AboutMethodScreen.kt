@@ -130,6 +130,77 @@ Thus, the name symbolizes the method itself.
                             modifier = Modifier.fillMaxWidth()
                         )
 
+                        Spacer(Modifier.height(16.dp))
+
+                        Text(
+                            text = amText(
+                                "ההבדל בין ק.מ.י לקרב מגע",
+                                "The Difference Between K.M.I and Krav Maga",
+                                isEnglish
+                            ),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = amAlign(isEnglish),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(Modifier.height(6.dp))
+
+                        Text(
+                            text = amText(
+                                """
+ק.מ.י – קרב מגן ישראלי היא שיטה שצמחה מתוך משפחת "קרב מגע" ומהווה חלק בלתי נפרד מהשם הכללי והגנרי "קרב מגע".
+
+מייסד שיטת ק.מ.י, אליהו (אלי) אביקזר ז"ל, היה תלמידו של מייסד קרב המגע אמריך אימי ליכטנפלד שדה-אור ז"ל, והראשון שקיבל מאימי חגורה.
+
+במשך שנים רבות אלי עבד בצמוד לאימי. לימים, כאשר אימי פרש מהצבא, נבחר אלי במקומו לתפקיד ראש מדור קרב מגע בצה"ל.
+
+עם פרישתו של אלי מהצבא הוא הציע לאימי להוסיף את המילה "ישראל" לשם קרב מגע, כדי להבדיל בין השם הכללי והגנרי "קרב מגע" לבין שם ייחודי וספציפי הכולל את ארץ המקור – ישראל. אימי דחה את הרעיון בטענה שהמילה "ישראל" עלולה להרתיע אנשים מחו"ל מללמוד קרב מגע ישראלי.
+
+בשנת 1987, ובברכתו של אימי, פרש אלי מהאגודה לקרב מגע במטרה להקים שיטה בשם "קרב מגע ישראלי" או בקיצור "ק.מ.י". מאחר שאימי התנגד לשם קרב מגע ישראלי, ומכיוון שאלי כיבד את אימי, החליף אלי את המילה "מגע" ל"מגן", כך שיישארו ראשי התיבות "ק.מ.י". בדרך זו לשם "קרב מגן" נוספה המילה "ישראלי", והשם ק.מ.י הפך לשם ספציפי ולא גנרי.
+
+שינוי המילה ל"מגן" התאים למטרת השיטה, שנוסדה כדי ללמד את האוכלוסייה הגנה עצמית, אך עדיין השאיר את השיטה כחלק ממשפחת קרב המגע. בנוסף, קבע אלי כי בגד האימון בק.מ.י יהיה בצבעי כחול־לבן, כצבעי דגל ישראל.
+
+השיטה מתעדכנת, משתנה ומתאימה את התרגילים למצבים ולסכנות המודרניות והעכשוויות.
+
+השם "קרב מגע" משמש עדיין שם כללי וגנרי, וכל אחד יכול להשתמש בו וללמד קרב מגע ללא פיקוח מקצועי. לעומתו, עמותת ק.מ.י רשומה בישראל ובעולם; השם וסמלי ק.מ.י רשומים ומוגנים בישראל ובעולם; ותוכנית הלימודים מסודרת וזהה, כך שבכל העולם נלמדים התרגילים באופן אחיד ותחת פיקוח מקצועי.
+
+ק.מ.י כיום הוא הארגון הגדול בישראל בתחום קרב המגע, ונמצא תחת פיקוח מקצועי מתמיד של העמותה.
+
+המדריכים, מרמת עוזר מדריך ועד לרמת מומחה בענף, עוברים הכשרות המפוקחות ומאושרות על ידי המרכז האקדמי לוינסקי־וינגייט ומשרד הספורט הישראלי.
+
+שיטת ק.מ.י מאושרת על ידי המרכז האקדמי לוינסקי־וינגייט. מורים לחינוך גופני משתלמים במרכז האקדמי בקורסים להגנה עצמית מטעם ק.מ.י. השיטה הומלצה לנעמ"ת על ידי משטרת ישראל להעברת סדנאות להגנה עצמית לנערות ולנשים. שיטת ק.מ.י משמשת בזרועות הביטחון השונות, מבוקשת ברחבי העולם וזכתה להכרה בין־לאומית.
+                                """.trimIndent(),
+                                """
+K.M.I — Israeli Protective Combat — is a method that grew out of the Krav Maga family and remains an integral part of the general, generic name "Krav Maga".
+
+The founder of K.M.I, Eliyahu (Eli) Avikzar, was a student of Krav Maga founder Imi Lichtenfeld Sde-Or, and was the first person to receive a belt from Imi.
+
+For many years, Eli worked closely with Imi. Later, when Imi retired from the army, Eli was chosen to replace him as head of the Krav Maga section in the IDF.
+
+When Eli retired from the army, he suggested adding the word "Israel" to the name Krav Maga, in order to distinguish between the general, generic name "Krav Maga" and a unique, specific name that included the country of origin — Israel. Imi rejected the idea, arguing that the word "Israel" might discourage people abroad from learning Israeli Krav Maga.
+
+In 1987, with Imi's blessing, Eli left the Krav Maga association in order to establish a method named "Israeli Krav Maga", abbreviated in Hebrew as K.M.I. Since Imi objected to the name Israeli Krav Maga, and because Eli respected Imi, Eli replaced the Hebrew word "contact" with "protective", while keeping the same Hebrew initials K.M.I. In this way, the word "Israeli" was added to "Protective Combat", making K.M.I a specific name rather than a generic one.
+
+Changing the word to "protective" matched the purpose of the method, which was founded to teach self-defense to the public, while still keeping the method within the Krav Maga family. Eli also decided that the K.M.I training uniform would be blue and white, like the colors of the Israeli flag.
+
+The method continues to evolve, change, and adapt its techniques to modern and current situations and threats.
+
+The name "Krav Maga" is still used as a general, generic name, and anyone may use it and teach Krav Maga without professional supervision. In contrast, the K.M.I association is registered in Israel and worldwide; the name and symbols of K.M.I are registered and protected in Israel and worldwide; and the curriculum is structured and consistent, so the techniques are taught uniformly around the world under professional supervision.
+
+Today, K.M.I is the largest organization in Israel in the field of Krav Maga and is under constant professional supervision by the association.
+
+Instructors, from assistant instructor level to expert level, undergo training supervised and approved by the Levinsky-Wingate Academic Center and the Israeli Ministry of Sports.
+
+The K.M.I method is approved by the Levinsky-Wingate Academic Center. Physical education teachers train at the academic center in self-defense courses conducted by K.M.I. The method was recommended to Na'amat by the Israel Police for self-defense workshops for girls and women. K.M.I is used by various security branches, is sought after around the world, and has received international recognition.
+                                """.trimIndent(),
+                                isEnglish
+                            ),
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = amAlign(isEnglish),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
                         Spacer(Modifier.height(12.dp))
 
                         Text(

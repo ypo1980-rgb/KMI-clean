@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 
 enum class QuickMenuTriggerMode {
@@ -74,9 +75,16 @@ private data class QuickMenuItemUi(
     val isLocked: Boolean
 )
 
+private fun quickMenuLockTint(accentColor: Color): Color {
+    // ✅ המנעול יושב על שורת תפריט בהירה/לבנה,
+    // לכן הוא חייב להיות כהה בכל חגורה:
+    // כתומה, ירוקה, כחולה, חומה ושחורה.
+    // כך הוא לא נבלע בצבע החגורה ולא נעלם על רקע התפריט.
+    return Color(0xFF111827)
+}
+
 @Composable
-private fun ModernGlowFab(
-    accentColor: Color,
+private fun ModernGlowFab(    accentColor: Color,
     expanded: Boolean,
     onClick: () -> Unit
 ) {
@@ -787,45 +795,20 @@ private fun PremiumAnimatedLockIcon(
     scale: Float,
     glowAlpha: Float
 ) {
-    Box(
+    val lockTint = quickMenuLockTint(accentColor)
+
+    Icon(
+        imageVector = Icons.Filled.Lock,
+        contentDescription = null,
+        tint = lockTint,
         modifier = Modifier
-            .size(22.dp)
+            .size(17.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
+                alpha = 1f
             }
-            .clip(CircleShape)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        accentColor.copy(alpha = glowAlpha),
-                        Color.Transparent
-                    ),
-                    radius = 44f
-                )
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(20.dp)
-                .clip(CircleShape)
-                .background(accentColor.copy(alpha = 0.16f))
-                .border(
-                    width = 1.dp,
-                    color = accentColor.copy(alpha = 0.38f),
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Lock,
-                contentDescription = null,
-                tint = accentColor,
-                modifier = Modifier.size(12.dp)
-            )
-        }
-    }
+    )
 }
 
 @Composable

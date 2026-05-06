@@ -162,6 +162,16 @@ fun SettingsScreenModern(
     val email    by remember { mutableStateOf(sp.getString("email", "") ?: "") }
     val region   by remember { mutableStateOf(sp.getString("region", "") ?: "") }
     val branch   by remember { mutableStateOf(sp.getString("branch", "") ?: "") }
+
+    val rankDisplayName by remember(currentLanguage) {
+        mutableStateOf(
+            traineeRankDisplayName(
+                rawId = registeredRankId(appCtxLang, sp),
+                isEnglish = isEnglish
+            )
+        )
+    }
+
     val isCoachInit = sp.getString("user_role", "trainee") == "coach"
     var isCoach by rememberSaveable { mutableStateOf(isCoachInit) }
 // === כלים גלובליים למסך: Haptics + Toast + Overlay טעינה ===
@@ -396,6 +406,20 @@ fun SettingsScreenModern(
                                     Text(
                                         text = phone,
                                         style = MaterialTheme.typography.titleMedium,
+                                        textAlign = textAlignPrimary,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                if (rankDisplayName.isNotBlank()) {
+                                    Text(
+                                        text = tr(
+                                            "דרגה: $rankDisplayName",
+                                            "Rank: $rankDisplayName"
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color(0xFF475569),
+                                        fontWeight = FontWeight.SemiBold,
                                         textAlign = textAlignPrimary,
                                         modifier = Modifier.fillMaxWidth()
                                     )
@@ -2183,6 +2207,54 @@ private fun applyTheme(mode: String) {
         else    -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
     }
     AppCompatDelegate.setDefaultNightMode(night)
+}
+
+private fun traineeRankDisplayName(
+    rawId: String?,
+    isEnglish: Boolean
+): String {
+    return when (rawId?.trim().orEmpty()) {
+        "white" -> if (isEnglish) "White belt" else "לבנה"
+        "yellow" -> if (isEnglish) "Yellow belt" else "צהובה"
+        "orange" -> if (isEnglish) "Orange belt" else "כתומה"
+        "green" -> if (isEnglish) "Green belt" else "ירוקה"
+        "blue" -> if (isEnglish) "Blue belt" else "כחולה"
+        "brown" -> if (isEnglish) "Brown belt" else "חומה"
+
+        "black",
+        "שחורה",
+        "שחורה דאן 1" -> if (isEnglish) "Black belt Dan 1" else "שחורה דאן 1"
+
+        "black_dan_2" -> if (isEnglish) "Black belt Dan 2" else "שחורה דאן 2"
+        "black_dan_3" -> if (isEnglish) "Black belt Dan 3" else "שחורה דאן 3"
+        "black_dan_4" -> if (isEnglish) "Black belt Dan 4" else "שחורה דאן 4"
+        "black_dan_5" -> if (isEnglish) "Black belt Dan 5" else "שחורה דאן 5"
+        "black_dan_6" -> if (isEnglish) "Black belt Dan 6" else "שחורה דאן 6"
+        "black_dan_7" -> if (isEnglish) "Black belt Dan 7" else "שחורה דאן 7"
+        "black_dan_8" -> if (isEnglish) "Black belt Dan 8" else "שחורה דאן 8"
+        "black_dan_9" -> if (isEnglish) "Black belt Dan 9" else "שחורה דאן 9"
+        "black_dan_10" -> if (isEnglish) "Black belt Dan 10" else "שחורה דאן 10"
+
+        else -> ""
+    }
+}
+
+private fun registeredRankId(
+    ctx: android.content.Context,
+    spSettings: SharedPreferences
+): String {
+    val spUser = ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+
+    return listOf(
+        spSettings.getString("current_belt", null),
+        spSettings.getString("belt_current", null),
+        spSettings.getString("belt", null),
+        spUser.getString("current_belt", null),
+        spUser.getString("belt_current", null),
+        spUser.getString("belt", null)
+    ).firstOrNull { !it.isNullOrBlank() }
+        ?.trim()
+        .orEmpty()
 }
 
 private fun readRegisteredBelt(ctx: android.content.Context, spSettings: SharedPreferences): Belt {

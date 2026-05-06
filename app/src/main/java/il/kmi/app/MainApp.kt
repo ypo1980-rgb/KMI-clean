@@ -364,6 +364,9 @@ fun MainApp(
                                     onOpenAboutAvi = {
                                         nav.navigate(Route.AboutAvi.route)
                                     },
+                                    onOpenAboutNetworkCoaches = {
+                                        nav.navigate(Route.AboutNetworkCoaches.route)
+                                    },
                                     onOpenMyProfile = {
                                         nav.navigate(Route.MyProfile.route)
                                     },

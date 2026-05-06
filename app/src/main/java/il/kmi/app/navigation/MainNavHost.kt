@@ -46,6 +46,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import il.kmi.app.screens.ContactUsScreen
+import il.kmi.app.screens.AboutNetworkCoachesScreen
 import il.kmi.app.screens.SubTopics.subTopicsByBeltNavGraph
 import il.kmi.app.screens.SubTopics.subTopicsByTopicNavGraph
 import il.kmi.app.screens.admin.PaymentsReportScreen
@@ -143,7 +144,9 @@ fun MainNavHost(
     // לא עוברים דרך app_entry / splash כדי למנוע מסך לבן ומעבר מיותר.
     val actualStartDestination = remember(startDestination) {
         when (startDestination) {
-            Route.Home.route,
+            // ✅ לא מאפשרים יותר להתחיל ישירות ממסך הבית.
+            // גם אם MainApp מבקש Home אחרי Google Login / Auth restore,
+            // נתחיל מ-APP_ENTRY_ROUTE כדי לעבור דרך KmiStartupLoadingScreen.
             GOOGLE_PROFILE_COMPLETION_ROUTE,
             Route.RegistrationLanding.route,
             Route.Registration.route,
@@ -475,12 +478,13 @@ fun MainNavHost(
                     },
 
                     // Google Login הצליח + הפרופיל מלא
+                    // ✅ קודם מציגים את מסך הלוגו הדינמי וטעינת הנתונים
                     onProfileComplete = {
-                        Log.e(NAV_LOG, "intro onProfileComplete -> home")
+                        Log.e(NAV_LOG, "intro onProfileComplete -> splash/loading CLEAR_STACK")
 
                         markInitialLanguageSelected(sp)
 
-                        nav.navigate(Route.Home.route) {
+                        nav.navigate(Route.Splash.route) {
                             popUpTo(0) { inclusive = true }
                             launchSingleTop = true
                             restoreState = false
@@ -576,6 +580,15 @@ fun MainNavHost(
                     },
                     onSubmit = { fullName, phone, email, subject, message ->
                         // כאן תדבר בהמשך לשרת / Firebase / Firestore
+                    }
+                )
+            }
+
+            composable(Route.AboutNetworkCoaches.route) {
+                AboutNetworkCoachesScreen(
+                    isEnglish = isEnglish,
+                    onClose = {
+                        nav.popBackStack()
                     }
                 )
             }
@@ -707,9 +720,12 @@ fun MainNavHost(
                     onOpenLegal = { nav.navigate(Route.Legal.route) },
                     onOpenTerms = { nav.navigate(Route.Legal.route) },
                     onRegistrationDone = {
-                        nav.navigate(Route.Home.route) {
-                            popUpTo(0)
+                        Log.e(NAV_LOG, "google_profile_completion onRegistrationDone -> splash/loading CLEAR_STACK")
+
+                        nav.navigate(Route.Splash.route) {
+                            popUpTo(0) { inclusive = true }
                             launchSingleTop = true
+                            restoreState = false
                         }
                     },
                     startAfterGoogleLogin = true

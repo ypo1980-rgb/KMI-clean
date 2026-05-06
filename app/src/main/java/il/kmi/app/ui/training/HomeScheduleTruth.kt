@@ -72,8 +72,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.mutableLongStateOf
-import java.time.ZoneId
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.ColumnScope
@@ -223,7 +221,8 @@ fun TrainingSummaryScreen(
     kmiPrefs: KmiPrefs,
     belt: Belt,
     pickedDateIso: String? = null,
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    onOpenCalendar: (() -> Unit)? = null
 ) {
     val state by vm.state.collectAsState()
     val scrollState = rememberLazyListState()
@@ -235,11 +234,25 @@ fun TrainingSummaryScreen(
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
-    // ✅ אם המסך נפתח מלוח השנה עם תאריך נבחר — נכניס אותו ל-VM מיד בכניסה
-    LaunchedEffect(pickedDateIso) {
-        val iso = pickedDateIso?.trim().orEmpty()
-        if (iso.isNotBlank() && state.dateIso != iso) {
-            vm.setDateIso(iso)
+    fun normalizedIsoOrNull(raw: String?): String? {
+        val clean = raw?.trim().orEmpty()
+        if (clean.isBlank()) return null
+        if (clean == "{date}") return null
+        if (clean.equals("null", ignoreCase = true)) return null
+
+        return runCatching {
+            LocalDate.parse(clean)
+            clean
+        }.getOrNull()
+    }
+
+    // ✅ אם המסך נפתח עם תאריך אמיתי מהלוח – נכניס אותו ל-VM.
+    // אם הגיע placeholder כמו {date} – נתעלם ונציג בחירת תאריך.
+    val routeDateIso = remember(pickedDateIso) { normalizedIsoOrNull(pickedDateIso) }
+
+    LaunchedEffect(routeDateIso) {
+        if (routeDateIso != null && state.dateIso != routeDateIso) {
+            vm.setDateIso(routeDateIso)
         }
     }
 
@@ -248,7 +261,18 @@ fun TrainingSummaryScreen(
     var branchError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(state.dateIso) {
-        val t = runCatching { truth.trainingForDate(state.dateIso) }.getOrNull()
+        val cleanIso = normalizedIsoOrNull(state.dateIso)
+
+        // אם עדיין לא נבחר תאריך – לא מציגים שגיאה ולא מציגים "לא נמצא סניף"
+        if (cleanIso == null) {
+            branchError = null
+            if (state.branchName.isNotBlank()) vm.setBranchName("")
+            if (state.groupKey.isNotBlank()) vm.setGroupKey("")
+            if (state.coachName.isNotBlank()) vm.setCoachName("")
+            return@LaunchedEffect
+        }
+
+        val t = runCatching { truth.trainingForDate(cleanIso) }.getOrNull()
 
         if (t == null) {
             branchError = tr(
@@ -256,6 +280,8 @@ fun TrainingSummaryScreen(
                 "No training was found on this date according to your home screen schedule."
             )
             if (state.branchName.isNotBlank()) vm.setBranchName("")
+            if (state.groupKey.isNotBlank()) vm.setGroupKey("")
+            if (state.coachName.isNotBlank()) vm.setCoachName("")
             return@LaunchedEffect
         }
 
@@ -350,7 +376,8 @@ fun TrainingSummaryScreen(
                         errorText = branchError,
                         isEnglish = isEnglish,
                         markedDateIsos = state.summaryDaysInCalendarMonth,
-                        onRequestMonthMarks = { y, m -> vm.loadSummaryDaysForMonth(y, m) }
+                        onRequestMonthMarks = { y, m -> vm.loadSummaryDaysForMonth(y, m) },
+                        onOpenCalendar = onOpenCalendar
                     )
                 }
 
@@ -1111,9 +1138,23 @@ private fun TrainingInfoCard(
     errorText: String?,
     isEnglish: Boolean,
     markedDateIsos: Set<String>,
-    onRequestMonthMarks: (year: Int, month1to12: Int) -> Unit
+    onRequestMonthMarks: (year: Int, month1to12: Int) -> Unit,
+    onOpenCalendar: (() -> Unit)? = null
 ) {
     fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    fun normalizedIsoOrNull(raw: String?): String? {
+        val clean = raw?.trim().orEmpty()
+        if (clean.isBlank()) return null
+        if (clean == "{date}") return null
+        if (clean.equals("null", ignoreCase = true)) return null
+
+        return runCatching {
+            LocalDate.parse(clean)
+            clean
+        }.getOrNull()
+    }
+
     fun prettyDate(iso: String): String {
         return runCatching {
             val d = LocalDate.parse(iso.trim())
@@ -1125,25 +1166,7 @@ private fun TrainingInfoCard(
         }.getOrDefault(iso)
     }
 
-    val zone = remember { ZoneId.systemDefault() }
-
-    fun isoToMillis(iso: String): Long? {
-        return runCatching {
-            val d = LocalDate.parse(
-                iso.trim(),
-                DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
-            )
-            d.atStartOfDay(zone).toInstant().toEpochMilli()
-        }.getOrNull()
-    }
-
-    var initialMillis by rememberSaveable {
-        mutableLongStateOf(isoToMillis(dateIso) ?: System.currentTimeMillis())
-    }
-
-    LaunchedEffect(dateIso) {
-        isoToMillis(dateIso)?.let { initialMillis = it }
-    }
+    val validDateIso = normalizedIsoOrNull(dateIso)
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1182,7 +1205,11 @@ private fun TrainingInfoCard(
                         Spacer(Modifier.height(4.dp))
 
                         Text(
-                            text = prettyDate(dateIso),
+                            text = validDateIso?.let { prettyDate(it) }
+                                ?: tr(
+                                    "יש לבחור תאריך לסיכום האימון",
+                                    "Choose a date for the training summary"
+                                ),
                             style = MaterialTheme.typography.bodySmall.merge(rtlStyle),
                             color = Color.White.copy(alpha = 0.75f),
                             textAlign = TextAlign.Right,
@@ -1212,50 +1239,114 @@ private fun TrainingInfoCard(
                     }
                 }
 
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    color = SummaryCardInner
+                FilledTonalButton(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    onClick = {
+                        onOpenCalendar?.invoke()
+                    },
+                    shape = RoundedCornerShape(999.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                        contentColor = Color.White
+                    )
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        PremiumInfoRow(
-                            label = tr("סניף", "Branch"),
-                            value = branchName.ifBlank { tr("לא נמצא סניף", "Branch not found") }
-                        )
+                    Icon(
+                        imageVector = Icons.Filled.CalendarMonth,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color.White
+                    )
 
-                        PremiumInfoRow(
-                            label = tr("מאמן", "Coach"),
-                            value = coachName.ifBlank { tr("מאמן לא ידוע", "Unknown coach") }
-                        )
+                    Spacer(Modifier.width(8.dp))
 
-                        if (groupKey.isNotBlank()) {
-                            PremiumInfoRow(
-                                label = tr("קבוצה", "Group"),
-                                value = groupKey
+                    Text(
+                        text = if (validDateIso == null) {
+                            tr(
+                                "בחירת תאריך לסיכום האימון",
+                                "Choose training summary date"
                             )
-                        }
-                    }
+                        } else {
+                            tr(
+                                "שינוי תאריך האימון",
+                                "Change training date"
+                            )
+                        },
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
                 }
 
-                if (!errorText.isNullOrBlank()) {
+                if (validDateIso == null) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
+                        shape = RoundedCornerShape(18.dp),
+                        color = SummaryCardInner
                     ) {
                         Text(
-                            text = errorText,
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodySmall,
+                            text = tr(
+                                "בחר תאריך בלוח האימונים החודשי כדי להתחיל למלא את סיכום האימון.",
+                                "Choose a date in the monthly training calendar to start filling out the training summary."
+                            ),
+                            color = Color.White.copy(alpha = 0.86f),
+                            style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Right,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp)
+                                .padding(horizontal = 14.dp, vertical = 16.dp)
                         )
+                    }
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        color = SummaryCardInner
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            PremiumInfoRow(
+                                label = tr("סניף", "Branch"),
+                                value = branchName.ifBlank {
+                                    tr("לא נמצא סניף", "Branch not found")
+                                }
+                            )
+
+                            PremiumInfoRow(
+                                label = tr("מאמן", "Coach"),
+                                value = coachName.ifBlank {
+                                    tr("מאמן לא ידוע", "Unknown coach")
+                                }
+                            )
+
+                            if (groupKey.isNotBlank()) {
+                                PremiumInfoRow(
+                                    label = tr("קבוצה", "Group"),
+                                    value = groupKey
+                                )
+                            }
+                        }
+                    }
+
+                    if (!errorText.isNullOrBlank()) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
+                        ) {
+                            Text(
+                                text = errorText,
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            )
+                        }
                     }
                 }
             }

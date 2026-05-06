@@ -35,6 +35,31 @@ class BillingRepository(
 
     private companion object {
         const val TAG = "KMI_BILLING"
+
+        // ✅ לפני הפצה: להשאיר false כדי שלא יודפסו לוגים רגישים של מנויים / טוקנים.
+        const val ENABLE_BILLING_LOGS = false
+
+        fun logBilling(message: String) {
+            if (ENABLE_BILLING_LOGS) {
+                Log.e(TAG, message)
+            }
+        }
+
+        fun logBillingError(message: String, throwable: Throwable? = null) {
+            if (ENABLE_BILLING_LOGS) {
+                if (throwable != null) {
+                    Log.e(TAG, message, throwable)
+                } else {
+                    Log.e(TAG, message)
+                }
+            }
+        }
+
+        fun logBillingWarning(message: String) {
+            if (ENABLE_BILLING_LOGS) {
+                Log.w(TAG, message)
+            }
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -106,8 +131,7 @@ class BillingRepository(
             override fun onBillingSetupFinished(result: BillingResult) {
                 val ok = result.responseCode == BillingClient.BillingResponseCode.OK
 
-                Log.e(
-                    TAG,
+                logBilling(
                     "onBillingSetupFinished ok=$ok code=${result.responseCode} msg='${result.debugMessage}'"
                 )
 
@@ -156,8 +180,7 @@ class BillingRepository(
 
             val loadedIds = cachedProductDetails.keys.toList()
 
-            Log.e(
-                TAG,
+            logBilling(
                 "queryProductDetails loaded=${loadedIds.size} ids=$loadedIds expected=$productIds"
             )
 
@@ -175,7 +198,7 @@ class BillingRepository(
 
             refreshPriceState()
         }.onFailure {
-            Log.e(TAG, "queryProductDetails failed", it)
+            logBillingError("queryProductDetails failed", it)
             _state.update { s ->
                 s.copy(
                     productsLoaded = false,
@@ -187,14 +210,13 @@ class BillingRepository(
     }
 
     fun launchPurchase(activity: Activity, productId: String): Boolean {
-        Log.e(
-            TAG,
+        logBilling(
             "launchPurchase requested productId=$productId connected=${billingClient.isReady} loaded=${cachedProductDetails.keys}"
         )
 
         if (!billingClient.isReady) {
             _state.update { it.copy(error = "Billing client is not ready") }
-            Log.e(TAG, "launchPurchase blocked: billingClient not ready")
+            logBilling("launchPurchase blocked: billingClient not ready")
             return false
         }
 
@@ -205,7 +227,7 @@ class BillingRepository(
                     error = "Product not loaded from Google Play: $productId"
                 )
             }
-            Log.e(TAG, "launchPurchase blocked: missing ProductDetails for $productId")
+            logBilling("launchPurchase blocked: missing ProductDetails for $productId")
             return false
         }
 
@@ -219,7 +241,7 @@ class BillingRepository(
                     error = "Missing offer token for product: $productId"
                 )
             }
-            Log.e(TAG, "launchPurchase blocked: missing offerToken for $productId")
+            logBilling("launchPurchase blocked: missing offerToken for $productId")
             return false
         }
 
@@ -235,8 +257,7 @@ class BillingRepository(
 
         val result = billingClient.launchBillingFlow(activity, flowParams)
 
-        Log.e(
-            TAG,
+        logBilling(
             "launchBillingFlow result code=${result.responseCode} msg='${result.debugMessage}' productId=$productId"
         )
 
@@ -259,8 +280,7 @@ class BillingRepository(
     }
 
     override fun onPurchasesUpdated(result: BillingResult, purchases: MutableList<Purchase>?) {
-        Log.e(
-            TAG,
+        logBilling(
             "onPurchasesUpdated code=${result.responseCode} msg='${result.debugMessage}' purchases=${purchases?.size ?: 0}"
         )
 
@@ -274,8 +294,7 @@ class BillingRepository(
             }
 
             BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> {
-                Log.e(
-                    TAG,
+                logBilling(
                     "purchase result ITEM_ALREADY_OWNED - refreshing owned subscriptions from Google Play"
                 )
 
@@ -283,7 +302,7 @@ class BillingRepository(
             }
 
             BillingClient.BillingResponseCode.USER_CANCELED -> {
-                Log.e(TAG, "purchase canceled by user")
+                logBilling("purchase canceled by user")
             }
 
             else -> {
@@ -295,8 +314,8 @@ class BillingRepository(
     /**
      * מצב בדיקות Google Play:
      *
-     * חודשי = 5 דקות
-     * שנתי = 30 דקות
+     * חודשי = 15 דקות
+     * שנתי = 45 דקות
      *
      * חשוב:
      * מחשבים את הסיום לפי purchaseTime ולא לפי now.
@@ -311,18 +330,17 @@ class BillingRepository(
 
         val testDurationMs = when (productId) {
             SubscriptionProducts.REGULAR_MONTHLY,
-            SubscriptionProducts.MEMBER_MONTHLY -> 5L * 60L * 1000L
+            SubscriptionProducts.MEMBER_MONTHLY -> 15L * 60L * 1000L
 
             SubscriptionProducts.REGULAR_YEARLY,
-            SubscriptionProducts.MEMBER_YEARLY -> 30L * 60L * 1000L
+            SubscriptionProducts.MEMBER_YEARLY -> 45L * 60L * 1000L
 
-            else -> 5L * 60L * 1000L
+            else -> 15L * 60L * 1000L
         }
 
         val until = safePurchaseTime + testDurationMs
 
-        Log.e(
-            TAG,
+        logBilling(
             "TEST ACCESS UNTIL product=$productId " +
                     "purchaseTime=$purchaseTime safePurchaseTime=$safePurchaseTime " +
                     "now=$now until=$until " +
@@ -381,8 +399,7 @@ class BillingRepository(
         KmiAccess.setFullAccess(sp, false)
         KmiAccess.setFullAccess(userSp, false)
 
-        Log.e(
-            TAG,
+        logBilling(
             "ACCESS CLOSED EXPIRED TOKEN token=$expiredToken product=$ownedProduct expiredUntil=$expiredUntil now=$now"
         )
     }
@@ -434,24 +451,21 @@ class BillingRepository(
         val accessUntil = if (enabled) {
             when {
                 isExpiredPurchaseToken -> {
-                    Log.e(
-                        TAG,
+                    logBilling(
                         "ACCESS WRITE BLOCKED expired token cannot reopen token=$currentToken"
                     )
                     0L
                 }
 
                 wasLastTokenAlreadyClosed -> {
-                    Log.e(
-                        TAG,
+                    logBilling(
                         "ACCESS WRITE BLOCKED last token was already closed token=$currentToken"
                     )
                     0L
                 }
 
                 isSamePurchaseToken && existingAccessUntil > now -> {
-                    Log.e(
-                        TAG,
+                    logBilling(
                         "ACCESS UNTIL REUSED sameToken=true existingUntil=$existingAccessUntil now=$now"
                     )
                     existingAccessUntil
@@ -464,8 +478,7 @@ class BillingRepository(
                         ownedProduct = ownedProduct
                     )
 
-                    Log.e(
-                        TAG,
+                    logBilling(
                         "ACCESS WRITE BLOCKED same token expired existingUntil=$existingAccessUntil now=$now"
                     )
                     0L
@@ -519,8 +532,7 @@ class BillingRepository(
             .putLong("access_changed_at", now)
             .commit()
 
-        Log.e(
-            TAG,
+        logBilling(
             "ACCESS WRITE requestedEnabled=$enabled finalEnabled=$finalEnabled product=$ownedProduct " +
                     "purchaseTime=${purchaseTime ?: 0L} " +
                     "accessUntil=$accessUntil " +
@@ -533,8 +545,7 @@ class BillingRepository(
     }
 
     private fun handleOwnedPurchases(list: List<Purchase>) {
-        Log.e(
-            TAG,
+        logBilling(
             "handleOwnedPurchases count=${list.size} " +
                     list.joinToString(prefix = "[", postfix = "]") { purchase ->
                         "products=${purchase.products}, state=${purchase.purchaseState}, acknowledged=${purchase.isAcknowledged}"
@@ -588,8 +599,7 @@ class BillingRepository(
                         existingToken.isBlank() &&
                         existingAccessUntil == 0L
 
-            Log.e(
-                TAG,
+            logBilling(
                 "ACTIVE subscription detected product=$ownedProduct state=${sub.purchaseState} " +
                         "acknowledged=${sub.isAcknowledged} " +
                         "isSameToken=$isSameToken existingUntil=$existingAccessUntil now=$now " +
@@ -623,8 +633,7 @@ class BillingRepository(
 
                 refreshPriceState()
 
-                Log.e(
-                    TAG,
+                logBilling(
                     "ACCESS CLOSED AND BLOCKED expired/closed token. " +
                             "token=$currentToken product=$ownedProduct existingUntil=$existingAccessUntil " +
                             "expiredToken=$expiredToken expiredUntil=$expiredUntil lastToken=$lastToken"
@@ -652,8 +661,7 @@ class BillingRepository(
 
             val activeNow = activeAccessUntil > System.currentTimeMillis()
 
-            Log.e(
-                TAG,
+            logBilling(
                 "ACCESS OPENED VERIFIED product=$ownedProduct activeNow=$activeNow activeAccessUntil=$activeAccessUntil"
             )
 
@@ -668,7 +676,7 @@ class BillingRepository(
             }
             refreshPriceState()
         } else {
-            Log.e(TAG, "NO active subscription found")
+            logBilling("NO active subscription found")
 
             // אין מנוי פעיל
             sp.edit()
@@ -696,7 +704,7 @@ class BillingRepository(
                 purchaseTime = null
             )
 
-            Log.e(TAG, "ACCESS CLOSED VERIFIED full_access=false subscription_active=false")
+            logBilling("ACCESS CLOSED VERIFIED full_access=false subscription_active=false")
 
             _state.update {
                 it.copy(
@@ -719,7 +727,7 @@ class BillingRepository(
                     .build()
                 val res = billingClient.acknowledgePurchase(params)
                 if (res.responseCode != BillingClient.BillingResponseCode.OK) {
-                    Log.w("Billing", "Acknowledge failed: ${res.debugMessage}")
+                    logBillingWarning("Acknowledge failed: ${res.debugMessage}")
                 }
             }
         }

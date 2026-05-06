@@ -42,6 +42,97 @@ import il.kmi.shared.domain.Belt
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.ui.ext.color
 
+private data class TraineeRankOption(
+    val id: String,
+    val heb: String,
+    val color: Color
+)
+
+private fun traineeRankOptions(): List<TraineeRankOption> {
+    return listOf(
+        TraineeRankOption(
+            id = "white",
+            heb = "לבנה",
+            color = Belt.WHITE.color
+        ),
+        TraineeRankOption(
+            id = "yellow",
+            heb = "צהובה",
+            color = Belt.YELLOW.color
+        ),
+        TraineeRankOption(
+            id = "orange",
+            heb = "כתומה",
+            color = Belt.ORANGE.color
+        ),
+        TraineeRankOption(
+            id = "green",
+            heb = "ירוקה",
+            color = Belt.GREEN.color
+        ),
+        TraineeRankOption(
+            id = "blue",
+            heb = "כחולה",
+            color = Belt.BLUE.color
+        ),
+        TraineeRankOption(
+            id = "brown",
+            heb = "חומה",
+            color = Belt.BROWN.color
+        ),
+        TraineeRankOption(
+            id = "black",
+            heb = "שחורה דאן 1",
+            color = Belt.BLACK.color
+        ),
+        TraineeRankOption(
+            id = "black_dan_2",
+            heb = "שחורה דאן 2",
+            color = Belt.BLACK.color
+        ),
+        TraineeRankOption(
+            id = "black_dan_3",
+            heb = "שחורה דאן 3",
+            color = Belt.BLACK.color
+        ),
+        TraineeRankOption(
+            id = "black_dan_4",
+            heb = "שחורה דאן 4",
+            color = Belt.BLACK.color
+        ),
+        TraineeRankOption(
+            id = "black_dan_5",
+            heb = "שחורה דאן 5",
+            color = Belt.BLACK.color
+        ),
+        TraineeRankOption(
+            id = "black_dan_6",
+            heb = "שחורה דאן 6",
+            color = Belt.BLACK.color
+        ),
+        TraineeRankOption(
+            id = "black_dan_7",
+            heb = "שחורה דאן 7",
+            color = Belt.BLACK.color
+        ),
+        TraineeRankOption(
+            id = "black_dan_8",
+            heb = "שחורה דאן 8",
+            color = Belt.BLACK.color
+        ),
+        TraineeRankOption(
+            id = "black_dan_9",
+            heb = "שחורה דאן 9",
+            color = Belt.BLACK.color
+        ),
+        TraineeRankOption(
+            id = "black_dan_10",
+            heb = "שחורה דאן 10",
+            color = Belt.BLACK.color
+        )
+    )
+}
+
 @Composable
 fun RegistrationFormContent(
     isCoach: Boolean,
@@ -468,15 +559,13 @@ fun RegistrationFormContent(
                 )
             }
 
-            if (!isCoach) {
-                BeltPicker(
-                    currentBeltId = currentBeltId,
-                    onBeltChange = onBeltChange
-                )
-            }
+            BeltPicker(
+                currentBeltId = currentBeltId,
+                onBeltChange = onBeltChange
+            )
         }
 
-        // ===== Preferences =====
+            // ===== Preferences =====
         RegistrationSectionCard(
             title = "העדפות ואישורים"
         ) {
@@ -1298,9 +1387,18 @@ private fun BeltPicker(
     currentBeltId: String,
     onBeltChange: (String) -> Unit
 ) {
-    val beltOptions = Belt.order
+    val beltOptions = remember { traineeRankOptions() }
     var expanded by remember { mutableStateOf(false) }
-    val currentBelt = beltOptions.firstOrNull { it.id == currentBeltId }
+
+    val normalizedCurrentBeltId = when (currentBeltId.trim()) {
+        // תאימות לאחור אם נשמר בעבר "black"
+        "black" -> "black"
+        "שחורה" -> "black"
+        "שחורה דאן 1" -> "black"
+        else -> currentBeltId.trim()
+    }
+
+    val currentBelt = beltOptions.firstOrNull { it.id == normalizedCurrentBeltId }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -1345,8 +1443,13 @@ private fun BeltPicker(
                                 shape = MaterialTheme.shapes.small,
                                 modifier = Modifier.size(14.dp)
                             ) {}
+
                             Spacer(Modifier.width(8.dp))
-                            Text(belt.heb, color = Color.Black)
+
+                            Text(
+                                text = belt.heb,
+                                color = Color.Black
+                            )
                         }
                     },
                     onClick = {

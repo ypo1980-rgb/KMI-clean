@@ -129,6 +129,72 @@ data class AdminUserRecord(
  * קודם לפי uid, אם אין אז לפי מייל, אם אין אז לפי טלפון, ואם אין – לפי שם.
  */
 // קודם מייל, אחר כך טלפון, ורק אם אין – uid / שם
+private fun traineeRankDisplayName(rawId: String?): String {
+    return when (rawId?.trim().orEmpty()) {
+        "white" -> "לבנה"
+        "yellow" -> "צהובה"
+        "orange" -> "כתומה"
+        "green" -> "ירוקה"
+        "blue" -> "כחולה"
+        "brown" -> "חומה"
+
+        "black",
+        "שחורה",
+        "שחורה דאן 1" -> "שחורה דאן 1"
+
+        "black_dan_2" -> "שחורה דאן 2"
+        "black_dan_3" -> "שחורה דאן 3"
+        "black_dan_4" -> "שחורה דאן 4"
+        "black_dan_5" -> "שחורה דאן 5"
+        "black_dan_6" -> "שחורה דאן 6"
+        "black_dan_7" -> "שחורה דאן 7"
+        "black_dan_8" -> "שחורה דאן 8"
+        "black_dan_9" -> "שחורה דאן 9"
+        "black_dan_10" -> "שחורה דאן 10"
+
+        else -> ""
+    }
+}
+
+private fun traineeRankSortIndex(rawId: String?): Int {
+    return when (rawId?.trim().orEmpty()) {
+        "white" -> 0
+        "yellow" -> 1
+        "orange" -> 2
+        "green" -> 3
+        "blue" -> 4
+        "brown" -> 5
+
+        "black",
+        "שחורה",
+        "שחורה דאן 1" -> 6
+
+        "black_dan_2" -> 7
+        "black_dan_3" -> 8
+        "black_dan_4" -> 9
+        "black_dan_5" -> 10
+        "black_dan_6" -> 11
+        "black_dan_7" -> 12
+        "black_dan_8" -> 13
+        "black_dan_9" -> 14
+        "black_dan_10" -> 15
+
+        else -> 99
+    }
+}
+
+private fun traineeRankColor(rawId: String?): Color {
+    return when {
+        rawId?.startsWith("black_dan_") == true -> Belt.BLACK.color
+        rawId == "black" || rawId == "שחורה" || rawId == "שחורה דאן 1" -> Belt.BLACK.color
+        else -> Belt.fromId(rawId.orEmpty())?.color ?: Color(0xFF6B7280)
+    }
+}
+
+/**
+ * מפתח דה-דופ – מאחד מסמכים של אותו משתמש:
+ * קודם לפי מייל, אחר כך טלפון, אחר כך uid, ואם אין – לפי שם.
+ */
 private fun AdminUserRecord.dedupeKey(): String {
     // 1) מייל – הכי יציב לזיהוי אותו אדם
     email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { mail ->
@@ -232,7 +298,7 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         region = stringOrNull("region", "area"),
         branch = stringOrNull("branch", "club", "dojo"),
         groups = groupsList,
-        currentBeltId = stringOrNull("currentBeltId", "beltId", "belt"),
+        currentBeltId = stringOrNull("currentBeltId", "currentBelt", "belt_current", "beltId", "belt"),
         phone = stringOrNull("phone", "phoneNumber"),
         email = stringOrNull("email"),
 
@@ -374,11 +440,20 @@ fun AdminUsersScreen(
             .distinct()
             .sorted()
     }
-    val allBelts = remember(users) {
-        users.mapNotNull { it.belt?.heb }
-            .distinct()
-            .sorted()
-    }
+val allBelts = remember(users) {
+users
+.mapNotNull { user ->
+traineeRankDisplayName(user.currentBeltId).ifBlank { null }
+}
+.distinct()
+.sortedBy { label ->
+val id = users.firstOrNull {
+traineeRankDisplayName(it.currentBeltId) == label
+}?.currentBeltId
+
+traineeRankSortIndex(id)
+}
+}
     val allAgeBuckets = remember(users) {
         users.map { it.ageBucket }.distinct().sortedBy { it }
     }
@@ -389,7 +464,8 @@ fun AdminUsersScreen(
                     (genderFilter == "male" && (u.gender ?: "").lowercase().startsWith("m")) ||
                     (genderFilter == "female" && (u.gender ?: "").lowercase().startsWith("f"))
             val rOk = regionFilter == null || u.region == regionFilter
-            val bOk = beltFilter == null || u.belt?.heb == beltFilter
+val bOk = beltFilter == null ||
+traineeRankDisplayName(u.currentBeltId) == beltFilter
             val aOk = ageBucketFilter == null || u.ageBucket == ageBucketFilter
             gOk && rOk && bOk && aOk
         }
@@ -448,16 +524,37 @@ fun AdminUsersScreen(
     val regionCounts = users.groupBy { it.region ?: "לא ידוע" }
         .mapValues { it.value.size }
 
-    val beltCountsRaw = users.groupBy { it.belt?.heb ?: "ללא חגורה" }
-        .mapValues { it.value.size }
+val beltCountsRaw = users.groupBy { user ->
+traineeRankDisplayName(user.currentBeltId).ifBlank { "ללא חגורה" }
+}.mapValues { it.value.size }
 
-    // רשימה מסודרת: קודם "ללא חגורה", אח"כ כל החגורות לפי Belt.order
-    val beltCountsOrdered: List<Pair<String, Int>> = buildList {
-        add("ללא חגורה" to (beltCountsRaw["ללא חגורה"] ?: 0))
-        Belt.order.forEach { belt ->
-            add(belt.heb to (beltCountsRaw[belt.heb] ?: 0))
-        }
-    }
+// רשימה מסודרת: קודם "ללא חגורה", אח"כ חגורות רגילות ודאן 1–10
+val beltCountsOrdered: List<Pair<String, Int>> = buildList {
+add("ללא חגורה" to (beltCountsRaw["ללא חגורה"] ?: 0))
+
+val orderedLabels = listOf(
+"לבנה",
+"צהובה",
+"כתומה",
+"ירוקה",
+"כחולה",
+"חומה",
+"שחורה דאן 1",
+"שחורה דאן 2",
+"שחורה דאן 3",
+"שחורה דאן 4",
+"שחורה דאן 5",
+"שחורה דאן 6",
+"שחורה דאן 7",
+"שחורה דאן 8",
+"שחורה דאן 9",
+"שחורה דאן 10"
+)
+
+orderedLabels.forEach { label ->
+add(label to (beltCountsRaw[label] ?: 0))
+}
+}
 
     val avgAge = users.mapNotNull { it.age }.takeIf { it.isNotEmpty() }?.average()
 
@@ -575,11 +672,28 @@ fun AdminUsersScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            beltCountsOrdered.forEach { (label, value) ->
-                                val belt = Belt.order.firstOrNull { it.heb == label }
-                                val circleColor = belt?.color ?: Color(0xFF6B7280)
+beltCountsOrdered.forEach { (label, value) ->
+val circleColor = when (label) {
+"לבנה" -> Belt.WHITE.color
+"צהובה" -> Belt.YELLOW.color
+"כתומה" -> Belt.ORANGE.color
+"ירוקה" -> Belt.GREEN.color
+"כחולה" -> Belt.BLUE.color
+"חומה" -> Belt.BROWN.color
+"שחורה דאן 1",
+"שחורה דאן 2",
+"שחורה דאן 3",
+"שחורה דאן 4",
+"שחורה דאן 5",
+"שחורה דאן 6",
+"שחורה דאן 7",
+"שחורה דאן 8",
+"שחורה דאן 9",
+"שחורה דאן 10" -> Belt.BLACK.color
+else -> Color(0xFF6B7280)
+}
 
-                                Column(
+Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(4.dp),
                                     modifier = Modifier.padding(vertical = 4.dp)
@@ -1076,7 +1190,8 @@ private fun FilterRow(
 private fun UserRowCard(
     user: AdminUserRecord
 ) {
-    val beltColor = user.belt?.color ?: Color(0xFF6B7280)
+    val beltText = traineeRankDisplayName(user.currentBeltId).ifBlank { "ללא חגורה" }
+    val beltColor = traineeRankColor(user.currentBeltId)
     val roleLabel = if (user.isCoach) "מאמן" else "מתאמן"
 
     Card(
@@ -1165,10 +1280,9 @@ private fun UserRowCard(
                     }
                 }
 
-                val beltText = user.belt?.heb ?: "ללא חגורה"
-                val ageText = user.age?.toString() ?: "לא ידוע"
-                val regionBranch =
-                    listOfNotNull(user.region, user.branch).joinToString(" · ").ifBlank { "—" }
+val ageText = user.age?.toString() ?: "לא ידוע"
+val regionBranch =
+listOfNotNull(user.region, user.branch).joinToString(" · ").ifBlank { "—" }
 
                 Text(
                     text = "$beltText  •  גיל: $ageText  •  $regionBranch",

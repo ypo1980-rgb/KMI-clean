@@ -163,6 +163,7 @@ fun AppDrawerContent(
     onOpenAboutNetwork: () -> Unit,
     onOpenAboutMethod: () -> Unit,
     onOpenAboutAvi: () -> Unit,
+    onOpenAboutNetworkCoaches: () -> Unit = {},
     onOpenSubscriptions: () -> Unit,
     onOpenForum: () -> Unit,
     onOpenMyProfile: () -> Unit,
@@ -397,6 +398,7 @@ fun AppDrawerContent(
                 title: String,
                 subtitle: String? = null,
                 icon: androidx.compose.ui.graphics.vector.ImageVector,
+                showDivider: Boolean = true,
                 onClick: () -> Unit
             ) {
                 Column(
@@ -412,17 +414,9 @@ fun AppDrawerContent(
                             .padding(horizontal = 6.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // שימוש ב-icon הקיים במקום leading שלא קיים
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = Color(0xFFFF8AD8),
-                            modifier = Modifier.size(20.dp).padding(end = 10.dp)
-                        )
-
                         Column(
                             modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.Start, // יישור ל-Start (ימין ב-RTL)
+                            horizontalAlignment = Alignment.Start,
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
@@ -431,7 +425,7 @@ fun AppDrawerContent(
                                     color = Color.White,
                                     fontWeight = FontWeight.ExtraBold
                                 ),
-                                textAlign = TextAlign.Start, // יישור לימין בעברית
+                                textAlign = TextAlign.Start,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
@@ -463,10 +457,12 @@ fun AppDrawerContent(
                         )
                     }
 
-                    HorizontalDivider(
-                        thickness = 1.dp,
-                        color = Color.White.copy(alpha = 0.12f)
-                    )
+                    if (showDivider) {
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = Color.White.copy(alpha = 0.12f)
+                        )
+                    }
                 }
             }
 
@@ -475,6 +471,7 @@ fun AppDrawerContent(
                 title: String,
                 subtitle: String? = null,
                 icon: androidx.compose.ui.graphics.vector.ImageVector,
+                showDivider: Boolean = true,
                 onClick: () -> Unit
             ) {
                 Column(
@@ -533,10 +530,12 @@ fun AppDrawerContent(
                         }
                     }
 
-                    HorizontalDivider(
-                        thickness = 1.dp,
-                        color = Color.White.copy(alpha = 0.12f)
-                    )
+                    if (showDivider) {
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = Color.White.copy(alpha = 0.12f)
+                        )
+                    }
                 }
             }
 
@@ -603,11 +602,9 @@ fun AppDrawerContent(
 
                 Spacer(Modifier.height(8.dp))
 
-                //------------------------------------------------------------------------
-                // ===== כפתורי מאמן — ורק למאמן =====
+                        //------------------------------------------------------------------------
+                        // ===== כפתורי מאמן — ורק למאמן =====
                         if (isCoach) {
-                            Spacer(Modifier.height(8.dp))
-                            Divider(color = Color.White.copy(alpha = 0.12f))
                             Spacer(Modifier.height(8.dp))
 
                             Column(
@@ -649,6 +646,7 @@ fun AppDrawerContent(
                                     CoachLineItemEn(
                                         title = "Internal Belt Exam",
                                         icon = Icons.Filled.WorkspacePremium,
+                                        showDivider = false,
                                         onClick = {
                                             onClose()
                                             onOpenCoachInternalExam()
@@ -690,6 +688,7 @@ fun AppDrawerContent(
                                     CoachLineItemHe(
                                         title = "מבחן פנימי לחגורה",
                                         icon = Icons.Filled.WorkspacePremium,
+                                        showDivider = false,
                                         onClick = {
                                             onClose()
                                             onOpenCoachInternalExam()
@@ -698,11 +697,15 @@ fun AppDrawerContent(
                                 }
                             }
 
-                    // מפריד קטן כמו בשאר הפריטים
-                    Spacer(Modifier.height(16.dp))
-                    Divider(color = Color.White.copy(alpha = 0.12f))
-                    Spacer(Modifier.height(8.dp))
-                }
+                            // מפריד אחד בולט בין אזור המאמן לאזור המתאמן
+                            Spacer(Modifier.height(14.dp))
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                thickness = 2.dp,
+                                color = Color.White.copy(alpha = 0.32f)
+                            )
+                            Spacer(Modifier.height(14.dp))
+                        }
 
                 // ===== אזור מנהל – רק למנהל =====
                         if (resolvedIsAdmin == true) {
@@ -760,6 +763,39 @@ fun AppDrawerContent(
                                 onClick = {
                                     onClose()
                                     onOpenAboutAvi()
+                                }
+                            )
+                        }
+
+                        // ===== אודות המאמנים ברשת =====
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                title = "About Network Coaches",
+                                subtitle = "Ranks, experience and certifications",
+                                titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = (-0.2).sp
+                                ),
+                                onClick = {
+                                    onClose()
+                                    onOpenAboutNetworkCoaches()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                title = "אודות המאמנים ברשת",
+                                subtitle = "דרגות, ותק, הכשרות והסמכות",
+                                titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = (-0.2).sp
+                                ),
+                                onClick = {
+                                    onClose()
+                                    onOpenAboutNetworkCoaches()
                                 }
                             )
                         }

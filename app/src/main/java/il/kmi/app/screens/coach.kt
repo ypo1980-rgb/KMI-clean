@@ -81,6 +81,11 @@ import kotlin.math.roundToInt
 
 //=========================================================================
 
+data class CoachDateEntry(
+    val date: String = "",
+    val description: String = ""
+)
+
 data class TraineeProfile(
     val id: String,
     val fullName: String,
@@ -90,7 +95,12 @@ data class TraineeProfile(
     val attendancePct: Int = 0,
     val branch: String = "",
     val groupKey: String = "",
-    val beltAwardDates: Map<String, String> = emptyMap()
+    val beltAwardDates: Map<String, String> = emptyMap(),
+
+    // ✅ שדות נוספים למילוי ע"י המאמן ונשמרים בשרת: תאריך + תיאור
+    val seminarDates: Map<String, CoachDateEntry> = emptyMap(),
+    val campDates: Map<String, CoachDateEntry> = emptyMap(),
+    val certificationDates: Map<String, CoachDateEntry> = emptyMap()
 )
 
 data class GroupStatsUi(
@@ -458,7 +468,10 @@ fun CoachTraineesScreen(
                 val age: Int,
                 val beltHeb: String,
                 val seniority: String,
-                val beltAwardDates: Map<String, String>
+                val beltAwardDates: Map<String, String>,
+                val seminarDates: Map<String, CoachDateEntry>,
+                val campDates: Map<String, CoachDateEntry>,
+                val certificationDates: Map<String, CoachDateEntry>
             )
 
             val userInfoByName = mutableMapOf<String, FireUserInfo>() // nameKey -> full user info
@@ -489,16 +502,52 @@ fun CoachTraineesScreen(
                         ?: doc.getString("yearsTraining")
                         ?: ""
 
-                val rawAwardDates = doc.get("beltAwardDates") as? Map<*, *> ?: emptyMap<Any, Any>()
-                val beltAwardDates = rawAwardDates.entries.associate { entry ->
-                    entry.key.toString() to entry.value.toString()
+                fun readStringMap(fieldName: String): Map<String, String> {
+                    val raw = doc.get(fieldName) as? Map<*, *> ?: emptyMap<Any, Any>()
+                    return raw.entries.associate { entry ->
+                        entry.key.toString() to entry.value.toString()
+                    }
                 }
+
+                fun readCoachEntryMap(fieldName: String): Map<String, CoachDateEntry> {
+                    val raw = doc.get(fieldName) as? Map<*, *> ?: emptyMap<Any, Any>()
+
+                    return raw.entries.associate { entry ->
+                        val key = entry.key.toString()
+                        val value = entry.value
+
+                        val parsed = when (value) {
+                            is Map<*, *> -> CoachDateEntry(
+                                date = value["date"]?.toString().orEmpty(),
+                                description = value["description"]?.toString().orEmpty()
+                            )
+
+                            // ✅ תאימות לאחור: אם בעבר נשמר רק תאריך כמחרוזת
+                            is String -> CoachDateEntry(
+                                date = value,
+                                description = ""
+                            )
+
+                            else -> CoachDateEntry()
+                        }
+
+                        key to parsed
+                    }
+                }
+
+                val beltAwardDates = readStringMap("beltAwardDates")
+                val seminarDates = readCoachEntryMap("seminarDates")
+                val campDates = readCoachEntryMap("campDates")
+                val certificationDates = readCoachEntryMap("certificationDates")
 
                 userInfoByName[n] = FireUserInfo(
                     age = age,
                     beltHeb = beltHeb(beltRaw),
                     seniority = seniority,
-                    beltAwardDates = beltAwardDates
+                    beltAwardDates = beltAwardDates,
+                    seminarDates = seminarDates,
+                    campDates = campDates,
+                    certificationDates = certificationDates
                 )
             }
 
@@ -514,6 +563,9 @@ fun CoachTraineesScreen(
                 val belt = info?.beltHeb.orEmpty()
                 val seniority = info?.seniority.orEmpty()
                 val beltAwardDates = info?.beltAwardDates ?: emptyMap()
+                val seminarDates = info?.seminarDates ?: emptyMap()
+                val campDates = info?.campDates ?: emptyMap()
+                val certificationDates = info?.certificationDates ?: emptyMap()
 
                 TraineeProfile(
                     id = m.id.toString(),
@@ -524,7 +576,10 @@ fun CoachTraineesScreen(
                     attendancePct = pct,
                     branch = branchDbKey,
                     groupKey = groupName,
-                    beltAwardDates = beltAwardDates
+                    beltAwardDates = beltAwardDates,
+                    seminarDates = seminarDates,
+                    campDates = campDates,
+                    certificationDates = certificationDates
                 )
             }
         }
@@ -605,6 +660,11 @@ fun CoachTraineesScreen(
     // תאריכי קבלת חגורות לפי מתאמן
     val beltAwardDatesState = remember { mutableStateMapOf<String, Map<String, String>>() }
 
+    // ✅ שדות נוספים למילוי ע"י המאמן לפי מתאמן: תאריך + תיאור
+    val seminarDatesState = remember { mutableStateMapOf<String, Map<String, CoachDateEntry>>() }
+    val campDatesState = remember { mutableStateMapOf<String, Map<String, CoachDateEntry>>() }
+    val certificationDatesState = remember { mutableStateMapOf<String, Map<String, CoachDateEntry>>() }
+
     var showStatsSheet by remember { mutableStateOf(false) }
 
     val groupStats = remember(uiProfiles) {
@@ -648,6 +708,50 @@ fun CoachTraineesScreen(
         }
     }
 
+    suspend fun saveCoachDateSectionForSelected(
+        selectedProfile: TraineeProfile,
+        firestoreFieldName: String,
+        entries: Map<String, CoachDateEntry>
+    ) {
+        val cleanedEntries = entries
+            .mapValues { (_, value) ->
+                mapOf(
+                    "date" to value.date.trim(),
+                    "description" to value.description.trim()
+                )
+            }
+            .filterValues { value ->
+                value["date"].orEmpty().isNotBlank() ||
+                        value["description"].orEmpty().isNotBlank()
+            }
+
+        val userDocs = Firebase.firestore.collection("users")
+            .whereEqualTo("role", "trainee")
+            .whereIn(
+                "fullName",
+                listOf(selectedProfile.fullName, selectedProfile.fullName.trim())
+            )
+            .get()
+            .await()
+
+        val targetDoc = userDocs.documents.firstOrNull()
+            ?: userDocs.documents.firstOrNull { doc ->
+                val n1 = doc.getString("fullName")?.trim()
+                val n2 = doc.getString("name")?.trim()
+                val n3 = doc.getString("displayName")?.trim()
+                n1 == selectedProfile.fullName.trim() ||
+                        n2 == selectedProfile.fullName.trim() ||
+                        n3 == selectedProfile.fullName.trim()
+            }
+
+        if (targetDoc != null) {
+            Firebase.firestore.collection("users")
+                .document(targetDoc.id)
+                .update(firestoreFieldName, cleanedEntries)
+                .await()
+        }
+    }
+
     LaunchedEffect(uiProfiles) {
         if (selectedId == null && uiProfiles.isNotEmpty()) {
             selectedId = uiProfiles.first().id
@@ -658,6 +762,18 @@ fun CoachTraineesScreen(
         uiProfiles.forEach { trainee ->
             if (beltAwardDatesState[trainee.id] == null) {
                 beltAwardDatesState[trainee.id] = trainee.beltAwardDates
+            }
+
+            if (seminarDatesState[trainee.id] == null) {
+                seminarDatesState[trainee.id] = trainee.seminarDates
+            }
+
+            if (campDatesState[trainee.id] == null) {
+                campDatesState[trainee.id] = trainee.campDates
+            }
+
+            if (certificationDatesState[trainee.id] == null) {
+                certificationDatesState[trainee.id] = trainee.certificationDates
             }
         }
     }
@@ -1236,6 +1352,57 @@ fun CoachTraineesScreen(
                                         }
                                     }
 
+                                    CoachDateSectionCard(
+                                        title = "השתלמויות",
+                                        collapsedSubtitle = "לחצו לפתיחת רשימת השתלמויות",
+                                        expandedSubtitle = "הוסיפו תאריך ותיאור להשתלמויות שהמתאמן עבר",
+                                        defaultItems = listOf(
+                                            "השתלמות 1",
+                                            "השתלמות 2",
+                                            "השתלמות 3"
+                                        ),
+                                        selectedId = selected.id,
+                                        stateMap = seminarDatesState,
+                                        firestoreFieldName = "seminarDates",
+                                        selectedProfile = selected,
+                                        screenScope = screenScope,
+                                        onSave = ::saveCoachDateSectionForSelected
+                                    )
+
+                                    CoachDateSectionCard(
+                                        title = "מחנות אימונים",
+                                        collapsedSubtitle = "לחצו לפתיחת רשימת מחנות אימונים",
+                                        expandedSubtitle = "הוסיפו תאריך ותיאור למחנות אימונים שבהם המתאמן השתתף",
+                                        defaultItems = listOf(
+                                            "מחנה אימונים 1",
+                                            "מחנה אימונים 2",
+                                            "מחנה אימונים 3"
+                                        ),
+                                        selectedId = selected.id,
+                                        stateMap = campDatesState,
+                                        firestoreFieldName = "campDates",
+                                        selectedProfile = selected,
+                                        screenScope = screenScope,
+                                        onSave = ::saveCoachDateSectionForSelected
+                                    )
+
+                                    CoachDateSectionCard(
+                                        title = "הסמכות",
+                                        collapsedSubtitle = "לחצו לפתיחת רשימת הסמכות",
+                                        expandedSubtitle = "הוסיפו תאריך ותיאור להסמכות שהמתאמן קיבל",
+                                        defaultItems = listOf(
+                                            "הסמכה 1",
+                                            "הסמכה 2",
+                                            "הסמכה 3"
+                                        ),
+                                        selectedId = selected.id,
+                                        stateMap = certificationDatesState,
+                                        firestoreFieldName = "certificationDates",
+                                        selectedProfile = selected,
+                                        screenScope = screenScope,
+                                        onSave = ::saveCoachDateSectionForSelected
+                                    )
+
                                     OutlinedTextField(
                                         value = coachNotes[selected.id] ?: "",
                                         onValueChange = { coachNotes[selected.id] = it },
@@ -1261,7 +1428,323 @@ fun CoachTraineesScreen(
         }
     }
 
+@Composable
+private fun CoachDateSectionCard(
+    title: String,
+    collapsedSubtitle: String,
+    expandedSubtitle: String,
+    defaultItems: List<String>,
+    selectedId: String,
+    stateMap: MutableMap<String, Map<String, CoachDateEntry>>,
+    firestoreFieldName: String,
+    selectedProfile: TraineeProfile,
+    screenScope: kotlinx.coroutines.CoroutineScope,
+    onSave: suspend (
+        selectedProfile: TraineeProfile,
+        firestoreFieldName: String,
+        entries: Map<String, CoachDateEntry>
+    ) -> Unit
+) {
+    var isExpanded by remember(selectedId, title) { mutableStateOf(false) }
+    var expandedItem by remember(selectedId, title) { mutableStateOf<String?>(null) }
+    var isSaving by remember(selectedId, title) { mutableStateOf(false) }
+    var saveMessage by remember(selectedId, title) { mutableStateOf<String?>(null) }
 
+    val selectedEntries = stateMap[selectedId].orEmpty()
+
+    Surface(
+        color = Color.Transparent,
+        shape = RoundedCornerShape(24.dp),
+        shadowElevation = 6.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFF8FAFF),
+                            Color(0xFFF3F7FF),
+                            Color(0xFFFFFFFF)
+                        )
+                    ),
+                    shape = RoundedCornerShape(24.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color(0xFFD8E6FF),
+                    shape = RoundedCornerShape(24.dp)
+                )
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                color = Color.White,
+                shape = RoundedCornerShape(18.dp),
+                shadowElevation = 3.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = Color(0xFFD8E6FF)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        isExpanded = !isExpanded
+                    }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) {
+                            Icons.Default.KeyboardArrowUp
+                        } else {
+                            Icons.Default.KeyboardArrowDown
+                        },
+                        contentDescription = null,
+                        tint = Color(0xFF64748B)
+                    )
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            text = title,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Right,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF1E293B)
+                        )
+
+                        Text(
+                            text = if (isExpanded) expandedSubtitle else collapsedSubtitle,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Right,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
+            }
+
+            if (isExpanded) {
+                defaultItems.forEach { itemName ->
+                    val currentEntry = selectedEntries[itemName] ?: CoachDateEntry()
+                    val hasContent =
+                        currentEntry.date.isNotBlank() ||
+                                currentEntry.description.isNotBlank()
+
+                    val isItemExpanded = expandedItem == itemName
+                    val accent = Color(0xFF6366F1)
+
+                    Surface(
+                        color = Color.White,
+                        shape = RoundedCornerShape(20.dp),
+                        shadowElevation = 3.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            accent.copy(alpha = 0.18f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                expandedItem = if (isItemExpanded) null else itemName
+                            }
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(accent)
+                                )
+
+                                Spacer(Modifier.width(8.dp))
+
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = itemName,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1F2937)
+                                    )
+
+                                    Text(
+                                        text = when {
+                                            currentEntry.date.isNotBlank() &&
+                                                    currentEntry.description.isNotBlank() ->
+                                                "תאריך: ${currentEntry.date} • ${currentEntry.description}"
+
+                                            currentEntry.date.isNotBlank() ->
+                                                "תאריך: ${currentEntry.date}"
+
+                                            currentEntry.description.isNotBlank() ->
+                                                currentEntry.description
+
+                                            else -> "אין מידע"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (hasContent) Color(0xFF0F766E) else Color(0xFF94A3B8)
+                                    )
+                                }
+
+                                Icon(
+                                    imageVector = if (hasContent) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                    contentDescription = null,
+                                    tint = if (hasContent) Color(0xFF16A34A) else Color(0xFFDC2626)
+                                )
+
+                                Spacer(Modifier.width(6.dp))
+
+                                Icon(
+                                    imageVector = if (isItemExpanded) {
+                                        Icons.Default.KeyboardArrowUp
+                                    } else {
+                                        Icons.Default.KeyboardArrowDown
+                                    },
+                                    contentDescription = null,
+                                    tint = Color(0xFF64748B)
+                                )
+                            }
+
+                            if (isItemExpanded) {
+                                OutlinedTextField(
+                                    value = currentEntry.date,
+                                    onValueChange = { newValue ->
+                                        val current = stateMap[selectedId]
+                                            .orEmpty()
+                                            .toMutableMap()
+
+                                        val oldEntry = current[itemName] ?: CoachDateEntry()
+                                        current[itemName] = oldEntry.copy(date = newValue)
+                                        stateMap[selectedId] = current
+                                    },
+                                    label = { Text("תאריך") },
+                                    placeholder = { Text("YYYY-MM-DD") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+
+                                OutlinedTextField(
+                                    value = currentEntry.description,
+                                    onValueChange = { newValue ->
+                                        val current = stateMap[selectedId]
+                                            .orEmpty()
+                                            .toMutableMap()
+
+                                        val oldEntry = current[itemName] ?: CoachDateEntry()
+                                        current[itemName] = oldEntry.copy(description = newValue)
+                                        stateMap[selectedId] = current
+                                    },
+                                    label = { Text("תיאור") },
+                                    placeholder = { Text("לדוגמה: השתלמות מדריכים / מחנה קיץ / הסמכת עוזר מדריך") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    minLines = 2,
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Surface(
+                    onClick = {
+                        if (!isSaving) {
+                            val entriesToSave = stateMap[selectedId].orEmpty()
+
+                            screenScope.launch {
+                                isSaving = true
+                                saveMessage = null
+
+                                runCatching {
+                                    onSave(
+                                        selectedProfile,
+                                        firestoreFieldName,
+                                        entriesToSave
+                                    )
+                                }.onSuccess {
+                                    saveMessage = "$title נשמרו"
+                                }.onFailure {
+                                    saveMessage = "שמירת $title נכשלה"
+                                }
+
+                                isSaving = false
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color.Transparent,
+                    shadowElevation = 6.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color(0xFF7C3AED),
+                                        Color(0xFF6366F1),
+                                        Color(0xFF0EA5E9)
+                                    )
+                                ),
+                                shape = RoundedCornerShape(18.dp)
+                            )
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (isSaving) "שומר..." else "שמור $title",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                saveMessage?.let { msg ->
+                    Surface(
+                        color = if (msg.contains("נשמרו")) {
+                            Color(0xFFDCFCE7)
+                        } else {
+                            Color(0xFFFEE2E2)
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (msg.contains("נשמרו")) Color(0xFF166534) else Color(0xFF991B1B),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 @Composable
 private fun LabeledField(label: String, value: String) {
     Column(

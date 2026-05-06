@@ -181,6 +181,9 @@ sealed class Route(val route: String) {
 
     object AboutNetwork : Route("about_network")
 
+    // ✅ NEW: מסך "אודות המאמנים ברשת"
+    object AboutNetworkCoaches : Route("about_network_coaches")
+
     // ▼▼▼ חדש: מסך "אודות איציק ביטון" (לשימוש מהמגירה)
     object AboutItzik : Route("about_itzik")
 

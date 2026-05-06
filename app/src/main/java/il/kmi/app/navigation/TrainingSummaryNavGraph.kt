@@ -53,7 +53,12 @@ fun NavGraphBuilder.trainingSummaryNavGraph(
             kmiPrefs = kmiPrefs,
             belt = belt,
             pickedDateIso = pickedDateIso.ifBlank { null },
-            onBack = onBack
+            onBack = onBack,
+            onOpenCalendar = {
+                nav.navigate(Route.MonthlyCalendar.route) {
+                    launchSingleTop = true
+                }
+            }
         )
     }
 }
