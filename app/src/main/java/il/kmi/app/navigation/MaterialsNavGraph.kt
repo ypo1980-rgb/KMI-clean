@@ -76,6 +76,13 @@ fun NavGraphBuilder.materialsNavGraph(
                     launchSingleTop = true
                     restoreState = true
                 }
+            },
+
+            onOpenSubscription = {
+                nav.navigate(Route.Subscription.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
             }
         )
     }
@@ -151,6 +158,13 @@ fun NavGraphBuilder.materialsNavGraph(
                         inclusive = false
                         saveState = true
                     }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onOpenSubscription = {
+                nav.navigate(Route.Subscription.route) {
                     launchSingleTop = true
                     restoreState = true
                 }

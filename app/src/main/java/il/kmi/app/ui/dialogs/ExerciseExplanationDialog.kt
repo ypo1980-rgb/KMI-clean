@@ -12,14 +12,15 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import il.kmi.app.ui.StyledExplanationText
 
 @Composable
 fun ExerciseExplanationDialog(
@@ -31,19 +32,39 @@ fun ExerciseExplanationDialog(
     accentColor: Color,
     onDismiss: () -> Unit,
     onEditNote: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    backgroundBrush: Brush = Brush.verticalGradient(
+        colors = listOf(
+            Color.White,
+            lerp(Color.White, accentColor, 0.10f),
+            lerp(Color.White, accentColor, 0.05f),
+            Color.White
+        )
+    )
 ) {
     AlertDialog(
+        modifier = Modifier
+            .background(
+                brush = backgroundBrush,
+                shape = RoundedCornerShape(24.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = accentColor.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(24.dp)
+            ),
         onDismissRequest = { },
         properties = androidx.compose.ui.window.DialogProperties(
             dismissOnClickOutside = false,
             dismissOnBackPress = true
         ),
-        containerColor = Color.White.copy(alpha = 0.98f),
+        // חשוב: השקיפות נמצאת רק ב־overlay של המסך, לא בכרטיס עצמו.
+        // הרקע של הכרטיס מגיע מ־backgroundBrush האטום.
+        containerColor = Color.Transparent,
         shape = RoundedCornerShape(24.dp),
         tonalElevation = 0.dp,
         title = {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
@@ -61,61 +82,99 @@ fun ExerciseExplanationDialog(
                         accentColor.copy(alpha = 0.12f),
                         RoundedCornerShape(18.dp)
                     )
-                    .padding(12.dp)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.End
             ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFF1F2937)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Row(
-                    modifier = Modifier.align(AbsoluteAlignment.CenterLeft),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(onClick = onEditNote) {
-                        Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = "עריכת הערה",
-                            tint = if (noteText.isNotBlank()) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
-                    }
-
-                    IconButton(onClick = onToggleFavorite) {
-                        if (isFavorite) {
-                            Icon(
-                                imageVector = Icons.Filled.Star,
-                                contentDescription = "הסר ממועדפים",
-                                tint = Color(0xFFFFC107)
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Outlined.StarBorder,
-                                contentDescription = "הוסף למועדפים"
-                            )
-                        }
-                    }
-                }
-
-                Column(
-                    modifier = Modifier
-                        .align(AbsoluteAlignment.CenterRight)
-                        .fillMaxWidth(),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFF1F2937)
-                    )
                     Text(
                         text = beltLabel,
                         style = MaterialTheme.typography.labelMedium,
                         textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth(),
-                        color = accentColor
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 10.dp),
+                        color = accentColor,
+                        fontWeight = FontWeight.Bold
                     )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Surface(
+                            onClick = onEditNote,
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (noteText.isNotBlank()) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            } else {
+                                Color.White.copy(alpha = 0.72f)
+                            },
+                            border = BorderStroke(
+                                1.dp,
+                                accentColor.copy(alpha = 0.12f)
+                            ),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = "עריכת הערה",
+                                    tint = if (noteText.isNotBlank()) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.size(21.dp)
+                                )
+                            }
+                        }
+
+                        Surface(
+                            onClick = onToggleFavorite,
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White.copy(alpha = 0.72f),
+                            border = BorderStroke(
+                                1.dp,
+                                accentColor.copy(alpha = 0.12f)
+                            ),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                if (isFavorite) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Star,
+                                        contentDescription = "הסר ממועדפים",
+                                        tint = Color(0xFFFFC107),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Outlined.StarBorder,
+                                        contentDescription = "הוסף למועדפים",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -141,8 +200,8 @@ fun ExerciseExplanationDialog(
                     )
                     .padding(14.dp)
             ) {
-                Text(
-                    text = explanation,
+                StyledExplanationText(
+                    raw = explanation,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Right,
                     modifier = Modifier.fillMaxWidth(),

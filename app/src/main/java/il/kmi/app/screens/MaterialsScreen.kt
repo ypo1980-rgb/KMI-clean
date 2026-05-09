@@ -51,6 +51,7 @@ import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.kmi.app.subscription.KmiAccess
 
 //=================================================================================
 
@@ -180,7 +181,8 @@ fun MaterialsScreen(
     onPractice: (Belt, String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenHome: () -> Unit,
-    subTopicFilter: String? = null
+    subTopicFilter: String? = null,
+    onOpenSubscription: () -> Unit = {}
 ) {
 
     val context = LocalContext.current
@@ -189,12 +191,21 @@ fun MaterialsScreen(
     val isEnglish = currentLang == AppLanguage.ENGLISH
 
     val sp = remember { context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
-    val scope = rememberCoroutineScope()
-    val scroll = rememberScrollState()
-    val itemStates = remember(belt.id, topic, subTopicFilter) { mutableStateMapOf<String, Boolean?>() }
 
     // ✅ גורם למסך להתרענן אחרי סימון יודע/לא יודע ממסכים אחרים, כולל RandomPracticeScreen
     val marksVersion by vm.marksVersion.collectAsState()
+
+    val accessSp = remember(context) {
+        context.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+    }
+
+    val hasFullAccess = remember(accessSp, marksVersion) {
+        KmiAccess.hasFullAccess(accessSp)
+    }
+
+    val scope = rememberCoroutineScope()
+    val scroll = rememberScrollState()
+    val itemStates = remember(belt.id, topic, subTopicFilter) { mutableStateMapOf<String, Boolean?>() }
 
     var explainTriple by remember { mutableStateOf<Triple<Belt, String, String>?>(null) }
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -212,6 +223,12 @@ fun MaterialsScreen(
         } else {
             "${topicUi}__${subTopicFilter}"
         }
+    }
+
+    // ✅ תרגול נעול לכל הנושאים אם אין מנוי פעיל.
+    // החומר עצמו יכול להיפתח לפי הלוגיקה הקיימת, אבל כפתור "תרגול" דורש מנוי.
+    val isPracticeLocked = remember(hasFullAccess) {
+        !hasFullAccess
     }
 
     // ===== canonical (✅ מקור אמת אחד לכל האפליקציה) =====
@@ -298,6 +315,34 @@ fun MaterialsScreen(
         }
 
         itemsCache[key] = value
+    }
+
+    // ✅ אם כמה שורות מקבלות אותו canonicalId, אסור שסימון יודע/לא יודע ישתמש באותו מפתח.
+    // canonicalId נשאר להסברים / מועדפים / הערות.
+    // statusId משמש רק לסימונים.
+    val duplicatedCanonicalIds = remember(itemList, belt.id, topicUi) {
+        itemList
+            .map { item -> canonicalFor(item) }
+            .groupingBy { it }
+            .eachCount()
+            .filterValues { count -> count > 1 }
+            .keys
+    }
+
+    fun normalizeStatusPart(s: String): String =
+        s.replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    fun statusIdFor(index: Int, item: String): String {
+        val cleanItem = normalizeStatusPart(item)
+
+        // ✅ מזהה סימון ייחודי תמיד לפי:
+        // חגורה + נושא/תת־נושא מדויק + מיקום השורה + שם השורה.
+        // לא משתמשים ב-canonicalId לסימונים, כי תרגילים דומים עלולים להידבק דרך נרמול/מפתחות ישנים.
+        return "status_${belt.id}_${topicKey}_${index}_${cleanItem}"
     }
 
     // הדגשת תרגיל (✅ בלי Reflection: זה top-level flow)
@@ -411,23 +456,26 @@ fun MaterialsScreen(
         // produceState מתחיל לפעמים עם itemList ריק, ואז נטען שוב עם הרשימה האמיתית.
         // אם ננקה את itemStates בזמן שהרשימה ריקה — כל הוי/איקס נעלמים רגעית.
         if (itemList.isEmpty()) {
-            android.util.Log.d(
-                "KMI_MARK_SYNC",
-                "Materials load batch skipped | belt=${belt.id} | topicKey=$topicKey | reason=itemList empty"
-            )
             return@LaunchedEffect
         }
 
         val nextStates = mutableMapOf<String, Boolean?>()
 
-        itemList.forEach { item ->
+        itemList.forEachIndexed { index, item ->
             val canonicalId = canonicalFor(item)
+            val statusId = statusIdFor(index, item)
 
-            val topicKeysToRead = listOf(
-                topicKey,
-                topicUi,
-                "כללי"
-            )
+            // ✅ בתת־נושא קוראים רק מהמפתח המדויק.
+            // אחרת סימונים ישנים מ־topicUi / כללי עלולים לסמן אוטומטית תרגילים אחרים.
+            val topicKeysToRead = if (subTopicFilter.isNullOrBlank()) {
+                listOf(
+                    topicKey,
+                    topicUi,
+                    "כללי"
+                )
+            } else {
+                listOf(topicKey)
+            }
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
                 .distinct()
@@ -441,7 +489,7 @@ fun MaterialsScreen(
                         vm.getItemStatusNullable(
                             belt = belt,
                             topic = key,
-                            item = canonicalId
+                            item = statusId
                         )
                     }.getOrNull()
                         ?: runCatching {
@@ -449,9 +497,9 @@ fun MaterialsScreen(
                                 vm.isMastered(
                                     belt = belt,
                                     topic = key,
-                                    item = canonicalId
+                                    item = statusId
                                 )
-                            ) true else null
+                                ) true else null
                         }.getOrNull()
 
                 if (valueFromKey != null) {
@@ -463,58 +511,46 @@ fun MaterialsScreen(
 
             // ✅ fallback לשמירה המקומית הישנה
             val localFallback: Boolean? = when {
-                masteredSet.contains(canonicalId) -> true
-                unknowns.contains(canonicalId) -> false
+                masteredSet.contains(statusId) -> true
+                unknowns.contains(statusId) -> false
                 else -> null
             }
 
             val finalValue = vFromVm ?: localFallback
 
-            // ✅ ריפוי VM רק אם מצאנו ערך מקומי אבל ה־VM ריק
+            // ✅ ריפוי VM רק אם מצאנו ערך מקומי אבל ה־VM ריק.
+            // בתת־נושא כותבים רק למפתח המדויק כדי לא לזהם את topicUi / כללי.
             if (vFromVm == null && finalValue != null) {
-                vm.setItemStatusNullable(
-                    belt = belt,
-                    topic = topicKey,
-                    item = canonicalId,
-                    value = finalValue
-                )
-
-                if (topicKey != topicUi) {
-                    vm.setItemStatusNullable(
-                        belt = belt,
-                        topic = topicUi,
-                        item = canonicalId,
-                        value = finalValue
+                val topicKeysToHeal = if (subTopicFilter.isNullOrBlank()) {
+                    listOf(
+                        topicKey,
+                        topicUi,
+                        "כללי"
                     )
+                } else {
+                    listOf(topicKey)
                 }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
 
-                if (topicUi != "כללי") {
+                topicKeysToHeal.forEach { key ->
                     vm.setItemStatusNullable(
                         belt = belt,
-                        topic = "כללי",
-                        item = canonicalId,
+                        topic = key,
+                        item = statusId,
                         value = finalValue
                     )
                 }
             }
 
-            // ✅ שומרים זמנית לפי canonicalId בלבד
-            nextStates[canonicalId] = finalValue
-
-            android.util.Log.d(
-                "KMI_MARK_SYNC",
-                "Materials load batch | belt=${belt.id} | topicKey=$topicKey | topicUi=$topicUi | readKeys=$topicKeysToRead | matchedKey=$matchedKey | rawItem=$item | canonicalId=$canonicalId | vmValue=$vFromVm | localFallback=$localFallback | finalValue=$finalValue"
-            )
+            // ✅ שומרים זמנית לפי statusId בלבד כדי למנוע סימון כפול בין תרגילים דומים.
+            nextStates[statusId] = finalValue
         }
 
         // ✅ עדכון UI פעם אחת אחרי שכל הרשימה נטענה
         itemStates.clear()
         itemStates.putAll(nextStates)
-
-        android.util.Log.d(
-            "KMI_MARK_SYNC",
-            "Materials load batch done | belt=${belt.id} | topicKey=$topicKey | count=${nextStates.size} | states=$nextStates"
-        )
     }
 
     Scaffold(
@@ -589,10 +625,25 @@ fun MaterialsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             AnimatedButton(
-                                text = if (isEnglish) "Practice" else "תרגול",
+                                text = when {
+                                    isPracticeLocked && isEnglish -> "🔒 Practice"
+                                    isPracticeLocked -> "🔒 תרגול"
+                                    isEnglish -> "Practice"
+                                    else -> "תרגול"
+                                },
                                 modifier = Modifier.weight(1f),
-                                containerColor = belt.color.copy(alpha = 0.92f),
-                                onClick = { onPractice(belt, topicUi) }
+                                containerColor = if (isPracticeLocked) {
+                                    Color(0xFF9A7A22)
+                                } else {
+                                    belt.color.copy(alpha = 0.92f)
+                                },
+                                onClick = {
+                                    if (isPracticeLocked) {
+                                        onOpenSubscription()
+                                    } else {
+                                        onPractice(belt, topicUi)
+                                    }
+                                }
                             )
 
                             AnimatedButton(
@@ -602,18 +653,41 @@ fun MaterialsScreen(
                                 onClick = {
                                     scope.launch {
                                         vm.clearTopic(belt, topicKey)
-                                        itemList.forEach { item ->
-                                            val canonicalId = canonicalFor(item)
-                                            itemStates[canonicalId] = null
+                                        itemList.forEachIndexed { index, item ->
+                                            val statusId = statusIdFor(index, item)
+                                            itemStates[statusId] = null
                                         }
 
                                         excludedItems.clear()
-                                        sp.edit()
+
+                                        val keysToClear = if (subTopicFilter.isNullOrBlank()) {
+                                            listOf(
+                                                topicKey,
+                                                topicUi,
+                                                "כללי"
+                                            )
+                                        } else {
+                                            listOf(topicKey)
+                                        }
+                                            .map { it.trim() }
+                                            .filter { it.isNotBlank() }
+                                            .distinct()
+
+                                        val editor = sp.edit()
                                             .remove("excluded_${belt.id}_$excludedKeySuffix")
                                             .remove("fav_${belt.id}_$excludedKeySuffix")
-                                            .apply()
+
+                                        keysToClear.forEach { key ->
+                                            editor
+                                                .remove("mastered_${belt.id}_$key")
+                                                .remove("unknown_${belt.id}_$key")
+                                        }
+
+                                        editor.apply()
 
                                         favorites = mutableSetOf()
+                                        masteredSet = mutableSetOf()
+                                        unknowns = mutableSetOf()
                                     }
                                 }
                             )
@@ -712,59 +786,19 @@ fun MaterialsScreen(
         // ===== סוף הדיאלוג =====
 
         noteEditorFor?.let { itemId ->
-            AlertDialog(
-                onDismissRequest = { noteEditorFor = null },
-                title = {
-                    Text(
-                        if (isEnglish) "Exercise Note" else "הערה על התרגיל",
-                        style = MaterialTheme.typography.titleSmall,
-                        textAlign = TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth(),
-                        fontWeight = FontWeight.Bold
-                    )
+            PremiumExerciseNoteDialog(
+                isEnglish = isEnglish,
+                noteText = noteDraft,
+                onNoteChange = { noteDraft = it },
+                onDismiss = { noteEditorFor = null },
+                onSave = {
+                    saveNote(itemId, noteDraft)
+                    noteEditorFor = null
                 },
-                text = {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        OutlinedTextField(
-                            value = noteDraft,
-                            onValueChange = { noteDraft = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text(if (isEnglish) "Write a free note" else "הקלד הערה חופשית") },
-                            minLines = 3,
-                            maxLines = 5
-                        )
-                        if (noteDraft.isNotBlank()) {
-                            TextButton(
-                                onClick = {
-                                    noteDraft = ""
-                                    saveNote(itemId, "")
-                                    noteEditorFor = null
-                                }
-                            ) {
-                                Text(if (isEnglish) "Delete note" else "מחק הערה")
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            saveNote(itemId, noteDraft)
-                            noteEditorFor = null
-                        }
-                    ) {
-                        Text(if (isEnglish) "Save" else "שמור")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { noteEditorFor = null }
-                    ) {
-                        Text(if (isEnglish) "Cancel" else "בטל")
-                    }
+                onDelete = {
+                    noteDraft = ""
+                    saveNote(itemId, "")
+                    noteEditorFor = null
                 }
             )
         }
@@ -864,11 +898,17 @@ fun MaterialsScreen(
                     ) {
 
                         val filtered = itemList
-                        filtered.forEach { item ->
+                        filtered.forEachIndexed { index, item ->
                             var showNoteDialog by remember { mutableStateOf(false) }
 
-                            // ✅ מזהה אחיד לכל פעולה/שמירה
+                            // ✅ מזהה אחיד להסבר / מועדפים / הערות
                             val canonicalId = remember(item, belt.id, topicUi) { canonicalFor(item) }
+
+                            // ✅ מזהה לסימון יודע/לא יודע בלבד.
+                            // אם canonicalId כפול בין כמה שורות, statusId מפריד ביניהן לפי מיקום השורה.
+                            val statusId = remember(index, item, duplicatedCanonicalIds, belt.id, topicKey, topicUi) {
+                                statusIdFor(index, item)
+                            }
 
                             // ✅ טקסט לתצוגה בלבד
                             val displayName = remember(item, topicUi, currentLang) {
@@ -879,19 +919,14 @@ fun MaterialsScreen(
                                 mutableStateOf(loadNote(canonicalId))
                             }
 
-                            val mastered = itemStates[canonicalId] ?: when {
-                                masteredSet.contains(canonicalId) -> true
-                                unknowns.contains(canonicalId) -> false
+                            val mastered = itemStates[statusId] ?: when {
+                                masteredSet.contains(statusId) -> true
+                                unknowns.contains(statusId) -> false
                                 else -> null
                             }
 
                             val isExcluded = excludedItems.contains(canonicalId)
                             val isHighlighted = highlight != null && canonicalId == highlight
-
-                            android.util.Log.d(
-                                "KMI_MARK_SYNC",
-                                "Materials render | belt=${belt.id} | topicKey=$topicKey | rawItem=$item | canonicalId=$canonicalId | mastered=$mastered"
-                            )
 
                             val bringer = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
                             LaunchedEffect(isHighlighted) {
@@ -958,58 +993,51 @@ fun MaterialsScreen(
 
                                     Spacer(Modifier.width(8.dp))
 
-                                    key(canonicalId, mastered) {
+                                    key(statusId, mastered) {
                                         MasterToggle(
                                             mastered = mastered,
                                             onSelect = { newVal ->
-                                                itemStates[canonicalId] = newVal
+                                                itemStates[statusId] = newVal
 
-                                                // ✅ שמירה למפתח הנוכחי
-                                                vm.setItemStatusNullable(
-                                                    belt = belt,
-                                                    topic = topicKey,
-                                                    item = canonicalId,
-                                                    value = newVal
-                                                )
+                                                // ✅ במסך תת־נושא שומרים רק למפתח המדויק.
+                                                // אחרת סימון בתת־נושא עלול להשפיע על תרגילים אחרים דרך topicUi / כללי.
+                                                val topicKeysToWriteToVm = if (subTopicFilter.isNullOrBlank()) {
+                                                    listOf(
+                                                        topicKey,
+                                                        topicUi,
+                                                        "כללי"
+                                                    )
+                                                } else {
+                                                    listOf(topicKey)
+                                                }
+                                                    .map { it.trim() }
+                                                    .filter { it.isNotBlank() }
+                                                    .distinct()
 
-                                                // ✅ אם זה תת־נושא, נשמור גם לנושא הראשי
-                                                // כדי ש־RandomPracticeScreen יקרא אותו בלי לאבד סנכרון.
-                                                if (topicKey != topicUi) {
+                                                topicKeysToWriteToVm.forEach { key ->
                                                     vm.setItemStatusNullable(
                                                         belt = belt,
-                                                        topic = topicUi,
-                                                        item = canonicalId,
+                                                        topic = key,
+                                                        item = statusId,
                                                         value = newVal
                                                     )
                                                 }
-
-                                                // ✅ שמירה גם תחת "כללי"
-                                                // חשוב לתרגול כללי לפי חגורה ולסנכרון דו־כיווני.
-                                                if (topicUi != "כללי") {
-                                                    vm.setItemStatusNullable(
-                                                        belt = belt,
-                                                        topic = "כללי",
-                                                        item = canonicalId,
-                                                        value = newVal
-                                                    )
-                                                }
-
-                                                android.util.Log.d(
-                                                    "KMI_MARK_SYNC",
-                                                    "Materials UI click | belt=${belt.id} | topicKey=$topicKey | topicUi=$topicUi | rawItem=$item | canonicalId=$canonicalId | value=$newVal"
-                                                )
 
                                                 // ✅ שמירה מקומית תואמת לסיכום/מסכים ישנים
-                                                setMasteredLocal(canonicalId, newVal == true)
-                                                setUnknown(canonicalId, newVal == false)
+                                                setMasteredLocal(statusId, newVal == true)
+                                                setUnknown(statusId, newVal == false)
 
-                                                // ✅ שמירה מקומית רחבה גם למפתחות ש-RandomPracticeScreen קורא.
-                                                // זה פותר את הכיוון: מסך תרגילים -> מסך תרגול.
-                                                val localKeysToWrite = listOf(
-                                                    topicKey,
-                                                    topicUi,
-                                                    "כללי"
-                                                )
+                                                // ✅ בתת־נושא שומרים מקומית רק למפתח המדויק.
+                                                // במסך נושא רגיל נשארת שמירה רחבה לסנכרון עם תרגול.
+                                                val localKeysToWrite = if (subTopicFilter.isNullOrBlank()) {
+                                                    listOf(
+                                                        topicKey,
+                                                        topicUi,
+                                                        "כללי"
+                                                    )
+                                                } else {
+                                                    listOf(topicKey)
+                                                }
                                                     .map { it.trim() }
                                                     .filter { it.isNotBlank() }
                                                     .distinct()
@@ -1028,18 +1056,18 @@ fun MaterialsScreen(
 
                                                     when (newVal) {
                                                         true -> {
-                                                            masteredSetForPractice.add(canonicalId)
-                                                            unknownSetForPractice.remove(canonicalId)
+                                                            masteredSetForPractice.add(statusId)
+                                                            unknownSetForPractice.remove(statusId)
                                                         }
 
                                                         false -> {
-                                                            unknownSetForPractice.add(canonicalId)
-                                                            masteredSetForPractice.remove(canonicalId)
+                                                            unknownSetForPractice.add(statusId)
+                                                            masteredSetForPractice.remove(statusId)
                                                         }
 
                                                         null -> {
-                                                            masteredSetForPractice.remove(canonicalId)
-                                                            unknownSetForPractice.remove(canonicalId)
+                                                            masteredSetForPractice.remove(statusId)
+                                                            unknownSetForPractice.remove(statusId)
                                                         }
                                                     }
 
@@ -1064,55 +1092,19 @@ fun MaterialsScreen(
 
                             // דיאלוג הערה
                             if (showNoteDialog) {
-                                AlertDialog(
-                                    onDismissRequest = { showNoteDialog = false },
-                                    title = {
-                                        Text(
-                                            if (isEnglish) "Exercise Note" else "הערה על התרגיל",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            textAlign = TextAlign.Right,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                PremiumExerciseNoteDialog(
+                                    isEnglish = isEnglish,
+                                    noteText = noteText,
+                                    onNoteChange = { noteText = it },
+                                    onDismiss = { showNoteDialog = false },
+                                    onSave = {
+                                        saveNote(canonicalId, noteText)
+                                        showNoteDialog = false
                                     },
-                                    text = {
-                                        Column(
-                                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                                            horizontalAlignment = Alignment.End
-                                        ) {
-                                            OutlinedTextField(
-                                                value = noteText,
-                                                onValueChange = { noteText = it },
-                                                modifier = Modifier.fillMaxWidth(),
-                                                label = { Text(if (isEnglish) "Write a free note" else "הקלד הערה חופשית") },
-                                                minLines = 3,
-                                                maxLines = 5
-                                            )
-                                            if (noteText.isNotBlank()) {
-                                                TextButton(
-                                                    onClick = {
-                                                        noteText = ""
-                                                        saveNote(canonicalId, "")
-                                                        showNoteDialog = false
-                                                    }
-                                                ) {
-                                                    Text(if (isEnglish) "Delete note" else "מחק הערה")
-                                                }
-                                            }
-                                        }
-                                    },
-                                    confirmButton = {
-                                        TextButton(onClick = {
-                                            saveNote(canonicalId, noteText)
-                                            showNoteDialog = false
-                                        }) {
-                                            Text(if (isEnglish) "Save" else "שמור")
-                                        }
-                                    },
-                                    dismissButton = {
-                                        TextButton(onClick = { showNoteDialog = false }) {
-                                            Text(if (isEnglish) "Cancel" else "בטל")
-                                        }
+                                    onDelete = {
+                                        noteText = ""
+                                        saveNote(canonicalId, "")
+                                        showNoteDialog = false
                                     }
                                 )
                             }
@@ -1124,6 +1116,184 @@ fun MaterialsScreen(
             }
         }
     }
+}
+
+@Composable
+private fun PremiumExerciseNoteDialog(
+    isEnglish: Boolean,
+    noteText: String,
+    onNoteChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit,
+    onDelete: (() -> Unit)? = null
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color.Transparent,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(30.dp),
+        title = null,
+        text = {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(30.dp),
+                color = Color.White.copy(alpha = 0.98f),
+                shadowElevation = 18.dp,
+                tonalElevation = 0.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = Color(0xFF7E57C2).copy(alpha = 0.16f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White,
+                                    Color(0xFFF7F2FF),
+                                    Color.White
+                                )
+                            )
+                        )
+                        .padding(horizontal = 20.dp, vertical = 20.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Right,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF1F2937)
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            "Write a personal note that will stay attached to this exercise."
+                        } else {
+                            "כתוב הערה אישית שתישמר לתרגיל הזה"
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Right,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF64748B)
+                    )
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White.copy(alpha = 0.96f),
+                        shadowElevation = 7.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color(0xFF7E57C2).copy(alpha = 0.18f)
+                        )
+                    ) {
+                        OutlinedTextField(
+                            value = noteText,
+                            onValueChange = onNoteChange,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            minLines = 4,
+                            maxLines = 7,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                textAlign = TextAlign.Right,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF111827)
+                            ),
+                            placeholder = {
+                                Text(
+                                    text = if (isEnglish) "Write a free note" else "הקלד הערה חופשית",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Right,
+                                    color = Color(0xFF94A3B8),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                cursorColor = Color(0xFF7E57C2)
+                            )
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = Color(0xFF7E57C2).copy(alpha = 0.24f)
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = Color.White.copy(alpha = 0.78f),
+                                contentColor = Color(0xFF6D5BA6)
+                            )
+                        ) {
+                            Text(
+                                text = if (isEnglish) "Cancel" else "בטל",
+                                fontWeight = FontWeight.Black,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                        }
+
+                        Button(
+                            onClick = onSave,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF5B3FA6),
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(
+                                defaultElevation = 8.dp,
+                                pressedElevation = 2.dp
+                            )
+                        ) {
+                            Text(
+                                text = if (isEnglish) "Save" else "שמור",
+                                fontWeight = FontWeight.Black,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                        }
+                    }
+
+                    if (noteText.isNotBlank() && onDelete != null) {
+                        TextButton(
+                            onClick = onDelete,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (isEnglish) "Delete note" else "מחק הערה",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB3261E)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {}
+    )
 }
 
 // ===== כפתור מונפש =====

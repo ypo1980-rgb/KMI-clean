@@ -32,6 +32,7 @@ import il.kmi.app.localization.rememberIsEnglish
 import il.kmi.app.screens.parseSearchKey
 import il.kmi.app.ui.FloatingQuickMenu
 import il.kmi.app.ui.QuickMenuTriggerMode
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.screens.PracticeByTopicsSelection
 import il.kmi.app.screens.PracticeMenuDialog
 import il.kmi.shared.domain.Belt
@@ -500,81 +501,109 @@ fun BeltQuestionsByTopicScreen(
             )
         }
 
-        // --- ניהול דיאלוגים (AlertDialog) ---
+        // --- ניהול דיאלוגים ---
         pickedKey?.let { key ->
             val (belt, topic, item) = parseSearchKey(key)
+
             val baseDisplayName = ExerciseTitleFormatter.displayName(item).ifBlank { item }
             val displayName = if (isEnglish) {
                 ExerciseTitlesEn.getOrSame(baseDisplayName)
             } else {
                 baseDisplayName
             }
+
             val favoriteId = remember(item) { normalizeFavoriteId(item) }
             val favorites by FavoritesStore.favoritesFlow.collectAsState(initial = emptySet())
             val isFavorite = favorites.contains(favoriteId)
+
             val noteKey = "note_${belt.id}_${topic.trim()}_${favoriteId}"
-            var noteText by remember { mutableStateOf(notePrefs.getString(noteKey, "").orEmpty()) }
-            var showNoteEditor by remember { mutableStateOf(false) }
-            val explanation = remember(belt, item) { findExplanationForHitLocal(belt, item, topic) }
+            var noteText by remember(noteKey) {
+                mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+            }
 
-            AlertDialog(
-                onDismissRequest = { pickedKey = null },
-                title = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            Text(
-                                text = displayName,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right
-                            )
+            var showNoteEditor by rememberSaveable(noteKey) {
+                mutableStateOf(false)
+            }
 
-                            Text(
-                                text = if (isEnglish) {
-                                    "${ExerciseTitlesEn.getOrSame(topic)} • ${belt.en}"
-                                } else {
-                                    "$topic • ${belt.heb}"
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                textAlign = TextAlign.Right
-                            )
-                        }
+            val explanation = remember(belt, item, topic) {
+                findExplanationForHitLocal(belt, item, topic)
+            }
 
-                        IconButton(
-                            onClick = { showNoteEditor = true }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = null,
-                                tint = Color(0xFF42A5F5)
-                            )
-                        }
-
-                        IconButton(
-                            onClick = { FavoritesStore.toggle(favoriteId) }
-                        ) {
-                            Icon(
-                                imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                                contentDescription = null,
-                                tint = if (isFavorite) Color(0xFFFFC107) else Color.Gray
-                            )
-                        }
-                    }
+            ExerciseExplanationDialog(
+                title = displayName,
+                beltLabel = if (isEnglish) {
+                    "(${ExerciseTitlesEn.getOrSame(topic)} • ${belt.en})"
+                } else {
+                    "($topic • ${belt.heb})"
                 },
-                text = {
-                    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-                        Text(text = explanation, textAlign = TextAlign.Right)
-                    }
+                explanation = explanation,
+                noteText = noteText,
+                isFavorite = isFavorite,
+                accentColor = belt.color,
+                onDismiss = {
+                    pickedKey = null
+                    showNoteEditor = false
                 },
-                confirmButton = {
-                    TextButton(onClick = { pickedKey = null }) { Text(if (isEnglish) "Close" else "סגור") }
+                onEditNote = {
+                    showNoteEditor = true
+                },
+                onToggleFavorite = {
+                    FavoritesStore.toggle(favoriteId)
                 }
             )
+
+            if (showNoteEditor) {
+                AlertDialog(
+                    onDismissRequest = { showNoteEditor = false },
+                    title = {
+                        Text(
+                            text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Right,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        OutlinedTextField(
+                            value = noteText,
+                            onValueChange = { noteText = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 4,
+                            maxLines = 7,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                textAlign = TextAlign.Right
+                            ),
+                            placeholder = {
+                                Text(
+                                    text = if (isEnglish) "Write a free note" else "הקלד הערה חופשית",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Right
+                                )
+                            }
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                notePrefs.edit()
+                                    .putString(noteKey, noteText)
+                                    .apply()
+
+                                showNoteEditor = false
+                            }
+                        ) {
+                            Text(if (isEnglish) "Save" else "שמור")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { showNoteEditor = false }
+                        ) {
+                            Text(if (isEnglish) "Cancel" else "בטל")
+                        }
+                    }
+                )
+            }
         }
     }
 }

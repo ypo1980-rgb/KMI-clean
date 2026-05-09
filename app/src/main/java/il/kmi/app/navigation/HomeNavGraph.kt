@@ -494,12 +494,32 @@ fun NavGraphBuilder.homeNavGraph(
         val beltId = backStackEntry.arguments?.getString("beltId").orEmpty()
         val belt = Belt.fromId(beltId) ?: Belt.WHITE
 
+        val accessSp = remember(nav.context) {
+            nav.context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+        }
+
+        val subsSp = remember(nav.context) {
+            nav.context.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
+        }
+
+        fun hasPremiumAccessNow(): Boolean {
+            return KmiAccess.hasFullAccess(accessSp) ||
+                    KmiAccess.hasFullAccess(subsSp)
+        }
+
         ExercisesTabsScreen(
             vm = vm,
             belt = belt,
             topic = "__ALL__",
             onPractice = { b, t ->
-                nav.navigate(Route.Practice.make(b, t))
+                if (hasPremiumAccessNow()) {
+                    nav.navigate(Route.Practice.make(b, t))
+                } else {
+                    nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
             },
             subTopicFilter = null,
             onHome = {

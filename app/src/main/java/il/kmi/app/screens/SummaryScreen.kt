@@ -90,6 +90,25 @@ private fun topicKey(s: String): String = s
     .replace(Regex("\\s+"), " ")
     .trim()
 
+private fun normalizeStatusPart(s: String): String =
+    s.replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+private fun summaryStatusIdFor(
+    belt: Belt,
+    topicKey: String,
+    index: Int,
+    item: String
+): String {
+    val cleanItem = normalizeStatusPart(item)
+
+    // חייב להיות זהה ל-statusIdFor ב-MaterialsScreen
+    return "status_${belt.id}_${topicKey}_${index}_${cleanItem}"
+}
+
 private fun findCanonicalItem(b: Belt, t: String, displayItem: String): String? {
     val wanted = norm(displayItem)
 
@@ -213,9 +232,16 @@ fun ProgressMeter(
             // ✅ Snapshot מהיר ומדויק לנושא (ה-VM עושה canonicalTopicKey בפנים)
             val topicSnap = vm.getTopicStatusSnapshot(belt, tp)
 
-            items.forEach { raw ->
+            items.forEachIndexed { index, raw ->
                 val canonicalId = canonicalFromRepo(tp, raw)
-                if (topicSnap[canonicalId] == true) d++
+                val statusId = summaryStatusIdFor(
+                    belt = belt,
+                    topicKey = tp.trim(),
+                    index = index,
+                    item = raw
+                )
+
+                if ((topicSnap[statusId] ?: topicSnap[canonicalId]) == true) d++
             }
         }
 
@@ -336,12 +362,30 @@ fun SummaryScreen(
         val beltContent = beltContentFor(belt)
         val topics = beltContent?.topics.orEmpty()
 
+        val out = LinkedHashMap<String, List<String>>()
+
+        if (topic.isNotBlank() && !subTopicFilter.isNullOrBlank()) {
+            val items = withContext(Dispatchers.Default) {
+                SharedContentRepo.getAllItemsFor(
+                    belt = belt,
+                    topicTitle = topic.trim(),
+                    subTopicTitle = subTopicFilter.trim()
+                )
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+            }
+
+            out[topic.trim()] = items
+            itemsByTopic = out
+            return@LaunchedEffect
+        }
+
         val allTitles = topics.map { it.title }
         val orderedTitles: List<String> =
             if (topic.isNotBlank()) listOf(topic) + allTitles.filterNot { norm(it) == norm(topic) }
             else allTitles
 
-        val out = LinkedHashMap<String, List<String>>()
         orderedTitles.forEach { title ->
             val tObj = topics.firstOrNull { norm(it.title) == norm(title) }
             val items = if (tObj == null) emptyList()
@@ -369,13 +413,33 @@ fun SummaryScreen(
 
                 itemsByTopic.forEach { (topicTitle, items) ->
 
-                    // ✅ Snapshot מהיר לנושא (ללא IO)
-                    val topicSnap = vm.getTopicStatusSnapshot(belt, topicTitle)
+                    val statusTopicKey = if (
+                        topic.isNotBlank() &&
+                        !subTopicFilter.isNullOrBlank() &&
+                        norm(topicTitle) == norm(topic)
+                    ) {
+                        "${topic.trim()}__${subTopicFilter.trim()}"
+                    } else {
+                        topicTitle.trim()
+                    }
 
-                    items.forEach { itemRaw ->
+                    // ✅ Snapshot לפי אותו topicKey שבו MaterialsScreen שומר
+                    val topicSnap = vm.getTopicStatusSnapshot(belt, statusTopicKey)
+
+                    items.forEachIndexed { index, itemRaw ->
                         val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
 
-                        val v: Boolean? = topicSnap[canonicalId]
+                        // ✅ אותו מפתח בדיוק כמו MaterialsScreen
+                        val statusId = summaryStatusIdFor(
+                            belt = belt,
+                            topicKey = statusTopicKey,
+                            index = index,
+                            item = itemRaw
+                        )
+
+                        // ✅ קוראים קודם את המפתח החדש.
+                        // fallback ל-canonicalId רק כדי לא לאבד סימונים ישנים שכבר נשמרו בעבר.
+                        val v: Boolean? = topicSnap[statusId] ?: topicSnap[canonicalId]
 
                         val state = when (v) {
                             true  -> MarkState.YES

@@ -54,6 +54,7 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import il.kmi.app.ui.FloatingQuickMenu
+import il.kmi.app.ui.StyledExplanationText
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -971,8 +972,8 @@ internal fun BeltPangoLayout(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalAlignment = Alignment.End
                         ) {
-                            Text(
-                                text = explanation,
+                            StyledExplanationText(
+                                raw = explanation,
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()

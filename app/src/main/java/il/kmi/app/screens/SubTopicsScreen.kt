@@ -16,6 +16,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,6 +40,7 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.localization.AppLanguage
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.domain.content.English.ExerciseExplanationsEn
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 
 //===========================================================================
 
@@ -560,8 +562,9 @@ fun SubTopicsScreen(
 
                         ModernExerciseInfoDialog(
                             title = item,
-                            subtitle = hardTitle,
+                            subtitle = if (isEnglish) belt.en else belt.heb,
                             explanation = explanation,
+                            accentColor = belt.color,
                             onDismiss = { explain = null }
                         )
                     }
@@ -623,8 +626,9 @@ fun SubTopicsScreen(
 
                         ModernExerciseInfoDialog(
                             title = item,
-                            subtitle = topicDecoded,
+                            subtitle = if (isEnglish) belt.en else belt.heb,
                             explanation = explanation,
+                            accentColor = belt.color,
                             onDismiss = { explain = null }
                         )
                     }
@@ -719,8 +723,9 @@ fun SubTopicsScreen(
 
         ModernExerciseInfoDialog(
             title = req.item,
-            subtitle = "${req.belt.heb} • ${hardTitle.ifBlank { topicDecoded }}",
+            subtitle = if (isEnglish) req.belt.en else req.belt.heb,
             explanation = explanation,
+            accentColor = req.belt.color,
             onDismiss = { openedExerciseRequest = null }
         )
     }
@@ -742,8 +747,9 @@ fun SubTopicsScreen(
 
         ModernExerciseInfoDialog(
             title = displayName,
-            subtitle = "${beltHit.heb} • $topicHit",
+            subtitle = if (isEnglish) beltHit.en else beltHit.heb,
             explanation = explanation,
+            accentColor = beltHit.color,
             isFav = isFav,
             onToggleFav = { isFav = !isFav },
             onDismiss = { pickedKey = null }
@@ -823,6 +829,7 @@ private fun ModernExerciseInfoDialog(
     title: String,
     subtitle: String? = null,
     explanation: String,
+    accentColor: Color = MaterialTheme.colorScheme.primary,
     isFav: Boolean? = null,
     onToggleFav: (() -> Unit)? = null,
     onDismiss: () -> Unit
@@ -830,99 +837,129 @@ private fun ModernExerciseInfoDialog(
     val context = LocalContext.current
     val langManager = remember(context) { AppLanguageManager(context) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-    val textAlignByLang = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontalByLang = if (isEnglish) Alignment.Start else Alignment.End
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFFF7F4FB),
-        shape = RoundedCornerShape(28.dp),
-        tonalElevation = 8.dp,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    horizontalAlignment = horizontalByLang
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = textAlignByLang,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+    val notePrefs = remember(context) {
+        context.getSharedPreferences("kmi_exercise_notes", android.content.Context.MODE_PRIVATE)
+    }
 
-                    subtitle?.takeIf { it.isNotBlank() }?.let {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                            textAlign = textAlignByLang,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+    val favoriteId = remember(title) {
+        title.trim()
+    }
 
-                if (isFav != null && onToggleFav != null) {
-                    Spacer(Modifier.width(8.dp))
+    val noteKey = remember(title, subtitle) {
+        "note_${subtitle.orEmpty().trim()}_${favoriteId}"
+    }
 
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = Color.White,
-                        border = BorderStroke(1.dp, Color(0xFFE0D8EF))
-                    ) {
-                        IconButton(onClick = onToggleFav) {
-                            if (isFav) {
-                                Icon(
-                                    imageVector = Icons.Filled.Star,
-                                    contentDescription = "מועדף",
-                                    tint = Color(0xFFFFC107)
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Outlined.StarBorder,
-                                    contentDescription = "הוסף למועדפים",
-                                    tint = Color(0xFF7F759A)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+    var noteText by remember(noteKey) {
+        mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+    }
+
+    var showNoteEditor by rememberSaveable(noteKey) {
+        mutableStateOf(false)
+    }
+
+    var localFavorite by remember(favoriteId) {
+        mutableStateOf(il.kmi.app.favorites.FavoritesStore.isFavorite(favoriteId))
+    }
+
+    val effectiveFavorite = isFav ?: localFavorite
+
+    ExerciseExplanationDialog(
+        title = title,
+        beltLabel = subtitle
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "($it)" }
+            ?: "",
+        explanation = explanation,
+        noteText = noteText,
+        isFavorite = effectiveFavorite,
+        accentColor = accentColor,
+        backgroundBrush = Brush.verticalGradient(
+            colors = listOf(
+                Color.White,
+                lerp(Color.White, accentColor, 0.12f),
+                lerp(Color.White, accentColor, 0.06f),
+                Color.White
+            )
+        ),
+        onDismiss = {
+            showNoteEditor = false
+            onDismiss()
         },
-        text = {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Color(0xFFE4DDF1))
-            ) {
-                Text(
-                    text = explanation,
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = textAlignByLang,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                )
-            }
+        onEditNote = {
+            showNoteEditor = true
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = "סגור",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+        onToggleFavorite = {
+            if (onToggleFav != null) {
+                onToggleFav()
+            } else {
+                il.kmi.app.favorites.FavoritesStore.toggle(favoriteId)
+                localFavorite = !localFavorite
             }
         }
     )
+
+    if (showNoteEditor) {
+        AlertDialog(
+            onDismissRequest = { showNoteEditor = false },
+            containerColor = Color(0xFFF7F4FB),
+            shape = RoundedCornerShape(28.dp),
+            title = {
+                Text(
+                    text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            },
+            text = {
+                OutlinedTextField(
+                    value = noteText,
+                    onValueChange = { noteText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 7,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    placeholder = {
+                        Text(
+                            text = if (isEnglish) "Write a free note" else "הקלד הערה חופשית",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                        )
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        notePrefs.edit()
+                            .putString(noteKey, noteText)
+                            .apply()
+
+                        showNoteEditor = false
+                    }
+                ) {
+                    Text(
+                        text = if (isEnglish) "Save" else "שמור",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showNoteEditor = false }
+                ) {
+                    Text(
+                        text = if (isEnglish) "Cancel" else "בטל",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        )
+    }
 }
 
 @Composable
