@@ -61,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import il.kmi.app.database.KmiDatabaseProvider
+import il.kmi.app.database.KmiDatabaseRepository
 import kotlinx.coroutines.tasks.await
 
 private data class NetworkCoachInfo(
@@ -261,6 +263,30 @@ private val fallbackNetworkCoaches = listOf(
     )
 )
 
+private fun KmiDatabaseRepository.KmiNetworkCoach.toNetworkCoachInfo(): NetworkCoachInfo {
+    return NetworkCoachInfo(
+        id = id,
+        active = active,
+        sortOrder = sortOrder,
+        nameHe = nameHe,
+        nameEn = nameEn,
+        roleHe = roleHe,
+        roleEn = roleEn,
+        rankHe = rankHe,
+        rankEn = rankEn,
+        experienceHe = experienceHe,
+        experienceEn = experienceEn,
+        trainingHe = trainingHe,
+        trainingEn = trainingEn,
+        certificationsHe = certificationsHe.ifEmpty { listOf("הסמכות יעודכנו בהמשך") },
+        certificationsEn = certificationsEn.ifEmpty { listOf("Certifications will be updated") },
+        branchesHe = branchesHe.ifEmpty { listOf("רשת ק.מ.י") },
+        branchesEn = branchesEn.ifEmpty { listOf("K.M.I Network") },
+        descriptionHe = descriptionHe,
+        descriptionEn = descriptionEn
+    )
+}
+
 private fun DocumentSnapshot.toNetworkCoachInfo(): NetworkCoachInfo? {
     fun s(vararg keys: String): String {
         return keys.firstNotNullOfOrNull { key ->
@@ -327,7 +353,14 @@ private fun DocumentSnapshot.toNetworkCoachInfo(): NetworkCoachInfo? {
     )
 }
 
-private suspend fun loadNetworkCoachesFromFirestore(): List<NetworkCoachInfo> {
+private suspend fun loadNetworkCoachesFromFirestore(
+    context: android.content.Context
+): List<NetworkCoachInfo> {
+    val localCoaches = runCatching {
+        KmiDatabaseProvider.networkCoaches(context)
+            .map { it.toNetworkCoachInfo() }
+    }.getOrDefault(emptyList())
+
     val docs = Firebase.firestore
         .collection("network_coaches")
         .get()
@@ -338,11 +371,18 @@ private suspend fun loadNetworkCoachesFromFirestore(): List<NetworkCoachInfo> {
         .mapNotNull { it.toNetworkCoachInfo() }
         .filter { it.active }
 
-    // ✅ הנתונים מהשרת מחליפים את ברירת המחדל לפי id.
-    // אם עדיין לא קיים מאמן בשרת — הוא יופיע מתוך fallbackNetworkCoaches.
+    // סדר המיזוג:
+    // 1. fallback פנימי בקוד
+    // 2. network_coaches.json
+    // 3. Firestore
+    // כל שכבה מחליפה לפי id.
     val mergedById = linkedMapOf<String, NetworkCoachInfo>()
 
     fallbackNetworkCoaches.forEach { coach ->
+        mergedById[coach.id] = coach
+    }
+
+    localCoaches.forEach { coach ->
         mergedById[coach.id] = coach
     }
 
@@ -351,6 +391,7 @@ private suspend fun loadNetworkCoachesFromFirestore(): List<NetworkCoachInfo> {
     }
 
     return mergedById.values
+        .filter { it.active }
         .sortedWith(
             compareBy<NetworkCoachInfo> { it.sortOrder }
                 .thenBy { it.nameHe }
@@ -379,16 +420,23 @@ fun AboutNetworkCoachesScreen(
     var selectedLetterExpanded by remember { mutableStateOf(false) }
     var selectedCoachId by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(ctx) {
         isLoading = true
         loadError = null
 
         runCatching {
-            loadNetworkCoachesFromFirestore()
+            loadNetworkCoachesFromFirestore(ctx)
         }.onSuccess { loaded ->
             coaches = loaded.ifEmpty { fallbackNetworkCoaches }
         }.onFailure { error ->
-            coaches = fallbackNetworkCoaches
+            val localOnly = runCatching {
+                KmiDatabaseProvider.networkCoaches(ctx)
+                    .map { it.toNetworkCoachInfo() }
+            }.getOrDefault(emptyList())
+
+            coaches = localOnly.ifEmpty { fallbackNetworkCoaches }
             loadError = error.message
         }
 

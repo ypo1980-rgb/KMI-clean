@@ -127,7 +127,7 @@ fun MainApp(
     val nav = rememberNavController()
 
     val resolvedStartDestination = remember(startRoute) {
-        startRoute ?: Route.Home.route
+        startRoute ?: Route.Splash.route
     }
 
     val mainBackStackEntry by nav.currentBackStackEntryAsState()
@@ -371,9 +371,10 @@ fun MainApp(
                                         nav.navigate(Route.MyProfile.route)
                                     },
 
-                                    // עריכת פרופיל — אותו מסך שהיה נפתח מכפתור "ערוך פרטים" בהגדרות
+                                    // עריכת פרופיל — פותח את אותו טופס רישום,
+                                    // אבל במצב עריכה: בסיום חוזרים למסך הקודם ולא למסך הטעינה הדינמי.
                                     onOpenEditProfile = {
-                                        nav.navigate("google_profile_completion") {
+                                        nav.navigate(Route.NewUserTrainee.route + "?step=profile&skipOtp=false") {
                                             launchSingleTop = true
                                             restoreState = false
                                         }

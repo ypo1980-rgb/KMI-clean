@@ -10,15 +10,24 @@ import android.content.SharedPreferences
 import android.util.Patterns
 import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -33,6 +42,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -41,6 +51,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import il.kmi.app.KmiViewModel
@@ -49,6 +61,7 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.shared.prefs.KmiPrefs
 import kotlinx.coroutines.launch
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.ui.draw.clip
 import il.kmi.app.FcmTokenManager
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -70,6 +83,188 @@ private fun generateCoachCode(): String =
         .replace("-", "")
         .take(8)
         .uppercase()
+
+@Composable
+private fun ExistingUserLockedTopBar(
+    title: String,
+    isEnglish: Boolean,
+    onLockedAction: (String) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color.White,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(142.dp), // 56 top + 86 bottom — כמו KmiTopBar
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // איזון מול כפתור התפריט כדי שהכותרת תישאר במרכז
+                    Spacer(Modifier.width(38.dp))
+
+                    Text(
+                        text = title,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 20.sp,
+                            lineHeight = 24.sp,
+                            color = Color(0xFF111827)
+                        )
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFE6E6EE))
+                            .clickable {
+                                onLockedAction(if (isEnglish) "Menu" else "התפריט")
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Menu,
+                            contentDescription = if (isEnglish) "Menu" else "תפריט",
+                            tint = Color(0xFF4B478F),
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(85.dp)
+                    .padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ExistingUserLockedTopAction(
+                    label = if (isEnglish) "Search" else "חיפוש",
+                    icon = Icons.Filled.Search,
+                    iconTint = Color(0xFF12B886),
+                    circleColor = Color(0xFFD6F5EA),
+                    onClick = {
+                        onLockedAction(if (isEnglish) "Search" else "אייקון החיפוש")
+                    }
+                )
+
+                ExistingUserLockedTopAction(
+                    label = if (isEnglish) "Home" else "בית",
+                    icon = Icons.Filled.Home,
+                    iconTint = Color(0xFF2F6FE4),
+                    circleColor = Color(0xFFD8E5FF),
+                    onClick = {
+                        onLockedAction(if (isEnglish) "Home" else "אייקון הבית")
+                    }
+                )
+
+                ExistingUserLockedTopAction(
+                    label = if (isEnglish) "Settings" else "הגדרות",
+                    icon = Icons.Filled.Settings,
+                    iconTint = Color(0xFFFF9800),
+                    circleColor = Color(0xFFFFEAC2),
+                    onClick = {
+                        onLockedAction(if (isEnglish) "Settings" else "אייקון ההגדרות")
+                    }
+                )
+
+                ExistingUserLockedTopAction(
+                    label = if (isEnglish) "Assistant" else "עוזר",
+                    icon = Icons.Filled.Info,
+                    iconTint = Color(0xFF7C4DFF),
+                    circleColor = Color(0xFFE5D8FF),
+                    onClick = {
+                        onLockedAction(if (isEnglish) "Assistant" else "אייקון העוזר")
+                    }
+                )
+
+                ExistingUserLockedTopAction(
+                    label = if (isEnglish) "Share" else "שתף",
+                    icon = Icons.Filled.Share,
+                    iconTint = Color(0xFFE83E8C),
+                    circleColor = Color(0xFFFFD7EA),
+                    onClick = {
+                        onLockedAction(if (isEnglish) "Share" else "אייקון השיתוף")
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExistingUserLockedTopAction(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
+    circleColor: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(64.dp)
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = circleColor,
+            modifier = Modifier.size(50.dp),
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp
+        ) {
+            IconButton(
+                onClick = onClick,
+                modifier = Modifier.size(50.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = iconTint,
+                    modifier = Modifier.size(27.dp)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(5.dp))
+
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 13.sp,
+                lineHeight = 15.sp,
+                color = Color(0xFF4B4F5C)
+            ),
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Clip
+        )
+    }
+}
 
 @Composable
 fun ExistingUserTraineeScreen(
@@ -233,30 +428,19 @@ fun ExistingUserTraineeScreen(
 
     Scaffold(
         topBar = {
-            val ctx = LocalContext.current
-            val currentLang = langManager.getCurrentLanguage().code
-
-            KmiTopBar(
+            ExistingUserLockedTopBar(
                 title = tr("התחברות", "Login"),
-                showRoleStatus = false,
-                showBottomActions = true,
-                onOpenDrawer = onOpenDrawer,
-                extraActions = { Spacer(Modifier.width(48.dp)) },
-                showRoleBadge = false,
-                lockSearch = true,
-                showCoachBroadcastFab = isCoach,
-
-                currentLang = currentLang,
-
-                onToggleLanguage = {
-                    val newLang =
-                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW)
-                            AppLanguage.ENGLISH
-                        else
-                            AppLanguage.HEBREW
-
-                    langManager.setLanguage(newLang)
-                    (ctx as? android.app.Activity)?.recreate()
+                isEnglish = isEnglish,
+                onLockedAction = { actionName ->
+                    Toast.makeText(
+                        appCtx,
+                        if (isEnglish) {
+                            "$actionName will be available after sign in or registration"
+                        } else {
+                            "$actionName יהיה זמין לאחר כניסה / רישום"
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             )
         },

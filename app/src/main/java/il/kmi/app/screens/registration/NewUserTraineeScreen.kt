@@ -57,6 +57,13 @@ fun NewUserTraineeScreen(
     remember(skipOtp, userSp) {
         if (skipOtp) {
             seedGoogleUserIntoPrefs(userSp)
+        } else {
+            // ✅ רישום רגיל — מנקים דגלים ישנים של Google כדי ששדות שם משתמש/סיסמה יוצגו
+            userSp.edit()
+                .putString("authProvider", "local")
+                .putBoolean("google_login", false)
+                .putBoolean("skip_otp", false)
+                .apply()
         }
         true
     }

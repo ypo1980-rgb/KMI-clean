@@ -695,9 +695,12 @@ fun MainNavHost(
                     onOpenLegal = { nav.navigate(Route.Legal.route) },
                     onOpenTerms = { nav.navigate(Route.Legal.route) },
                     onRegistrationDone = {
-                        nav.navigate(Route.Home.route) {
-                            popUpTo(0)
+                        Log.e(NAV_LOG, "registration_landing onRegistrationDone -> splash/loading CLEAR_STACK")
+
+                        nav.navigate(Route.Splash.route) {
+                            popUpTo(0) { inclusive = true }
                             launchSingleTop = true
+                            restoreState = false
                         }
                     }
                 )

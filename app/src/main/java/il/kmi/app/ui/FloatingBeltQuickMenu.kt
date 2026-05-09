@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -76,11 +77,9 @@ private data class QuickMenuItemUi(
 )
 
 private fun quickMenuLockTint(accentColor: Color): Color {
-    // ✅ המנעול יושב על שורת תפריט בהירה/לבנה,
-    // לכן הוא חייב להיות כהה בכל חגורה:
-    // כתומה, ירוקה, כחולה, חומה ושחורה.
-    // כך הוא לא נבלע בצבע החגורה ולא נעלם על רקע התפריט.
-    return Color(0xFF111827)
+    // ✅ מנעול קבוע בסגנון פרימיום "אמיתי" בכל החגורות
+    // לא לפי צבע חגורה, כדי שלא ייראה כמו צעצוע
+    return Color(0xFFD49A1F)
 }
 
 @Composable
@@ -535,155 +534,197 @@ fun FloatingQuickMenu(
     }
 }
 
-   /* ✅ FIX: הפונקציה הזאת חסרה אצלך בקובץ ולכן הכל נשבר */
-   @Composable
-   private fun PremiumQuickMenuPanel(
-       title: String,
-       accentColor: Color,
-       isEnglish: Boolean,
-       menuLocked: Boolean,
-       items: List<QuickMenuItemUi>,
-       onItemClick: (() -> Unit) -> Unit,
-       onLockedItemClick: () -> Unit,
-       onClose: () -> Unit
-   ) {
-       val panelWidth = 214.dp
-       val panelShape = RoundedCornerShape(22.dp)
+@Composable
+private fun PremiumQuickMenuPanel(
+    title: String,
+    accentColor: Color,
+    isEnglish: Boolean,
+    menuLocked: Boolean,
+    items: List<QuickMenuItemUi>,
+    onItemClick: (() -> Unit) -> Unit,
+    onLockedItemClick: () -> Unit,
+    onClose: () -> Unit
+) {
+    val panelWidth = 214.dp
+    val panelShape = RoundedCornerShape(22.dp)
 
-       Surface(
-           shape = panelShape,
-           color = Color.White,
-           tonalElevation = 0.dp,
-           shadowElevation = 16.dp,
-           modifier = Modifier
-               .requiredWidth(panelWidth)
-               .wrapContentWidth(
-                   if (isEnglish) Alignment.Start else Alignment.End
-               )
-       ) {
-           Box(
-               modifier = Modifier
-                   .clip(panelShape)
-                   .background(
-                       brush = Brush.verticalGradient(
-                           colors = listOf(
-                               accentColor.copy(alpha = 0.24f),
-                               Color(0xFFFDFDFE),
-                               Color(0xFFF6F8FB),
-                               accentColor.copy(alpha = 0.14f)
-                           )
-                       )
-                   )
-                   .border(
-                       width = 1.dp,
-                       color = accentColor.copy(alpha = 0.42f),
-                       shape = panelShape
-                   )
-                   .padding(horizontal = 10.dp, vertical = 10.dp)
-           ) {
-               Column(
-                   modifier = Modifier
-                       .fillMaxWidth()
-                       .wrapContentWidth(if (isEnglish) Alignment.Start else Alignment.End),
-                   horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-               ) {
-                   Row(
-                       modifier = Modifier.fillMaxWidth(),
-                       verticalAlignment = Alignment.CenterVertically
-                   ) {
-                       if (isEnglish) {
-                           Box(
-                               modifier = Modifier.weight(1f),
-                               contentAlignment = Alignment.CenterStart
-                           ) {
-                               Text(
-                                   text = title,
-                                   color = accentColor,
-                                   fontWeight = FontWeight.ExtraBold,
-                                   textAlign = TextAlign.Start,
-                                   modifier = Modifier.fillMaxWidth()
-                               )
-                           }
+    // ✅ המלל מקבל את צבע החגורה, אבל בצורה כהה/יוקרתית מספיק לקריאה.
+    val textColor = when {
+        accentColor.luminance() > 0.78f -> Color(0xFF9A6A00) // צהוב/לבן
+        accentColor.luminance() > 0.58f -> accentColor.copy(alpha = 0.96f)
+        else -> accentColor.copy(alpha = 0.94f)
+    }
 
-                           Spacer(Modifier.width(8.dp))
+    // ✅ צבע חגורה מרוכך — לא רקע מלא וגס
+    val softAccent = if (accentColor.luminance() > 0.65f) {
+        accentColor.copy(alpha = 0.18f)
+    } else {
+        accentColor.copy(alpha = 0.12f)
+    }
 
-                           Icon(
-                               imageVector = Icons.Filled.Close,
-                               contentDescription = "close",
-                               tint = accentColor,
-                               modifier = Modifier
-                                   .size(18.dp)
-                                   .clickable { onClose() }
-                           )
-                       } else {
-                           Box(
-                               modifier = Modifier.weight(1f),
-                               contentAlignment = BiasAbsoluteAlignment(1f, 0f)
-                           ) {
-                               Text(
-                                   text = title,
-                                   color = accentColor,
-                                   fontWeight = FontWeight.ExtraBold,
-                                   textAlign = TextAlign.Right,
-                                   modifier = Modifier.fillMaxWidth()
-                               )
-                           }
+    val borderAccent = if (accentColor.luminance() > 0.65f) {
+        accentColor.copy(alpha = 0.42f)
+    } else {
+        accentColor.copy(alpha = 0.34f)
+    }
 
-                           Spacer(Modifier.width(8.dp))
+    val titleAccent = if (accentColor.luminance() > 0.65f) {
+        Color(0xFF64748B)
+    } else {
+        accentColor.copy(alpha = 0.86f)
+    }
 
-                           Icon(
-                               imageVector = Icons.Filled.Close,
-                               contentDescription = "close",
-                               tint = accentColor,
-                               modifier = Modifier
-                                   .size(18.dp)
-                                   .clickable { onClose() }
-                           )
-                       }
-                   }
-                   Spacer(Modifier.height(10.dp))
+    Surface(
+        shape = panelShape,
+        color = Color.White,
+        tonalElevation = 0.dp,
+        shadowElevation = 18.dp,
+        modifier = Modifier
+            .requiredWidth(panelWidth)
+            .wrapContentWidth(
+                if (isEnglish) Alignment.Start else Alignment.End
+            )
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(panelShape)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.98f),
+                            Color(0xFFF9FFFB),
+                            softAccent,
+                            Color(0xFFFBFFFC),
+                            Color.White.copy(alpha = 0.98f)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = borderAccent,
+                    shape = panelShape
+                )
+                .padding(horizontal = 10.dp, vertical = 10.dp)
+        ) {
+            // ✅ ברק עדין מאוד בחלק העליון — מראה פרימיום
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.42f),
+                                Color.White.copy(alpha = 0.10f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
 
-                   items.forEachIndexed { index, item ->
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentWidth(if (isEnglish) Alignment.Start else Alignment.End),
+                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isEnglish) {
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Text(
+                                text = title,
+                                color = titleAccent,
+                                fontWeight = FontWeight.ExtraBold,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
 
-                       // ✅ הגנה כפולה:
-                       // אם יש מנוי פעיל, menuLocked=false,
-                       // ולכן לא מציגים מנעול ולא שולחים למסך המנוי.
-                       val lockedForUi = menuLocked && item.isLocked
+                        Spacer(Modifier.width(8.dp))
 
-                       PremiumQuickMenuRow(
-                           text = item.title,
-                           icon = item.icon,
-                           accentColor = accentColor,
-                           isEnglish = isEnglish,
-                           isLocked = lockedForUi,
-                           onClick = {
-                               onItemClick {
-                                   if (lockedForUi) {
-                                       onLockedItemClick()
-                                   } else {
-                                       item.action()
-                                   }
-                               }
-                           }
-                       )
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "close",
+                            tint = titleAccent,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clickable { onClose() }
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = BiasAbsoluteAlignment(1f, 0f)
+                        ) {
+                            Text(
+                                text = title,
+                                color = titleAccent,
+                                fontWeight = FontWeight.ExtraBold,
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
 
-                       if (index != items.lastIndex) {
-                           HorizontalDivider(
-                               thickness = 0.8.dp,
-                               color = accentColor.copy(alpha = 0.20f)
-                           )
-                       }
-                   }
-               }
-           }
-       }
-   }
+                        Spacer(Modifier.width(8.dp))
+
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "close",
+                            tint = titleAccent,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clickable { onClose() }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                items.forEachIndexed { index, item ->
+                    val lockedForUi = menuLocked && item.isLocked
+
+                    PremiumQuickMenuRow(
+                        text = item.title,
+                        icon = item.icon,
+                        accentColor = accentColor,
+                        textColor = textColor,
+                        lockColor = quickMenuLockTint(accentColor),
+                        isEnglish = isEnglish,
+                        isLocked = lockedForUi,
+                        onClick = {
+                            onItemClick {
+                                if (lockedForUi) {
+                                    onLockedItemClick()
+                                } else {
+                                    item.action()
+                                }
+                            }
+                        }
+                    )
+
+                    if (index != items.lastIndex) {
+                        HorizontalDivider(
+                            thickness = 0.8.dp,
+                            color = accentColor.copy(alpha = 0.16f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun PremiumQuickMenuRow(
     text: String,
     icon: ImageVector,
     accentColor: Color,
+    textColor: Color,
+    lockColor: Color,
     isEnglish: Boolean,
     isLocked: Boolean = false,
     onClick: () -> Unit
@@ -701,8 +742,8 @@ private fun PremiumQuickMenuRow(
     )
 
     val lockGlowAlpha by lockPulse.animateFloat(
-        initialValue = 0.10f,
-        targetValue = 0.26f,
+        initialValue = 0.08f,
+        targetValue = 0.22f,
         animationSpec = infiniteRepeatable(
             animation = tween(900, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
@@ -713,6 +754,7 @@ private fun PremiumQuickMenuRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -732,7 +774,7 @@ private fun PremiumQuickMenuRow(
             ) {
                 Text(
                     text = text,
-                    color = Color(0xFF0F172A),
+                    color = textColor,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Start,
                     maxLines = 1,
@@ -745,7 +787,7 @@ private fun PremiumQuickMenuRow(
                     Spacer(Modifier.width(8.dp))
 
                     PremiumAnimatedLockIcon(
-                        accentColor = accentColor,
+                        accentColor = lockColor,
                         scale = lockScale,
                         glowAlpha = lockGlowAlpha
                     )
@@ -759,7 +801,7 @@ private fun PremiumQuickMenuRow(
             ) {
                 if (isLocked) {
                     PremiumAnimatedLockIcon(
-                        accentColor = accentColor,
+                        accentColor = lockColor,
                         scale = lockScale,
                         glowAlpha = lockGlowAlpha
                     )
@@ -769,7 +811,7 @@ private fun PremiumQuickMenuRow(
 
                 Text(
                     text = text,
-                    color = Color(0xFF0F172A),
+                    color = textColor,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Right,
                     maxLines = 1,
@@ -795,14 +837,13 @@ private fun PremiumAnimatedLockIcon(
     scale: Float,
     glowAlpha: Float
 ) {
-    val lockTint = quickMenuLockTint(accentColor)
-
-    Icon(
-        imageVector = Icons.Filled.Lock,
-        contentDescription = null,
-        tint = lockTint,
+    // ✅ אותו מנעול כמו במסך "לפי נושאים":
+    // Emoji אמיתי, לא Icon וקטורי, ולכן נראה יותר פרימיום/אמיתי.
+    Text(
+        text = "🔒",
+        fontSize = 15.sp,
+        lineHeight = 15.sp,
         modifier = Modifier
-            .size(17.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale

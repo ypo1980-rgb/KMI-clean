@@ -35,7 +35,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +45,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.shared.prefs.KmiPrefs
 import java.io.BufferedReader
@@ -149,17 +149,37 @@ fun MonthlyCalendarScreen(
                 .filter { it.isNotEmpty() }
         }
 
-        // נרמול סניפים – לפי האזור
-        val normBranchKeys: List<String> = remember(region, branchListRaw) {
-            val regionBranches = TrainingCatalog.branchesFor(region)
-            if (regionBranches.isEmpty()) {
-                emptyList()
+        // נרמול סניפים – קודם מתוך branches.json, ואם אין התאמה אז fallback ל־TrainingCatalog הישן
+        val normBranchKeys: List<String> = remember(ctx, region, branchListRaw) {
+            val dbBranches = KmiDatabaseProvider.branches(ctx)
+            val dbRegionBranches = dbBranches.filter { branch ->
+                branch.regionHe == region ||
+                        branch.regionEn.equals(region, ignoreCase = true) ||
+                        branch.regionId.equals(region, ignoreCase = true)
+            }
+
+            val pickedFromDb = branchListRaw.mapNotNull { wanted ->
+                dbRegionBranches.firstOrNull { branch ->
+                    branch.nameHe == wanted ||
+                            branch.nameEn.equals(wanted, ignoreCase = true) ||
+                            branch.placeHe == wanted ||
+                            branch.placeEn.equals(wanted, ignoreCase = true)
+                }?.nameHe
+            }
+
+            if (pickedFromDb.isNotEmpty()) {
+                pickedFromDb.distinct()
             } else {
-                val picked = branchListRaw.mapNotNull { wanted ->
-                    regionBranches.firstOrNull { it == wanted }
-                        ?: regionBranches.firstOrNull { it.equals(wanted, true) }
+                val regionBranches = TrainingCatalog.branchesFor(region)
+                if (regionBranches.isEmpty()) {
+                    emptyList()
+                } else {
+                    val picked = branchListRaw.mapNotNull { wanted ->
+                        regionBranches.firstOrNull { it == wanted }
+                            ?: regionBranches.firstOrNull { it.equals(wanted, true) }
+                    }
+                    if (picked.isNotEmpty()) picked else listOf(regionBranches.first())
                 }
-                if (picked.isNotEmpty()) picked else listOf(regionBranches.first())
             }
         }
 
@@ -209,39 +229,63 @@ fun MonthlyCalendarScreen(
 // ✅ האם יש חגים בחודש הזה?
         val hasHolidaysThisMonth = remember(holidaysByDate) { holidaysByDate.isNotEmpty() }
 
-// אימונים מאוחדים לחודש
+// אימונים מאוחדים לחודש — קודם branches.json, ואם אין נתונים אז fallback ל־TrainingCatalog
         val trainingsCountByDate: Map<LocalDate, Int> = remember(
-            ym, region, normBranchKeys, normGroupKeys, holidayDates
+            ym, ctx, region, normBranchKeys, normGroupKeys, holidayDates
         ) {
             if (region.isBlank() || normBranchKeys.isEmpty() || normGroupKeys.isEmpty()) {
                 emptyMap()
-            } else if (!TrainingCatalog.isRegionActive(region)) {
-                emptyMap()
             } else {
-                mergeMonthlyTrainingCounts(
-                    ym = ym,
-                    branches = normBranchKeys,
-                    groups   = normGroupKeys,
-                    skipDates = holidayDates
-                )
-            }
-        }
-
-        // פירוט אימונים לפי תאריך — להצגה בכרטיס התחתון של היום הנבחר
-        val trainingsByDate: Map<LocalDate, List<CalendarTrainingItem>> = remember(
-            ym, region, normBranchKeys, normGroupKeys, holidayDates
-        ) {
-            if (region.isBlank() || normBranchKeys.isEmpty() || normGroupKeys.isEmpty()) {
-                emptyMap()
-            } else if (!TrainingCatalog.isRegionActive(region)) {
-                emptyMap()
-            } else {
-                mergeMonthlyTrainingItems(
+                val fromDatabase = mergeMonthlyTrainingCountsFromDatabase(
+                    ctx = ctx,
                     ym = ym,
                     branches = normBranchKeys,
                     groups = normGroupKeys,
                     skipDates = holidayDates
                 )
+
+                if (fromDatabase.isNotEmpty()) {
+                    fromDatabase
+                } else if (!TrainingCatalog.isRegionActive(region)) {
+                    emptyMap()
+                } else {
+                    mergeMonthlyTrainingCounts(
+                        ym = ym,
+                        branches = normBranchKeys,
+                        groups = normGroupKeys,
+                        skipDates = holidayDates
+                    )
+                }
+            }
+        }
+
+        // פירוט אימונים לפי תאריך — קודם branches.json, ואם אין נתונים אז fallback ל־TrainingCatalog
+        val trainingsByDate: Map<LocalDate, List<CalendarTrainingItem>> = remember(
+            ym, ctx, region, normBranchKeys, normGroupKeys, holidayDates
+        ) {
+            if (region.isBlank() || normBranchKeys.isEmpty() || normGroupKeys.isEmpty()) {
+                emptyMap()
+            } else {
+                val fromDatabase = mergeMonthlyTrainingItemsFromDatabase(
+                    ctx = ctx,
+                    ym = ym,
+                    branches = normBranchKeys,
+                    groups = normGroupKeys,
+                    skipDates = holidayDates
+                )
+
+                if (fromDatabase.isNotEmpty()) {
+                    fromDatabase
+                } else if (!TrainingCatalog.isRegionActive(region)) {
+                    emptyMap()
+                } else {
+                    mergeMonthlyTrainingItems(
+                        ym = ym,
+                        branches = normBranchKeys,
+                        groups = normGroupKeys,
+                        skipDates = holidayDates
+                    )
+                }
             }
         }
 
@@ -249,13 +293,26 @@ fun MonthlyCalendarScreen(
         val primaryBranch = normBranchKeys.firstOrNull().orEmpty()
         val primaryGroup  = normGroupKeys.firstOrNull().orEmpty()
 
-        // סיבת חסר
+        val databaseRegionActive = remember(ctx, region) {
+            KmiDatabaseProvider.regions(ctx).any { dbRegion ->
+                dbRegion.nameHe == region ||
+                        dbRegion.nameEn.equals(region, ignoreCase = true) ||
+                        dbRegion.id.equals(region, ignoreCase = true)
+            }
+        }
+
+        val databaseBranchExists = remember(ctx, primaryBranch) {
+            KmiDatabaseProvider.branchByName(ctx, primaryBranch) != null
+        }
+
+        // סיבת חסר — מכיר גם את branches.json וגם את TrainingCatalog הישן
         val missingReason = when {
             region.isBlank() -> "לא נבחר אזור (region) בהגדרות"
             primaryBranch.isBlank() -> "לא נבחר סניף (branch) בהגדרות"
             primaryGroup.isBlank() -> "לא נבחרה קבוצה / קבוצת גיל"
-            !TrainingCatalog.isRegionActive(region) -> "האזור \"$region\" לא פעיל ב־TrainingCatalog"
-            !TrainingCatalog.branchesFor(region).contains(primaryBranch) ->
+            !databaseRegionActive && !TrainingCatalog.isRegionActive(region) ->
+                "האזור \"$region\" לא פעיל ב־Database או ב־TrainingCatalog"
+            !databaseBranchExists && !TrainingCatalog.branchesFor(region).contains(primaryBranch) ->
                 "הסניף \"$primaryBranch\" לא שייך לאזור \"$region\""
             else -> null
         }
@@ -785,6 +842,177 @@ fun MonthlyCalendarScreen(
 /* -------------------------------------------------------------------------- */
 /*                             helpers                                         */
 /* -------------------------------------------------------------------------- */
+
+private fun databaseGroupMatchesCalendar(
+    selectedGroup: String,
+    databaseGroupHe: String,
+    databaseGroupEn: String
+): Boolean {
+    val wanted = TrainingCatalog
+        .normalizeGroupName(selectedGroup)
+        .ifBlank { selectedGroup }
+        .trim()
+
+    val dbHe = TrainingCatalog
+        .normalizeGroupName(databaseGroupHe)
+        .ifBlank { databaseGroupHe }
+        .trim()
+
+    val dbEn = databaseGroupEn.trim()
+
+    if (wanted.equals(dbHe, ignoreCase = true)) return true
+    if (selectedGroup.trim().equals(databaseGroupHe.trim(), ignoreCase = true)) return true
+    if (selectedGroup.trim().equals(dbEn, ignoreCase = true)) return true
+
+    if (wanted == "נוער" && dbHe == "נוער + בוגרים") return true
+    if (wanted == "בוגרים" && dbHe == "נוער + בוגרים") return true
+
+    return false
+}
+
+private fun calendarDowFromDatabase(dayOfWeek: String): DayOfWeek {
+    return when (dayOfWeek.trim().uppercase(Locale.US)) {
+        "SUNDAY" -> DayOfWeek.SUNDAY
+        "MONDAY" -> DayOfWeek.MONDAY
+        "TUESDAY" -> DayOfWeek.TUESDAY
+        "WEDNESDAY" -> DayOfWeek.WEDNESDAY
+        "THURSDAY" -> DayOfWeek.THURSDAY
+        "FRIDAY" -> DayOfWeek.FRIDAY
+        "SATURDAY" -> DayOfWeek.SATURDAY
+        else -> DayOfWeek.MONDAY
+    }
+}
+
+private fun firstDateInMonthForJavaDow(startOfMonth: LocalDate, wanted: DayOfWeek): LocalDate {
+    var d = startOfMonth
+    while (d.dayOfWeek != wanted) d = d.plusDays(1)
+    return d
+}
+
+private fun buildMonthlyTrainingItemsFromDatabase(
+    ctx: Context,
+    ym: YearMonth,
+    branch: String,
+    group: String,
+    skipDates: Set<LocalDate> = emptySet()
+): Map<LocalDate, List<CalendarTrainingItem>> {
+    val dbBranch = KmiDatabaseProvider.branchByName(ctx, branch) ?: return emptyMap()
+
+    val matchingDays = dbBranch.trainingDays.filter { day ->
+        databaseGroupMatchesCalendar(
+            selectedGroup = group,
+            databaseGroupHe = day.groupHe,
+            databaseGroupEn = day.groupEn
+        )
+    }
+
+    if (matchingDays.isEmpty()) return emptyMap()
+
+    val startOfMonth = ym.atDay(1)
+    val endOfMonth = ym.atEndOfMonth()
+    val out = linkedMapOf<LocalDate, MutableList<CalendarTrainingItem>>()
+
+    matchingDays.forEach { trainingDay ->
+        val dow = calendarDowFromDatabase(trainingDay.dayOfWeek)
+        var d = firstDateInMonthForJavaDow(startOfMonth, dow)
+
+        while (!d.isAfter(endOfMonth)) {
+            if (d !in skipDates) {
+                out.getOrPut(d) { mutableListOf() }
+                    .add(
+                        CalendarTrainingItem(
+                            branch = dbBranch.nameHe.ifBlank { branch },
+                            group = trainingDay.groupHe.ifBlank { group },
+                            timeText = trainingDay.startTime
+                        )
+                    )
+            }
+
+            d = d.plusDays(7)
+        }
+    }
+
+    return out.mapValues { (_, items) ->
+        items.sortedBy { it.timeText }
+    }
+}
+
+private fun buildMonthlyTrainingCountFromDatabase(
+    ctx: Context,
+    ym: YearMonth,
+    branch: String,
+    group: String,
+    skipDates: Set<LocalDate> = emptySet()
+): Map<LocalDate, Int> {
+    return buildMonthlyTrainingItemsFromDatabase(
+        ctx = ctx,
+        ym = ym,
+        branch = branch,
+        group = group,
+        skipDates = skipDates
+    ).mapValues { (_, items) ->
+        items.size
+    }
+}
+
+private fun mergeMonthlyTrainingItemsFromDatabase(
+    ctx: Context,
+    ym: YearMonth,
+    branches: List<String>,
+    groups: List<String>,
+    skipDates: Set<LocalDate> = emptySet()
+): Map<LocalDate, List<CalendarTrainingItem>> {
+    val out = linkedMapOf<LocalDate, MutableList<CalendarTrainingItem>>()
+
+    for (b in branches) {
+        for (g in groups) {
+            val m = buildMonthlyTrainingItemsFromDatabase(
+                ctx = ctx,
+                ym = ym,
+                branch = b,
+                group = g,
+                skipDates = skipDates
+            )
+
+            m.forEach { (date, items) ->
+                out.getOrPut(date) { mutableListOf() }.addAll(items)
+            }
+        }
+    }
+
+    return out.mapValues { (_, items) ->
+        items.sortedBy { it.timeText }
+    }
+}
+
+private fun mergeMonthlyTrainingCountsFromDatabase(
+    ctx: Context,
+    ym: YearMonth,
+    branches: List<String>,
+    groups: List<String>,
+    skipDates: Set<LocalDate> = emptySet()
+): Map<LocalDate, Int> {
+    val out = mutableMapOf<LocalDate, Int>()
+
+    for (b in branches) {
+        for (g in groups) {
+            val m = buildMonthlyTrainingCountFromDatabase(
+                ctx = ctx,
+                ym = ym,
+                branch = b,
+                group = g,
+                skipDates = skipDates
+            )
+
+            m.forEach { (date, count) ->
+                out[date] = (out[date] ?: 0) + count
+            }
+        }
+    }
+
+    return out
+}
+
 /** יוצר מיפוי לכל המופעים החודשיים לפי לו״ז שבועי */
 private fun buildMonthlyTrainingItems(
     ym: YearMonth,

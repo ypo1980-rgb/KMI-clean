@@ -34,9 +34,12 @@ fun NavGraphBuilder.registrationNavGraph(
             onOpenLegal = { nav.navigate(Route.Legal.route) },
             onOpenTerms = { nav.navigate(Route.Legal.route) },
             onRegistrationDone = {
-                nav.navigate(Route.Home.route) {
-                    popUpTo(0)
+                // ✅ כניסה רגילה / סיום רישום או התחברות:
+                // קודם עוברים למסך הלוגו הדינמי, ורק ממנו לבית.
+                nav.navigate(Route.Splash.route) {
+                    popUpTo(0) { inclusive = true }
                     launchSingleTop = true
+                    restoreState = false
                 }
             }
         )
@@ -50,17 +53,24 @@ fun NavGraphBuilder.registrationNavGraph(
             navArgument("skipOtp") { type = NavType.StringType;  defaultValue = "false" }
         )
     ) { entry ->
-        val stepArg        = entry.arguments?.getString("step")
-        val skipOtp        = entry.arguments?.getString("skipOtp") == "true"
-        val startAtProfile = skipOtp || stepArg == "profile"
+        val stepArg = entry.arguments?.getString("step")?.trim().orEmpty()
+        val skipOtp = entry.arguments?.getString("skipOtp") == "true"
+
+        // ✅ startAtProfile=true רק בעריכת פרופיל.
+        // Google / skipOtp הם כניסה ראשונית ולכן חייבים להמשיך למסך הטעינה הדינמי.
+        val startAtProfile = stepArg.equals("profile", ignoreCase = true) ||
+                stepArg.equals("edit_profile", ignoreCase = true)
 
         il.kmi.app.screens.registration.RegistrationFormScreen(
             initial = "trainee",
             onBack = { nav.popBackStack() },
             onRegistrationComplete = {
-                nav.navigate(Route.Home.route) {
-                    popUpTo(Route.RegistrationLanding.route) { inclusive = false }
+                // ✅ רישום ראשוני / Google completion:
+                // קודם עוברים למסך הטעינה הדינמי, והוא מחליט בסיום לאן להמשיך.
+                nav.navigate(Route.Splash.route) {
+                    popUpTo(0) { inclusive = true }
                     launchSingleTop = true
+                    restoreState = false
                 }
             },
             onOpenTerms = { nav.navigate(Route.Legal.route) },
@@ -78,8 +88,8 @@ fun NavGraphBuilder.registrationNavGraph(
         ExistingUserTraineeScreen(
             onBack = { nav.popBackStack() },
             onLoginComplete = {
-                nav.navigate(Route.Home.route) {
-                    popUpTo(0)
+                nav.navigate(Route.Splash.route) {
+                    popUpTo(0) { inclusive = true }
                     launchSingleTop = true
                     restoreState = false
                 }
@@ -97,8 +107,8 @@ fun NavGraphBuilder.registrationNavGraph(
         ExistingUserCoachScreen(
             onBack = { nav.popBackStack() },
             onLoginComplete = {
-                nav.navigate(Route.Home.route) {
-                    popUpTo(0)
+                nav.navigate(Route.Splash.route) {
+                    popUpTo(0) { inclusive = true }
                     launchSingleTop = true
                     restoreState = false
                 }
@@ -115,9 +125,10 @@ fun NavGraphBuilder.registrationNavGraph(
         NewUserCoachScreen(
             onBack = { nav.popBackStack() },
             onRegistrationComplete = {
-                nav.navigate(Route.Home.route) {
-                    popUpTo(Route.RegistrationLanding.route) { inclusive = false }
+                nav.navigate(Route.Splash.route) {
+                    popUpTo(0) { inclusive = true }
                     launchSingleTop = true
+                    restoreState = false
                 }
             },
             onOpenLegal = { nav.navigate(Route.Legal.route) },

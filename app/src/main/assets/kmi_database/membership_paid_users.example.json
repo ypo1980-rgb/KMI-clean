@@ -1,0 +1,16 @@
+{
+  "important": "This file is an example only. Do not put real paid trainee data inside the app assets.",
+  "version": 1,
+  "updatedAt": "2026-05-07",
+  "paidMembers": [
+    {
+      "userId": "firebase_uid_here",
+      "fullName": "שם לדוגמה",
+      "phone": "0500000000",
+      "paid": true,
+      "paidAt": "2026-05-01",
+      "validUntil": "2027-05-01",
+      "source": "manual"
+    }
+  ]
+}

@@ -37,6 +37,7 @@ import il.kmi.shared.prefs.KmiPrefs
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.material.icons.filled.Close
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.database.KmiDatabaseProvider
 import android.app.Activity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.zIndex
@@ -151,6 +152,103 @@ fun MyProfileScreen(
             prefStr(kmiPrefs.ageGroup, sp.getString("age_group", ""), sp.getString("group", ""))
         )
 
+        fun dbGroupMatches(
+            selectedGroup: String,
+            databaseGroupHe: String,
+            databaseGroupEn: String
+        ): Boolean {
+            val wanted = TrainingCatalog
+                .normalizeGroupName(selectedGroup)
+                .ifBlank { selectedGroup }
+                .trim()
+
+            val dbHe = TrainingCatalog
+                .normalizeGroupName(databaseGroupHe)
+                .ifBlank { databaseGroupHe }
+                .trim()
+
+            val dbEn = databaseGroupEn.trim()
+
+            if (wanted.equals(dbHe, ignoreCase = true)) return true
+            if (selectedGroup.trim().equals(databaseGroupHe.trim(), ignoreCase = true)) return true
+            if (selectedGroup.trim().equals(dbEn, ignoreCase = true)) return true
+
+            if (wanted == "נוער" && dbHe == "נוער + בוגרים") return true
+            if (wanted == "בוגרים" && dbHe == "נוער + בוגרים") return true
+
+            return false
+        }
+
+        fun calendarDowFromDb(dayOfWeek: String): Int {
+            return when (dayOfWeek.trim().uppercase(java.util.Locale.US)) {
+                "SUNDAY" -> java.util.Calendar.SUNDAY
+                "MONDAY" -> java.util.Calendar.MONDAY
+                "TUESDAY" -> java.util.Calendar.TUESDAY
+                "WEDNESDAY" -> java.util.Calendar.WEDNESDAY
+                "THURSDAY" -> java.util.Calendar.THURSDAY
+                "FRIDAY" -> java.util.Calendar.FRIDAY
+                "SATURDAY" -> java.util.Calendar.SATURDAY
+                else -> java.util.Calendar.MONDAY
+            }
+        }
+
+        fun hourFromDbTime(time: String): Int {
+            return time.substringBefore(":").trim().toIntOrNull() ?: 19
+        }
+
+        fun minuteFromDbTime(time: String): Int {
+            return time.substringAfter(":", "").trim().toIntOrNull() ?: 0
+        }
+
+        data class DbNextTrainingForProfile(
+            val cal: java.util.Calendar,
+            val place: String,
+            val address: String,
+            val coach: String
+        )
+
+        fun nextTrainingFromDatabase(
+            branchName: String,
+            groupName: String
+        ): DbNextTrainingForProfile? {
+            val dbBranch = KmiDatabaseProvider.branchByName(ctx, branchName) ?: return null
+
+            val matchingDays = dbBranch.trainingDays.filter { trainingDay ->
+                dbGroupMatches(
+                    selectedGroup = groupName,
+                    databaseGroupHe = trainingDay.groupHe,
+                    databaseGroupEn = trainingDay.groupEn
+                )
+            }
+
+            if (matchingDays.isEmpty()) return null
+
+            val now = java.util.Calendar.getInstance()
+
+            return matchingDays
+                .map { trainingDay ->
+                    val cal = java.util.Calendar.getInstance().apply {
+                        set(java.util.Calendar.SECOND, 0)
+                        set(java.util.Calendar.MILLISECOND, 0)
+                        set(java.util.Calendar.DAY_OF_WEEK, calendarDowFromDb(trainingDay.dayOfWeek))
+                        set(java.util.Calendar.HOUR_OF_DAY, hourFromDbTime(trainingDay.startTime))
+                        set(java.util.Calendar.MINUTE, minuteFromDbTime(trainingDay.startTime))
+
+                        if (!after(now)) {
+                            add(java.util.Calendar.DAY_OF_YEAR, 7)
+                        }
+                    }
+
+                    DbNextTrainingForProfile(
+                        cal = cal,
+                        place = dbBranch.displayPlace(isEnglish = false),
+                        address = dbBranch.displayAddress(isEnglish = false),
+                        coach = trainingDay.displayCoachName(isEnglish = false)
+                    )
+                }
+                .minByOrNull { it.cal.timeInMillis }
+        }
+
         val beltId = prefStr(
             null,
             sp.getString("current_belt", ""),
@@ -174,18 +272,45 @@ fun MyProfileScreen(
                 currentBelt?.heb ?: beltId.ifBlank { "לא הוגדר" }
             }
 
-        // ✅ אימון הבא + מאמן – משתמשים בסניף הראשי בלבד
-        val upcoming = if (primaryBranch.isNotBlank())
-            TrainingCatalog.upcomingFor("השרון", primaryBranch, group, count = 1).firstOrNull()
-        else null
+        // ✅ אימון הבא + מאמן – קודם branches.json, ואם אין התאמה fallback ל־TrainingCatalog
+        val dbUpcoming = if (primaryBranch.isNotBlank()) {
+            nextTrainingFromDatabase(primaryBranch, group)
+        } else {
+            null
+        }
 
-        val coachName: String = upcoming?.coach.orEmpty().ifBlank { "—" }
+        val upcoming = if (dbUpcoming == null && primaryBranch.isNotBlank()) {
+            val savedRegion = prefStr(
+                kmiPrefs.region,
+                sp.getString("region", ""),
+                userSp.getString("region", "")
+            ).ifBlank { "השרון" }
 
-        val nextTraining: String = if (upcoming != null) {
-            val fmtDay = java.text.SimpleDateFormat("EEEE", java.util.Locale("he", "IL"))
-            val fmtTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale("he", "IL"))
-            "${fmtDay.format(upcoming.cal.time)} • ${fmtTime.format(upcoming.cal.time)}\n${upcoming.place}"
-        } else "—"
+            TrainingCatalog.upcomingFor(savedRegion, primaryBranch, group, count = 1).firstOrNull()
+        } else {
+            null
+        }
+
+        val coachName: String =
+            dbUpcoming?.coach.orEmpty()
+                .ifBlank { upcoming?.coach.orEmpty() }
+                .ifBlank { "—" }
+
+        val nextTraining: String = when {
+            dbUpcoming != null -> {
+                val fmtDay = java.text.SimpleDateFormat("EEEE", java.util.Locale("he", "IL"))
+                val fmtTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale("he", "IL"))
+                "${fmtDay.format(dbUpcoming.cal.time)} • ${fmtTime.format(dbUpcoming.cal.time)}\n${dbUpcoming.place}"
+            }
+
+            upcoming != null -> {
+                val fmtDay = java.text.SimpleDateFormat("EEEE", java.util.Locale("he", "IL"))
+                val fmtTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale("he", "IL"))
+                "${fmtDay.format(upcoming.cal.time)} • ${fmtTime.format(upcoming.cal.time)}\n${upcoming.place}"
+            }
+
+            else -> "—"
+        }
 
         // ✅ הדרגה הבאה בתור, כולל דאן 2–10
         val nextBeltText: String = nextTraineeRankDisplayName(beltId)
@@ -204,8 +329,18 @@ fun MyProfileScreen(
             "—"
         } else {
             branchesList.joinToString("\n") { b ->
-                val mapped = TrainingCatalog.addressFor(b).trim()
-                if (mapped.isNotBlank() && mapped != b.trim()) mapped else fallbackCityVenue(b)
+                val dbAddress = KmiDatabaseProvider
+                    .branchByName(ctx, b)
+                    ?.displayAddress(isEnglish = false)
+                    ?.trim()
+                    .orEmpty()
+
+                if (dbAddress.isNotBlank() && dbAddress != b.trim()) {
+                    dbAddress
+                } else {
+                    val mapped = TrainingCatalog.addressFor(b).trim()
+                    if (mapped.isNotBlank() && mapped != b.trim()) mapped else fallbackCityVenue(b)
+                }
             }
         }
         // --- סוף תיקון הכתובת ---

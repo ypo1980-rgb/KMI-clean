@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "updatedAt": "2026-05-07",
+  "coaches": [
+    {
+      "id": "avi_avisidon",
+      "active": true,
+      "sortOrder": 1,
+      "type": "coach",
+      "nameHe": "אבי אביסידון",
+      "nameEn": "Avi Avisidon",
+      "roleHe": "ראש השיטה",
+      "roleEn": "Head of the Method",
+      "rankHe": "חגורה שחורה דאן 10",
+      "rankEn": "Black Belt Dan 10",
+      "experienceHe": "מעל 40 שנות ותק",
+      "experienceEn": "Over 40 years of experience",
+      "trainingHe": "הכשרת מדריכים, הדרכת מאמנים ופיתוח מקצועי",
+      "trainingEn": "Instructor training, coach mentoring and professional development",
+      "certificationsHe": [
+        "ראש השיטה",
+        "הכשרת מדריכים",
+        "פיתוח מקצועי"
+      ],
+      "certificationsEn": [
+        "Head of the Method",
+        "Instructor Training",
+        "Professional Development"
+      ],
+      "branchIds": [],
+      "descriptionHe": "ראש שיטת ק.מ.י ומוביל מקצועי ברשת.",
+      "descriptionEn": "Head of the K.M.I method and professional leader of the network."
+    }
+  ]
+}

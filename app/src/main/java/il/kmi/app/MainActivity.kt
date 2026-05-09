@@ -358,6 +358,11 @@ private fun AndroidAppRoot(
         return
     }
 
+    val isEnglish = remember(ctx) {
+        AppLanguageManager(ctx).getCurrentLanguage() ==
+                il.kmi.shared.localization.AppLanguage.ENGLISH
+    }
+
     // 🌍 בדיקה אם נבחרה שפה בפעם הראשונה
     var initialLanguageSelected by remember {
         mutableStateOf(userSp.getBoolean("initial_language_selected", false))
@@ -391,7 +396,6 @@ private fun AndroidAppRoot(
         mutableStateOf(
             when {
                 !initialLanguageSelected -> "language"
-                isRegistered -> "main"
                 else -> "intro"
             }
         )
@@ -405,7 +409,9 @@ private fun AndroidAppRoot(
         "language" -> {
             il.kmi.app.screens.InitialLanguageScreen(
                 onLanguageSelected = {
-                    currentScreen = if (isRegistered) "main" else "intro"
+                    // פעם ראשונה בלבד:
+                    // בחירת שפה → IntroScreen
+                    currentScreen = "intro"
                 }
             )
         }
@@ -416,10 +422,14 @@ private fun AndroidAppRoot(
                 onContinue = {
                     android.util.Log.e(
                         "KMI_INTRO_FLOW",
-                        "regular login / register button clicked"
+                        "regular login / register button clicked -> registration landing"
                     )
 
-                    currentScreen = if (isRegistered) "main" else "register"
+                    // ✅ כניסה רגילה תמיד מובילה למסך הבחירה:
+                    // משתמש חדש / משתמש קיים.
+                    // גם אם יש נתוני משתמש שמורים, לא מדלגים לבית.
+                    startRoute = null
+                    currentScreen = "register"
                 },
 
                 // Google Login הצליח והפרופיל מלא

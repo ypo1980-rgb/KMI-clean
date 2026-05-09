@@ -40,6 +40,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import il.kmi.shared.domain.Belt
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.ui.ext.color
 
 private data class TraineeRankOption(
@@ -186,15 +187,28 @@ fun RegistrationFormContent(
     var passwordVisible by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
 
-    val allGroupsAcrossBranches by remember(selectedBranches) {
+    val allGroupsAcrossBranches by remember(ctx, selectedBranches) {
         derivedStateOf {
             selectedBranches
                 .flatMap { branch ->
                     val key = branch.trim()
-                    TrainingCatalog.ageGroupsByBranch[key]
-                        ?: TrainingCatalog.ageGroupsByBranch[key.replace("’", "'")]
-                        ?: TrainingCatalog.ageGroupsByBranch[key.replace("־", "-")]
-                        ?: emptyList()
+
+                    val dbGroups = KmiDatabaseProvider
+                        .branchByName(ctx, key)
+                        ?.trainingDays
+                        ?.map { it.groupHe }
+                        ?.filter { it.isNotBlank() }
+                        ?.distinct()
+                        .orEmpty()
+
+                    if (dbGroups.isNotEmpty()) {
+                        dbGroups
+                    } else {
+                        TrainingCatalog.ageGroupsByBranch[key]
+                            ?: TrainingCatalog.ageGroupsByBranch[key.replace("’", "'")]
+                            ?: TrainingCatalog.ageGroupsByBranch[key.replace("־", "-")]
+                            ?: emptyList()
+                    }
                 }
                 .distinct()
         }
@@ -1009,19 +1023,57 @@ private fun RegionAndMultiBranchPicker(
     val fieldColors = registrationLightFieldColors()
     val fieldShape = RoundedCornerShape(14.dp)
 
-    val regions = remember(branchType) {
-        if (branchType == "abroad") {
-            TrainingCatalog.abroadRegions()
+    val regions = remember(ctx, branchType) {
+        val dbRegions = KmiDatabaseProvider
+            .regions(ctx)
+            .filter { region ->
+                if (branchType == "abroad") {
+                    region.country != "IL"
+                } else {
+                    region.country == "IL"
+                }
+            }
+            .map { region ->
+                if (branchType == "abroad") {
+                    region.nameEn.ifBlank { region.nameHe }
+                } else {
+                    region.nameHe.ifBlank { region.nameEn }
+                }
+            }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        if (dbRegions.isNotEmpty()) {
+            dbRegions
         } else {
-            TrainingCatalog.activeRegions()
+            if (branchType == "abroad") {
+                TrainingCatalog.abroadRegions()
+            } else {
+                TrainingCatalog.activeRegions()
+            }
         }
     }
 
-    val allBranches = remember(branchType, selectedRegion) {
+    val allBranches = remember(ctx, branchType, selectedRegion) {
         if (selectedRegion.isBlank()) {
             emptyList()
         } else {
-            TrainingCatalog.branchesFor(selectedRegion)
+            val dbBranches = KmiDatabaseProvider
+                .branches(ctx)
+                .filter { branch ->
+                    branch.regionHe == selectedRegion ||
+                            branch.regionEn.equals(selectedRegion, ignoreCase = true) ||
+                            branch.regionId.equals(selectedRegion, ignoreCase = true)
+                }
+                .map { dbBranch -> dbBranch.nameHe.ifBlank { dbBranch.nameEn } }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+            if (dbBranches.isNotEmpty()) {
+                dbBranches
+            } else {
+                TrainingCatalog.branchesFor(selectedRegion)
+            }
         }
     }
 

@@ -40,6 +40,9 @@ fun KmiSpeedDialFab(
     actions: List<KmiFabAction>,
     modifier: Modifier = Modifier,
     initiallyOpen: Boolean = false,
+    scrimColor: Color = Color.Black.copy(alpha = 0.15f),
+    mainFabColor: Color? = null,
+    actionIconTint: Color? = null,
     onHaptic: (() -> Unit)? = null,
     onClickSound: (() -> Unit)? = null
 ) {
@@ -49,6 +52,9 @@ fun KmiSpeedDialFab(
 
     var open by rememberSaveable { mutableStateOf(initiallyOpen) }
 
+    val resolvedMainFabColor = mainFabColor ?: MaterialTheme.colorScheme.primary
+    val resolvedActionIconTint = actionIconTint ?: resolvedMainFabColor
+
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         val mainIcon = if (open) Icons.Filled.Close else Icons.Filled.Add
 
@@ -57,7 +63,7 @@ fun KmiSpeedDialFab(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.15f))
+                    .background(scrimColor)
                     .clickable { open = false }
             )
         }
@@ -96,6 +102,7 @@ fun KmiSpeedDialFab(
                             iconButtonSize = dialIconButtonSize,
                             iconSize = dialIconSize,
                             gap = dialGap,
+                            iconTint = resolvedActionIconTint,
                             onClick = {
                                 onClickSound?.invoke()
                                 onHaptic?.invoke()
@@ -111,7 +118,7 @@ fun KmiSpeedDialFab(
         // הכפתור הראשי
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary,
+            color = resolvedMainFabColor,
             shadowElevation = 10.dp,
             modifier = modifier
                 .fillMaxSize()
@@ -119,7 +126,7 @@ fun KmiSpeedDialFab(
             Box(modifier = Modifier.fillMaxSize()) {
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = resolvedMainFabColor,
                     shadowElevation = 10.dp,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -156,7 +163,8 @@ private fun SpeedDialRow(
     labelWidth: Dp = 170.dp,
     iconButtonSize: Dp = 52.dp,
     iconSize: Dp = 22.dp,
-    gap: Dp = 10.dp
+    gap: Dp = 10.dp,
+    iconTint: Color
 ) {
     val alphaDisabled = 0.45f
 
@@ -211,7 +219,7 @@ private fun SpeedDialRow(
                     imageVector = icon,
                     contentDescription = text,
                     modifier = Modifier.size(iconSize),
-                    tint = if (enabled) MaterialTheme.colorScheme.primary
+                    tint = if (enabled) iconTint
                     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
                 )
             }

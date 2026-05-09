@@ -77,6 +77,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 //=========================================================================
@@ -1062,95 +1063,28 @@ fun CoachTraineesScreen(
 
                                     Divider()
 
-                                    Surface(
-                                        color = Color.Transparent,
-                                        shape = RoundedCornerShape(24.dp),
-                                        shadowElevation = 6.dp,
-                                        modifier = Modifier.fillMaxWidth()
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .background(
-                                                    brush = Brush.verticalGradient(
-                                                        colors = listOf(
-                                                            Color(0xFFF8FAFF),
-                                                            Color(0xFFF3F7FF),
-                                                            Color(0xFFFFFFFF)
-                                                        )
-                                                    ),
-                                                    shape = RoundedCornerShape(24.dp)
-                                                )
-                                                .border(
-                                                    width = 1.dp,
-                                                    color = Color(0xFFD8E6FF),
-                                                    shape = RoundedCornerShape(24.dp)
-                                                )
-                                                .padding(horizontal = 14.dp, vertical = 14.dp),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            var isBeltDatesSectionExpanded by remember(selected.id) {
-                                                mutableStateOf(false)
-                                            }
+                                        var isBeltDatesSectionExpanded by remember(selected.id) {
+                                            mutableStateOf(false)
+                                        }
 
-                                            Surface(
-                                                color = Color.White,
-                                                shape = RoundedCornerShape(18.dp),
-                                                shadowElevation = 3.dp,
-                                                border = BorderStroke(
-                                                    width = 1.dp,
-                                                    color = Color(0xFFD8E6FF)
-                                                ),
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        isBeltDatesSectionExpanded = !isBeltDatesSectionExpanded
-                                                    }
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Icon(
-                                                        imageVector = if (isBeltDatesSectionExpanded) {
-                                                            Icons.Default.KeyboardArrowUp
-                                                        } else {
-                                                            Icons.Default.KeyboardArrowDown
-                                                        },
-                                                        contentDescription = null,
-                                                        tint = Color(0xFF64748B)
-                                                    )
-
-                                                    Spacer(Modifier.width(8.dp))
-
-                                                    Column(
-                                                        modifier = Modifier.weight(1f),
-                                                        horizontalAlignment = Alignment.End
-                                                    ) {
-                                                        Text(
-                                                            text = "תאריכי קבלת חגורות",
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            textAlign = TextAlign.Right,
-                                                            style = MaterialTheme.typography.titleMedium,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            color = Color(0xFF1E293B)
-                                                        )
-
-                                                        Text(
-                                                            text = if (isBeltDatesSectionExpanded) {
-                                                                "לחצו על חגורה כדי להציג או לעדכן תאריך"
-                                                            } else {
-                                                                "לחצו לפתיחת רשימת החגורות"
-                                                            },
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            textAlign = TextAlign.Right,
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color = Color(0xFF64748B)
-                                                        )
-                                                    }
+                                            PremiumCoachCompactSectionHeader(
+                                                title = "תאריכי קבלת חגורות",
+                                                subtitle = if (isBeltDatesSectionExpanded) {
+                                                    "עדכון תאריכים לפי חגורה"
+                                                } else {
+                                                    "לחצו לפתיחת רשימת החגורות"
+                                                },
+                                                iconText = "📅",
+                                                isExpanded = isBeltDatesSectionExpanded,
+                                                accent = Color(0xFF6D56B8),
+                                                onClick = {
+                                                    isBeltDatesSectionExpanded = !isBeltDatesSectionExpanded
                                                 }
-                                            }
+                                            )
 
                                             if (isBeltDatesSectionExpanded) {
                                             val beltOrder = listOf(
@@ -1329,27 +1263,26 @@ fun CoachTraineesScreen(
                                                 }
                                             }
 
-                                            beltDatesSaveMessage?.let { msg ->
-                                                Surface(
-                                                    color = if (msg.contains("נשמרו")) {
-                                                        Color(0xFFDCFCE7)
-                                                    } else {
-                                                        Color(0xFFFEE2E2)
-                                                    },
-                                                    shape = RoundedCornerShape(14.dp),
-                                                    modifier = Modifier.fillMaxWidth()
-                                                ) {
-                                                    Text(
-                                                        text = msg,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (msg.contains("נשמרו")) Color(0xFF166534) else Color(0xFF991B1B),
-                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                                                    )
+                                                beltDatesSaveMessage?.let { msg ->
+                                                    Surface(
+                                                        color = if (msg.contains("נשמרו")) {
+                                                            Color(0xFFDCFCE7)
+                                                        } else {
+                                                            Color(0xFFFEE2E2)
+                                                        },
+                                                        shape = RoundedCornerShape(14.dp),
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Text(
+                                                            text = msg,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (msg.contains("נשמרו")) Color(0xFF166534) else Color(0xFF991B1B),
+                                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                                        )
+                                                    }
                                                 }
                                             }
-                                            }
-                                        }
                                     }
 
                                     CoachDateSectionCard(
@@ -1417,16 +1350,124 @@ fun CoachTraineesScreen(
                 }
             }
 
-                if (showStatsSheet) {
-                    CoachGroupStatsPremiumScreen(
-                        stats = groupStats,
-                        profiles = uiProfiles,
-                        onClose = { showStatsSheet = false }
-                    )
-                }
+            if (showStatsSheet) {
+                CoachGroupStatsPremiumScreen(
+                    stats = groupStats,
+                    profiles = uiProfiles,
+                    onClose = { showStatsSheet = false }
+                )
             }
         }
     }
+}
+
+@Composable
+private fun PremiumCoachCompactSectionHeader(
+    title: String,
+    subtitle: String,
+    iconText: String,
+    isExpanded: Boolean,
+    accent: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        color = Color(0xFFFCFDFF),
+        shape = RoundedCornerShape(28.dp),
+        shadowElevation = 6.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            1.dp,
+            Color(0xFFE7ECF7)
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 102.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.White,
+                            Color(0xFFFAFBFF),
+                            accent.copy(alpha = 0.035f)
+                        )
+                    )
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = accent.copy(alpha = 0.08f),
+                shadowElevation = 2.dp,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = iconText,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accent,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Right,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 18.sp,
+                        lineHeight = 21.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF0F172A)
+                    )
+                )
+
+                Text(
+                    text = subtitle,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Right,
+                    maxLines = 2,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF7A879A)
+                    )
+                )
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            Icon(
+                imageVector = if (isExpanded) {
+                    Icons.Default.KeyboardArrowUp
+                } else {
+                    Icons.Default.KeyboardArrowDown
+                },
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
 
 @Composable
 private fun CoachDateSectionCard(
@@ -1452,87 +1493,34 @@ private fun CoachDateSectionCard(
 
     val selectedEntries = stateMap[selectedId].orEmpty()
 
-    Surface(
-        color = Color.Transparent,
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 6.dp,
-        modifier = Modifier.fillMaxWidth()
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF8FAFF),
-                            Color(0xFFF3F7FF),
-                            Color(0xFFFFFFFF)
-                        )
-                    ),
-                    shape = RoundedCornerShape(24.dp)
-                )
-                .border(
-                    width = 1.dp,
-                    color = Color(0xFFD8E6FF),
-                    shape = RoundedCornerShape(24.dp)
-                )
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Surface(
-                color = Color.White,
-                shape = RoundedCornerShape(18.dp),
-                shadowElevation = 3.dp,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = Color(0xFFD8E6FF)
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        isExpanded = !isExpanded
-                    }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = if (isExpanded) {
-                            Icons.Default.KeyboardArrowUp
-                        } else {
-                            Icons.Default.KeyboardArrowDown
-                        },
-                        contentDescription = null,
-                        tint = Color(0xFF64748B)
-                    )
+        val sectionIcon = when (title) {
+            "השתלמויות" -> "🎓"
+            "מחנות אימונים" -> "👥"
+            "הסמכות" -> "🏅"
+            else -> "⌄"
+        }
 
-                    Spacer(Modifier.width(8.dp))
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        Text(
-                            text = title,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Right,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF1E293B)
-                        )
-
-                        Text(
-                            text = if (isExpanded) expandedSubtitle else collapsedSubtitle,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Right,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF64748B)
-                        )
-                    }
-                }
+            val sectionAccent = when (title) {
+                "השתלמויות" -> Color(0xFF7C3AED)
+                "מחנות אימונים" -> Color(0xFF2563EB)
+                "הסמכות" -> Color(0xFF0891B2)
+                else -> Color(0xFF6D56B8)
             }
+
+            PremiumCoachCompactSectionHeader(
+                title = title,
+                subtitle = if (isExpanded) expandedSubtitle else collapsedSubtitle,
+                iconText = sectionIcon,
+                isExpanded = isExpanded,
+                accent = sectionAccent,
+                onClick = {
+                    isExpanded = !isExpanded
+                }
+            )
 
             if (isExpanded) {
                 defaultItems.forEach { itemName ->
@@ -1744,7 +1732,7 @@ private fun CoachDateSectionCard(
             }
         }
     }
-}
+
 @Composable
 private fun LabeledField(label: String, value: String) {
     Column(
@@ -1875,111 +1863,81 @@ private fun CoachGroupStatsPremiumScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
 
-                Surface(
-                    color = Color.Transparent,
-                    shape = RoundedCornerShape(30.dp),
-                    shadowElevation = 10.dp,
-                    modifier = Modifier.fillMaxWidth()
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(glassTop, glassBottom)
-                                ),
-                                shape = RoundedCornerShape(30.dp)
-                            )
-                            .border(
-                                width = 1.dp,
-                                brush = Brush.linearGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0.95f),
-                                        statsAccent.copy(alpha = 0.18f),
-                                        Color.White.copy(alpha = 0.55f)
-                                    )
-                                ),
-                                shape = RoundedCornerShape(30.dp)
-                            )
+                    Surface(
+                        color = Color(0xFFFCFDFF),
+                        shape = RoundedCornerShape(28.dp),
+                        shadowElevation = 7.dp,
+                        tonalElevation = 0.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            Color(0xFFE7ECF7)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .clip(RoundedCornerShape(30.dp))
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = glowShift.dp, y = (-22).dp)
-                                    .size(180.dp)
-                                    .background(
-                                        brush = Brush.radialGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.42f),
-                                                Color.Transparent
-                                            )
-                                        ),
-                                        shape = CircleShape
-                                    )
-                            )
-                        }
-
                         Column(
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.White,
+                                            Color(0xFFFAFBFF),
+                                            Color(0xFFF7FAFF)
+                                        )
+                                    )
+                                )
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Top
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = Alignment.End
                                 ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(16.dp),
-                                        color = Color.White.copy(alpha = 0.65f),
-                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
-                                        shadowElevation = 4.dp
-                                    ) {
-                                        Box(
-                                            modifier = Modifier.padding(10.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Assessment,
-                                                contentDescription = null,
-                                                tint = statsAccent,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                        }
-                                    }
-
-                                    Column(
-                                        horizontalAlignment = Alignment.End
-                                    ) {
-                                        Text(
-                                            text = "מידע על הקבוצה",
-                                            style = MaterialTheme.typography.titleLarge,
-                                            fontWeight = FontWeight.ExtraBold,
+                                    Text(
+                                        text = "מידע על הקבוצה",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Right,
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontSize = 22.sp,
+                                            lineHeight = 25.sp,
+                                            fontWeight = FontWeight.Black,
                                             color = Color(0xFF0F172A)
                                         )
-                                        Text(
-                                            text = "Premium analytics overview",
-                                            style = MaterialTheme.typography.bodySmall,
+                                    )
+
+                                    Text(
+                                        text = "סיכום נוכחות, גיל, ותק וחגורות",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Right,
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 12.sp,
+                                            lineHeight = 15.sp,
+                                            fontWeight = FontWeight.Medium,
                                             color = Color(0xFF64748B)
                                         )
-                                    }
+                                    )
                                 }
+
+                                Spacer(Modifier.width(10.dp))
 
                                 Surface(
                                     onClick = onClose,
                                     shape = RoundedCornerShape(16.dp),
-                                    color = Color.White.copy(alpha = 0.72f),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.9f)),
-                                    shadowElevation = 4.dp,
+                                    color = Color(0xFFF8FAFC),
+                                    border = BorderStroke(1.dp, Color(0xFFE7ECF7)),
+                                    shadowElevation = 3.dp,
                                     modifier = Modifier.size(42.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
@@ -1993,324 +1951,347 @@ private fun CoachGroupStatsPremiumScreen(
                                 }
                             }
 
-                            Surface(
-                                color = Color.White.copy(alpha = 0.44f),
-                                shape = RoundedCornerShape(24.dp),
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.78f)),
-                                modifier = Modifier.fillMaxWidth()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                Surface(
+                                    color = Color(0xFFFCFDFF),
+                                    shape = RoundedCornerShape(24.dp),
+                                    shadowElevation = 5.dp,
+                                    tonalElevation = 0.dp,
+                                    border = BorderStroke(1.dp, Color(0xFFE7ECF7)),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(132.dp)
                                 ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(horizontalAlignment = Alignment.End) {
-                                            AttendanceRing(
-                                                percent = animatedAvgAttendance.toInt()
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.horizontalGradient(
+                                                    listOf(
+                                                        Color.White,
+                                                        Color(0xFFFAFBFF),
+                                                        Color(0xFF4F46E5).copy(alpha = 0.07f)
+                                                    )
+                                                )
                                             )
+                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                        horizontalAlignment = Alignment.End,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
                                             Text(
-                                                text = "נוכחות ממוצעת",
-                                                style = MaterialTheme.typography.bodySmall,
+                                                text = stats.highAttendanceCount.toString(),
+                                                textAlign = TextAlign.Right,
+                                                maxLines = 1,
+                                                style = MaterialTheme.typography.headlineMedium.copy(
+                                                    fontSize = 32.sp,
+                                                    lineHeight = 34.sp,
+                                                    fontWeight = FontWeight.Black,
+                                                    color = Color(0xFF4F46E5)
+                                                )
+                                            )
+
+                                            Text(
+                                                text = "🏆",
+                                                fontSize = 22.sp,
+                                                textAlign = TextAlign.Left
+                                            )
+                                        }
+
+                                        Spacer(Modifier.height(8.dp))
+
+                                        Text(
+                                            text = "מעל 80%",
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = TextAlign.Right,
+                                            maxLines = 1,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontSize = 14.sp,
+                                                lineHeight = 17.sp,
+                                                fontWeight = FontWeight.Black,
+                                                color = Color(0xFF4F46E5)
+                                            )
+                                        )
+
+                                        Spacer(Modifier.height(2.dp))
+
+                                        Text(
+                                            text = "נוכחות",
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = TextAlign.Right,
+                                            maxLines = 1,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontSize = 14.sp,
+                                                lineHeight = 17.sp,
+                                                fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF64748B)
                                             )
-                                        }
-
-                                        Surface(
-                                            shape = RoundedCornerShape(999.dp),
-                                            color = statsAccent.copy(alpha = 0.14f),
-                                            border = BorderStroke(
-                                                width = 1.dp,
-                                                color = statsAccent.copy(alpha = 0.22f)
-                                            )
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-
-                                                Text(
-                                                    text = "🏆",
-                                                    style = MaterialTheme.typography.labelMedium
-                                                )
-
-                                                Spacer(Modifier.width(6.dp))
-
-                                                Text(
-                                                    text = "${stats.highAttendanceCount} מתאמנים מעל 80% נוכחות",
-                                                    color = statsAccent,
-                                                    fontWeight = FontWeight.Bold,
-                                                    style = MaterialTheme.typography.labelMedium
-                                                )
-                                            }
-                                        }
+                                        )
                                     }
+                                }
 
-                                    AttendanceSparkline(
-                                        values = sparklineData,
+                                Surface(
+                                    color = Color(0xFFFCFDFF),
+                                    shape = RoundedCornerShape(24.dp),
+                                    shadowElevation = 5.dp,
+                                    tonalElevation = 0.dp,
+                                    border = BorderStroke(1.dp, Color(0xFFE7ECF7)),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(132.dp)
+                                ) {
+                                    Column(
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(64.dp)
-                                    )
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.horizontalGradient(
+                                                    listOf(
+                                                        Color.White,
+                                                        Color(0xFFFAFBFF),
+                                                        Color(0xFF22C55E).copy(alpha = 0.07f)
+                                                    )
+                                                )
+                                            )
+                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        AttendanceRing(
+                                            percent = animatedAvgAttendance.toInt(),
+                                            modifier = Modifier.size(82.dp)
+                                        )
+
+                                        Spacer(Modifier.height(6.dp))
+
+                                        Text(
+                                            text = "נוכחות ממוצעת",
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontSize = 12.sp,
+                                                lineHeight = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF64748B)
+                                            )
+                                        )
+                                    }
                                 }
                             }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                PremiumStatChip(
-                                    label = "גיל מינ'",
-                                    value = minAge,
-                                    icon = "🎂",
-                                    gradient = listOf(
-                                        Color(0xFF0F766E),
-                                        Color(0xFF14B8A6),
-                                        Color(0xFF5EEAD4)
-                                    ),
-                                    modifier = Modifier.weight(1f)
-                                )
-                                PremiumStatChip(
-                                    label = "גיל מקס'",
-                                    value = maxAge,
-                                    icon = "📅",
-                                    gradient = listOf(
-                                        Color(0xFF1D4ED8),
-                                        Color(0xFF3B82F6),
-                                        Color(0xFF93C5FD)
-                                    ),
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                PremiumStatChip(
-                                    label = "וותק מינ'",
-                                    value = minSeniority,
-                                    icon = "⏱",
-                                    gradient = listOf(
-                                        Color(0xFF7C3AED),
-                                        Color(0xFFA855F7),
-                                        Color(0xFFD8B4FE)
-                                    ),
-                                    modifier = Modifier.weight(1f)
-                                )
-                                PremiumStatChip(
-                                    label = "וותק מקס'",
-                                    value = maxSeniority,
-                                    icon = "🔥",
-                                    gradient = listOf(
-                                        Color(0xFFBE185D),
-                                        Color(0xFFEC4899),
-                                        Color(0xFFF9A8D4)
-                                    ),
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                PremiumMiniPill(
-                                    title = "מתאמנים",
-                                    value = stats.totalTrainees.toString(),
-                                    icon = "👥",
-                                    accent = Color(0xFF4F46E5),
-                                    modifier = Modifier.weight(1f)
-                                )
-                                PremiumMiniPill(
-                                    title = "חגורות שונות",
-                                    value = stats.beltCounts.size.toString(),
-                                    icon = "🥋",
-                                    accent = Color(0xFF0891B2),
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                            AttendanceSparkline(
+                                values = sparklineData,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                            )
                         }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        PremiumStatChip(
+                            label = "גיל מינ׳",
+                            value = minAge,
+                            icon = "📅",
+                            gradient = listOf(
+                                Color(0xFF1D4ED8),
+                                Color(0xFF3B82F6),
+                                Color(0xFF93C5FD)
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        PremiumStatChip(
+                            label = "גיל מקס׳",
+                            value = maxAge,
+                            icon = "🎂",
+                            gradient = listOf(
+                                Color(0xFF0F766E),
+                                Color(0xFF14B8A6),
+                                Color(0xFF5EEAD4)
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        PremiumStatChip(
+                            label = "ותק מינ׳",
+                            value = minSeniority,
+                            icon = "⏱",
+                            gradient = listOf(
+                                Color(0xFF7C3AED),
+                                Color(0xFFA855F7),
+                                Color(0xFFD8B4FE)
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        PremiumStatChip(
+                            label = "ותק מקס׳",
+                            value = maxSeniority,
+                            icon = "🔥",
+                            gradient = listOf(
+                                Color(0xFFBE185D),
+                                Color(0xFFEC4899),
+                                Color(0xFFF9A8D4)
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        PremiumMiniPill(
+                            title = "מתאמנים",
+                            value = stats.totalTrainees.toString(),
+                            icon = "👥",
+                            accent = Color(0xFF4F46E5),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        PremiumMiniPill(
+                            title = "חגורות שונות",
+                            value = stats.beltCounts.size.toString(),
+                            icon = "🥋",
+                            accent = Color(0xFF0891B2),
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
 
                 Surface(
-                    color = Color.Transparent,
-                    shape = RoundedCornerShape(24.dp),
-                    shadowElevation = 8.dp,
+                    color = Color(0xFFFCFDFF),
+                    shape = RoundedCornerShape(28.dp),
+                    shadowElevation = 7.dp,
+                    tonalElevation = 0.dp,
+                    border = BorderStroke(
+                        1.dp,
+                        Color(0xFFE7ECF7)
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
+                            .fillMaxWidth()
                             .background(
                                 brush = Brush.verticalGradient(
                                     colors = listOf(
                                         Color.White,
-                                        statsAccent.copy(alpha = 0.03f),
-                                        Color.White
+                                        Color(0xFFFAFBFF),
+                                        Color(0xFFF7FAFF)
                                     )
-                                ),
-                                shape = RoundedCornerShape(24.dp)
+                                )
                             )
-                            .border(
-                                1.dp,
-                                statsAccent.copy(alpha = 0.08f),
-                                RoundedCornerShape(24.dp)
-                            )
-                            .padding(horizontal = 18.dp, vertical = 18.dp),
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Text(
                             text = "התפלגות חגורות בסניף",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Right,
+                            maxLines = 1,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 20.sp,
+                                lineHeight = 23.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF0F172A)
+                            )
                         )
 
                         if (stats.beltCounts.isEmpty()) {
-                            Text("אין נתונים להצגה", color = Color(0xFF64748B))
+                            Text(
+                                text = "אין נתונים להצגה",
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Right,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFF64748B)
+                            )
                         } else {
                             stats.beltCounts.forEach { (belt, count) ->
                                 val progress =
                                     if (profiles.isNotEmpty()) count.toFloat() / profiles.size.toFloat() else 0f
 
                                 val beltColor = beltColorForStats(belt)
+                                val labelColor =
+                                    if (beltColor == Color(0xFFE5E7EB)) Color(0xFF475569) else beltColor
 
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                                ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(10.dp)
-                                                    .clip(RoundedCornerShape(999.dp))
-                                                    .background(beltColor)
-                                            )
-
-                                            Spacer(modifier = Modifier.width(8.dp))
-
-                                            Text(
-                                                text = belt,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = if (beltColor == Color(0xFFE5E7EB)) Color(0xFF475569) else beltColor
-                                            )
-                                        }
-
-                                        Spacer(modifier = Modifier.weight(1f))
-
                                         Surface(
                                             color = beltColor.copy(alpha = 0.14f),
-                                            shape = RoundedCornerShape(999.dp)
+                                            shape = CircleShape,
+                                            modifier = Modifier.size(34.dp)
                                         ) {
-                                            Text(
-                                                text = "$count",
-                                                color = if (beltColor == Color(0xFFE5E7EB)) Color(0xFF475569) else beltColor,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
-                                            )
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "$count",
+                                                    color = labelColor,
+                                                    fontWeight = FontWeight.Black,
+                                                    fontSize = 16.sp
+                                                )
+                                            }
                                         }
+
+                                        Spacer(modifier = Modifier.width(10.dp))
+
+                                        Text(
+                                            text = belt,
+                                            modifier = Modifier.weight(1f),
+                                            textAlign = TextAlign.Right,
+                                            maxLines = 1,
+                                            style = MaterialTheme.typography.titleSmall.copy(
+                                                fontSize = 18.sp,
+                                                lineHeight = 21.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = labelColor
+                                            )
+                                        )
+
+                                        Spacer(modifier = Modifier.width(8.dp))
+
+                                        Box(
+                                            modifier = Modifier
+                                                .size(9.dp)
+                                                .clip(CircleShape)
+                                                .background(beltColor)
+                                        )
                                     }
 
                                     LinearProgressIndicator(
                                         progress = { progress },
                                         color = beltColor,
-                                        trackColor = beltColor.copy(alpha = 0.22f),
+                                        trackColor = beltColor.copy(alpha = 0.18f),
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(8.dp)
+                                            .height(7.dp)
                                             .clip(RoundedCornerShape(999.dp))
                                     )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Surface(
-                    color = Color.Transparent,
-                    shape = RoundedCornerShape(22.dp),
-                    shadowElevation = 5.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.White,
-                                        statsAccent.copy(alpha = 0.04f),
-                                        Color.White
-                                    )
-                                ),
-                                shape = RoundedCornerShape(22.dp)
-                            )
-                            .border(
-                                1.dp,
-                                statsAccent.copy(alpha = 0.10f),
-                                RoundedCornerShape(22.dp)
-                            )
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "מתאמני הקבוצה",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        if (profiles.isEmpty()) {
-                            Text("אין מתאמנים להצגה", color = Color(0xFF64748B))
-                        } else {
-                            profiles.forEach { trainee ->
-                                Surface(
-                                    color = Color.Transparent,
-                                    shape = RoundedCornerShape(20.dp),
-                                    shadowElevation = 4.dp,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .background(
-                                                brush = Brush.verticalGradient(
-                                                    colors = listOf(
-                                                        Color.White,
-                                                        statsAccent.copy(alpha = 0.025f),
-                                                        Color.White
-                                                    )
-                                                ),
-                                                shape = RoundedCornerShape(20.dp)
-                                            )
-                                            .border(
-                                                1.dp,
-                                                statsAccent.copy(alpha = 0.07f),
-                                                RoundedCornerShape(20.dp)
-                                            )
-                                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(5.dp)
-                                    ) {
-                                        Text(
-                                            text = trainee.fullName,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            color = Color(0xFF263238)
-                                        )
-                                        Text(
-                                            text = listOf(
-                                                trainee.belt.ifBlank { "ללא דרגה" },
-                                                if (trainee.age > 0) "גיל ${trainee.age}" else null,
-                                                trainee.seniority.takeIf { it.isNotBlank() },
-                                                if (trainee.attendancePct > 0) "נוכחות ${trainee.attendancePct}%" else null
-                                            ).filterNotNull().joinToString(" • "),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFF64748B),
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -2330,6 +2311,7 @@ private fun PremiumStatChip(
     modifier: Modifier = Modifier
 ) {
     val valueNumber = value.filter { it.isDigit() }.toFloatOrNull() ?: 0f
+
     var startAnimation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -2339,53 +2321,40 @@ private fun PremiumStatChip(
     val animatedValue by animateFloatAsState(
         targetValue = if (startAnimation) valueNumber else 0f,
         animationSpec = tween(
-            durationMillis = 1400,
+            durationMillis = 900,
             easing = FastOutSlowInEasing
         ),
         label = "premiumChipValue"
     )
 
-    val glowTransition = rememberInfiniteTransition(label = "statChipGlow")
-    val glowShift by glowTransition.animateFloat(
-        initialValue = -100f,
-        targetValue = 180f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "statChipGlowShift"
-    )
-
-    val ringScale by glowTransition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "statChipRingScale"
-    )
-
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+
     val chipScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
+        targetValue = if (isPressed) 0.98f else 1f,
         animationSpec = tween(120),
         label = "statChipPressScale"
     )
 
+    val accent = gradient.getOrNull(1) ?: Color(0xFF4F46E5)
+
     Surface(
-        shape = RoundedCornerShape(30.dp),
-        color = Color.Transparent,
-        shadowElevation = 12.dp,
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFFFCFDFF),
+        shadowElevation = 6.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFFE7ECF7)
+        ),
         modifier = modifier
-            .height(142.dp)
+            .height(96.dp)
             .graphicsLayer {
                 scaleX = chipScale
                 scaleY = chipScale
             }
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .clickable(
@@ -2394,80 +2363,68 @@ private fun PremiumStatChip(
                     onClick = {}
                 )
                 .background(
-                    brush = Brush.verticalGradient(colors = gradient),
-                    shape = RoundedCornerShape(30.dp)
-                )
-                .border(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(
+                    brush = Brush.horizontalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.44f),
-                            Color.White.copy(alpha = 0.10f),
-                            Color.White.copy(alpha = 0.30f)
+                            Color.White,
+                            Color(0xFFFAFBFF),
+                            accent.copy(alpha = 0.08f)
                         )
-                    ),
-                    shape = RoundedCornerShape(30.dp)
-                )
-                .clip(RoundedCornerShape(30.dp))
-        ) {
-            Box(
-                modifier = Modifier
-                    .offset(x = glowShift.dp, y = (-8).dp)
-                    .size(128.dp)
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.22f),
-                                Color.Transparent
-                            )
-                        ),
-                        shape = CircleShape
                     )
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = icon,
-                    style = MaterialTheme.typography.titleMedium
                 )
-
+                .padding(start = 6.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(15.dp),
+                color = accent.copy(alpha = 0.13f),
+                shadowElevation = 2.dp,
+                modifier = Modifier.size(34.dp)
+            ) {
                 Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .graphicsLayer {
-                            scaleX = ringScale
-                            scaleY = ringScale
-                        }
-                        .background(
-                            color = Color.White.copy(alpha = 0.93f),
-                            shape = CircleShape
-                        )
-                        .border(
-                            width = 2.dp,
-                            color = Color.White.copy(alpha = 0.58f),
-                            shape = CircleShape
-                        ),
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (valueNumber > 0f) animatedValue.toInt().toString() else value,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF0F172A)
+                        text = icon,
+                        fontSize = 17.sp,
+                        textAlign = TextAlign.Center
                     )
                 }
+            }
 
+            Spacer(Modifier.width(6.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.Center
+            ) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Right,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        lineHeight = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF64748B)
+                    )
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    text = if (valueNumber > 0f) animatedValue.toInt().toString() else value,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Right,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontSize = 28.sp,
+                        lineHeight = 31.sp,
+                        fontWeight = FontWeight.Black,
+                        color = accent
+                    )
                 )
             }
         }
@@ -2587,23 +2544,28 @@ private fun PremiumMiniPill(
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.97f else 1f,
+        targetValue = if (isPressed) 0.98f else 1f,
         animationSpec = tween(120),
         label = "pillScale"
     )
 
     Surface(
-        color = Color.Transparent,
-        shape = RoundedCornerShape(22.dp),
-        shadowElevation = 8.dp,
+        color = Color(0xFFFCFDFF),
+        shape = RoundedCornerShape(24.dp),
+        shadowElevation = 7.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            1.dp,
+            Color(0xFFE7ECF7)
+        ),
         modifier = modifier
-            .height(86.dp)
+            .height(78.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .clickable(
@@ -2611,67 +2573,66 @@ private fun PremiumMiniPill(
                     indication = null
                 ) {}
                 .background(
-                    brush = Brush.verticalGradient(
+                    brush = Brush.horizontalGradient(
                         colors = listOf(
                             Color.White,
-                            accent.copy(alpha = 0.15f)
+                            Color(0xFFFAFBFF),
+                            accent.copy(alpha = 0.06f)
                         )
-                    ),
-                    shape = RoundedCornerShape(22.dp)
+                    )
                 )
-                .border(
-                    width = 1.dp,
-                    color = Color.White.copy(alpha = 0.9f),
-                    shape = RoundedCornerShape(22.dp)
-                )
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                shape = CircleShape,
+                color = accent.copy(alpha = 0.12f),
+                modifier = Modifier.size(40.dp)
             ) {
-
                 Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(
-                            brush = Brush.linearGradient(
-                                listOf(
-                                    accent,
-                                    accent.copy(alpha = 0.7f)
-                                )
-                            ),
-                            shape = CircleShape
-                        ),
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = icon,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = Color.White
+                        fontSize = 19.sp,
+                        textAlign = TextAlign.Center
                     )
                 }
+            }
 
-                Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(8.dp))
 
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodySmall,
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Right,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF64748B)
                     )
+                )
 
-                    Text(
-                        text = if (valueNumber > 0f) animatedValue.toInt().toString() else value,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                Text(
+                    text = if (valueNumber > 0f) animatedValue.toInt().toString() else value,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Right,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 21.sp,
+                        lineHeight = 24.sp,
+                        fontWeight = FontWeight.Black,
                         color = accent
                     )
-                }
+                )
             }
         }
     }

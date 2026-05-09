@@ -193,6 +193,9 @@ fun MaterialsScreen(
     val scroll = rememberScrollState()
     val itemStates = remember(belt.id, topic, subTopicFilter) { mutableStateMapOf<String, Boolean?>() }
 
+    // ✅ גורם למסך להתרענן אחרי סימון יודע/לא יודע ממסכים אחרים, כולל RandomPracticeScreen
+    val marksVersion by vm.marksVersion.collectAsState()
+
     var explainTriple by remember { mutableStateOf<Triple<Belt, String, String>?>(null) }
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
     var noteDraft by rememberSaveable { mutableStateOf("") }
@@ -400,18 +403,118 @@ fun MaterialsScreen(
     }
 
     // טעינת מצבי שליטה — מקור אמת יחיד: VM/DataStore
-    LaunchedEffect(belt, topicUi, subTopicFilter, itemList) {
-        itemStates.clear()
+    // ✅ טוען את כל הסימונים למפה זמנית ורק בסוף מעדכן UI,
+    // כדי למנוע מצב ביניים שבו רוב השורות מצוירות כ-null.
+    LaunchedEffect(belt, topicUi, subTopicFilter, itemList, marksVersion) {
+
+        // ✅ חשוב:
+        // produceState מתחיל לפעמים עם itemList ריק, ואז נטען שוב עם הרשימה האמיתית.
+        // אם ננקה את itemStates בזמן שהרשימה ריקה — כל הוי/איקס נעלמים רגעית.
+        if (itemList.isEmpty()) {
+            android.util.Log.d(
+                "KMI_MARK_SYNC",
+                "Materials load batch skipped | belt=${belt.id} | topicKey=$topicKey | reason=itemList empty"
+            )
+            return@LaunchedEffect
+        }
+
+        val nextStates = mutableMapOf<String, Boolean?>()
 
         itemList.forEach { item ->
             val canonicalId = canonicalFor(item)
 
-            val vFromVm: Boolean? =
-                runCatching { vm.getItemStatusNullable(belt, topicKey, canonicalId) }.getOrNull()
-                    ?: runCatching { if (vm.isMastered(belt, topicKey, canonicalId)) true else null }.getOrNull()
+            val topicKeysToRead = listOf(
+                topicKey,
+                topicUi,
+                "כללי"
+            )
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
 
-            itemStates[item] = vFromVm
+            var vFromVm: Boolean? = null
+            var matchedKey: String? = null
+
+            for (key in topicKeysToRead) {
+                val valueFromKey: Boolean? =
+                    runCatching {
+                        vm.getItemStatusNullable(
+                            belt = belt,
+                            topic = key,
+                            item = canonicalId
+                        )
+                    }.getOrNull()
+                        ?: runCatching {
+                            if (
+                                vm.isMastered(
+                                    belt = belt,
+                                    topic = key,
+                                    item = canonicalId
+                                )
+                            ) true else null
+                        }.getOrNull()
+
+                if (valueFromKey != null) {
+                    vFromVm = valueFromKey
+                    matchedKey = key
+                    break
+                }
+            }
+
+            // ✅ fallback לשמירה המקומית הישנה
+            val localFallback: Boolean? = when {
+                masteredSet.contains(canonicalId) -> true
+                unknowns.contains(canonicalId) -> false
+                else -> null
+            }
+
+            val finalValue = vFromVm ?: localFallback
+
+            // ✅ ריפוי VM רק אם מצאנו ערך מקומי אבל ה־VM ריק
+            if (vFromVm == null && finalValue != null) {
+                vm.setItemStatusNullable(
+                    belt = belt,
+                    topic = topicKey,
+                    item = canonicalId,
+                    value = finalValue
+                )
+
+                if (topicKey != topicUi) {
+                    vm.setItemStatusNullable(
+                        belt = belt,
+                        topic = topicUi,
+                        item = canonicalId,
+                        value = finalValue
+                    )
+                }
+
+                if (topicUi != "כללי") {
+                    vm.setItemStatusNullable(
+                        belt = belt,
+                        topic = "כללי",
+                        item = canonicalId,
+                        value = finalValue
+                    )
+                }
+            }
+
+            // ✅ שומרים זמנית לפי canonicalId בלבד
+            nextStates[canonicalId] = finalValue
+
+            android.util.Log.d(
+                "KMI_MARK_SYNC",
+                "Materials load batch | belt=${belt.id} | topicKey=$topicKey | topicUi=$topicUi | readKeys=$topicKeysToRead | matchedKey=$matchedKey | rawItem=$item | canonicalId=$canonicalId | vmValue=$vFromVm | localFallback=$localFallback | finalValue=$finalValue"
+            )
         }
+
+        // ✅ עדכון UI פעם אחת אחרי שכל הרשימה נטענה
+        itemStates.clear()
+        itemStates.putAll(nextStates)
+
+        android.util.Log.d(
+            "KMI_MARK_SYNC",
+            "Materials load batch done | belt=${belt.id} | topicKey=$topicKey | count=${nextStates.size} | states=$nextStates"
+        )
     }
 
     Scaffold(
@@ -499,7 +602,10 @@ fun MaterialsScreen(
                                 onClick = {
                                     scope.launch {
                                         vm.clearTopic(belt, topicKey)
-                                        itemList.forEach { item -> itemStates[item] = null }
+                                        itemList.forEach { item ->
+                                            val canonicalId = canonicalFor(item)
+                                            itemStates[canonicalId] = null
+                                        }
 
                                         excludedItems.clear()
                                         sp.edit()
@@ -773,9 +879,19 @@ fun MaterialsScreen(
                                 mutableStateOf(loadNote(canonicalId))
                             }
 
-                            val mastered = itemStates[item]
+                            val mastered = itemStates[canonicalId] ?: when {
+                                masteredSet.contains(canonicalId) -> true
+                                unknowns.contains(canonicalId) -> false
+                                else -> null
+                            }
+
                             val isExcluded = excludedItems.contains(canonicalId)
                             val isHighlighted = highlight != null && canonicalId == highlight
+
+                            android.util.Log.d(
+                                "KMI_MARK_SYNC",
+                                "Materials render | belt=${belt.id} | topicKey=$topicKey | rawItem=$item | canonicalId=$canonicalId | mastered=$mastered"
+                            )
 
                             val bringer = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
                             LaunchedEffect(isHighlighted) {
@@ -842,13 +958,99 @@ fun MaterialsScreen(
 
                                     Spacer(Modifier.width(8.dp))
 
-                                    MasterToggle(
-                                        mastered = mastered,
-                                        onSelect = { newVal ->
-                                            itemStates[item] = newVal
-                                            vm.setItemStatusNullable(belt, topicKey, canonicalId, newVal)
-                                        }
-                                    )
+                                    key(canonicalId, mastered) {
+                                        MasterToggle(
+                                            mastered = mastered,
+                                            onSelect = { newVal ->
+                                                itemStates[canonicalId] = newVal
+
+                                                // ✅ שמירה למפתח הנוכחי
+                                                vm.setItemStatusNullable(
+                                                    belt = belt,
+                                                    topic = topicKey,
+                                                    item = canonicalId,
+                                                    value = newVal
+                                                )
+
+                                                // ✅ אם זה תת־נושא, נשמור גם לנושא הראשי
+                                                // כדי ש־RandomPracticeScreen יקרא אותו בלי לאבד סנכרון.
+                                                if (topicKey != topicUi) {
+                                                    vm.setItemStatusNullable(
+                                                        belt = belt,
+                                                        topic = topicUi,
+                                                        item = canonicalId,
+                                                        value = newVal
+                                                    )
+                                                }
+
+                                                // ✅ שמירה גם תחת "כללי"
+                                                // חשוב לתרגול כללי לפי חגורה ולסנכרון דו־כיווני.
+                                                if (topicUi != "כללי") {
+                                                    vm.setItemStatusNullable(
+                                                        belt = belt,
+                                                        topic = "כללי",
+                                                        item = canonicalId,
+                                                        value = newVal
+                                                    )
+                                                }
+
+                                                android.util.Log.d(
+                                                    "KMI_MARK_SYNC",
+                                                    "Materials UI click | belt=${belt.id} | topicKey=$topicKey | topicUi=$topicUi | rawItem=$item | canonicalId=$canonicalId | value=$newVal"
+                                                )
+
+                                                // ✅ שמירה מקומית תואמת לסיכום/מסכים ישנים
+                                                setMasteredLocal(canonicalId, newVal == true)
+                                                setUnknown(canonicalId, newVal == false)
+
+                                                // ✅ שמירה מקומית רחבה גם למפתחות ש-RandomPracticeScreen קורא.
+                                                // זה פותר את הכיוון: מסך תרגילים -> מסך תרגול.
+                                                val localKeysToWrite = listOf(
+                                                    topicKey,
+                                                    topicUi,
+                                                    "כללי"
+                                                )
+                                                    .map { it.trim() }
+                                                    .filter { it.isNotBlank() }
+                                                    .distinct()
+
+                                                localKeysToWrite.forEach { key ->
+                                                    val masteredKeyForPractice = "mastered_${belt.id}_${key}"
+                                                    val unknownKeyForPractice = "unknown_${belt.id}_${key}"
+
+                                                    val masteredSetForPractice =
+                                                        (sp.getStringSet(masteredKeyForPractice, emptySet()) ?: emptySet())
+                                                            .toMutableSet()
+
+                                                    val unknownSetForPractice =
+                                                        (sp.getStringSet(unknownKeyForPractice, emptySet()) ?: emptySet())
+                                                            .toMutableSet()
+
+                                                    when (newVal) {
+                                                        true -> {
+                                                            masteredSetForPractice.add(canonicalId)
+                                                            unknownSetForPractice.remove(canonicalId)
+                                                        }
+
+                                                        false -> {
+                                                            unknownSetForPractice.add(canonicalId)
+                                                            masteredSetForPractice.remove(canonicalId)
+                                                        }
+
+                                                        null -> {
+                                                            masteredSetForPractice.remove(canonicalId)
+                                                            unknownSetForPractice.remove(canonicalId)
+                                                        }
+                                                    }
+
+                                                    sp.edit()
+                                                        .putStringSet(masteredKeyForPractice, masteredSetForPractice)
+                                                        .putStringSet(unknownKeyForPractice, unknownSetForPractice)
+                                                        .apply()
+                                                }
+                                            }
+                                        )
+                                    }
                                 }
 
                                 Divider(

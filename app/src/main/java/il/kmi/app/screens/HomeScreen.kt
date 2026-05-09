@@ -82,6 +82,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.subscription.KmiAccess
+import il.kmi.app.database.KmiDatabaseProvider
 import kotlinx.coroutines.delay
 
 //=================================================================================
@@ -1131,27 +1132,142 @@ fun HomeScreen(
                         .distinct()
                 }
 
+                fun calendarDayFromDatabase(dayOfWeek: String): Int {
+                    return when (dayOfWeek.trim().uppercase(java.util.Locale.US)) {
+                        "SUNDAY" -> java.util.Calendar.SUNDAY
+                        "MONDAY" -> java.util.Calendar.MONDAY
+                        "TUESDAY" -> java.util.Calendar.TUESDAY
+                        "WEDNESDAY" -> java.util.Calendar.WEDNESDAY
+                        "THURSDAY" -> java.util.Calendar.THURSDAY
+                        "FRIDAY" -> java.util.Calendar.FRIDAY
+                        "SATURDAY" -> java.util.Calendar.SATURDAY
+                        else -> java.util.Calendar.MONDAY
+                    }
+                }
+
+                fun hourFromTimeText(time: String, fallback: Int): Int {
+                    return time
+                        .substringBefore(":")
+                        .trim()
+                        .toIntOrNull()
+                        ?: fallback
+                }
+
+                fun minuteFromTimeText(time: String, fallback: Int): Int {
+                    return time
+                        .substringAfter(":", "")
+                        .trim()
+                        .toIntOrNull()
+                        ?: fallback
+                }
+
+                fun databaseGroupMatches(
+                    selectedGroup: String,
+                    databaseGroupHe: String,
+                    databaseGroupEn: String
+                ): Boolean {
+                    val wanted = il.kmi.app.training.TrainingCatalog
+                        .normalizeGroupName(selectedGroup)
+                        .ifBlank { selectedGroup }
+                        .trim()
+
+                    val dbHe = il.kmi.app.training.TrainingCatalog
+                        .normalizeGroupName(databaseGroupHe)
+                        .ifBlank { databaseGroupHe }
+                        .trim()
+
+                    val dbEn = databaseGroupEn.trim()
+
+                    if (wanted.equals(dbHe, ignoreCase = true)) return true
+                    if (selectedGroup.trim().equals(databaseGroupHe.trim(), ignoreCase = true)) return true
+                    if (selectedGroup.trim().equals(dbEn, ignoreCase = true)) return true
+
+                    // התאמות מרחיבות כמו ב-TrainingCatalog:
+                    // מי שבחר נוער או בוגרים יכול לקבל גם "נוער + בוגרים".
+                    if (wanted == "נוער" && dbHe == "נוער + בוגרים") return true
+                    if (wanted == "בוגרים" && dbHe == "נוער + בוגרים") return true
+
+                    return false
+                }
+
+                fun trainingsFromDatabaseForHome(
+                    branchName: String,
+                    groupName: String,
+                    coachFallback: String
+                ): List<TrainingData> {
+                    val dbBranch = KmiDatabaseProvider.branchByName(ctx, branchName)
+                        ?: return emptyList()
+
+                    val matchingDays = dbBranch.trainingDays.filter { day ->
+                        databaseGroupMatches(
+                            selectedGroup = groupName,
+                            databaseGroupHe = day.groupHe,
+                            databaseGroupEn = day.groupEn
+                        )
+                    }
+
+                    if (matchingDays.isEmpty()) return emptyList()
+
+                    return matchingDays.map { day ->
+                        TrainingData.nextWeekly(
+                            dayOfWeek = calendarDayFromDatabase(day.dayOfWeek),
+                            startHour = hourFromTimeText(day.startTime, 19),
+                            startMinute = minuteFromTimeText(day.startTime, 0),
+                            durationMinutes = day.durationMinutes.takeIf { it > 0 } ?: 90,
+                            place = dbBranch.displayPlace(isEnglish),
+                            address = dbBranch.displayAddress(isEnglish),
+                            coach = day.displayCoachName(isEnglish)
+                                .ifBlank { coachFallback }
+                                .ifBlank { "איציק ביטון" }
+                        )
+                    }
+                }
+
                 val currentWeekCandidates: List<TrainingData> =
-                    remember(branchesEffective, groupsEffective, coachFromPrefs) {
+                    remember(branchesEffective, groupsEffective, coachFromPrefs, isEnglish) {
                         android.util.Log.e(
                             "KMI_HOME_SCHEDULE",
-                            "START branchesEffective=$branchesEffective groupsEffective=$groupsEffective"
+                            "START DB-FIRST branchesEffective=$branchesEffective groupsEffective=$groupsEffective"
                         )
 
                         val all = mutableListOf<TrainingData>()
+
                         branchesEffective.forEach { branchName ->
                             val parts = branchName.split('–', '-').map { it.trim() }
                             val city = parts.getOrNull(0) ?: branchName
                             val venue = parts.getOrNull(1) ?: ""
 
-                            val addr =
-                                il.kmi.app.training.TrainingCatalog.addressFor(branchName) ?: ""
-                                    .ifBlank {
-                                        if (city.isNotBlank() && venue.isNotBlank()) "$venue, $city" else branchName
-                                    }
-                            val place = il.kmi.app.training.TrainingCatalog.placeFor(branchName)
-
                             groupsEffective.forEach { grp ->
+
+                                // ✅ 1) ניסיון ראשון: branches.json דרך KmiDatabaseProvider
+                                val dbItems = trainingsFromDatabaseForHome(
+                                    branchName = branchName,
+                                    groupName = grp,
+                                    coachFallback = coachFromPrefs
+                                )
+
+                                if (dbItems.isNotEmpty()) {
+                                    val validDbItems = dbItems
+                                        .map { it.copy(cal = rollForwardIfPast(it.cal, 60)) }
+                                        .filter { isWithinCurrentWeek(it.cal) }
+
+                                    android.util.Log.e(
+                                        "KMI_HOME_SCHEDULE",
+                                        "DB items branch='$branchName' group='$grp' count=${validDbItems.size}"
+                                    )
+
+                                    all += validDbItems
+                                    return@forEach
+                                }
+
+                                // ✅ 2) Fallback זמני: TrainingDirectory הישן
+                                val addr =
+                                    il.kmi.app.training.TrainingCatalog.addressFor(branchName)
+                                        .ifBlank {
+                                            if (city.isNotBlank() && venue.isNotBlank()) "$venue, $city" else branchName
+                                        }
+
+                                val place = il.kmi.app.training.TrainingCatalog.placeFor(branchName)
 
                                 val branchVariants = branchScheduleVariants(branchName)
                                 val groupVariants = groupScheduleVariants(grp)
@@ -1184,7 +1300,7 @@ fun HomeScreen(
 
                                 android.util.Log.e(
                                     "KMI_HOME_SCHEDULE",
-                                    "schedule lookup originalBranch='$branchName' originalGroup='$grp' " +
+                                    "FALLBACK schedule lookup originalBranch='$branchName' originalGroup='$grp' " +
                                             "matchedBranch='$matchedBranch' matchedGroup='$matchedGroup' " +
                                             "found=${sched != null}"
                                 )
@@ -1194,7 +1310,7 @@ fun HomeScreen(
                                         ?: coachFromPrefs.takeIf { it.isNotBlank() }
                                         ?: "איציק ביטון"
 
-                                val branchItems: List<TrainingData> =
+                                val fallbackItems: List<TrainingData> =
                                     sched?.slots?.map { slotAny ->
                                         val s = readSlot(slotAny)
                                         TrainingData.nextWeekly(
@@ -1208,16 +1324,16 @@ fun HomeScreen(
                                         )
                                     } ?: emptyList()
 
-                                val validItems = branchItems
+                                val validFallbackItems = fallbackItems
                                     .map { it.copy(cal = rollForwardIfPast(it.cal, 60)) }
                                     .filter { isWithinCurrentWeek(it.cal) }
 
                                 android.util.Log.e(
                                     "KMI_HOME_SCHEDULE",
-                                    "items branch='$branchName' group='$grp' count=${validItems.size}"
+                                    "FALLBACK items branch='$branchName' group='$grp' count=${validFallbackItems.size}"
                                 )
 
-                                all += validItems
+                                all += validFallbackItems
                             }
                         }
 
@@ -1236,7 +1352,7 @@ fun HomeScreen(
 
                         android.util.Log.e(
                             "KMI_HOME_SCHEDULE",
-                            "FINAL candidates=${result.size} " +
+                            "FINAL DB-FIRST candidates=${result.size} " +
                                     result.joinToString(" || ") {
                                         "${it.place} | ${it.address} | ${it.cal.time}"
                                     }

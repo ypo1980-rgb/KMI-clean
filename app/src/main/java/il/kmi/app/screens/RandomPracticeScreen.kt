@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
@@ -47,12 +48,20 @@ import il.kmi.app.ui.KmiTtsManager.speak
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.shared.platform.PlatformSoundPlayer
 import java.net.URLDecoder   // ✅ נשאר רק זה
+import il.kmi.app.KmiViewModel
+import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import android.app.Activity
+import android.media.AudioManager
+import android.media.ToneGenerator
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 
 //==========================================================================
 
@@ -139,6 +148,7 @@ fun RandomPracticeScreen(
     onBack: () -> Unit,
     practiceDurationMinutes: Int = 1,
     beepLast10: Boolean = true,
+    vm: KmiViewModel? = null,
     onOpenSettings: () -> Unit = {},
     onHome: () -> Unit = {},
     onSearch: () -> Unit = {}
@@ -364,17 +374,201 @@ fun RandomPracticeScreen(
             .replace(' ', '_')
     }
 
-    // ✅ טעויות נשמרות כ-canonicalKeys (יציב, לא תלוי תצוגה)
+    // ✅ טעויות נשמרות כ-canonicalKeys — עדיין משמש לתרגול משוקלל / כל הרשימות
     val wrongCanonicalKeys = remember(belt.id, practiceKey) {
         (sp.getStringSet("wrong_${belt.id}_$practiceKey", emptySet()) ?: emptySet())
             .toMutableSet()
     }
 
-    fun addWrongForCurrent(item: il.kmi.shared.practice.PracticeItem?) {
-        if (item == null) return
-        if (wrongCanonicalKeys.add(item.canonicalKey)) {
-            sp.edit().putStringSet("wrong_${belt.id}_$practiceKey", wrongCanonicalKeys).apply()
+    // ✅ מצב סימון משותף למסך תרגול:
+    // true = יודע / וי ירוק
+    // false = לא יודע / איקס אדום
+    // null = לא סומן / עיגול ריק
+    val practiceStatusMap = remember(belt.id, practiceKey) {
+        mutableStateMapOf<String, Boolean?>()
+    }
+
+    // ✅ מאזין לשינויים של סימוני יודע/לא יודע מכל המסכים
+    val marksVersion by (vm?.marksVersion ?: kotlinx.coroutines.flow.flowOf(0))
+        .collectAsState(initial = 0)
+
+    fun statusTopicFor(item: il.kmi.shared.practice.PracticeItem): String {
+        return item.topicTitle.trim().ifBlank {
+            topicFilter?.trim()?.takeIf { it.isNotBlank() } ?: "כללי"
         }
+    }
+
+    // ✅ מחזיר את ה־raw item המקורי מתוך ContentRepo לפי שם התצוגה.
+    // זה חשוב כדי שה־canonicalId יהיה זהה ל־MaterialsScreen.
+    fun statusRawItemFor(item: il.kmi.shared.practice.PracticeItem): String {
+        val statusTopic = statusTopicFor(item)
+        val wantedDisplay = item.displayTitle.trim()
+        val wantedNorm = wantedDisplay.normHeb()
+
+        val allRawItems = sharedItemsFor(
+            b = belt,
+            topicTitle = statusTopic,
+            subTopicTitle = null
+        )
+
+        return allRawItems.firstOrNull { raw ->
+            val rawDisplay = displayName(raw).ifBlank { raw }.trim()
+
+            raw.trim().normHeb() == wantedNorm ||
+                    rawDisplay.normHeb() == wantedNorm
+        } ?: wantedDisplay
+    }
+
+    fun statusCanonicalFor(item: il.kmi.shared.practice.PracticeItem): String {
+        val statusTopic = statusTopicFor(item)
+        val rawItem = statusRawItemFor(item)
+
+        return CanonicalIds.canonicalFor(
+            belt = belt,
+            topicTitle = statusTopic,
+            displayItem = rawItem
+        )
+    }
+
+    // ✅ מחזיר את כל מפתחות הסימון האפשריים:
+    // 1) המפתח שהתרגול חושב עליו
+    // 2) כללי — כי MaterialsScreen שומר תרגילי חגורה כלליים תחת "כללי"
+    // 3) כל נושא אמיתי ב-ContentRepo שבו התרגיל נמצא
+    // 4) תתי-נושאים בפורמט: נושא__תת-נושא
+    fun statusTopicKeysFor(item: il.kmi.shared.practice.PracticeItem): List<String> {
+        val baseTopic = statusTopicFor(item).trim()
+        val rawItem = statusRawItemFor(item)
+        val rawNorm = rawItem.normHeb()
+        val displayNorm = item.displayTitle.normHeb()
+
+        fun matchesItem(candidateRaw: String): Boolean {
+            val candidateDisplay = displayName(candidateRaw).ifBlank { candidateRaw }.trim()
+
+            return candidateRaw.trim().normHeb() == rawNorm ||
+                    candidateDisplay.normHeb() == rawNorm ||
+                    candidateRaw.trim().normHeb() == displayNorm ||
+                    candidateDisplay.normHeb() == displayNorm
+        }
+
+        val directTopicKeys =
+            runCatching {
+                SharedContentRepo.data[belt]?.topics
+                    ?.filter { topic ->
+                        topic.items.any { raw -> matchesItem(raw) } ||
+                                topic.subTopics.any { sub ->
+                                    sub.items.any { raw -> matchesItem(raw) }
+                                }
+                    }
+                    ?.map { it.title.trim() }
+                    .orEmpty()
+            }.getOrDefault(emptyList())
+
+        val subTopicKeys =
+            runCatching {
+                SharedContentRepo.data[belt]?.topics
+                    ?.flatMap { topic ->
+                        topic.subTopics
+                            .filter { subTopic ->
+                                subTopic.items.any { raw -> matchesItem(raw) }
+                            }
+                            .map { subTopic ->
+                                "${topic.title.trim()}__${subTopic.title.trim()}"
+                            }
+                    }
+                    .orEmpty()
+            }.getOrDefault(emptyList())
+
+        return (
+                listOf(
+                    baseTopic,
+                    "כללי",
+                    topicFilter?.trim().orEmpty()
+                ) + directTopicKeys + subTopicKeys
+                )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    fun persistWrongKeys() {
+        sp.edit()
+            .putStringSet("wrong_${belt.id}_$practiceKey", wrongCanonicalKeys.toSet())
+            .apply()
+    }
+
+    fun setPracticeStatus(
+        item: il.kmi.shared.practice.PracticeItem?,
+        newStatus: Boolean?
+    ) {
+        if (item == null) return
+
+        val statusTopic = statusTopicFor(item)
+        val canonicalId = statusCanonicalFor(item)
+        val topicKeys = statusTopicKeysFor(item)
+
+        android.util.Log.d(
+            "KMI_MARK_SYNC",
+            "RandomPractice save | belt=${belt.id} | topic=$statusTopic | topicKeys=$topicKeys | display=${item.displayTitle} | canonicalId=$canonicalId | value=$newStatus"
+        )
+
+        // ✅ עדכון מיידי במסך התרגול
+        practiceStatusMap[canonicalId] = newStatus
+
+        // ✅ שמירה לכל מפתחות הסימון האפשריים:
+        // גם לנושא הראשי, גם ל"כללי", וגם לתת־נושא אם קיים.
+        topicKeys.forEach { key ->
+            vm?.setItemStatusNullable(
+                belt = belt,
+                topic = key,
+                item = canonicalId,
+                value = newStatus
+            )
+
+            // ✅ שמירה מקומית תואמת ל-MaterialsScreen
+            // כדי שכאשר חוזרים למסך החומר, הרינדור הראשון כבר יראה וי/איקס
+            // ולא יחכה רק לטעינת ה-VM.
+            val masteredKey = "mastered_${belt.id}_${key}"
+            val unknownKey = "unknown_${belt.id}_${key}"
+
+            val masteredSet = (sp.getStringSet(masteredKey, emptySet()) ?: emptySet()).toMutableSet()
+            val unknownSet = (sp.getStringSet(unknownKey, emptySet()) ?: emptySet()).toMutableSet()
+
+            when (newStatus) {
+                true -> {
+                    masteredSet.add(canonicalId)
+                    unknownSet.remove(canonicalId)
+                }
+
+                false -> {
+                    unknownSet.add(canonicalId)
+                    masteredSet.remove(canonicalId)
+                }
+
+                null -> {
+                    masteredSet.remove(canonicalId)
+                    unknownSet.remove(canonicalId)
+                }
+            }
+
+            sp.edit()
+                .putStringSet(masteredKey, masteredSet)
+                .putStringSet(unknownKey, unknownSet)
+                .apply()
+        }
+
+        // ✅ תאימות למסך "כל הרשימות" / רשימת לא יודע:
+        // false = נכנס ללא יודע
+        // true/null = יוצא מלא יודע
+        when (newStatus) {
+            false -> wrongCanonicalKeys.add(item.canonicalKey)
+            true, null -> wrongCanonicalKeys.remove(item.canonicalKey)
+        }
+
+        persistWrongKeys()
+    }
+
+    fun addWrongForCurrent(item: il.kmi.shared.practice.PracticeItem?) {
+        setPracticeStatus(item, false)
     }
 
     // ✅ רשימה משוקללת דרך shared (Wrong first + weight)
@@ -398,6 +592,129 @@ fun RandomPracticeScreen(
     }
 
     var currentIndex by remember { mutableStateOf(0) }
+
+    val currentPracticeItem = weightedPracticeItems.getOrNull(currentIndex)
+    val currentStatusCanonical = currentPracticeItem?.let { statusCanonicalFor(it) }
+    val currentPracticeStatus: Boolean? =
+        currentStatusCanonical?.let { practiceStatusMap[it] }
+
+    suspend fun readPracticeStatusFromSources(
+        safeVm: KmiViewModel?,
+        item: il.kmi.shared.practice.PracticeItem,
+        canonicalId: String
+    ): Pair<Boolean?, String?> {
+        val topicKeys = statusTopicKeysFor(item)
+
+        // ✅ 1. אם יש VM — קוראים קודם מהמקור הראשי
+        if (safeVm != null) {
+            for (key in topicKeys) {
+                val valueFromKey: Boolean? =
+                    runCatching {
+                        safeVm.getItemStatusNullable(
+                            belt = belt,
+                            topic = key,
+                            item = canonicalId
+                        )
+                    }.getOrNull()
+                        ?: runCatching {
+                            if (
+                                safeVm.isMastered(
+                                    belt = belt,
+                                    topic = key,
+                                    item = canonicalId
+                                )
+                            ) true else null
+                        }.getOrNull()
+
+                if (valueFromKey != null) {
+                    return valueFromKey to key
+                }
+            }
+        }
+
+        // ✅ 2. גם אם אין VM — קוראים מהשמירה המקומית ש-MaterialsScreen כותב אליה
+        for (key in topicKeys) {
+            val masteredKey = "mastered_${belt.id}_${key}"
+            val unknownKey = "unknown_${belt.id}_${key}"
+
+            val masteredSet =
+                sp.getStringSet(masteredKey, emptySet()) ?: emptySet()
+
+            val unknownSet =
+                sp.getStringSet(unknownKey, emptySet()) ?: emptySet()
+
+            val localValue: Boolean? = when {
+                masteredSet.contains(canonicalId) -> true
+                unknownSet.contains(canonicalId) -> false
+                else -> null
+            }
+
+            if (localValue != null) {
+                // ✅ אם יש VM — נרפא גם אותו
+                safeVm?.setItemStatusNullable(
+                    belt = belt,
+                    topic = key,
+                    item = canonicalId,
+                    value = localValue
+                )
+
+                android.util.Log.d(
+                    "KMI_MARK_SYNC",
+                    "RandomPractice SP fallback | belt=${belt.id} | key=$key | display=${item.displayTitle} | canonicalId=$canonicalId | value=$localValue | vmIsNull=${safeVm == null}"
+                )
+
+                return localValue to "$key/SP"
+            }
+        }
+
+        return null to null
+    }
+
+    // ✅ טעינה ממוקדת לתרגיל הנוכחי בכל מעבר תרגיל.
+    // זה מבטיח שהעיגול העליון יקבל וי/איקס גם אם הסימון נטען אחרי הרינדור הראשון.
+LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
+    val item = currentPracticeItem ?: return@LaunchedEffect
+    val canonicalId = currentStatusCanonical ?: return@LaunchedEffect
+
+    val statusTopic = statusTopicFor(item)
+    val topicKeys = statusTopicKeysFor(item)
+
+    val (fromSources, matchedKey) = readPracticeStatusFromSources(
+        safeVm = vm,
+        item = item,
+        canonicalId = canonicalId
+    )
+
+    practiceStatusMap[canonicalId] = fromSources
+
+    android.util.Log.d(
+        "KMI_MARK_SYNC",
+        "RandomPractice current load | belt=${belt.id} | baseTopic=$statusTopic | topicKeys=$topicKeys | matchedKey=$matchedKey | display=${item.displayTitle} | canonicalId=$canonicalId | value=$fromSources | vmIsNull=${vm == null}"
+    )
+}
+
+    // ✅ טעינת כל הסימונים בתחילת התרגול / אחרי שינוי סימון.
+    // חשוב: לא עושים clear למפה, כדי שלא יהיה רגע שבו העיגול חוזר לריק.
+    LaunchedEffect(weightedPracticeItems, vm, marksVersion) {
+        weightedPracticeItems.forEach { item ->
+            val statusTopic = statusTopicFor(item)
+            val canonicalId = statusCanonicalFor(item)
+            val topicKeys = statusTopicKeysFor(item)
+
+            val (fromSources, matchedKey) = readPracticeStatusFromSources(
+                safeVm = vm,
+                item = item,
+                canonicalId = canonicalId
+            )
+
+            practiceStatusMap[canonicalId] = fromSources
+
+            android.util.Log.d(
+                "KMI_MARK_SYNC",
+                "RandomPractice load | belt=${belt.id} | baseTopic=$statusTopic | topicKeys=$topicKeys | matchedKey=$matchedKey | display=${item.displayTitle} | canonicalId=$canonicalId | value=$fromSources | vmIsNull=${vm == null}"
+            )
+        }
+    }
 
 // ✅ Guard: אם הרשימה השתנתה והאינדקס יצא מהטווח – נתקן בעדינות
     LaunchedEffect(weightedItems.size) {
@@ -437,6 +754,11 @@ fun RandomPracticeScreen(
     // 🔊 נגן צלילים רב-פלטפורמי (Android + iOS)
     val soundPlayer = remember { PlatformSoundPlayer(context) }
 
+    // ✅ צפצוף יציב לספירה לאחור — לא תלוי בקובץ beep ולא נבלע בין שניות
+    val countdownTone = remember {
+        ToneGenerator(AudioManager.STREAM_MUSIC, 95)
+    }
+
     // ✅ יציאה בטוחה: עוצרים הכול *לפני* ניווט
     fun requestExit() {
         if (isExiting) return
@@ -457,6 +779,7 @@ fun RandomPracticeScreen(
             // לא shutdown כדי לא לפגוע במסכים אחרים; רק עוצרים
             runCatching { KmiTtsManager.stop() }
             runCatching { soundPlayer.release() }
+            runCatching { countdownTone.release() }
         }
     }
 
@@ -473,7 +796,9 @@ fun RandomPracticeScreen(
     }
 
     fun beep(ms: Int = 120) {
-        runCatching { soundPlayer.play("beep") }
+        runCatching {
+            countdownTone.startTone(ToneGenerator.TONE_PROP_BEEP, ms)
+        }
     }
 
 // בכל שינוי משך – מאפסים את הזמן הנותר
@@ -661,163 +986,151 @@ fun RandomPracticeScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp),
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.SpaceBetween,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("⏳", fontSize = 28.sp)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = String.format("%02d:%02d", timeLeft / 60, timeLeft % 60),
-                            style = MaterialTheme.typography.headlineLarge.copy(
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        IconButton(
-                            onClick = {
-                                isRunning = !isRunning
-                                if (isRunning && sessionStarted && currentIndex in weightedItems.indices) {
-                                    weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
-                                        speak(uiTitleFor(currentItem))
-                                    }
-                                    lastSpokenIndex = currentIndex
-                                } else {
-                                    KmiTtsManager.stop()
-                                }
-                            },
-                            modifier = Modifier.size(36.dp)
+                        // ✅ שורת טיימר נקייה בלבד — בלי רמקול ובלי כפתור עצירה
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = if (isRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                contentDescription = if (isRunning) {
-                                    if (isEnglish) "Pause" else "השהה"
-                                } else {
-                                    if (isEnglish) "Resume" else "המשך"
-                                }
-                            )
-                        }
-                    }
+                            Text("⏳", fontSize = 30.sp)
 
-                    if (currentIndex in weightedItems.indices) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFFFFF9C4), RoundedCornerShape(12.dp))
-                                .clickable {
-                                    // נפתח את דיאלוג ההסבר על התרגיל הנוכחי
-                                    showHelp = true
-                                }
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
+                            Spacer(Modifier.width(10.dp))
+
                             Text(
-                                text = weightedPracticeItems.getOrNull(currentIndex)?.let { uiTitleFor(it) }.orEmpty(),
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontSize = 22.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
+                                text = String.format("%02d:%02d", timeLeft / 60, timeLeft % 60),
+                                style = MaterialTheme.typography.displaySmall.copy(
+                                    color = Color(0xFF6D56B8),
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 0.4.sp
+                                )
                             )
                         }
-                    }
 
-                    Spacer(Modifier.height(24.dp))
+                        Spacer(Modifier.height(14.dp))
 
-                    ModernActionsRow(
-                        isEnglish = isEnglish,
-                        onSkip = {
-                            if (currentIndex < weightedItems.lastIndex) currentIndex++
-                        },
-                        onDontKnow = {
-                            if (currentIndex in weightedItems.indices) {
-                                addWrongForCurrent(weightedPracticeItems.getOrNull(currentIndex))
-                            }
-                            if (currentIndex < weightedItems.lastIndex) currentIndex++
-                        }
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        GlassHelpButton(
-                            label = if (isEnglish) "Help" else "עזרה",
-                            onClick = { showHelp = true }
-                        )
-
-                        IconButton(onClick = {
-                            isMuted = !isMuted
-                            if (!isMuted && sessionStarted && currentIndex in weightedItems.indices) {
-                                weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
-                                    speak(uiTitleFor(currentItem))
-                                }
-                                lastSpokenIndex = currentIndex
-                            } else {
-                                KmiTtsManager.stop()
-                            }
-                        }) {
-                            Icon(
-                                if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                                contentDescription = if (isMuted) {
-                                    if (isEnglish) "Resume audio" else "המשך קול"
-                                } else {
-                                    if (isEnglish) "Mute" else "השתק"
-                                }
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    Surface(
-                        color = Color(0xFFE0E0E0),
-                        shadowElevation = 8.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            TextButton(
-                                onClick = {
-                                    // ✅ עוצרים את הטיימר/הקראה עכשיו
-                                    isRunning = false
-                                    sessionStarted = false
-                                    runCatching { KmiTtsManager.stop() }
-
-                                    // ✅ לא נועלים isExiting כאן!
-                                    // קודם צליל STOP_REST ואז חזרה למסך הקודם
-                                    playStopRest {
-                                        requestExit()
+                        if (currentIndex in weightedItems.indices) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFFFFF9C4), RoundedCornerShape(20.dp))
+                                    .clickable {
+                                        showHelp = true
                                     }
-                                },
-                                modifier = Modifier.fillMaxSize(),
-                                colors = ButtonDefaults.textButtonColors(contentColor = Color.Black)
+                                    .padding(horizontal = 22.dp, vertical = 30.dp),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    if (isEnglish) "Finish and Return" else "סיום וחזרה",
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center
+                                    text = weightedPracticeItems
+                                        .getOrNull(currentIndex)
+                                        ?.let { uiTitleFor(it) }
+                                        .orEmpty(),
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontSize = 28.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFF171717)
+                                    ),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Spacer(Modifier.height(18.dp))
+
+                            // ✅ רמקול מצד אחד, סטטוס באמצע, עצירה/המשך מצד שני
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                PremiumSoundIconButton(
+                                    isMuted = isMuted,
+                                    isEnglish = isEnglish,
+                                    onClick = {
+                                        isMuted = !isMuted
+                                        if (!isMuted && sessionStarted && currentIndex in weightedItems.indices) {
+                                            weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
+                                                speak(uiTitleFor(currentItem))
+                                            }
+                                            lastSpokenIndex = currentIndex
+                                        } else {
+                                            KmiTtsManager.stop()
+                                        }
+                                    },
+                                    modifier = Modifier.align(Alignment.CenterStart)
+                                )
+
+                                key(currentStatusCanonical, currentPracticeStatus) {
+                                    Box(modifier = Modifier.align(Alignment.Center)) {
+                                        PracticeStatusCircle(
+                                            status = currentPracticeStatus,
+                                            beltColor = belt.lightColor,
+                                            isEnglish = isEnglish,
+                                            onClick = {
+                                                val nextStatus = when (currentPracticeStatus) {
+                                                    null -> true
+                                                    true -> false
+                                                    false -> null
+                                                }
+
+                                                setPracticeStatus(
+                                                    weightedPracticeItems.getOrNull(currentIndex),
+                                                    nextStatus
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+
+                                PremiumPauseResumeButton(
+                                    isRunning = isRunning,
+                                    isEnglish = isEnglish,
+                                    onClick = {
+                                        isRunning = !isRunning
+                                        if (isRunning && sessionStarted && currentIndex in weightedItems.indices) {
+                                            weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
+                                                speak(uiTitleFor(currentItem))
+                                            }
+                                            lastSpokenIndex = currentIndex
+                                        } else {
+                                            KmiTtsManager.stop()
+                                        }
+                                    },
+                                    modifier = Modifier.align(Alignment.CenterEnd)
                                 )
                             }
                         }
                     }
+
+                    PracticeBottomActionCard(
+                        isEnglish = isEnglish,
+                        onHelp = { showHelp = true },
+                        onSkip = {
+                            if (currentIndex < weightedItems.lastIndex) {
+                                currentIndex++
+                            }
+                        },
+                        onFinish = {
+                            isRunning = false
+                            sessionStarted = false
+                            runCatching { KmiTtsManager.stop() }
+
+                            playStopRest {
+                                requestExit()
+                            }
+                        }
+                    )
                 }
             }
         }
-
 
         // ----- סדר עדיפויות לדיאלוגים -----
         // 1) אם נבחר תרגיל מהחיפוש – מציגים רק את ההסבר הזה
@@ -1536,31 +1849,183 @@ private fun SegmentedTimeChooser(
 @Composable
 private fun ModernActionsRow(
     isEnglish: Boolean,
-    onSkip: () -> Unit,
-    onDontKnow: () -> Unit
+    onHelp: () -> Unit,
+    onSkip: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         ModernPillButton(
+            text = if (isEnglish) "Help" else "עזרה",
+            leading = { Icon(Icons.Outlined.Info, contentDescription = null) },
+            container = Color(0xFFEEE7FF),
+            content = Color(0xFF6D56B8),
+            overlayGradient = Brush.linearGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.65f),
+                    Color.White.copy(alpha = 0.22f),
+                    Color(0xFF6D56B8).copy(alpha = 0.10f)
+                )
+            ),
+            onClick = onHelp,
+            modifier = Modifier.weight(1f)
+        )
+
+        ModernPillButton(
             text = if (isEnglish) "Skip" else "דלג",
             leading = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-            container = MaterialTheme.colorScheme.primary,
-            onClick = onSkip,
-            modifier = Modifier.weight(1f)      // ✅ ה-weight עובר להורה (RowScope)
-        )
-        ModernPillButton(
-            text = if (isEnglish) "Don't Know" else "לא יודע",
-            leading = { Icon(Icons.Filled.Close, contentDescription = null) },
-            container = Color(0xFF7F1D1D),
+            container = Color(0xFF6D56B8),
+            content = Color.White,
             overlayGradient = Brush.horizontalGradient(
-                listOf(Color(0x33FFFFFF), Color(0x11FFFFFF), Color.Transparent)
+                listOf(
+                    Color.White.copy(alpha = 0.24f),
+                    Color.White.copy(alpha = 0.08f),
+                    Color.Transparent
+                )
             ),
-            onClick = onDontKnow,
-            modifier = Modifier.weight(1f)      // ✅ כאן גם
+            onClick = onSkip,
+            modifier = Modifier.weight(1f)
         )
+    }
+}
+
+@Composable
+private fun PracticeBottomActionCard(
+    isEnglish: Boolean,
+    onHelp: () -> Unit,
+    onSkip: () -> Unit,
+    onFinish: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
+        shape = RoundedCornerShape(30.dp),
+        color = Color.White.copy(alpha = 0.92f),
+        tonalElevation = 3.dp,
+        shadowElevation = 12.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.80f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.98f),
+                            Color(0xFFF7F4FF).copy(alpha = 0.72f),
+                            Color.White.copy(alpha = 0.96f)
+                        )
+                    )
+                )
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            ModernActionsRow(
+                isEnglish = isEnglish,
+                onHelp = onHelp,
+                onSkip = onSkip
+            )
+
+            Surface(
+                onClick = onFinish,
+                color = Color.White.copy(alpha = 0.97f),
+                contentColor = Color(0xFF111827),
+                shape = RoundedCornerShape(24.dp),
+                shadowElevation = 7.dp,
+                tonalElevation = 2.dp,
+                border = BorderStroke(1.dp, Color(0xFFE5E7EB).copy(alpha = 0.92f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isEnglish) "Finish and Return" else "סיום וחזרה",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF111827),
+                            letterSpacing = 0.sp
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PremiumSoundIconButton(
+    isMuted: Boolean,
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White.copy(alpha = 0.88f),
+        contentColor = if (isMuted) Color(0xFF94A3B8) else Color(0xFF6D56B8),
+        shadowElevation = 8.dp,
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.80f)),
+        modifier = modifier.size(58.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                contentDescription = if (isMuted) {
+                    if (isEnglish) "Resume audio" else "המשך קול"
+                } else {
+                    if (isEnglish) "Mute" else "השתק"
+                },
+                modifier = Modifier.size(28.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PremiumPauseResumeButton(
+    isRunning: Boolean,
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White.copy(alpha = 0.88f),
+        contentColor = Color(0xFF111827),
+        shadowElevation = 8.dp,
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.80f)),
+        modifier = modifier.size(58.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (isRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (isRunning) {
+                    if (isEnglish) "Pause" else "השהה"
+                } else {
+                    if (isEnglish) "Resume" else "המשך"
+                },
+                modifier = Modifier.size(28.dp)
+            )
+        }
     }
 }
 
@@ -1572,23 +2037,24 @@ private fun ModernPillButton(
     content: Color = MaterialTheme.colorScheme.onPrimary,
     overlayGradient: Brush? = Brush.linearGradient(
         listOf(
-            Color.White.copy(alpha = 0.20f),
-            Color.White.copy(alpha = 0.05f)
+            Color.White.copy(alpha = 0.22f),
+            Color.White.copy(alpha = 0.06f)
         )
     ),
-    modifier: Modifier = Modifier,              // ✅ חדש
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(26.dp)
+    val shape = RoundedCornerShape(28.dp)
+
     Surface(
         onClick = onClick,
         shape = shape,
         color = container,
         contentColor = content,
-        shadowElevation = 6.dp,
-        tonalElevation = 2.dp,
-        modifier = modifier                     // ✅ מקבלים מבחוץ
-            .height(56.dp)
+        shadowElevation = 9.dp,
+        tonalElevation = 3.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.52f)),
+        modifier = modifier.height(58.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (overlayGradient != null) {
@@ -1598,22 +2064,76 @@ private fun ModernPillButton(
                         .background(overlayGradient)
                 )
             }
+
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
                 if (leading != null) {
                     leading()
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
                 }
+
                 Text(
                     text = text,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    maxLines = 1,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.sp
+                    )
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PremiumSoundButton(
+    isMuted: Boolean,
+    isEnglish: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(22.dp)
+
+    Surface(
+        onClick = onClick,
+        shape = shape,
+        color = Color.White.copy(alpha = 0.72f),
+        contentColor = Color(0xFF111827),
+        shadowElevation = 8.dp,
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.75f)),
+        modifier = Modifier.height(52.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                contentDescription = if (isMuted) {
+                    if (isEnglish) "Resume audio" else "המשך קול"
+                } else {
+                    if (isEnglish) "Mute" else "השתק"
+                },
+                modifier = Modifier.size(28.dp)
+            )
+
+            Text(
+                text = if (isMuted) {
+                    if (isEnglish) "Audio off" else "קול כבוי"
+                } else {
+                    if (isEnglish) "Audio on" else "קול פעיל"
+                },
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.ExtraBold
+                )
+            )
         }
     }
 }
@@ -1694,6 +2214,101 @@ private fun SettingRow(
                     )
                 }
             })
+        }
+    }
+}
+
+@Composable
+private fun PracticeStatusCircle(
+    status: Boolean?,
+    beltColor: Color,
+    isEnglish: Boolean,
+    onClick: () -> Unit
+) {
+    val label = when (status) {
+        true -> if (isEnglish) "Known" else "יודע"
+        false -> if (isEnglish) "Don't know" else "לא יודע"
+        null -> if (isEnglish) "Not marked" else "לא סומן"
+    }
+
+    val circleColor = when (status) {
+        true -> Color(0xFF22C55E)
+        false -> Color(0xFFDC2626)
+        null -> Color.White
+    }
+
+    val borderColor = when (status) {
+        true -> Color(0xFF16A34A)
+        false -> Color(0xFFB91C1C)
+        null -> beltColor.copy(alpha = 0.42f)
+    }
+
+    val iconColor = when (status) {
+        true, false -> Color.White
+        null -> beltColor.copy(alpha = 0.72f)
+    }
+
+    val textColor = when (status) {
+        true -> Color(0xFF15803D)
+        false -> Color(0xFFB91C1C)
+        null -> Color(0xFF334155)
+    }
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(999.dp),
+        color = Color.White.copy(alpha = 0.86f),
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, beltColor.copy(alpha = 0.18f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = circleColor,
+                border = BorderStroke(2.dp, borderColor),
+                modifier = Modifier.size(34.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when (status) {
+                        true -> Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = label,
+                            tint = iconColor,
+                            modifier = Modifier.size(21.dp)
+                        )
+
+                        false -> Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = label,
+                            tint = iconColor,
+                            modifier = Modifier.size(21.dp)
+                        )
+
+                        null -> Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(iconColor.copy(alpha = 0.18f))
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Text(
+                text = label,
+                color = textColor,
+                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
     }
 }
