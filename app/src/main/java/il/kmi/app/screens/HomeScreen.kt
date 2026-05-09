@@ -61,6 +61,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.domain.color
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Edit
@@ -84,6 +86,7 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.database.KmiDatabaseProvider
 import kotlinx.coroutines.delay
+import il.kmi.app.debug.ExplanationAudit
 
 //=================================================================================
 
@@ -231,6 +234,12 @@ fun HomeScreen(
 ) {
     val haptic = rememberHapticsGlobal()
     val clickSound = rememberClickSound()
+
+    // ✅ בדיקה זמנית: מוצא את כל התרגילים שאין להם הסבר אמיתי.
+    // אחרי שסיימת לבדוק ב-Logcat — למחוק את ה-LaunchedEffect הזה.
+    LaunchedEffect(Unit) {
+        ExplanationAudit.runHebrewAudit()
+    }
 
     // 🔵 מצב לדיאלוג העוזר האישי (AI)
     var showAiDialog by rememberSaveable { mutableStateOf(false) }
@@ -1849,122 +1858,28 @@ fun HomeScreen(
                     )
                 }
 
-                AlertDialog(
-                    onDismissRequest = { pickedKey = null },
-                    title = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                                horizontalAlignment = Alignment.End
-                            ) {
-                                Text(
-                                    text = displayName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Text(
-                                    text = "${topic} • ${belt.heb}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    clickSound()
-                                    haptic(true)
-                                    showNoteEditor = true
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Edit,
-                                    contentDescription = "הערה",
-                                    tint = Color(0xFF42A5F5)
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    clickSound()
-                                    haptic(true)
-                                    FavoritesStore.toggle(favoriteId)
-                                },
-                                modifier = Modifier.padding(start = 6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                    contentDescription = "מועדפים",
-                                    tint = if (isFavorite) Color(0xFFFFC107) else Color.Gray
-                                )
-                            }
-                        }
+                ExerciseExplanationDialog(
+                    title = displayName,
+                    beltLabel = "(${belt.heb})",
+                    explanation = explanation,
+                    noteText = noteText,
+                    isFavorite = isFavorite,
+                    accentColor = belt.color,
+                    onDismiss = {
+                        clickSound()
+                        haptic(true)
+                        pickedKey = null
+                        showNoteEditor = false
                     },
-                    text = {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            val annotated = buildExplanationWithStanceHighlight(
-                                source = explanation,
-                                stanceColor = MaterialTheme.colorScheme.primary
-                            )
-
-                            Text(
-                                text = annotated,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth(),
-                                color = Color.Black
-                            )
-
-                            if (noteText.isNotBlank()) {
-                                Spacer(Modifier.height(12.dp))
-
-                                HorizontalDivider(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = Color.LightGray.copy(alpha = 0.65f)
-                                )
-
-                                Spacer(Modifier.height(10.dp))
-
-                                Text(
-                                    text = "הערה של המתאמן:",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Spacer(Modifier.height(6.dp))
-
-                                Text(
-                                    text = noteText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = Color.Black
-                                )
-                            }
-                        }
+                    onEditNote = {
+                        clickSound()
+                        haptic(true)
+                        showNoteEditor = true
                     },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                clickSound()
-                                haptic(true)
-                                pickedKey = null
-                            }
-                        ) {
-                            Text("סגור")
-                        }
+                    onToggleFavorite = {
+                        clickSound()
+                        haptic(true)
+                        FavoritesStore.toggle(favoriteId)
                     }
                 )
 
