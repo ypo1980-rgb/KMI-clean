@@ -1836,9 +1836,11 @@ fun HomeScreen(
                     .ifBlank { item }
 
                 val favoriteId = remember(item) { normalizeFavoriteId(item) }
+
                 val favorites: Set<String> by FavoritesStore
                     .favoritesFlow
                     .collectAsState(initial = emptySet())
+
                 val isFavorite = favorites.contains(favoriteId)
 
                 val noteKey = remember(belt, topic, favoriteId) {
@@ -1848,9 +1850,12 @@ fun HomeScreen(
                 var noteText by remember(noteKey) {
                     mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
                 }
-                var showNoteEditor by remember { mutableStateOf(false) }
 
-                val explanation = remember(belt, item) {
+                var showNoteEditor by rememberSaveable(noteKey) {
+                    mutableStateOf(false)
+                }
+
+                val explanation = remember(belt, item, topic) {
                     findExplanationForHit(
                         belt = belt,
                         rawItem = item,
@@ -1865,6 +1870,14 @@ fun HomeScreen(
                     noteText = noteText,
                     isFavorite = isFavorite,
                     accentColor = belt.color,
+                    backgroundBrush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White,
+                            androidx.compose.ui.graphics.lerp(Color.White, belt.color, 0.12f),
+                            androidx.compose.ui.graphics.lerp(Color.White, belt.color, 0.06f),
+                            Color.White
+                        )
+                    ),
                     onDismiss = {
                         clickSound()
                         haptic(true)
@@ -1886,43 +1899,164 @@ fun HomeScreen(
                 if (showNoteEditor) {
                     AlertDialog(
                         onDismissRequest = { showNoteEditor = false },
-                        title = {
-                            Text(
-                                text = "הערה לתרגיל",
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        },
+                        containerColor = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        shape = RoundedCornerShape(30.dp),
+                        title = null,
                         text = {
-                            OutlinedTextField(
-                                value = noteText,
-                                onValueChange = { noteText = it },
+                            Surface(
                                 modifier = Modifier.fillMaxWidth(),
-                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
-                                label = {
-                                    Text("כתוב הערה")
-                                }
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    notePrefs.edit()
-                                        .putString(noteKey, noteText.trim())
-                                        .apply()
-                                    showNoteEditor = false
-                                }
+                                shape = RoundedCornerShape(30.dp),
+                                color = Color.White,
+                                shadowElevation = 18.dp,
+                                tonalElevation = 0.dp,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = 1.dp,
+                                    color = belt.color.copy(alpha = 0.20f)
+                                )
                             ) {
-                                Text("שמור")
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color.White,
+                                                    androidx.compose.ui.graphics.lerp(Color.White, belt.color, 0.10f),
+                                                    Color.White
+                                                )
+                                            )
+                                        )
+                                        .padding(horizontal = 20.dp, vertical = 20.dp),
+                                    horizontalAlignment = Alignment.End,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Text(
+                                        text = "הערה על התרגיל",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Right,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFF1F2937)
+                                    )
+
+                                    Text(
+                                        text = "כתוב הערה אישית שתישמר לתרגיל הזה",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Right,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF64748B)
+                                    )
+
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(24.dp),
+                                        color = Color.White.copy(alpha = 0.96f),
+                                        shadowElevation = 7.dp,
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            width = 1.dp,
+                                            color = belt.color.copy(alpha = 0.20f)
+                                        )
+                                    ) {
+                                        OutlinedTextField(
+                                            value = noteText,
+                                            onValueChange = { noteText = it },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            minLines = 4,
+                                            maxLines = 7,
+                                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                                textAlign = TextAlign.Right,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFF111827)
+                                            ),
+                                            placeholder = {
+                                                Text(
+                                                    text = "הקלד הערה חופשית",
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    textAlign = TextAlign.Right,
+                                                    color = Color(0xFF94A3B8),
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            },
+                                            shape = RoundedCornerShape(20.dp)
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        TextButton(
+                                            onClick = { showNoteEditor = false },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(50.dp)
+                                        ) {
+                                            Text(
+                                                text = "בטל",
+                                                fontWeight = FontWeight.Black,
+                                                color = Color(0xFF6D5BA6),
+                                                style = MaterialTheme.typography.titleSmall
+                                            )
+                                        }
+
+                                        Surface(
+                                            onClick = {
+                                                notePrefs.edit()
+                                                    .putString(noteKey, noteText.trim())
+                                                    .apply()
+
+                                                showNoteEditor = false
+                                            },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(50.dp),
+                                            shape = RoundedCornerShape(18.dp),
+                                            color = belt.color,
+                                            shadowElevation = 8.dp
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "שמור",
+                                                    fontWeight = FontWeight.Black,
+                                                    color = Color.White,
+                                                    style = MaterialTheme.typography.titleSmall
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (noteText.isNotBlank()) {
+                                        TextButton(
+                                            onClick = {
+                                                noteText = ""
+                                                notePrefs.edit()
+                                                    .remove(noteKey)
+                                                    .apply()
+
+                                                showNoteEditor = false
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = "מחק הערה",
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFB3261E)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         },
-                        dismissButton = {
-                            TextButton(
-                                onClick = { showNoteEditor = false }
-                            ) {
-                                Text("ביטול")
-                            }
-                        }
+                        confirmButton = {},
+                        dismissButton = {}
                     )
                 }
             }

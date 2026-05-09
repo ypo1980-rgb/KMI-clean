@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.*
@@ -345,26 +346,69 @@ fun SettingsScreenModern(
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
 
-                    // ⬇⬇ כותרת עם יישור אבסולוטי:
-                    // עברית = ימין אמיתי, אנגלית = שמאל אמיתי
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = if (isEnglish) {
-                            Arrangement.Absolute.Left
-                        } else {
-                            Arrangement.Absolute.Right
-                        }
+                    // ⬇⬇ כותרת עם כפתור סגירה במיקום פיזי קבוע:
+                    // עברית: X בשמאל, כותרת בימין
+                    // אנגלית: כותרת בשמאל, X בימין
+                    CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalLayoutDirection provides
+                                androidx.compose.ui.unit.LayoutDirection.Ltr
                     ) {
-                        Text(
-                            text = tr("הגדרות", "Settings"),
-                            style = MaterialTheme.typography.headlineMedium.copy(
-                                color = Color.White,
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            modifier = Modifier.padding(horizontal = 8.dp)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isEnglish) {
+                                Text(
+                                    text = "Settings",
+                                    style = MaterialTheme.typography.headlineMedium.copy(
+                                        color = Color.White,
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
+                                    textAlign = TextAlign.Left,
+                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                )
+
+                                Spacer(modifier = Modifier.weight(1f))
+
+                                IconButton(
+                                    onClick = { onBack() },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = "Close settings",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                            } else {
+                                IconButton(
+                                    onClick = { onBack() },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = "סגור הגדרות",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.weight(1f))
+
+                                Text(
+                                    text = "הגדרות",
+                                    style = MaterialTheme.typography.headlineMedium.copy(
+                                        color = Color.White,
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                )
+                            }
+                        }
                     }
 
                     Spacer(Modifier.height(8.dp))

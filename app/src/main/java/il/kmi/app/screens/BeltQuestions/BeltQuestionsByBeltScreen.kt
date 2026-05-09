@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -55,6 +56,7 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import il.kmi.app.ui.FloatingQuickMenu
 import il.kmi.app.ui.StyledExplanationText
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -909,158 +911,214 @@ internal fun BeltPangoLayout(
                         )
                     }
 
-                AlertDialog(
-                    onDismissRequest = { pickedKey = null },
-                    title = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                horizontalAlignment = Alignment.End
-                            ) {
-
-                                Text(
-                                    text = displayName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Text(
-                                    text = if (isEnglish) {
-                                        "${ExerciseTitlesEn.getOrSame(topic.trim())} • ${belt.en}"
-                                    } else {
-                                        "${topic.trim()} • ${belt.heb}"
-                                    },
-                                    style = MaterialTheme.typography.labelMedium,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    showNoteEditor = true
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = if (isEnglish) "Note" else "הערה",
-                                    tint = Color(0xFF42A5F5)
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    FavoritesStore.toggle(favoriteId)
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                                    contentDescription = if (isEnglish) "Favorites" else "מועדפים",
-                                    tint = if (isFavorite) Color(0xFFFFC107) else Color.Gray
-                                )
-                            }
-                        }
-                    },
-                    text = {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            StyledExplanationText(
-                                raw = explanation,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            if (noteText.isNotBlank()) {
-                                Spacer(Modifier.height(12.dp))
-
-                                HorizontalDivider(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = Color.LightGray.copy(alpha = 0.65f)
-                                )
-
-                                Spacer(Modifier.height(10.dp))
-
-                                Text(
-                                    text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Spacer(Modifier.height(6.dp))
-
-                                Text(
-                                    text = noteText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { pickedKey = null }) {
-                            Text(if (isEnglish) "Close" else "סגור")
-                        }
-                    }
-                )
-
-                if (showNoteEditor) {
-                    AlertDialog(
-                        onDismissRequest = { showNoteEditor = false },
-                        title = {
-                            Text(
-                                text = if (isEnglish) "Exercise note" else "הערה לתרגיל",
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                    ExerciseExplanationDialog(
+                        title = displayName,
+                        beltLabel = if (isEnglish) {
+                            "(${belt.en})"
+                        } else {
+                            "(${belt.heb})"
                         },
-                        text = {
-                            OutlinedTextField(
-                                value = noteText,
-                                onValueChange = { noteText = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
-                                label = {
-                                    Text(if (isEnglish) "Write a note" else "כתוב הערה")
-                                }
+                        explanation = explanation,
+                        noteText = noteText,
+                        isFavorite = isFavorite,
+                        accentColor = belt.color,
+                        backgroundBrush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White,
+                                lerp(Color.White, belt.color, 0.12f),
+                                lerp(Color.White, belt.color, 0.06f),
+                                Color.White
                             )
+                        ),
+                        onDismiss = {
+                            clickSound()
+                            haptic(true)
+                            pickedKey = null
+                            showNoteEditor = false
                         },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    notePrefs.edit()
-                                        .putString(noteKey, noteText.trim())
-                                        .apply()
-                                    showNoteEditor = false
-                                }
-                            ) {
-                                Text(if (isEnglish) "Save" else "שמור")
-                            }
+                        onEditNote = {
+                            clickSound()
+                            haptic(true)
+                            showNoteEditor = true
                         },
-                        dismissButton = {
-                            TextButton(
-                                onClick = { showNoteEditor = false }
-                            ) {
-                                Text(if (isEnglish) "Cancel" else "ביטול")
-                            }
+                        onToggleFavorite = {
+                            clickSound()
+                            haptic(true)
+                            FavoritesStore.toggle(favoriteId)
                         }
                     )
+
+                    if (showNoteEditor) {
+                        AlertDialog(
+                            onDismissRequest = { showNoteEditor = false },
+                            containerColor = Color.Transparent,
+                            tonalElevation = 0.dp,
+                            shape = RoundedCornerShape(30.dp),
+                            title = null,
+                            text = {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(30.dp),
+                                    color = Color.White,
+                                    shadowElevation = 18.dp,
+                                    tonalElevation = 0.dp,
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = belt.color.copy(alpha = 0.20f)
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                brush = Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        Color.White,
+                                                        lerp(Color.White, belt.color, 0.10f),
+                                                        Color.White
+                                                    )
+                                                )
+                                            )
+                                            .padding(horizontal = 20.dp, vertical = 20.dp),
+                                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End,
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Black,
+                                            color = Color(0xFF1F2937)
+                                        )
+
+                                        Text(
+                                            text = if (isEnglish) {
+                                                "Write a personal note that will stay attached to this exercise"
+                                            } else {
+                                                "כתוב הערה אישית שתישמר לתרגיל הזה"
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF64748B)
+                                        )
+
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(24.dp),
+                                            color = Color.White.copy(alpha = 0.96f),
+                                            shadowElevation = 7.dp,
+                                            border = BorderStroke(
+                                                width = 1.dp,
+                                                color = belt.color.copy(alpha = 0.20f)
+                                            )
+                                        ) {
+                                            OutlinedTextField(
+                                                value = noteText,
+                                                onValueChange = { noteText = it },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(12.dp),
+                                                minLines = 4,
+                                                maxLines = 7,
+                                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color(0xFF111827)
+                                                ),
+                                                placeholder = {
+                                                    Text(
+                                                        text = if (isEnglish) "Write a free note" else "הקלד הערה חופשית",
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                        color = Color(0xFF94A3B8),
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                },
+                                                shape = RoundedCornerShape(20.dp)
+                                            )
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            TextButton(
+                                                onClick = { showNoteEditor = false },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(50.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (isEnglish) "Cancel" else "בטל",
+                                                    fontWeight = FontWeight.Black,
+                                                    color = Color(0xFF6D5BA6),
+                                                    style = MaterialTheme.typography.titleSmall
+                                                )
+                                            }
+
+                                            Surface(
+                                                onClick = {
+                                                    notePrefs.edit()
+                                                        .putString(noteKey, noteText.trim())
+                                                        .apply()
+
+                                                    showNoteEditor = false
+                                                },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(50.dp),
+                                                shape = RoundedCornerShape(18.dp),
+                                                color = belt.color,
+                                                shadowElevation = 8.dp
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = if (isEnglish) "Save" else "שמור",
+                                                        fontWeight = FontWeight.Black,
+                                                        color = Color.White,
+                                                        style = MaterialTheme.typography.titleSmall
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        if (noteText.isNotBlank()) {
+                                            TextButton(
+                                                onClick = {
+                                                    noteText = ""
+                                                    notePrefs.edit()
+                                                        .remove(noteKey)
+                                                        .apply()
+
+                                                    showNoteEditor = false
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text(
+                                                    text = if (isEnglish) "Delete note" else "מחק הערה",
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFB3261E)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {},
+                            dismissButton = {}
+                        )
+                    }
                 }
             }
         }
     }
-}
 
 /* ----------------------------- מתג "לפי חגורה / לפי נושא" ----------------------------- */
 
