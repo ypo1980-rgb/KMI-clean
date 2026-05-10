@@ -2,14 +2,12 @@ package il.kmi.app.screens.BeltQuestions
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -23,7 +21,10 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.zIndex
+import il.kmi.app.R
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.domain.ExerciseCountsRegistry
 import il.kmi.app.domain.SubjectTopic
@@ -634,6 +635,44 @@ private fun subjectIconFor(subjectId: String): ImageVector =
         else -> Icons.Filled.Info
     }
 
+private fun subjectImageFor(subjectId: String): Int? =
+    when (subjectId.trim().lowercase()) {
+        // הגנות
+        "defense_root",
+        "defenses_root",
+        "defenses" -> R.drawable.topic_defenses
+
+        // שחרורים / חביקות גוף
+        "releases",
+        "releases_hugs",
+        "releases_hugs_body" -> R.drawable.topic_body_hug_releases
+
+        // עבודות ידיים
+        "hands_root",
+        "hands_all",
+        "hands_strikes" -> R.drawable.topic_hand_strikes
+
+        // בלימות וגלגולים
+        "rolls_breakfalls",
+        "topic_breakfalls_rolls" -> R.drawable.topic_forward_roll
+
+        // עמידת מוצא
+        "topic_ready_stance" -> R.drawable.topic_ready_stance
+
+        // עבודת קרקע
+        "topic_ground_prep" -> R.drawable.topic_ground_fighting
+
+        // קוואלר
+        "topic_kavaler",
+        "kavaler" -> R.drawable.topic_kavaler
+
+        // בעיטות
+        "kicks",
+        "topic_kicks" -> R.drawable.topic_kicks
+
+        else -> null
+    }
+
 @Composable
 private fun SubjectRootCardPremium(
     title: String,
@@ -647,6 +686,7 @@ private fun SubjectRootCardPremium(
     val isEnglish = rememberIsEnglish()
     val accent = remember(subjectId) { subjectAccentColor(subjectId) }
     val icon = remember(subjectId) { subjectIconFor(subjectId) }
+    val imageRes = remember(subjectId) { subjectImageFor(subjectId) }
 
     val titleColor = if (isDarkMode) Color.White else Color(0xFF111827)
     val subtitleColor = if (isDarkMode) {
@@ -655,6 +695,44 @@ private fun SubjectRootCardPremium(
         Color(0xFF64748B)
     }
     val countColor = accent.copy(alpha = 1f)
+
+    @Composable
+    fun SubjectVisual() {
+        if (imageRes != null) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color.White.copy(alpha = if (isDarkMode) 0.08f else 0.92f),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.22f)),
+                shadowElevation = if (isDarkMode) 0.dp else 3.dp,
+                modifier = Modifier
+                    .width(76.dp)
+                    .height(58.dp)
+            ) {
+                Image(
+                    painter = painterResource(id = imageRes),
+                    contentDescription = title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+        } else {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = accent.copy(alpha = 0.18f),
+                border = BorderStroke(1.dp, accent.copy(alpha = 0.26f)),
+                modifier = Modifier.size(30.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
 
     Surface(
         onClick = onClick,
@@ -680,7 +758,13 @@ private fun SubjectRootCardPremium(
                     Box(
                         modifier = Modifier
                             .width(4.dp)
-                            .height(if (showLeftBadge) 38.dp else 30.dp)
+                            .height(
+                                when {
+                                    imageRes != null -> 58.dp
+                                    showLeftBadge -> 38.dp
+                                    else -> 30.dp
+                                }
+                            )
                     ) {
                         Surface(
                             shape = RoundedCornerShape(999.dp),
@@ -691,21 +775,7 @@ private fun SubjectRootCardPremium(
 
                     Spacer(modifier = Modifier.width(10.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = accent.copy(alpha = 0.18f),
-                        border = BorderStroke(1.dp, accent.copy(alpha = 0.26f)),
-                        modifier = Modifier.size(30.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = accent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
+                    SubjectVisual()
 
                     Spacer(modifier = Modifier.width(10.dp))
 
@@ -720,7 +790,7 @@ private fun SubjectRootCardPremium(
                             textAlign = TextAlign.Start,
                             color = titleColor,
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 1
+                            maxLines = 2
                         )
 
                         if (subtitle.isNotBlank()) {
@@ -760,7 +830,7 @@ private fun SubjectRootCardPremium(
                             textAlign = TextAlign.Right,
                             color = titleColor,
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 1
+                            maxLines = 2
                         )
 
                         if (subtitle.isNotBlank()) {
@@ -791,28 +861,20 @@ private fun SubjectRootCardPremium(
 
                     Spacer(modifier = Modifier.width(10.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = accent.copy(alpha = 0.18f),
-                        border = BorderStroke(1.dp, accent.copy(alpha = 0.26f)),
-                        modifier = Modifier.size(30.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = accent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
+                    SubjectVisual()
 
                     Spacer(modifier = Modifier.width(10.dp))
 
                     Box(
                         modifier = Modifier
                             .width(4.dp)
-                            .height(if (showLeftBadge) 38.dp else 30.dp)
+                            .height(
+                                when {
+                                    imageRes != null -> 58.dp
+                                    showLeftBadge -> 38.dp
+                                    else -> 30.dp
+                                }
+                            )
                     ) {
                         Surface(
                             shape = RoundedCornerShape(999.dp),

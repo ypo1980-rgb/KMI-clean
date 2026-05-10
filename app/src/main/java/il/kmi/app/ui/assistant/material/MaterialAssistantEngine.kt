@@ -166,8 +166,8 @@ object MaterialAssistantEngine {
                 "groundwork",
                 "ground work"
             ),
-            "הכנה לעבודת קרקע" to listOf(
-                "הכנה לעבודת קרקע",
+            "עבודת קרקע" to listOf(
+                "עבודת קרקע",
                 "הכנה לקרקע",
                 "groundwork preparation"
             )

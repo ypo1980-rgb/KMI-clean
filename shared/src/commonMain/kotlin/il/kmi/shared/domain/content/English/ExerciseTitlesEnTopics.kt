@@ -12,7 +12,7 @@ object ExerciseTitlesEnTopics {
         "עבודת ידיים" to "Hand Techniques",
         "מניעת התקרבות התוקף" to "Preventing the Attacker’s Approach",
         "שחרורים" to "Releases",
-        "הכנה לעבודת קרקע" to "Groundwork Preparation",
+        "עבודת קרקע" to "Groundwork Preparation",
         "בעיטות" to "Kicks",
         "הגנות" to "Defenses",
         "בלימות וגלגולים" to "Breakfalls and Rolls",

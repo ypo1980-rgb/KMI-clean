@@ -55,13 +55,16 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import il.kmi.app.ui.FloatingQuickMenu
-import il.kmi.app.ui.StyledExplanationText
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import il.kmi.app.R
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -73,8 +76,6 @@ import il.kmi.shared.domain.TopicsEngine
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.screens.parseSearchKey
 import il.kmi.shared.domain.content.ExerciseTitlesEn
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
@@ -248,6 +249,59 @@ internal fun topicTitleForUi(title: String, lang: AppLanguage): String {
         ExerciseTitlesEn.getOrSame(title.trim())
     } else {
         title
+    }
+}
+
+private fun beltTopicImageFor(belt: Belt, topicTitle: String): Int? {
+    val clean = topicTitle.trim()
+
+    return when {
+        // הגנות
+        clean.contains("הגנות") -> R.drawable.topic_defenses
+
+        // שחרורים / חביקות
+        clean.contains("שחרורים") ||
+                clean.contains("שחרור") ||
+                clean.contains("חביקות") ||
+                clean.contains("חביקת") -> R.drawable.topic_body_hug_releases
+
+        // מכות מרפק — רק חגורה ירוקה
+        belt == Belt.GREEN &&
+                clean.contains("מכות מרפק") -> R.drawable.topic_elbow_strikes
+
+        // מכות ידיים / עבודת ידיים
+        clean.contains("מכות ידיים") ||
+                clean.contains("מכות יד") ||
+                clean.contains("עבודת ידיים") ||
+                clean.contains("עבודת יד") -> R.drawable.topic_hand_strikes
+
+        // בלימות וגלגולים
+        clean.contains("בלימות") ||
+                clean.contains("גלגולים") ||
+                clean.contains("גלגול") ||
+                clean.contains("בלימה") -> R.drawable.topic_forward_roll
+
+        // עמידת מוצא
+        clean.contains("עמידת מוצא") -> R.drawable.topic_ready_stance
+
+        // עבודת קרקע
+        clean.contains("עבודת קרקע") -> R.drawable.topic_ground_fighting
+
+        // בעיטות
+        clean.contains("בעיטות") ||
+                clean.contains("בעיטה") -> R.drawable.topic_kicks
+
+        // קוואלר
+        clean.contains("קוואלר") -> R.drawable.topic_kavaler
+
+        // כללי
+        clean.contains("כללי") -> R.drawable.topic_general
+
+        // מקל / רובה — כרגע משתמשים בתמונת הגנות עם נשקים
+        clean.contains("מקל") ||
+                clean.contains("רובה") -> R.drawable.topic_defenses
+
+        else -> null
     }
 }
 
@@ -1535,6 +1589,8 @@ private fun TopicsCardForBelt(
                                     !isBrownSingleReleaseTopic &&
                                             LockedContentPolicy.shouldShowLock(accessMode, title)
 
+                                val topicImageRes = beltTopicImageFor(belt, title)
+
                                 CompositionLocalProvider(
                                     androidx.compose.ui.platform.LocalLayoutDirection provides layoutByLang
                                 ) {
@@ -1542,38 +1598,100 @@ private fun TopicsCardForBelt(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(3.dp)
-                                            .height(28.dp)
-                                            .clip(RoundedCornerShape(999.dp))
-                                            .background(floatingAccent)
-                                    )
-
-                                    Spacer(Modifier.width(8.dp))
-
-                                        Text(
-                                            text = displayTitle,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = floatingTitleColor,
-                                            textAlign = titleTextAlignByLang,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f)
+                                        Box(
+                                            modifier = Modifier
+                                                .width(3.dp)
+                                                .height(34.dp)
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(floatingAccent)
                                         )
 
-                                    // 🔥 המנעול החדש
-                                    if (parentLocked) {
                                         Spacer(Modifier.width(8.dp))
 
-                                        Icon(
-                                            imageVector = Icons.Filled.Lock,
-                                            contentDescription = null,
-                                            tint = Color(0xFFF59E0B),
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
+                                        if (!isEnglish && topicImageRes != null) {
+                                            Surface(
+                                                shape = RoundedCornerShape(12.dp),
+                                                color = Color.White.copy(alpha = if (isDarkTheme) 0.08f else 0.92f),
+                                                shadowElevation = if (isDarkTheme) 0.dp else 2.dp,
+                                                border = BorderStroke(
+                                                    width = 1.dp,
+                                                    color = belt.color.copy(alpha = 0.18f)
+                                                ),
+                                                modifier = Modifier.size(42.dp)
+                                            ) {
+                                                Image(
+                                                    painter = painterResource(id = topicImageRes),
+                                                    contentDescription = null,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+
+                                            Spacer(Modifier.width(10.dp))
+                                        }
+
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalAlignment = horizontalByLang
+                                        ) {
+                                            Text(
+                                                text = displayTitle,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = floatingTitleColor,
+                                                textAlign = titleTextAlignByLang,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+
+                                            if (topicImageRes != null && !hasSubs) {
+                                                Spacer(Modifier.height(1.dp))
+
+                                                Text(
+                                                    text = countsLine,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = floatingSubColor,
+                                                    textAlign = titleTextAlignByLang,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
+                                        }
+
+                                        if (isEnglish && topicImageRes != null) {
+                                            Spacer(Modifier.width(10.dp))
+
+                                            Surface(
+                                                shape = RoundedCornerShape(12.dp),
+                                                color = Color.White.copy(alpha = if (isDarkTheme) 0.08f else 0.92f),
+                                                shadowElevation = if (isDarkTheme) 0.dp else 2.dp,
+                                                border = BorderStroke(
+                                                    width = 1.dp,
+                                                    color = belt.color.copy(alpha = 0.18f)
+                                                ),
+                                                modifier = Modifier.size(42.dp)
+                                            ) {
+                                                Image(
+                                                    painter = painterResource(id = topicImageRes),
+                                                    contentDescription = null,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                        }
+
+                                        if (parentLocked) {
+                                            Spacer(Modifier.width(8.dp))
+
+                                            Icon(
+                                                imageVector = Icons.Filled.Lock,
+                                                contentDescription = null,
+                                                tint = Color(0xFFF59E0B),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
 
                                         if (hasSubs) {
                                             Spacer(Modifier.width(8.dp))
@@ -1591,17 +1709,19 @@ private fun TopicsCardForBelt(
                                     }
                                 }
 
-                                Spacer(Modifier.height(2.dp))
+                                if (topicImageRes == null || hasSubs) {
+                                    Spacer(Modifier.height(2.dp))
 
-                                Text(
-                                    text = countsLine,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = floatingSubColor,
-                                    textAlign = titleTextAlignByLang,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                    Text(
+                                        text = countsLine,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = floatingSubColor,
+                                        textAlign = titleTextAlignByLang,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
 
                                 if (hasSubs && isExpanded) {
                                     Spacer(Modifier.height(8.dp))

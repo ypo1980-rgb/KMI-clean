@@ -127,13 +127,13 @@ object TopicsBySubjectRegistry {
         // ================== הכנה לעבודת קרקע ==================
         SubjectTopic(
             id = "topic_ground_prep",
-            titleHeb = "הכנה לעבודת קרקע",
+            titleHeb = "עבודת קרקע",
             description = "הוצאת אגן, הרמת אגן ומוצא לעבודת קרקע",
             belts = listOf(
                 Belt.YELLOW
             ),
             topicsByBelt = mapOf(
-                Belt.YELLOW to listOf("הכנה לעבודת קרקע")
+                Belt.YELLOW to listOf("עבודת קרקע")
             )
         ),
 

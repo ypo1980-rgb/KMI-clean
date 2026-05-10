@@ -56,7 +56,7 @@ object CatalogRepoBuilder {
                 }
         ),
         CatalogTopic(
-            title = "הכנה לעבודת קרקע",
+            title = "עבודת קרקע",
             items = HardSectionsCatalog.subjectItemsFor(
                 subjectId = "topic_ground_prep",
                 belt = Belt.YELLOW

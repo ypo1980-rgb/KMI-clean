@@ -124,7 +124,7 @@ object HardSectionsCatalog {
             t == "בעיטות" -> "topic_kicks"
             t == "בלימות וגלגולים" -> "topic_breakfalls_rolls"
             t == "עמידת מוצא" -> "topic_ready_stance"
-            t == "הכנה לעבודת קרקע" -> "topic_ground_prep"
+            t == "עבודת קרקע" -> "topic_ground_prep"
             t == "קוואלר" -> "topic_Kavaler"
 
             else -> t
@@ -233,7 +233,7 @@ object HardSectionsCatalog {
             "topic_kicks" -> "בעיטות"
             "topic_breakfalls_rolls" -> "בלימות וגלגולים"
             "topic_ready_stance" -> "עמידת מוצא"
-            "topic_ground_prep" -> "הכנה לעבודת קרקע"
+            "topic_ground_prep" -> "עבודת קרקע"
             "topic_kavaler" -> "קוואלר"
             else -> null
         }
@@ -506,7 +506,7 @@ object HardSectionsCatalog {
     val topicGroundPrep: List<Section> = listOf(
         Section(
             id = "topic_ground_prep_main",
-            title = "הכנה לעבודת קרקע",
+            title = "עבודת קרקע",
             beltGroups = listOf(
                 BeltGroup(
                     belt = Belt.YELLOW,
