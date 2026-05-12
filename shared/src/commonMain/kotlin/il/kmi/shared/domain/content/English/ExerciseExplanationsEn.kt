@@ -25,7 +25,7 @@ object ExerciseExplanationsEn {
 // ───── Yellow Belt ─────
 // ───── General ─────
 
-            "בלימת רכה לפנים" ->
+            "בלימה רכה לפנים" ->
                 "Light stance. Fall forward onto the palms while absorbing the impact with bent elbows. Key points: head turned to the side, body straight, knees locked, heels stretched backward. Do not throw the legs backward."
 
             "בלימה לאחור" ->
@@ -34,11 +34,14 @@ object ExerciseExplanationsEn {
             "תזוזות" ->
                 "Movement drills: forward, backward and side steps. Forward – step forward with the left foot and bring the right foot back to the starting stance. Backward – step back with the right foot and bring the left foot back to stance. Left – step left then close the stance with the right foot. Right – step right then close with the left foot."
 
-            "גלגול לפנים – צד ימין" ->
+            "גלגול לפנים - ימין" ->
                 "Forward roll diagonally over the right shoulder with a rounded back and arms close to the body. Finish standing or in a defensive position."
 
-            "הוצאות אגן, הרמת אגן והפניית גוף למעלה " ->
-                "Hip mobility drill: lift the hips while lying on the back and rotate the body upward to build defensive movement and power from the hips."
+            "הוצאת אגן" ->
+                "Hip escape drill. Move the hips away from the attacker while lying on the back to create distance and improve ground movement."
+
+            "הרמת אגן והפניית גוף לכיון ההפלה" ->
+                "Lift the hips while lying on the back and rotate the body toward the sweep direction to build defensive movement and power from the hips."
 
             "צל בוקס" ->
                 "Shadow boxing against an imaginary opponent. Practice punches, kicks and movement in the air to improve coordination and fighting rhythm."
@@ -49,8 +52,11 @@ object ExerciseExplanationsEn {
             "אצבעות לפנים" ->
                 "Light stance. Step backward while turning the body sideways to the attacker and extend the nearest hand with straight fingers toward the attacker’s throat hollow. The other hand protects the face."
 
-            "מכת קשת האצבע והאגודל" ->
+            "מכת קשת האגודל והאצבע לקנה הנשימה" ->
                 "Light stance. Step backward and turn the body sideways while striking the attacker’s windpipe with the thumb-finger arch. The other hand protects the face."
+
+            "מכת קשת האגודל והאצבע" ->
+                "Thumb-finger arch strike delivered forward toward a vulnerable target while keeping the other hand ready to protect."
 
 // ───── Starting Stances ─────
 
@@ -66,10 +72,10 @@ object ExerciseExplanationsEn {
             "עמידת מוצא צידית" ->
                 "Start from a simple stance with legs spread. Turn the body, hands and the foot closer to the attacker to the side, where the attacker is positioned. Correct the position of the rear foot for comfortability."
 
-            "עמידת מוצא כללית מספר 1" ->
+            "עמידת מוצא כללית מס' 1" ->
                 "Left palm is extended forward, elbow bent dowward, palm facing the attacker. Right hand passes the left hip. Knees are bent to make the stance lower (to make \"you\" as target smaller and the area of defence larger)."
 
-            "עמידת מוצא כללית מספר 2" ->
+            "עמידת מוצא כללית מס' 2" ->
                 "Left hand is extended forward, elbow is bent, and the palm is facing inward. The right hand is positioned over the left shoulder. This stance is for bursting toward the attacker."
 
 // ───── Elbow Strikes ─────
@@ -149,6 +155,101 @@ object ExerciseExplanationsEn {
 
             "אגרוף ימין למטה בהגנה" ->
                 "Defensive downward right punch while rotating the heel and hip."
+
+// ───── Magal Punches and Uppercuts ─────
+
+            "מכת מגל שמאל" ->
+                "Left circular punch delivered in a rounded path toward the opponent while keeping the other hand ready to protect."
+
+            "מכת מגל ימין" ->
+                "Right circular punch delivered in a rounded path with hip rotation for power and the other hand protecting the face."
+
+            "מכת מגל למטה ולמעלה בהתחלפות" ->
+                "Alternating circular punches low and high. Keep continuous rhythm, switch hands smoothly, and maintain balance and guard."
+
+            "מכת סנוקרת שמאל" ->
+                "Left uppercut delivered upward toward the opponent’s chin or body while bending the knees and driving from the legs."
+
+            "מכת סנוקרת ימין" ->
+                "Right uppercut delivered upward with hip rotation and a short powerful motion toward the opponent’s chin or body."
+
+// ───── Kicks ─────
+
+            "בעיטה רגילה למפסעה" ->
+                "Regular kick to the groin. Lift the knee, extend the kicking leg forward, strike with the foot, and return quickly to stance."
+
+            "בעיטה רגילה לסנטר" ->
+                "Regular kick to the chin. Lift the knee high, extend the leg upward and forward, and return immediately to a balanced stance."
+
+            "בעיטת ברך נמוכה למפסעה" ->
+                "Low knee strike to the groin. Drive the knee forward from close range while keeping the body stable and hands protecting."
+
+            "בעיטת ברך גבוהה" ->
+                "High knee strike toward the opponent’s body or head. Pull the knee upward powerfully while maintaining balance."
+
+            "בעיטת ברך מהצד" ->
+                "Side knee strike delivered from close range by turning the hips and driving the knee from the side."
+
+            "בעיטת מגל אופקית" ->
+                "Horizontal circular kick. Rotate the hip and deliver the kick in a horizontal arc toward the target."
+
+            "בעיטת מגל אלכסונית" ->
+                "Diagonal circular kick delivered in an angled path with hip rotation and quick recovery to stance."
+
+            "בעיטת מגל בהטעיה" ->
+                "Circular kick with diversion. Use a deceptive movement before delivering the circular kick toward the target."
+
+            "בעיטת מגל נמוכה" ->
+                "Low circular kick aimed at the lower body or leg area. Rotate the hip and return quickly to a stable stance."
+
+            "בעיטה לצד מעמידת פיסוק" ->
+                "Side kick from a neutral stance. Lift the knee, turn the hip, extend the leg sideways, and return to stance."
+
+// ───── Defences ─────
+
+            "הגנה חיצונית רפלקסיבית 360 מעלות" ->
+                "Reflexive 360-degree external defence against strikes from different directions. Move the arm outward, protect the head and body, and continue with counterattack readiness."
+
+            "הגנה פנימית רפלקסיבית" ->
+                "Reflexive internal defence against a direct hand strike. Redirect the attack inward while keeping the body protected and ready to counter."
+
+            "הגנה פנימית נגד ימין בכף יד שמאל" ->
+                "Internal defence against a right punch using the left palm. Redirect the punch inward while moving the body off the attack line."
+
+            "הגנה פנימית נגד שמאל בכף יד ימין" ->
+                "Internal defence against a left punch using the right palm. Redirect the punch inward while maintaining balance and guard."
+
+            "הגנה פנימית נגד בעיטה רגילה למפסעה" ->
+                "Internal defence against a regular kick to the groin. Redirect the kick inward with the hand while moving the body away from the line of attack."
+
+// ───── Releases ─────
+
+            "שחרור מתפיסת יד מול יד" ->
+                "Release from one hand grabbing the same-side hand. Rotate the grabbed hand toward the attacker’s thumb and pull out along the weakest point of the grip."
+
+            "שחרור מתפיסת יד נגדית" ->
+                "Release from one hand grabbing the opposite hand. Turn the grabbed hand toward the thumb opening and pull out while stepping if needed."
+
+            "שחרור מתפיסת שתי ידיים למטה" ->
+                "Release from two hands grabbing both hands low. Move toward the weak point of the grips, rotate the hands out, and create distance."
+
+            "שחרור מתפיסת שתי ידיים למעלה" ->
+                "Release from two hands grabbing both hands high. Rotate and pull the hands through the weak points of the grips while preparing to defend or counter."
+
+            "שחרור מחביקת צואר מהצד" ->
+                "Release from a side neck hold. Lower the body, protect the airway, create space, and use the hands and body movement to escape the hold."
+
+            "מניעת התקרבות תוקף" ->
+                "Prevent the attacker’s forward motion by extending the nearest hand toward the throat area while stepping back and turning the body sideways."
+
+            "מניעת חניקה" ->
+                "Prevent a choke before it closes by striking forward with the fingers or palm toward the attacker’s throat area while moving away from the line of attack."
+
+            "שחרור מחניקה מלפנים בכף היד" ->
+                "Release from a front choke using the palm. React quickly, break the choking pressure, create space, and prepare to counterattack."
+
+            "שחרור מחניקה מאחור במשיכה" ->
+                "Release from a rear choke with a pull. Move with the pulling direction to reduce pressure, break the grip, turn, and prepare to defend."
 
             else -> "$FALLBACK_PREFIX $item"
         }

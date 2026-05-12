@@ -76,6 +76,12 @@ fun AttendanceScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current   // לשיתוף דו"ח
 
+    val languageManager = remember(context) { AppLanguageManager(context) }
+    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    val screenTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val screenLayoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
     LaunchedEffect(vm) {
         vm.events.collect { ev ->
             when (ev) {
@@ -156,17 +162,28 @@ fun AttendanceScreen(
         val excused = s.members.count { s.statusByMemberId[it.id] == AttendanceStatus.EXCUSED }
         val pct     = if (total > 0) (present * 100.0 / total) else 0.0
 
-        val header = "דו\"ח נוכחות – ${s.branch} / ${s.groupKey} – $date\n"
-        val stats  = "סה\"כ: $total | הגיעו: $present | לא הגיעו: $absent | מוצדקים: $excused | נוכחות: ${"%.1f".format(pct)}%\n"
-        val lines  = s.members.joinToString("\n") { m ->
-            val st = when (s.statusByMemberId[m.id]) {
-                AttendanceStatus.PRESENT -> "הגיע"
-                AttendanceStatus.ABSENT  -> "לא הגיע"
-                AttendanceStatus.EXCUSED -> "מוצדק"
-                else                     -> "לא סומן"
-            }
-            "• ${m.displayName} – $st"
+        val header = if (isEnglish) {
+            "Attendance report - ${s.branch} / ${s.groupKey} - $date\n"
+        } else {
+            "דו\"ח נוכחות – ${s.branch} / ${s.groupKey} – $date\n"
         }
+
+        val stats = if (isEnglish) {
+            "Total: $total | Present: $present | Absent: $absent | Excused: $excused | Attendance: ${"%.1f".format(pct)}%\n"
+        } else {
+            "סה\"כ: $total | הגיעו: $present | לא הגיעו: $absent | מוצדקים: $excused | נוכחות: ${"%.1f".format(pct)}%\n"
+        }
+
+        val lines = s.members.joinToString("\n") { m ->
+            val st = when (s.statusByMemberId[m.id]) {
+                AttendanceStatus.PRESENT -> tr("הגיע", "Present")
+                AttendanceStatus.ABSENT  -> tr("לא הגיע", "Absent")
+                AttendanceStatus.EXCUSED -> tr("מוצדק", "Excused")
+                else                     -> tr("לא סומן", "Not marked")
+            }
+            "• ${m.displayName} - $st"
+        }
+
         return header + stats + "\n" + lines
     }
 
@@ -174,24 +191,33 @@ fun AttendanceScreen(
         val text = buildReportText(s)
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "דו\"ח נוכחות – ${s.branch}/${s.groupKey} – $date")
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEnglish) {
+                    "Attendance report - ${s.branch}/${s.groupKey} - $date"
+                } else {
+                    "דו\"ח נוכחות – ${s.branch}/${s.groupKey} – $date"
+                }
+            )
             putExtra(Intent.EXTRA_TEXT, text)
         }
         runCatching {
-            context.startActivity(Intent.createChooser(send, "שליחת דו\"ח"))
+            context.startActivity(
+                Intent.createChooser(
+                    send,
+                    tr("שליחת דו\"ח", "Send report")
+                )
+            )
         }.onFailure { e ->
             Log.e("ATT_SHARE", "shareReport failed", e)
         }
     }
 
-    val hebDate = remember(date) {
-        val day = date.format(
-            DateTimeFormatter.ofPattern("EEEE", Locale("he", "IL"))
+    val hebDate = remember(date, isEnglish) {
+        val locale = if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
+        date.format(
+            DateTimeFormatter.ofPattern("EEEE · d.M.yyyy", locale)
         )
-        val dmy = date.format(
-            DateTimeFormatter.ofPattern("d.M.yyyy", Locale("he", "IL"))
-        )
-        "$day · $dmy"
     }
 
     // תרגיל שנבחר מהחיפוש (לפתיחת דיאלוג ההסבר)
@@ -212,11 +238,11 @@ fun AttendanceScreen(
         state.members.distinctBy { it.displayName.nameKey() }
     }
 
-    val demoUiMap = remember(displayMembers) {
+    val demoUiMap = remember(displayMembers, isEnglish) {
         displayMembers.mapIndexed { index, member ->
             val demo = DemoTrainees.trainees.getOrNull(index)
             member.id to Pair(
-                demo?.name ?: "מתאמן ${index + 1}",
+                demo?.name ?: tr("מתאמן ${index + 1}", "Trainee ${index + 1}"),
                 demo?.attendancePercent
             )
         }.toMap()
@@ -236,7 +262,7 @@ fun AttendanceScreen(
             val langManager = remember { AppLanguageManager(contextLang) }
 
             KmiTopBar(
-                title = "נוכחות",
+                title = if (isEnglish) "Attendance" else "נוכחות",
                 showTopHome = false,
                 showTopSearch = false,
                 showBottomActions = true,
@@ -260,7 +286,7 @@ fun AttendanceScreen(
                     (contextLang as? Activity)?.recreate()
                 }
             )
-        },
+                 },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { addDialog = true },
@@ -272,7 +298,10 @@ fun AttendanceScreen(
                     .padding(bottom = 8.dp)
                     .offset(y = (-28).dp) // ✅ מרים עוד למעלה (אפשר לשחק עם -24/-32)
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "הוספת מתאמן")
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = tr("הוספת מתאמן", "Add trainee")
+                )
             }
         },
         containerColor = Color.Transparent,
@@ -308,7 +337,8 @@ fun AttendanceScreen(
                         groupKey = state.groupKey,
                         hebDate = hebDate,
                         totalMembers = totalMembers,
-                        attendancePct = attendancePct
+                        attendancePct = attendancePct,
+                        isEnglish = isEnglish
                     )
                 }
 
@@ -318,28 +348,29 @@ fun AttendanceScreen(
                         presentCount = presentCount,
                         excusedCount = excusedCount,
                         absentCount = absentCount,
-                        attendancePct = attendancePct
+                        attendancePct = attendancePct,
+                        isEnglish = isEnglish
                     )
                 }
 
                 item {
                     Text(
-                        text = "סימון נוכחות למתאמנים",
+                        text = tr("סימון נוכחות למתאמנים", "Mark trainee attendance"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFFECFEFF),
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.End
+                        textAlign = screenTextAlign
                     )
                 }
 
                 items(displayMembers, key = { it.id }) { m ->
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    CompositionLocalProvider(LocalLayoutDirection provides screenLayoutDirection) {
                         Column(Modifier.fillMaxWidth()) {
 
                             val demoUi = demoUiMap[m.id]
                             val uiName = if (DemoPrivacy.ENABLED) {
-                                demoUi?.first ?: "מתאמן"
+                                demoUi?.first ?: tr("מתאמן", "Trainee")
                             } else {
                                 m.displayName
                             }
@@ -355,7 +386,7 @@ fun AttendanceScreen(
                             if (DemoPrivacy.ENABLED) {
                                 demoUi?.second?.let { attendancePercent ->
                                     Text(
-                                        text = "נוכחות חודשית: $attendancePercent%",
+                                        text = tr("נוכחות חודשית: $attendancePercent%", "Monthly attendance: $attendancePercent%"),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color(0xFF67E8F9),
                                         modifier = Modifier.fillMaxWidth(),
@@ -424,7 +455,7 @@ fun AttendanceScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     StatusPill(
-                                        text = "הגיע",
+                                        text = tr("הגיע", "Present"),
                                         selected = curr == AttendanceStatus.PRESENT,
                                         selectedColor = Color(0xFF22C55E),
                                         onClick = {
@@ -435,7 +466,7 @@ fun AttendanceScreen(
                                     )
 
                                     StatusPill(
-                                        text = "לא הגיע",
+                                        text = tr("לא הגיע", "Absent"),
                                         selected = curr == AttendanceStatus.ABSENT,
                                         selectedColor = Color(0xFFEF4444),
                                         onClick = {
@@ -454,7 +485,7 @@ fun AttendanceScreen(
                                         IconButton(onClick = {
                                             val mid: Long? = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull()
                                             val uiName = if (DemoPrivacy.ENABLED) {
-                                                demoUiMap[m.id]?.first ?: "מתאמן"
+                                                demoUiMap[m.id]?.first ?: tr("מתאמן", "Trainee")
                                             } else {
                                                 m.displayName
                                             }
@@ -462,7 +493,7 @@ fun AttendanceScreen(
                                         }) {
                                             Icon(
                                                 Icons.Filled.Assessment,
-                                                contentDescription = "סטטיסטיקה",
+                                                contentDescription = tr("סטטיסטיקה", "Statistics"),
                                                 tint = Color(0xFF38BDF8)
                                             )
                                         }
@@ -470,7 +501,7 @@ fun AttendanceScreen(
                                         IconButton(onClick = {
                                             val id = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull() ?: return@IconButton
                                             val uiName = if (DemoPrivacy.ENABLED) {
-                                                demoUiMap[m.id]?.first ?: "מתאמן"
+                                                demoUiMap[m.id]?.first ?: tr("מתאמן", "Trainee")
                                             } else {
                                                 m.displayName
                                             }
@@ -478,7 +509,7 @@ fun AttendanceScreen(
                                         }) {
                                             Icon(
                                                 Icons.Filled.Delete,
-                                                contentDescription = "הסר מתאמן",
+                                                contentDescription = tr("הסר מתאמן", "Remove trainee"),
                                                 tint = Color(0xFFF97316)
                                             )
                                         }
@@ -507,15 +538,16 @@ fun AttendanceScreen(
 
                         @Composable
                         fun BtnText(text: String) {
-                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                            CompositionLocalProvider(LocalLayoutDirection provides screenLayoutDirection) {
                                 Text(
                                     text = text,
                                     maxLines = 1,
                                     softWrap = false,
-                                    overflow = TextOverflow.Clip, // ✅ לא להפוך ל-...
+                                    overflow = TextOverflow.Clip,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = LocalContentColor.current
+                                    color = LocalContentColor.current,
+                                    textAlign = TextAlign.Center
                                 )
                             }
                         }
@@ -538,7 +570,7 @@ fun AttendanceScreen(
                                     tint = LocalContentColor.current
                                 )
                                 Spacer(Modifier.width(6.dp))
-                                BtnText("שמור")
+                                BtnText(tr("שמור", "Save"))
                             }
                         }
 
@@ -560,7 +592,7 @@ fun AttendanceScreen(
                                     tint = LocalContentColor.current
                                 )
                                 Spacer(Modifier.width(6.dp))
-                                BtnText("שתף")
+                                BtnText(tr("שתף", "Share"))
                             }
                         }
 
@@ -575,7 +607,7 @@ fun AttendanceScreen(
                             )
                         ) {
                             // ✅ טקסט קצר יותר אם עדיין צפוף: "נתונים"
-                            BtnText("סטטיסטיקה")
+                            BtnText(tr("סטטיסטיקה", "Stats"))
                         }
                     }
                 }
@@ -590,13 +622,27 @@ fun AttendanceScreen(
                 .displayName(item)
                 .ifBlank { item }
 
-
-            val explanation = remember(belt, item) {
+            val explanation = remember(belt, item, isEnglish) {
                 findExplanationForHit(
                     belt = belt,
                     rawItem = item,
-                    topic = topic
+                    topic = topic,
+                    isEnglish = isEnglish
                 )
+            }
+
+            val beltLabel = if (isEnglish) {
+                when (belt) {
+                    Belt.WHITE -> "(White belt)"
+                    Belt.YELLOW -> "(Yellow belt)"
+                    Belt.ORANGE -> "(Orange belt)"
+                    Belt.GREEN -> "(Green belt)"
+                    Belt.BLUE -> "(Blue belt)"
+                    Belt.BROWN -> "(Brown belt)"
+                    Belt.BLACK -> "(Black belt)"
+                }
+            } else {
+                "(${belt.heb})"
             }
 
             var isFav by remember { mutableStateOf(false) }
@@ -612,19 +658,19 @@ fun AttendanceScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth(),
-                            horizontalAlignment = Alignment.End
+                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                         ) {
                             Text(
                                 text = displayName,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right,
+                                textAlign = screenTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             Text(
-                                text = "(${belt.heb})",
+                                text = beltLabel,
                                 style = MaterialTheme.typography.labelMedium,
-                                textAlign = TextAlign.Right,
+                                textAlign = screenTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -636,13 +682,13 @@ fun AttendanceScreen(
                             if (isFav) {
                                 Icon(
                                     imageVector = Icons.Filled.Star,
-                                    contentDescription = "מועדף",
+                                    contentDescription = tr("מועדף", "Favorite"),
                                     tint = Color(0xFFFFC107)
                                 )
                             } else {
                                 Icon(
                                     imageVector = Icons.Outlined.StarBorder,
-                                    contentDescription = "הוסף למועדפים",
+                                    contentDescription = tr("הוסף למועדפים", "Add to favorites"),
                                 )
                             }
                         }
@@ -652,13 +698,13 @@ fun AttendanceScreen(
                     Text(
                         text = explanation,
                         style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Right,
+                        textAlign = screenTextAlign,
                         modifier = Modifier.fillMaxWidth()
                     )
                 },
                 confirmButton = {
                     TextButton(onClick = { pickedKey = null }) {
-                        Text("סגור")
+                        Text(tr("סגור", "Close"))
                     }
                 }
             )
@@ -668,16 +714,36 @@ fun AttendanceScreen(
         pendingDelete?.let { (memberId, displayName) ->
             AlertDialog(
                 onDismissRequest = { pendingDelete = null },
-                title = { Text("הסרת מתאמן") },
-                text = { Text("להסיר את \"$displayName\" מהרשימה?") },
+                title = {
+                    Text(
+                        text = tr("הסרת מתאמן", "Remove trainee"),
+                        textAlign = screenTextAlign,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                text = {
+                    Text(
+                        text = if (isEnglish) {
+                            "Remove \"$displayName\" from the list?"
+                        } else {
+                            "להסיר את \"$displayName\" מהרשימה?"
+                        },
+                        textAlign = screenTextAlign,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
                 confirmButton = {
                     TextButton(onClick = {
                         vm.removeMember(memberId)
                         pendingDelete = null
-                    }) { Text("הסר") }
+                    }) {
+                        Text(tr("הסר", "Remove"))
+                    }
                 },
                 dismissButton = {
-                    TextButton(onClick = { pendingDelete = null }) { Text("ביטול") }
+                    TextButton(onClick = { pendingDelete = null }) {
+                        Text(tr("ביטול", "Cancel"))
+                    }
                 }
             )
         }
@@ -693,18 +759,33 @@ fun AttendanceScreen(
                             name = ""
                         }
                         addDialog = false
-                    }) { Text("הוספה") }
+                    }) {
+                        Text(tr("הוספה", "Add"))
+                    }
                 },
                 dismissButton = {
-                    TextButton(onClick = { addDialog = false }) { Text("ביטול") }
+                    TextButton(onClick = { addDialog = false }) {
+                        Text(tr("ביטול", "Cancel"))
+                    }
                 },
-                title = { Text("הוספת מתאמן לקבוצה") },
+                title = {
+                    Text(
+                        text = tr("הוספת מתאמן לקבוצה", "Add trainee to group"),
+                        textAlign = screenTextAlign,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
                 text = {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
                         singleLine = true,
-                        label = { Text("שם מלא") }
+                        label = { Text(tr("שם מלא", "Full name")) },
+                        textStyle = LocalTextStyle.current.copy(
+                            textAlign = screenTextAlign,
+                            textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             )
@@ -718,19 +799,25 @@ private fun AttendanceHeroCard(
     groupKey: String,
     hebDate: String,
     totalMembers: Int,
-    attendancePct: Double
+    attendancePct: Double,
+    isEnglish: Boolean = false
 ) {
+    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+    val textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    val styleDirection = TextStyle(textDirection = textDirection)
+
+    fun trLocal(he: String, en: String): String = if (isEnglish) en else he
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         color = Color.White.copy(alpha = 0.08f),
         tonalElevation = 0.dp
     ) {
-        // ✅ משאירים פריסה LTR כדי ש-End יהיה ימין פיזית
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-
-            val rtlStyle = TextStyle(textDirection = TextDirection.Rtl)
-
+        CompositionLocalProvider(
+            LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -738,30 +825,32 @@ private fun AttendanceHeroCard(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
 
-                // ─── שורת כותרת קומפקטית ───
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(
                         modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End
+                        horizontalAlignment = horizontal
                     ) {
                         Text(
                             text = hebDate,
-                            style = MaterialTheme.typography.labelSmall.merge(rtlStyle),
+                            style = MaterialTheme.typography.labelSmall.merge(styleDirection),
                             color = Color(0xFFE5E7EB),
-                            textAlign = TextAlign.Right,
+                            textAlign = align,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()
                         )
 
                         Text(
-                            text = "מתאמנים בשיעור: $totalMembers",
-                            style = MaterialTheme.typography.labelSmall.merge(rtlStyle),
+                            text = trLocal(
+                                "מתאמנים בשיעור: $totalMembers",
+                                "Trainees in class: $totalMembers"
+                            ),
+                            style = MaterialTheme.typography.labelSmall.merge(styleDirection),
                             color = Color(0xFFBFDBFE),
-                            textAlign = TextAlign.Right,
+                            textAlign = align,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()
@@ -790,34 +879,35 @@ private fun AttendanceHeroCard(
                     }
                 }
 
-                // ─── אחוז נוכחות – מיושר לימין ───
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "נוכחות: ${"%.0f".format(attendancePct)}%",
-                        style = MaterialTheme.typography.labelLarge.merge(rtlStyle),
+                        text = trLocal(
+                            "נוכחות: ${"%.0f".format(attendancePct)}%",
+                            "Attendance: ${"%.0f".format(attendancePct)}%"
+                        ),
+                        style = MaterialTheme.typography.labelLarge.merge(styleDirection),
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF22D3EE),
-                        textAlign = TextAlign.Right
+                        textAlign = align
                     )
                 }
 
-                // ─── פרטים: סניפים/קבוצה – ימין + שורות נפרדות ───
                 @Composable
                 fun InfoRow(label: String, lines: List<String>) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.End,
+                        horizontalAlignment = horizontal,
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
                             text = label,
                             color = Color(0xFFBFDBFE),
-                            style = MaterialTheme.typography.labelSmall.merge(rtlStyle),
-                            textAlign = TextAlign.Right,
+                            style = MaterialTheme.typography.labelSmall.merge(styleDirection),
+                            textAlign = align,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
@@ -826,9 +916,9 @@ private fun AttendanceHeroCard(
                             Text(
                                 text = line,
                                 color = Color.White,
-                                style = MaterialTheme.typography.bodySmall.merge(rtlStyle),
+                                style = MaterialTheme.typography.bodySmall.merge(styleDirection),
                                 fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Right,
+                                textAlign = align,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
@@ -853,8 +943,8 @@ private fun AttendanceHeroCard(
                         .filter { it.isNotBlank() }
                 }
 
-                InfoRow("סניף", branchLines)
-                InfoRow("קבוצה", groupLines)
+                InfoRow(trLocal("סניף", "Branch"), branchLines)
+                InfoRow(trLocal("קבוצה", "Group"), groupLines)
             }
         }
     }
@@ -866,8 +956,12 @@ private fun AttendanceSummaryCard(
     presentCount: Int,
     excusedCount: Int,
     absentCount: Int,
-    attendancePct: Double
+    attendancePct: Double,
+    isEnglish: Boolean = false
 ) {
+    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
+    fun trLocal(he: String, en: String): String = if (isEnglish) en else he
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
@@ -880,13 +974,16 @@ private fun AttendanceSummaryCard(
                 .fillMaxWidth()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = Alignment.End
+            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
         ) {
             Text(
-                text = "נוכחות ממוצעת של הקבוצה בשיעור זה",
+                text = trLocal(
+                    "נוכחות ממוצעת של הקבוצה בשיעור זה",
+                    "Group attendance average for this class"
+                ),
                 style = MaterialTheme.typography.titleSmall,
                 color = Color(0xFFECFEFF),
-                textAlign = TextAlign.End,
+                textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -895,29 +992,39 @@ private fun AttendanceSummaryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AttendanceStatBox(label = "סה\"כ", value = totalMembers.toString())
-                AttendanceStatBox(label = "הגיעו", value = presentCount.toString())
                 AttendanceStatBox(
-                    label = "נוכחות %",
-                    value = String.format(Locale("he", "IL"), "%.1f", attendancePct)
+                    label = trLocal("סה\"כ", "Total"),
+                    value = totalMembers.toString()
+                )
+                AttendanceStatBox(
+                    label = trLocal("הגיעו", "Present"),
+                    value = presentCount.toString()
+                )
+                AttendanceStatBox(
+                    label = trLocal("נוכחות %", "Attendance %"),
+                    value = String.format(
+                        if (isEnglish) Locale.ENGLISH else Locale("he", "IL"),
+                        "%.1f",
+                        attendancePct
+                    )
                 )
             }
         }
     }
 }
 
-
 /* ========= עזר: למצוא הסבר אמיתי מתוך Explanations ========= */
 private fun findExplanationForHit(
     belt: Belt,
     rawItem: String,
-    topic: String
+    topic: String,
+    isEnglish: Boolean = false
 ): String {
     val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
 
     fun String.clean(): String = this
-        .replace('–', '-')    // en dash
-        .replace('־', '-')    // maqaf
+        .replace('–', '-')
+        .replace('־', '-')
         .replace("  ", " ")
         .trim()
 
@@ -927,6 +1034,20 @@ private fun findExplanationForHit(
         add(display.clean())
         add(display.substringBefore("(").trim().clean())
     }.distinct()
+
+    if (isEnglish) {
+        for (candidate in candidates) {
+            val got = il.kmi.shared.domain.content.English.ExerciseExplanationsEn
+                .get(belt, candidate)
+                .trim()
+
+            if (got.isNotBlank() && !got.startsWith("Detailed explanation for:")) {
+                return if ("::" in got) got.substringAfter("::").trim() else got
+            }
+        }
+
+        return "No explanation is currently available for this exercise."
+    }
 
     for (candidate in candidates) {
         val got = Explanations.get(belt, candidate).trim()

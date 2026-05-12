@@ -51,6 +51,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.shared.domain.content.ExerciseTitlesEn
 
 /* ------------------------------ MarkState (3 states) ------------------------------ */
 
@@ -163,37 +164,74 @@ private fun uiDisplayName(topicTitle: String, rawItem: String): String {
 }
 
 private fun topicDisplayName(topicTitle: String, isEnglish: Boolean): String {
-    if (!isEnglish) return topicTitle
+    val clean = topicTitle.trim()
+    if (!isEnglish) return clean
 
-    return when (topicTitle.trim()) {
+    return ExerciseTitlesEn.get(clean)?.takeIf { it.isNotBlank() } ?: when (clean) {
         "כללי" -> "General"
-        "עבודת ידיים" -> "Hand techniques"
+        "עבודת ידיים" -> "Hand Strikes"
         "בעיטות" -> "Kicks"
         "שחרורים" -> "Releases"
-        "הגנות" -> "Defenses"
-        "נפילות" -> "Breakfalls"
-        "קרקע" -> "Ground"
+        "הגנות" -> "Defences"
+        "נפילות" -> "Break-Falls and Rolls"
+        "קרקע" -> "Ground-Work"
         "כושר" -> "Fitness"
         "קוואלר" -> "Kavaler"
-        else -> topicTitle
+        else -> clean
     }
 }
 
 private fun exerciseDisplayNameForUi(topicTitle: String, rawItem: String, isEnglish: Boolean): String {
-    val base = uiDisplayName(topicTitle, rawItem)
+    val topicTrim = topicTitle.trim()
+
+    fun normalizeForLookup(s: String): String =
+        s.trim()
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace(" - ", " - ")
+            .replace("- ", "-")
+            .replace(" -", "-")
+            .replace(Regex("\\s*/\\s*"), "/")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    val cleaned = buildString {
+        var s = rawItem.trim()
+
+        if (topicTrim.isNotBlank() && s.startsWith("$topicTrim::")) {
+            s = s.removePrefix("$topicTrim::").trim()
+        }
+
+        if (topicTrim.isNotBlank() && s.startsWith(topicTrim)) {
+            s = s.removePrefix(topicTrim).trim()
+            s = s.trimStart('-', '–', '—', ':').trim()
+        }
+
+        append(s)
+    }
+
+    val base = ExerciseTitleFormatter.displayName(cleaned)
+        .ifBlank { cleaned }
+        .trim()
+
     if (!isEnglish) return base
 
-    return when (base.trim()) {
-        "גלגול לאחור צד ימין" -> "Backward roll right side"
-        "גלגול לאחור צד שמאל" -> "Backward roll left side"
-        "גלגול לפנים צד שמאל" -> "Forward roll left side"
-        "שילובי ידיים ורגליים" -> "Hand and leg combinations"
-        "בלימה לצד ימין" -> "Right-side breakfall"
-        "בלימה לצד שמאל" -> "Left-side breakfall"
-        "מכת גב בהצלפה" -> "Back strike with whip motion"
-        "מכת גב בהצלפה בסיבוב" -> "Spinning back strike"
-        else -> base
+    val candidates = listOf(
+        base,
+        normalizeForLookup(base),
+        cleaned,
+        normalizeForLookup(cleaned),
+        rawItem.trim(),
+        normalizeForLookup(rawItem.trim()),
+        rawItem.substringAfter("::", rawItem).trim(),
+        normalizeForLookup(rawItem.substringAfter("::", rawItem).trim())
+    ).distinct()
+
+    val translated = candidates.firstNotNullOfOrNull { candidate ->
+        ExerciseTitlesEn.get(candidate)?.takeIf { it.isNotBlank() }
     }
+
+    return translated ?: base
 }
 
 /* ------------------------------ ProgressMeter ------------------------------ */
@@ -692,22 +730,56 @@ fun SummaryScreen(
         explainFromSearch?.let { (b, t, iRaw) ->
             val canonical = resolveCanonicalIdForExplanation(b, t, iRaw)
 
-            val explanation = il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
-                val alt = canonical.substringAfter(":", canonical).trim()
-                il.kmi.app.domain.Explanations.get(b, alt)
-            }.ifBlank { tr("לא נמצא הסבר עבור \"$canonical\".", "No explanation was found for \"$canonical\".") }
+            val explanation = if (isEnglish) {
+                il.kmi.shared.domain.content.English.ExerciseExplanationsEn.get(b, canonical).let { main ->
+                    if (main.startsWith("Detailed explanation for:")) {
+                        val alt = canonical.substringAfter(":", canonical).trim()
+                        il.kmi.shared.domain.content.English.ExerciseExplanationsEn.get(b, alt)
+                    } else {
+                        main
+                    }
+                }
+            } else {
+                il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
+                    val alt = canonical.substringAfter(":", canonical).trim()
+                    il.kmi.app.domain.Explanations.get(b, alt)
+                }
+            }.ifBlank {
+                tr("לא נמצא הסבר עבור \"$canonical\".", "No explanation was found for \"$canonical\".")
+            }
 
             val cleanFavId = cleanItem(t, canonical)
             val isFav = favorites.contains(cleanFavId)
             val noteText = loadNote(cleanFavId)
 
+            val dialogTitle = if (isEnglish) {
+                exerciseDisplayNameForUi(t, canonical, true)
+            } else {
+                canonical
+            }
+
+            val dialogBeltLabel = if (isEnglish) {
+                when (b) {
+                    Belt.WHITE -> "(White belt)"
+                    Belt.YELLOW -> "(Yellow belt)"
+                    Belt.ORANGE -> "(Orange belt)"
+                    Belt.GREEN -> "(Green belt)"
+                    Belt.BLUE -> "(Blue belt)"
+                    Belt.BROWN -> "(Brown belt)"
+                    Belt.BLACK -> "(Black belt)"
+                }
+            } else {
+                "(${b.heb})"
+            }
+
             il.kmi.app.ui.dialogs.ExerciseExplanationDialog(
-                title = canonical,
-                beltLabel = if (isEnglish) "(${b.id.replaceFirstChar { it.uppercase() }})" else "(${b.heb})",
+                title = dialogTitle,
+                beltLabel = dialogBeltLabel,
                 explanation = explanation,
                 noteText = noteText,
                 isFavorite = isFav,
                 accentColor = b.color,
+                isEnglish = isEnglish,
                 onDismiss = {
                     explainFromSearch = null
                     focusManager.clearFocus()
@@ -975,7 +1047,7 @@ fun SummaryScreen(
                                         shape = RoundedCornerShape(18.dp)
                                     )
                                     .padding(16.dp),
-                                textAlign = TextAlign.Right
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                             )
                         }
                     } else {

@@ -51,6 +51,7 @@ import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.kmi.shared.domain.content.English.ExerciseExplanationsEn
 import il.kmi.app.subscription.KmiAccess
 
 //=================================================================================
@@ -761,20 +762,51 @@ fun MaterialsScreen(
                 }
 
                 val canonical = CanonicalIds.resolveCanonicalForExplanation(b, t, iRaw)
-                val explanation = remember(b, canonical) {
-                    il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
-                        val alt = canonical.substringAfter(":", canonical).trim()
-                        il.kmi.app.domain.Explanations.get(b, alt)
+
+                val explanation = remember(b, canonical, isEnglish) {
+                    val alt = canonical.substringAfter(":", canonical).trim()
+
+                    if (isEnglish) {
+                        ExerciseExplanationsEn.get(b, canonical).let { main ->
+                            if (main.startsWith("Detailed explanation for:")) {
+                                ExerciseExplanationsEn.get(b, alt)
+                            } else {
+                                main
+                            }
+                        }
+                    } else {
+                        il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
+                            il.kmi.app.domain.Explanations.get(b, alt)
+                        }
                     }
-                }.ifBlank { "לא נמצא הסבר עבור \"$canonical\"." }
+                }.ifBlank {
+                    if (isEnglish) {
+                        "No explanation found for \"$canonical\"."
+                    } else {
+                        "לא נמצא הסבר עבור \"$canonical\"."
+                    }
+                }
+
+                val dialogTitle = if (isEnglish) {
+                    itemTitleForUi(t, canonical, AppLanguage.ENGLISH)
+                } else {
+                    canonical
+                }
+
+                val dialogBeltLabel = if (isEnglish) {
+                    "(${b.name.lowercase().replaceFirstChar { it.uppercase() }} belt)"
+                } else {
+                    "(${b.heb})"
+                }
 
                 ExerciseExplanationDialog(
-                    title = canonical,
-                    beltLabel = "(${b.heb})",
+                    title = dialogTitle,
+                    beltLabel = dialogBeltLabel,
                     explanation = explanation,
                     noteText = loadNote(canonical),
                     isFavorite = favorites.contains(canonical),
                     accentColor = b.color,
+                    isEnglish = isEnglish,
                     onDismiss = { explainTriple = null },
                     onEditNote = {
                         noteEditorFor = canonical
@@ -956,6 +988,7 @@ fun MaterialsScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     ItemFloatingActions(
+                                        isEnglish = isEnglish,
                                         excluded = isExcluded,
                                         isFav = favorites.contains(canonicalId),
                                         hasNote = noteText.isNotBlank(),
@@ -1353,6 +1386,7 @@ fun AnimatedButton(
 
 @Composable
 private fun ItemFloatingActions(
+    isEnglish: Boolean,
     excluded: Boolean,
     isFav: Boolean,
     hasNote: Boolean,
@@ -1444,9 +1478,14 @@ private fun ItemFloatingActions(
                     enabled = false,
                     text = {
                         Text(
-                            "מה זה “החרג”?\nמנטרל את התרגיל מהתרגול של הנושא הנבחר.",
+                            text = if (isEnglish) {
+                                "What does “Exclude” mean?\nRemoves this exercise from practice for the selected topic."
+                            } else {
+                                "מה זה “החרג”?\nמנטרל את התרגיל מהתרגול של הנושא הנבחר."
+                            },
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                         )
                     },
                     onClick = {}
@@ -1455,7 +1494,13 @@ private fun ItemFloatingActions(
             }
 
             DropdownMenuItem(
-                text = { Text("מידע", style = MaterialTheme.typography.labelLarge) },
+                text = {
+                    Text(
+                        text = if (isEnglish) "Info" else "מידע",
+                        style = MaterialTheme.typography.labelLarge,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                    )
+                },
                 onClick = {
                     expanded = false
                     onInfo()
@@ -1465,8 +1510,14 @@ private fun ItemFloatingActions(
             DropdownMenuItem(
                 text = {
                     Text(
-                        if (isFav) "הסר ממועדפים" else "הוסף למועדפים",
-                        style = MaterialTheme.typography.labelLarge
+                        text = when {
+                            isEnglish && isFav -> "Remove from favorites"
+                            isEnglish -> "Add to favorites"
+                            isFav -> "הסר ממועדפים"
+                            else -> "הוסף למועדפים"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                     )
                 },
                 onClick = {
@@ -1475,7 +1526,12 @@ private fun ItemFloatingActions(
                     android.widget.Toast
                         .makeText(
                             context,
-                            if (isFav) "הוסר מהמועדפים." else "נוסף למועדפים.",
+                            when {
+                                isEnglish && isFav -> "Removed from favorites."
+                                isEnglish -> "Added to favorites."
+                                isFav -> "הוסר מהמועדפים."
+                                else -> "נוסף למועדפים."
+                            },
                             android.widget.Toast.LENGTH_SHORT
                         )
                         .show()
@@ -1485,8 +1541,14 @@ private fun ItemFloatingActions(
             DropdownMenuItem(
                 text = {
                     Text(
-                        if (excluded) "בטל החרגה" else "החרג (מנטרל מהתרגול)",
-                        style = MaterialTheme.typography.labelLarge
+                        text = when {
+                            isEnglish && excluded -> "Cancel exclusion"
+                            isEnglish -> "Exclude from practice"
+                            excluded -> "בטל החרגה"
+                            else -> "החרג (מנטרל מהתרגול)"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                     )
                 },
                 onClick = {
@@ -1495,7 +1557,12 @@ private fun ItemFloatingActions(
                     android.widget.Toast
                         .makeText(
                             context,
-                            if (excluded) "בוטלה ההחרגה – התרגיל יחזור לתרגול." else "התרגיל הוחרג – לא יופיע בתרגול הנושא.",
+                            when {
+                                isEnglish && excluded -> "Exclusion canceled. The exercise will return to practice."
+                                isEnglish -> "Exercise excluded. It will not appear in this topic practice."
+                                excluded -> "בוטלה ההחרגה – התרגיל יחזור לתרגול."
+                                else -> "התרגיל הוחרג – לא יופיע בתרגול הנושא."
+                            },
                             android.widget.Toast.LENGTH_SHORT
                         )
                         .show()
@@ -1505,8 +1572,14 @@ private fun ItemFloatingActions(
             DropdownMenuItem(
                 text = {
                     Text(
-                        if (hasNote) "ערוך / מחק הערה" else "הוסף הערה לתרגיל",
-                        style = MaterialTheme.typography.labelLarge
+                        text = when {
+                            isEnglish && hasNote -> "Edit / delete note"
+                            isEnglish -> "Add exercise note"
+                            hasNote -> "ערוך / מחק הערה"
+                            else -> "הוסף הערה לתרגיל"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                     )
                 },
                 onClick = {

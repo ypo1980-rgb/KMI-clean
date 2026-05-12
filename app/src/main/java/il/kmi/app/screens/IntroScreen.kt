@@ -248,26 +248,29 @@ private fun BeltBadge(
 
     val res = beltDrawableResOrNull(belt)
 
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = if (lang == AppLanguage.ENGLISH) rank.en else rank.he,
             color = beltTextColor,
-            fontSize = 25.sp,
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.height(6.dp))
 
         if (res != null) {
             Image(
                 painter = painterResource(id = res),
                 contentDescription = if (lang == AppLanguage.ENGLISH) rank.en else rank.he,
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(56.dp)
                     .graphicsLayer {
+                        scaleX = 1.55f
+                        scaleY = 1.55f
+
                         compositingStrategy =
                             androidx.compose.ui.graphics.CompositingStrategy.Offscreen
 
@@ -401,7 +404,8 @@ fun IntroScreen(
                     )
                 )
             )
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .statusBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -441,17 +445,22 @@ fun IntroScreen(
                 Spacer(Modifier.height(8.dp))
             }
 
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
                     text = if (isEnglish) "K.M.I" else "ק.מ.י",
-                    fontSize = 68.sp,
+                    fontSize = 58.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White,
                     modifier = Modifier.alpha(alpha).scale(scale)
                 )
                 Text(
                     text = if (isEnglish) "Israeli Krav Magen" else "קרב מגן ישראלי",
-                    fontSize = if (isEnglish) 24.sp else 34.sp,
+                    fontSize = if (isEnglish) 22.sp else 30.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.9f),
                     maxLines = 1,
@@ -460,21 +469,22 @@ fun IntroScreen(
 
                 Text(
                     text = dynamicGreeting,
-                    fontSize = 30.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,      // מודגש
                     color = Color.White.copy(alpha = 0.92f),
                     modifier = Modifier
-                        .padding(top = 8.dp)
+                        .padding(top = 4.dp)
                         .alpha(alpha)
                         .scale(scale)
                 )
 
                 if (traineeRankOrNull != null) {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(2.dp))
                     BeltBadge(
                         rank = traineeRankOrNull,
                         lang = currentLang,
                         modifier = Modifier
+                            .offset(y = 30.dp)
                             .alpha(alpha)
                             .scale(scale)
                     )
@@ -483,12 +493,12 @@ fun IntroScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1.05f)
-                        .padding(top = 8.dp, bottom = 4.dp)
+                        .height(256.dp)
+                        .padding(top = 0.dp, bottom = 0.dp)
                         .alpha(alpha),
                     contentAlignment = Alignment.Center
                 ) {
-                    val imageScale = (scale * 2.26f).coerceAtMost(2.52f)
+                    val imageScale = (scale * 1.96f).coerceAtMost(2.14f)
 
                     Image(
                         painter = painterResource(id = R.drawable.fighters_blackbelt),
@@ -496,6 +506,7 @@ fun IntroScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .wrapContentHeight()
+                            .offset(y = 4.dp)
                             .graphicsLayer {
                                 scaleX = imageScale
                                 scaleY = imageScale
@@ -519,7 +530,7 @@ fun IntroScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 34.dp),
+                        .padding(top = 6.dp, bottom = 14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Button(
@@ -607,7 +618,7 @@ fun IntroScreen(
                         enabled = !isGoogleLoading,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(58.dp),
+                            .height(54.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                         contentPadding = PaddingValues(),
                         shape = RoundedCornerShape(28.dp),
@@ -696,7 +707,7 @@ fun IntroScreen(
                         )
                     }
 
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(0.dp))
 
                     TextButton(
                         onClick = {
@@ -714,7 +725,7 @@ fun IntroScreen(
                             onContinue()
                         },
                         enabled = !isGoogleLoading,
-                        modifier = Modifier.heightIn(min = 42.dp)
+                        modifier = Modifier.heightIn(min = 34.dp)
                     ) {
                         Text(
                             text = if (isEnglish) {
@@ -723,7 +734,10 @@ fun IntroScreen(
                                 "כניסה / רישום בדרך הרגילה"
                             },
                             color = Color.White.copy(alpha = 0.88f),
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2
                         )
                     }
                 }

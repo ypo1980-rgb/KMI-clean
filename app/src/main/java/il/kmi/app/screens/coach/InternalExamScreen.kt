@@ -66,6 +66,8 @@ import androidx.core.content.FileProvider
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.search.KmiSearchBridge
+import il.kmi.app.localization.rememberIsEnglish
+import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.SubTopicRegistry
 import org.json.JSONObject
 import java.io.File
@@ -83,6 +85,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import android.graphics.RectF
+import androidx.compose.foundation.shape.CircleShape
 import android.graphics.Color as AColor
 
 // ======================
@@ -95,7 +98,8 @@ private fun clampScore10(v: Int): Int = v.coerceIn(0, 10)
 data class ExamExerciseItem(
     val id: String,
     val belt: Belt,      // החגורה האמיתית של התרגיל
-    val topic: String,
+    val topic: String,   // נושא ראשי בלבד
+    val subTopic: String? = null,
     val name: String
 )
 
@@ -146,11 +150,119 @@ private data class BeltScore(
 // הדפסה יפה של ניקוד
 private fun Double.toScoreString(): String {
     if (this == 0.0) return "0"
+
     val intPart = this.toInt()
+
     return if (abs(this - intPart) < 1e-6) {
         intPart.toString()
     } else {
-        String.format(java.util.Locale("he", "IL"), "%.1f", this)
+        String.format(java.util.Locale.US, "%.1f", this)
+    }
+}
+
+private fun examTr(isEnglish: Boolean, he: String, en: String): String =
+    if (isEnglish) en else he
+
+private fun examBeltNameForUi(belt: Belt, isEnglish: Boolean): String =
+    if (isEnglish) belt.en else belt.heb
+
+private fun examBeltMainColor(belt: Belt): Color =
+    when (belt) {
+        Belt.YELLOW -> Color(0xFFF59E0B)
+        Belt.ORANGE -> Color(0xFFFF8A00)
+        Belt.GREEN -> Color(0xFF16A34A)
+        Belt.BLUE -> Color(0xFF2563EB)
+        Belt.BROWN -> Color(0xFF7C3F1D)
+        Belt.BLACK -> Color(0xFF111827)
+        else -> Color(0xFF7C3AED)
+    }
+
+private fun examBeltDarkColor(belt: Belt): Color =
+    when (belt) {
+        Belt.YELLOW -> Color(0xFF78350F)
+        Belt.ORANGE -> Color(0xFF7C2D12)
+        Belt.GREEN -> Color(0xFF064E3B)
+        Belt.BLUE -> Color(0xFF1E3A8A)
+        Belt.BROWN -> Color(0xFF3B1F12)
+        Belt.BLACK -> Color(0xFF020617)
+        else -> Color(0xFF312E81)
+    }
+
+private fun examBeltSoftColor(belt: Belt): Color =
+    when (belt) {
+        Belt.YELLOW -> Color(0xFFFFF7D6)
+        Belt.ORANGE -> Color(0xFFFFEDD5)
+        Belt.GREEN -> Color(0xFFDCFCE7)
+        Belt.BLUE -> Color(0xFFDBEAFE)
+        Belt.BROWN -> Color(0xFFF3E8D6)
+        Belt.BLACK -> Color(0xFFE5E7EB)
+        else -> Color(0xFFEDE9FE)
+    }
+
+private fun examBeltScreenBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
+    androidx.compose.ui.graphics.Brush.verticalGradient(
+        listOf(
+            Color(0xFF020617),
+            examBeltDarkColor(belt),
+            examBeltMainColor(belt).copy(alpha = 0.92f),
+            examBeltSoftColor(belt)
+        )
+    )
+
+private fun examBeltButtonBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
+    androidx.compose.ui.graphics.Brush.horizontalGradient(
+        listOf(
+            examBeltDarkColor(belt),
+            examBeltMainColor(belt),
+            Color(0xFF7C3AED)
+        )
+    )
+
+private fun examBeltCardBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
+    androidx.compose.ui.graphics.Brush.horizontalGradient(
+        listOf(
+            examBeltSoftColor(belt),
+            Color.White.copy(alpha = 0.96f),
+            examBeltSoftColor(belt).copy(alpha = 0.78f)
+        )
+    )
+
+private fun examTitleForUi(raw: String, isEnglish: Boolean): String =
+    if (isEnglish) ExerciseTitlesEn.getOrSame(raw.trim()) else raw
+
+private fun examStatusText(percent: Int, isEnglish: Boolean): String {
+    return if (isEnglish) {
+        when {
+            percent >= 85 -> "Passed with excellence"
+            percent >= 70 -> "Passed"
+            percent >= 50 -> "Needs improvement"
+            else -> "Did not pass"
+        }
+    } else {
+        when {
+            percent >= 85 -> "עבר בהצטיינות"
+            percent >= 70 -> "עבר"
+            percent >= 50 -> "נדרש שיפור"
+            else -> "לא עבר"
+        }
+    }
+}
+
+private fun examSummaryText(percent: Int, isEnglish: Boolean): String {
+    return if (isEnglish) {
+        when {
+            percent >= 85 -> "Passed very successfully"
+            percent >= 70 -> "Passed successfully"
+            percent >= 50 -> "Average - needs improvement"
+            else -> "Did not pass the exam"
+        }
+    } else {
+        when {
+            percent >= 85 -> "עבר בהצלחה רבה"
+            percent >= 70 -> "עבר בהצלחה"
+            percent >= 50 -> "בינוני – נדרש שיפור"
+            else -> "לא עבר את המבחן"
+        }
     }
 }
 
@@ -166,6 +278,24 @@ private fun beltsUpTo(target: Belt): List<Belt> {
     )
     val idx = all.indexOf(target)
     return if (idx == -1) all else all.take(idx + 1)
+}
+
+private fun buildInternalExamSessionForUi(
+    traineeName: String,
+    belt: Belt,
+    marksMap: Map<String, Int>
+): InternalExamSession {
+    val allExercises = beltsUpTo(belt)
+        .flatMap { buildInternalExamExercisesFromContent(it) }
+        .distinctBy { it.id }
+
+    return InternalExamSession(
+        traineeName = traineeName,
+        belt = belt,
+        date = LocalDate.now(),
+        exercises = allExercises,
+        marks = allExercises.map { ex -> marksMap[ex.id] }
+    )
 }
 
 // ======================
@@ -585,11 +715,16 @@ fun InternalExamScreen(
     currentScore: Float = 0f,
     onResultUpdate: (String, Boolean) -> Unit = { _, _ -> },
     onBeltChange: (Belt) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    sharedMarksMap: MutableMap<String, Int>? = null,
+    showSetupHeader: Boolean = true
 ) {
     val ctx = LocalContext.current
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+
+    val isEnglish = rememberIsEnglish()
+    val screenTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
     // ✅ דיאלוג "נבחנים אחרונים"
     var showPickTraineeDialog by remember { mutableStateOf(false) }
     var recentTrainees by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -624,7 +759,9 @@ fun InternalExamScreen(
     var resumeCheckedKey by remember { mutableStateOf<String?>(null) }
 
     // ✅ ציון לכל תרגיל: 0..10
-    val marksMap = remember { mutableStateMapOf<String, Int>() }
+    // אם נשלחת מפה משותפת ממסך ההכנה — משתמשים בה כדי לשמור ציונים בין חגורות.
+    val localMarksMap = remember { mutableStateMapOf<String, Int>() }
+    val marksMap: MutableMap<String, Int> = sharedMarksMap ?: localMarksMap
 
     // ✅ דיאלוג יציאה / חזרה
     BackHandler {
@@ -635,16 +772,13 @@ fun InternalExamScreen(
         }
     }
 
-    // session – רק לחגורה הנוכחית (ל-PDF ולשורת הציון התחתונה)
+    // session מצטבר לכל החגורות עד החגורה הנוכחית
     val session by remember {
         derivedStateOf {
-            val marksList = exercises.map { ex -> marksMap[ex.id] }
-            InternalExamSession(
+            buildInternalExamSessionForUi(
                 traineeName = traineeName,
                 belt = belt,
-                date = LocalDate.now(),
-                exercises = exercises,
-                marks = marksList
+                marksMap = marksMap
             )
         }
     }
@@ -655,7 +789,11 @@ fun InternalExamScreen(
         if (uri != null) {
             InternalExamPdf.sharePdf(ctx, uri)
         } else {
-            Toast.makeText(ctx, "שגיאה ביצירת PDF", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                ctx,
+                examTr(isEnglish, "שגיאה ביצירת PDF", "Error creating PDF"),
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -682,165 +820,154 @@ fun InternalExamScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .background(
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF020617),
-                            Color(0xFF0F172A),
-                            Color(0xFF1E3A8A),
-                            Color(0xFF38BDF8)
-                        )
-                    )
-                )
+                .background(examBeltScreenBrush(belt))
         ) {
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
 
-                // ✅ מצב עבודה: אם יש שם נבחן והוא כבר "ננעל" – מציגים פס קומפקטי
-                val hasActiveTrainee = traineeName.trim().isNotBlank() && !showTraineeNameBox
+                if (showSetupHeader) {
+                    // ✅ מצב עבודה: אם יש שם נבחן והוא כבר "ננעל" – מציגים פס קומפקטי
+                    val hasActiveTrainee = traineeName.trim().isNotBlank() && !showTraineeNameBox
 
-                if (showTraineeNameBox) {
-                    // 🟦 מצב בחירת/הזנת נבחן (מופיע רק כשצריך)
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F2FE)),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Row(
+                    if (showTraineeNameBox) {
+                        // 🟦 מצב בחירת/הזנת נבחן
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F2FE)),
+                            shape = RoundedCornerShape(14.dp)
                         ) {
-                            // ✅ שם נבחן – צד ימין
-                            OutlinedTextField(
-                                value = traineeName,
-                                onValueChange = { onTraineeNameChange(it) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                label = { Text("שם הנבחן") },
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(
-                                    onDone = { commitTraineeNameAndCollapse() }
-                                )
-                            )
-
-                            Spacer(Modifier.width(10.dp))
-
-                            // ✅ כפתור אישור – צד שמאל
-                            Button(
-                                onClick = { commitTraineeNameAndCollapse() },
-                                enabled = traineeName.trim().isNotBlank()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("אישור")
+                                OutlinedTextField(
+                                    value = traineeName,
+                                    onValueChange = { onTraineeNameChange(it) },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    label = { Text(examTr(isEnglish, "שם הנבחן", "Trainee name")) },
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    keyboardActions = KeyboardActions(
+                                        onDone = { commitTraineeNameAndCollapse() }
+                                    )
+                                )
+
+                                Spacer(Modifier.width(10.dp))
+
+                                Button(
+                                    onClick = { commitTraineeNameAndCollapse() },
+                                    enabled = traineeName.trim().isNotBlank()
+                                ) {
+                                    Text(examTr(isEnglish, "אישור", "OK"))
+                                }
                             }
                         }
-                    }
 
-                } else if (hasActiveTrainee) {
-                    // 🟩 מצב עבודה — פס קומפקטי מאוד במקום הבלוק הגדול
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F2FE)),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Row(
+                    } else if (hasActiveTrainee) {
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F2FE)),
+                            shape = RoundedCornerShape(14.dp)
                         ) {
-                            Text(
-                                text = traineeName.trim(),
-                                modifier = Modifier.weight(1f),
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            Button(
-                                onClick = {
-                                    recentTrainees = loadRecentTrainees(ctx, 10)
-                                    showPickTraineeDialog = true
-                                }
-                            ) { Text("החלף") }
-
-                            Button(
-                                onClick = {
-                                    // ✅ מבחן חדש לגמרי
-                                    marksMap.clear()
-                                    onTraineeNameChange("")
-                                    showTraineeNameBox = true
-                                    resumeCheckedKey = null
-                                }
-                            ) { Text("חדש") }
-                        }
-                    }
-                }
-
-                if (showPickTraineeDialog) {
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { showPickTraineeDialog = false },
-                        title = { Text("בחר נבחן") },
-                        text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-
-                                if (recentTrainees.isEmpty()) {
-                                    Text("אין נבחנים שמורים עדיין.")
-                                } else {
-                                    recentTrainees.forEach { name ->
-                                        Button(
-                                            onClick = {
-                                                // ✅ מעבר לנבחן שנבחר
-                                                marksMap.clear()
-                                                onTraineeNameChange(name)
-                                                showTraineeNameBox = false
-                                                resumeCheckedKey = null
-                                                showPickTraineeDialog = false
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        }
-                                    }
-                                }
-
-                                Spacer(Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = traineeName.trim(),
+                                    modifier = Modifier.weight(1f),
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
 
                                 Button(
                                     onClick = {
-                                        // ✅ נבחן חדש
+                                        recentTrainees = loadRecentTrainees(ctx, 10)
+                                        showPickTraineeDialog = true
+                                    }
+                                ) { Text(examTr(isEnglish, "החלף", "Change")) }
+
+                                Button(
+                                    onClick = {
                                         marksMap.clear()
                                         onTraineeNameChange("")
                                         showTraineeNameBox = true
                                         resumeCheckedKey = null
-                                        showPickTraineeDialog = false
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) { Text("נבחן חדש") }
+                                    }
+                                ) { Text(examTr(isEnglish, "חדש", "New")) }
                             }
-                        },
-                        confirmButton = {},
-                        dismissButton = {}
+                        }
+                    }
+
+                    if (showPickTraineeDialog) {
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { showPickTraineeDialog = false },
+                            title = { Text(examTr(isEnglish, "בחר נבחן", "Select trainee")) },
+                            text = {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
+                                    if (recentTrainees.isEmpty()) {
+                                        Text(examTr(isEnglish, "אין נבחנים שמורים עדיין.", "No saved trainees yet."))
+                                    } else {
+                                        recentTrainees.forEach { name ->
+                                            Button(
+                                                onClick = {
+                                                    marksMap.clear()
+                                                    onTraineeNameChange(name)
+                                                    showTraineeNameBox = false
+                                                    resumeCheckedKey = null
+                                                    showPickTraineeDialog = false
+                                                },
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(6.dp))
+
+                                    Button(
+                                        onClick = {
+                                            marksMap.clear()
+                                            onTraineeNameChange("")
+                                            showTraineeNameBox = true
+                                            resumeCheckedKey = null
+                                            showPickTraineeDialog = false
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) { Text(examTr(isEnglish, "נבחן חדש", "New trainee")) }
+                                }
+                            },
+                            confirmButton = {},
+                            dismissButton = {}
+                        )
+                    }
+
+                    // --- בחירת חגורה ---
+                    BeltSelector(
+                        currentBelt = belt,
+                        isEnglish = isEnglish,
+                        onBeltChange = onBeltChange
                     )
                 }
-
-                // --- בחירת חגורה ---
-                BeltSelector(
-                    currentBelt = belt,
-                    onBeltChange = onBeltChange
-                )
 
                 // --- סיכום ---
                 SummaryCard(
                     currentBelt = belt,
-                    marksMap = marksMap
+                    marksMap = marksMap,
+                    isEnglish = isEnglish
                 )
 
                 Divider(modifier = Modifier.padding(vertical = 4.dp))
@@ -850,6 +977,7 @@ fun InternalExamScreen(
                 }
 
                 var expandedTopic by remember { mutableStateOf<String?>(null) }
+                var expandedSubTopicKey by remember { mutableStateOf<String?>(null) }
 
                 // --- תרגילים ---
                 LazyColumn(
@@ -857,103 +985,291 @@ fun InternalExamScreen(
                         .weight(1f, fill = true)
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     exercisesByTopic.forEach { (topic, topicExercises) ->
 
+                        val subTopicGroups = topicExercises
+                            .filter { !it.subTopic.isNullOrBlank() }
+                            .groupBy { it.subTopic.orEmpty() }
+
+                        val directExercises = topicExercises
+                            .filter { it.subTopic.isNullOrBlank() }
+
+                        val hasSubTopics = subTopicGroups.isNotEmpty()
+                        val topicIsExpanded = expandedTopic == topic
+
                         item {
                             TopicHeader(
-                                title = topic,
-                                expanded = expandedTopic == topic,
+                                title = examTitleForUi(topic, isEnglish),
+                                expanded = topicIsExpanded,
+                                hasSubTopics = hasSubTopics,
+                                exerciseCount = topicExercises.size,
+                                subTopicCount = subTopicGroups.size,
+                                isEnglish = isEnglish,
+                                belt = belt,
                                 onClick = {
-                                    expandedTopic = if (expandedTopic == topic) null else topic
+                                    if (topicIsExpanded) {
+                                        expandedTopic = null
+                                        expandedSubTopicKey = null
+                                    } else {
+                                        expandedTopic = topic
+                                        expandedSubTopicKey = null
+                                    }
                                 }
                             )
                         }
 
-                        if (expandedTopic == topic) {
-                            items(topicExercises) { ex ->
-                                val scoreForThis = marksMap[ex.id]
+                        if (topicIsExpanded) {
+                            if (hasSubTopics) {
+                                subTopicGroups.forEach { (subTopic, subTopicExercises) ->
+                                    val subTopicKey = "$topic||$subTopic"
+                                    val subTopicExpanded = expandedSubTopicKey == subTopicKey
 
-                                ExerciseRow(
-                                    name = ex.name,
-                                    score = scoreForThis,
-                                    onScoreChange = { newScore ->
-                                        hasUnsavedChanges = true
+                                    item {
+                                        SubTopicHeader(
+                                            title = examTitleForUi(subTopic, isEnglish),
+                                            expanded = subTopicExpanded,
+                                            exerciseCount = subTopicExercises.size,
+                                            isEnglish = isEnglish,
+                                            belt = belt,
+                                            onClick = {
+                                                expandedSubTopicKey =
+                                                    if (subTopicExpanded) null else subTopicKey
+                                            }
+                                        )
+                                    }
 
-                                        if (newScore == null) {
-                                            marksMap.remove(ex.id)
-                                        } else {
-                                            marksMap[ex.id] = clampScore10(newScore)
+                                    if (subTopicExpanded) {
+                                        items(subTopicExercises) { ex ->
+                                            val scoreForThis = marksMap[ex.id]
+
+                                            ExerciseRow(
+                                                name = examTitleForUi(ex.name, isEnglish),
+                                                score = scoreForThis,
+                                                isEnglish = isEnglish,
+                                                onScoreChange = { newScore ->
+                                                    hasUnsavedChanges = true
+
+                                                    if (newScore == null) {
+                                                        marksMap.remove(ex.id)
+                                                    } else {
+                                                        marksMap[ex.id] = clampScore10(newScore)
+                                                    }
+                                                }
+                                            )
                                         }
                                     }
-                                )
+                                }
+
+                                if (directExercises.isNotEmpty()) {
+                                    val generalKey = "$topic||__direct__"
+                                    val generalExpanded = expandedSubTopicKey == generalKey
+
+                                    item {
+                                        SubTopicHeader(
+                                            title = examTr(isEnglish, "כללי", "General"),
+                                            expanded = generalExpanded,
+                                            exerciseCount = directExercises.size,
+                                            isEnglish = isEnglish,
+                                            belt = belt,
+                                            onClick = {
+                                                expandedSubTopicKey =
+                                                    if (generalExpanded) null else generalKey
+                                            }
+                                        )
+                                    }
+
+                                    if (generalExpanded) {
+                                        items(directExercises) { ex ->
+                                            val scoreForThis = marksMap[ex.id]
+
+                                            ExerciseRow(
+                                                name = examTitleForUi(ex.name, isEnglish),
+                                                score = scoreForThis,
+                                                isEnglish = isEnglish,
+                                                onScoreChange = { newScore ->
+                                                    hasUnsavedChanges = true
+
+                                                    if (newScore == null) {
+                                                        marksMap.remove(ex.id)
+                                                    } else {
+                                                        marksMap[ex.id] = clampScore10(newScore)
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                items(directExercises) { ex ->
+                                    val scoreForThis = marksMap[ex.id]
+
+                                    ExerciseRow(
+                                        name = examTitleForUi(ex.name, isEnglish),
+                                        score = scoreForThis,
+                                        isEnglish = isEnglish,
+                                        onScoreChange = { newScore ->
+                                            hasUnsavedChanges = true
+
+                                            if (newScore == null) {
+                                                marksMap.remove(ex.id)
+                                            } else {
+                                                marksMap[ex.id] = clampScore10(newScore)
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
 
-                    item { Spacer(modifier = Modifier.height(80.dp)) }
+                    item { Spacer(modifier = Modifier.height(82.dp)) }
                 }
 
-                // --- תחתית ---
-                BottomActionBar(
-                    session = session,
-                    onSave = {
-                        val nameOk = commitTraineeNameAndCollapse()
-                        if (!nameOk) {
-                            Toast.makeText(ctx, "נא להזין שם נבחן לפני שמירה", Toast.LENGTH_SHORT).show()
-                            return@BottomActionBar
-                        }
-
-                        saveExamDraft(ctx, traineeName.trim(), belt, marksMap)
-                        pushRecentTrainee(ctx, traineeName.trim(), 10)
-                        saveLastTrainee(ctx, traineeName.trim())
+                // --- תחתית במסך התרגילים: מעבר חזרה למסך הראשי לבחירת חגורה אחרת ---
+                ChangeBeltBottomBar(
+                    isEnglish = isEnglish,
+                    belt = belt,
+                    onChangeBelt = {
                         hasUnsavedChanges = false
-                        Toast.makeText(ctx, "המבחן נשמר", Toast.LENGTH_SHORT).show()
-                    },
-                    onExportPdf = onExportPdf
+                        onBack()
+                    }
                 )
             }
         }
 
         if (showResumeDialog) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { showResumeDialog = false },
-                title = { Text("מבחן שמור נמצא") },
-                text = { Text("נמצא מבחן שמור מהפעם האחרונה. להמשיך ממנו או להתחיל מבחן חדש?") },
-                confirmButton = {
-                    Button(onClick = {
-                        // ✅ המשך מבחן אחרון
-                        marksMap.clear()
-                        marksMap.putAll(pendingLoadedDraft)
-                        hasUnsavedChanges = false
-                        showResumeDialog = false
-                    }) { Text("המשך") }
-                },
-                dismissButton = {
-                    Button(onClick = {
-                        // ✅ מבחן חדש
-                        marksMap.clear()
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { showResumeDialog = false }
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(32.dp),
+                    color = Color(0xFFF6F1FF),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.72f)),
+                    shadowElevation = 24.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    listOf(
+                                        Color(0xFFF8F5FF),
+                                        Color(0xFFF2EBFF),
+                                        Color(0xFFE9E2FF)
+                                    )
+                                )
+                            )
+                            .padding(horizontal = 20.dp, vertical = 22.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFEDE9FE),
+                            shadowElevation = 10.dp,
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "💾",
+                                    fontSize = 28.sp
+                                )
+                            }
+                        }
 
-                        val sp = ctx.getSharedPreferences("kmi_internal_exam_drafts", Context.MODE_PRIVATE)
-                        sp.edit().remove(draftKey(traineeName.trim(), belt)).apply()
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        onTraineeNameChange("")
-                        showTraineeNameBox = true
-                        resumeCheckedKey = null
+                        Text(
+                            text = examTr(isEnglish, "מבחן שמור נמצא", "Saved exam found"),
+                            color = Color(0xFF1F2937),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 28.sp,
+                            textAlign = TextAlign.Center
+                        )
 
-                        hasUnsavedChanges = false
-                        showResumeDialog = false
-                    }) { Text("מבחן חדש") }
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = examTr(
+                                isEnglish,
+                                "נמצא מבחן שמור מהפעם האחרונה.\nלהמשיך ממנו או להתחיל מבחן חדש?",
+                                "A saved exam was found from the last session.\nContinue from it or start a new exam?"
+                            ),
+                            color = Color(0xFF4B5563),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 24.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(22.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            PremiumDialogActionButton(
+                                modifier = Modifier.weight(1f),
+                                text = examTr(isEnglish, "המשך", "Continue"),
+                                icon = "▶",
+                                startColor = Color(0xFF4F46E5),
+                                centerColor = Color(0xFF7C3AED),
+                                endColor = Color(0xFF9333EA),
+                                onClick = {
+                                    // ✅ המשך מבחן אחרון
+                                    marksMap.clear()
+                                    marksMap.putAll(pendingLoadedDraft)
+                                    hasUnsavedChanges = false
+                                    showResumeDialog = false
+                                }
+                            )
+
+                            PremiumDialogActionButton(
+                                modifier = Modifier.weight(1f),
+                                text = examTr(isEnglish, "מבחן חדש", "New exam"),
+                                icon = "✨",
+                                startColor = Color(0xFF0EA5E9),
+                                centerColor = Color(0xFF2563EB),
+                                endColor = Color(0xFF7C3AED),
+                                onClick = {
+                                    // ✅ מבחן חדש
+                                    marksMap.clear()
+
+                                    val sp = ctx.getSharedPreferences("kmi_internal_exam_drafts", Context.MODE_PRIVATE)
+                                    sp.edit().remove(draftKey(traineeName.trim(), belt)).apply()
+
+                                    onTraineeNameChange("")
+                                    showTraineeNameBox = true
+                                    resumeCheckedKey = null
+
+                                    hasUnsavedChanges = false
+                                    showResumeDialog = false
+                                }
+                            )
+                        }
+                    }
                 }
-            )
+            }
         }
 
         if (showExitDialog) {
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { showExitDialog = false },
-                title = { Text("שמירת מבחן") },
-                text = { Text("האם ברצונך לשמור את המבחן לפני היציאה?") },
+                title = { Text(examTr(isEnglish, "שמירת מבחן", "Save exam")) },
+                text = {
+                    Text(
+                        examTr(
+                            isEnglish,
+                            "האם ברצונך לשמור את המבחן לפני היציאה?",
+                            "Would you like to save the exam before leaving?"
+                        )
+                    )
+                },
                 confirmButton = {
                     Button(onClick = {
                         val name = traineeName.trim()
@@ -965,13 +1281,13 @@ fun InternalExamScreen(
                         hasUnsavedChanges = false
                         showExitDialog = false
                         onBack()
-                    }) { Text("שמור") }
+                    }) { Text(examTr(isEnglish, "שמור", "Save")) }
                 },
                 dismissButton = {
                     Button(onClick = {
                         showExitDialog = false
                         onBack()
-                    }) { Text("צא בלי לשמור") }
+                    }) { Text(examTr(isEnglish, "צא בלי לשמור", "Exit without saving")) }
                 }
             )
         }
@@ -982,33 +1298,202 @@ fun InternalExamScreen(
 private fun TopicHeader(
     title: String,
     expanded: Boolean,
+    hasSubTopics: Boolean,
+    exerciseCount: Int,
+    subTopicCount: Int,
+    isEnglish: Boolean,
+    belt: Belt,
     onClick: () -> Unit
 ) {
-    Card(
+    Surface(
         onClick = onClick,
+        shape = RoundedCornerShape(22.dp),
+        color = Color.Transparent,
+        shadowElevation = if (expanded) 10.dp else 6.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color.White.copy(alpha = if (expanded) 0.40f else 0.22f)
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFE0F2FE)
-        ),
-        shape = RoundedCornerShape(14.dp)
+            .height(78.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .background(
+                    brush = examBeltCardBrush(belt)
+                )
+                .padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = title,
-                modifier = Modifier.weight(1f),
-                fontWeight = FontWeight.Bold
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (expanded) examBeltMainColor(belt) else examBeltDarkColor(belt).copy(alpha = 0.88f),
+                    shadowElevation = 7.dp,
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (expanded) "▲" else "▼",
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 17.sp
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                ) {
+                    Text(
+                        text = title,
+                        color = Color(0xFF111827),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 25.sp,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(2.dp))
+
+                    Text(
+                        text = if (hasSubTopics) {
+                            examTr(
+                                isEnglish,
+                                "$subTopicCount תתי נושאים • $exerciseCount תרגילים",
+                                "$subTopicCount sub-topics • $exerciseCount exercises"
+                            )
+                        } else {
+                            examTr(
+                                isEnglish,
+                                "$exerciseCount תרגילים",
+                                "$exerciseCount exercises"
+                            )
+                        },
+                        color = examBeltDarkColor(belt).copy(alpha = 0.72f),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubTopicHeader(
+    title: String,
+    expanded: Boolean,
+    exerciseCount: Int,
+    isEnglish: Boolean,
+    belt: Belt,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Transparent,
+        shadowElevation = if (expanded) 8.dp else 4.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color.White.copy(alpha = if (expanded) 0.34f else 0.20f)
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = if (isEnglish) 18.dp else 0.dp,
+                end = if (isEnglish) 0.dp else 18.dp
             )
-            Text(
-                text = if (expanded) "▲" else "▼",
-                fontWeight = FontWeight.Bold
-            )
+            .height(64.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.98f),
+                            examBeltSoftColor(belt),
+                            Color.White.copy(alpha = 0.96f)
+                        )
+                    )
+                )
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (expanded) examBeltMainColor(belt) else examBeltDarkColor(belt).copy(alpha = 0.62f),
+                    shadowElevation = 5.dp,
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (expanded) "−" else "+",
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 18.sp
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                ) {
+                    Text(
+                        text = title,
+                        color = Color(0xFF111827),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 20.sp,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = examTr(
+                            isEnglish,
+                            "$exerciseCount תרגילים",
+                            "$exerciseCount exercises"
+                        ),
+                        color = examBeltDarkColor(belt).copy(alpha = 0.68f),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         }
     }
 }
@@ -1019,18 +1504,20 @@ fun InternalExamEntryScreen(
     onBack: () -> Unit
 ) {
     val ctx = LocalContext.current
+    val isEnglish = rememberIsEnglish()
 
     var traineeName by rememberSaveable { mutableStateOf("") }
     var currentBelt by remember { mutableStateOf(Belt.YELLOW) }
 
-    // ✅ רשימת 10 נבחנים אחרונים
     var recentTrainees by remember { mutableStateOf(loadRecentTrainees(ctx)) }
     var expanded by remember { mutableStateOf(false) }
 
-    // ✅ מפתח סשן: מאתחל את InternalExamScreen רק כשבוחרים "נבחן חדש" / נבחן מהרשימה
+    var examStarted by rememberSaveable { mutableStateOf(false) }
     var traineeSessionKey by rememberSaveable { mutableStateOf(0) }
 
-    // ✅ ברירת מחדל: אם אין שם — נטען את האחרון
+    // ✅ ציונים משותפים לכל החגורות באותו מבחן
+    val marksMap = remember { mutableStateMapOf<String, Int>() }
+
     LaunchedEffect(Unit) {
         val last = loadLastTrainee(ctx).trim()
         if (last.isNotBlank() && traineeName.isBlank()) {
@@ -1038,66 +1525,316 @@ fun InternalExamEntryScreen(
         }
     }
 
+    LaunchedEffect(traineeName) {
+        recentTrainees = loadRecentTrainees(ctx)
+    }
+
     val exercises = remember(currentBelt) {
         buildInternalExamExercisesFromContent(currentBelt)
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    val hasExamProgress = marksMap.isNotEmpty()
 
-        // ✅ Dropdown נבחנים אחרונים + "נבחן חדש"
-        // ✅ מופיע רק כשאין שם נבחן (אחרי בחירה נעלם כדי לפנות מקום לתרגילים)
-        if (traineeName.isBlank()) {
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = it },
+    val entrySession by remember {
+        derivedStateOf {
+            buildInternalExamSessionForUi(
+                traineeName = traineeName,
+                belt = currentBelt,
+                marksMap = marksMap
+            )
+        }
+    }
+
+    if (!examStarted) {
+        Scaffold { padding ->
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(padding)
+                    .fillMaxSize()
+                    .background(examBeltScreenBrush(currentBelt))
             ) {
-                OutlinedTextField(
-                    value = traineeName,
-                    onValueChange = { traineeName = it },
+                Column(
                     modifier = Modifier
-                        .menuAnchor()
-                        .fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("בחר נבחן") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
-                )
-
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
+                        .fillMaxSize()
+                        .padding(horizontal = 18.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // ✅ נבחן חדש
-                    DropdownMenuItem(
-                        text = { Text("➕ נבחן חדש…") },
-                        onClick = {
-                            expanded = false
-                            traineeName = ""
-                            traineeSessionKey++ // ✅ אתחול מסך מבחן חדש
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp, start = 6.dp, end = 6.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.Transparent,
+                            shadowElevation = 14.dp,
+                            modifier = Modifier
+                                .size(46.dp)
+                                .align(if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .clickable { onBack() }
+                                    .background(
+                                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.30f),
+                                                Color(0xFF7C3AED).copy(alpha = 0.78f),
+                                                Color(0xFF111827).copy(alpha = 0.96f)
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "✕",
+                                    color = Color.White,
+                                    fontSize = 23.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
                         }
-                    )
 
-                    if (recentTrainees.isNotEmpty()) {
-                        Divider()
+                        Text(
+                            text = examTr(isEnglish, "מבחן פנימי", "Internal exam"),
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = if (isEnglish) 28.sp else 30.sp,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp)
+                                .align(Alignment.Center)
+                        )
                     }
 
-                    recentTrainees.forEach { name ->
-                        DropdownMenuItem(
-                            text = { Text(name) },
-                            onClick = {
-                                expanded = false
-                                traineeName = name
-                                traineeSessionKey++ // ✅ אתחול מסך מבחן לנבחן שנבחר
+                    Text(
+                        text = examTr(
+                            isEnglish,
+                            "בחר נבחן וחגורה לפני תחילת המבחן",
+                            "Select a trainee and exam belt before starting"
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 18.sp),
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White.copy(alpha = 0.82f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(26.dp),
+                        color = examBeltDarkColor(currentBelt).copy(alpha = 0.86f),
+                        border = BorderStroke(1.dp, examBeltSoftColor(currentBelt).copy(alpha = 0.42f)),
+                        shadowElevation = 18.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            ExposedDropdownMenuBox(
+                                expanded = expanded,
+                                onExpandedChange = { expanded = it },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                OutlinedTextField(
+                                    value = traineeName,
+                                    onValueChange = { traineeName = it },
+                                    modifier = Modifier
+                                        .menuAnchor()
+                                        .fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(18.dp),
+                                    label = {
+                                        Text(
+                                            examTr(
+                                                isEnglish,
+                                                "👤 שם הנבחן",
+                                                "👤 Trainee name"
+                                            )
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded)
+                                    },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = Color(0xFF38BDF8),
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.58f),
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedLabelColor = Color.White,
+                                        unfocusedLabelColor = Color.White.copy(alpha = 0.78f),
+                                        cursorColor = Color(0xFF38BDF8),
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        disabledContainerColor = Color.Transparent,
+                                        errorContainerColor = Color.Transparent
+                                    ),
+                                    textStyle = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Black,
+                                        color = Color.White,
+                                        fontSize = 23.sp,
+                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                                    )
+                                )
+
+                                ExposedDropdownMenu(
+                                    expanded = expanded,
+                                    onDismissRequest = { expanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                if (isEnglish) {
+                                                    "➕ New trainee…"
+                                                } else {
+                                                    "➕ נבחן חדש…"
+                                                }
+                                            )
+                                        },
+                                        onClick = {
+                                            expanded = false
+                                            traineeName = ""
+                                            marksMap.clear()
+                                            traineeSessionKey++
+                                        }
+                                    )
+
+                                    if (recentTrainees.isNotEmpty()) {
+                                        Divider()
+                                    }
+
+                                    recentTrainees.forEach { name ->
+                                        DropdownMenuItem(
+                                            text = { Text(name) },
+                                            onClick = {
+                                                expanded = false
+                                                traineeName = name
+                                                marksMap.clear()
+                                                traineeSessionKey++
+                                            }
+                                        )
+                                    }
+                                }
                             }
-                        )
+
+                            BeltSelector(
+                                currentBelt = currentBelt,
+                                isEnglish = isEnglish,
+                                onBeltChange = { newBelt -> currentBelt = newBelt }
+                            )
+
+                            PremiumExamSetupButton(
+                                text = if (hasExamProgress) {
+                                    examTr(isEnglish, "המשך מבחן", "Continue exam")
+                                } else {
+                                    examTr(isEnglish, "התחל מבחן", "Start exam")
+                                },
+                                icon = if (hasExamProgress) "⏩" else "▶",
+                                startColor = examBeltDarkColor(currentBelt),
+                                centerColor = examBeltMainColor(currentBelt),
+                                endColor = Color(0xFF7C3AED),
+                                onClick = {
+                                    val cleanName = traineeName.trim()
+
+                                    if (cleanName.isBlank()) {
+                                        Toast.makeText(
+                                            ctx,
+                                            examTr(
+                                                isEnglish,
+                                                "נא להזין שם נבחן לפני התחלת מבחן",
+                                                "Please enter a trainee name before starting the exam"
+                                            ),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        traineeName = cleanName
+                                        pushRecentTrainee(ctx, cleanName, 10)
+                                        saveLastTrainee(ctx, cleanName)
+                                        traineeSessionKey++
+                                        examStarted = true
+                                    }
+                                }
+                            )
+
+                            BottomActionBar(
+                                session = entrySession,
+                                isEnglish = isEnglish,
+                                onSave = {
+                                    val cleanName = traineeName.trim()
+
+                                    if (cleanName.isBlank()) {
+                                        Toast.makeText(
+                                            ctx,
+                                            examTr(
+                                                isEnglish,
+                                                "נא להזין שם נבחן לפני שמירה",
+                                                "Please enter a trainee name before saving"
+                                            ),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        traineeName = cleanName
+                                        saveExamDraft(ctx, cleanName, currentBelt, marksMap)
+                                        pushRecentTrainee(ctx, cleanName, 10)
+                                        saveLastTrainee(ctx, cleanName)
+
+                                        Toast.makeText(
+                                            ctx,
+                                            examTr(isEnglish, "המבחן נשמר", "Exam saved"),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                },
+                                onExportPdf = {
+                                    val cleanName = traineeName.trim()
+
+                                    if (cleanName.isBlank()) {
+                                        Toast.makeText(
+                                            ctx,
+                                            examTr(
+                                                isEnglish,
+                                                "נא להזין שם נבחן לפני שיתוף",
+                                                "Please enter a trainee name before sharing"
+                                            ),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        val pdfSession = buildInternalExamSessionForUi(
+                                            traineeName = cleanName,
+                                            belt = currentBelt,
+                                            marksMap = marksMap
+                                        )
+
+                                        val uri = InternalExamPdf.createPdf(ctx, pdfSession)
+                                        if (uri != null) {
+                                            InternalExamPdf.sharePdf(ctx, uri)
+                                        } else {
+                                            Toast.makeText(
+                                                ctx,
+                                                examTr(isEnglish, "שגיאה ביצירת PDF", "Error creating PDF"),
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
-
-        // ✅ המסך עצמו (מאותחל רק כשבוחרים נבחן מהרשימה/חדש)
+    } else {
         key(traineeSessionKey) {
             InternalExamScreen(
                 traineeName = traineeName,
@@ -1105,14 +1842,13 @@ fun InternalExamEntryScreen(
                 belt = currentBelt,
                 exercises = exercises,
                 onBeltChange = { newBelt -> currentBelt = newBelt },
-                onBack = onBack
+                onBack = {
+                    examStarted = false
+                },
+                sharedMarksMap = marksMap,
+                showSetupHeader = false
             )
         }
-    }
-
-    // ✅ רענון הרשימה כששומרים/משנים שם
-    LaunchedEffect(traineeName) {
-        recentTrainees = loadRecentTrainees(ctx)
     }
 }
 
@@ -1120,6 +1856,7 @@ fun InternalExamEntryScreen(
 @Composable
 private fun BeltSelector(
     currentBelt: Belt,
+    isEnglish: Boolean,
     onBeltChange: (Belt) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1141,25 +1878,35 @@ private fun BeltSelector(
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         OutlinedTextField(
-            value = currentBelt.heb,
+            value = examBeltNameForUi(currentBelt, isEnglish),
             onValueChange = {},
             readOnly = true,
+            singleLine = true,
+            shape = RoundedCornerShape(18.dp),
             label = {
                 Text(
-                    text = "חגורה במבחן",
+                    text = examTr(isEnglish, "🥋 חגורה במבחן", "🥋 Exam belt"),
                     fontWeight = FontWeight.Medium,
                     color = Color.White
                 )
             },
             textStyle = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.Bold,
-                color = Color.White
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                fontSize = 23.sp,
+                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
             ),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color(0xFF38BDF8),
                 unfocusedBorderColor = Color(0xFF60A5FA),
                 focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
+                unfocusedTextColor = Color.White,
+                focusedLabelColor = Color.White,
+                unfocusedLabelColor = Color.White.copy(alpha = 0.80f),
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                errorContainerColor = Color.Transparent
             ),
             modifier = Modifier
                 .menuAnchor()
@@ -1175,7 +1922,7 @@ private fun BeltSelector(
         ) {
             belts.forEach { b ->
                 DropdownMenuItem(
-                    text = { Text(b.heb) },
+                    text = { Text(examBeltNameForUi(b, isEnglish)) },
                     onClick = {
                         expanded = false
                         if (b != currentBelt) {
@@ -1191,7 +1938,8 @@ private fun BeltSelector(
 @Composable
 private fun SummaryCard(
     currentBelt: Belt,
-    marksMap: Map<String, Int>
+    marksMap: Map<String, Int>,
+    isEnglish: Boolean
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
 
@@ -1219,19 +1967,14 @@ private fun SummaryCard(
     val totalScore10: Double = if (maxScore == 0.0) 0.0 else (totalScore / maxScore) * 10.0
     val percent = if (maxScore == 0.0) 0 else ((totalScore / maxScore) * 100.0).toInt()
 
-    val summaryText = when {
-        percent >= 85 -> "עבר בהצלחה רבה"
-        percent >= 70 -> "עבר בהצלחה"
-        percent >= 50 -> "בינוני – נדרש שיפור"
-        else          -> "לא עבר את המבחן"
-    }
+    val summaryText = examSummaryText(percent, isEnglish)
 
     Card(
         onClick = { expanded = !expanded },
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp), // ✅ פחות גובה
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD)),
+        colors = CardDefaults.cardColors(containerColor = examBeltSoftColor(currentBelt)),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
@@ -1244,7 +1987,7 @@ private fun SummaryCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "סיכום מבחן",
+                    text = examTr(isEnglish, "סיכום מבחן", "Exam summary"),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     modifier = Modifier.weight(1f)
                 )
@@ -1259,7 +2002,11 @@ private fun SummaryCard(
             // ✅ תמיד מוצג (קומפקטי)
             Text(
                 // ✅ מצטבר 0–10
-                text = "מצטבר: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)",
+                text = examTr(
+                    isEnglish,
+                    "מצטבר: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)",
+                    "Total: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)"
+                ),
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
             )
             Text(
@@ -1276,7 +2023,7 @@ private fun SummaryCard(
                 beltScores.forEach { (belt, score) ->
                     Text(
                         // ✅ לכל חגורה: 0–10
-                        text = "${belt.heb}: ${score.score10.coerceIn(0.0, 10.0).toScoreString()} / 10 (${score.percent}%)",
+                        text = "${examBeltNameForUi(belt, isEnglish)}: ${score.score10.coerceIn(0.0, 10.0).toScoreString()} / 10 (${score.percent}%)",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -1290,6 +2037,7 @@ private fun SummaryCard(
 private fun ExerciseRow(
     name: String,
     score: Int?,                 // ✅ 0..10
+    isEnglish: Boolean,
     onScoreChange: (Int?) -> Unit // null = לא סומן
 ) {
     Card(
@@ -1309,7 +2057,7 @@ private fun ExerciseRow(
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
                 style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Right,
+                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1442,50 +2190,303 @@ private fun ScoreChip(
 }
 
 @Composable
+private fun PremiumExamSetupButton(
+    text: String,
+    icon: String,
+    startColor: Color,
+    centerColor: Color,
+    endColor: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(26.dp),
+        color = Color.Transparent,
+        shadowElevation = 16.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(26.dp))
+                .clickable { onClick() }
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                        listOf(
+                            startColor,
+                            centerColor,
+                            endColor
+                        )
+                    )
+                )
+                .padding(horizontal = 18.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = icon,
+                    fontSize = 27.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+
+                Spacer(Modifier.width(12.dp))
+
+                Text(
+                    text = text,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 21.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PremiumDialogActionButton(
+    modifier: Modifier = Modifier,
+    text: String,
+    icon: String,
+    startColor: Color,
+    centerColor: Color,
+    endColor: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = Color.Transparent,
+        shadowElevation = 14.dp,
+        modifier = modifier.height(58.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(22.dp))
+                .clickable { onClick() }
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                        listOf(
+                            startColor,
+                            centerColor,
+                            endColor
+                        )
+                    )
+                )
+                .padding(horizontal = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = icon,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    maxLines = 1
+                )
+
+                Spacer(modifier = Modifier.width(5.dp))
+
+                Text(
+                    text = text,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChangeBeltBottomBar(
+    isEnglish: Boolean,
+    belt: Belt,
+    onChangeBelt: () -> Unit
+) {
+    Surface(
+        tonalElevation = 6.dp,
+        shadowElevation = 16.dp,
+        color = examBeltSoftColor(belt).copy(alpha = 0.96f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Surface(
+            shape = RoundedCornerShape(26.dp),
+            color = Color.Transparent,
+            shadowElevation = 14.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp)
+                .height(60.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(26.dp))
+                    .clickable { onChangeBelt() }
+                    .background(
+                        brush = examBeltButtonBrush(belt)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "🥋",
+                        fontSize = 23.sp
+                    )
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Text(
+                        text = examTr(isEnglish, "מעבר לחגורה אחרת", "Change belt"),
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 17.sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun BottomActionBar(
     session: InternalExamSession,
+    isEnglish: Boolean,
     onSave: () -> Unit,
     onExportPdf: () -> Unit
 ) {
     Surface(
-        tonalElevation = 3.dp,
-        shadowElevation = 6.dp,
-        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        color = Color.Transparent,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val score10 = if (session.maxScore == 0.0) 0.0 else (session.totalScore / session.maxScore) * 10.0
 
-            Text(
-                text = "ציון: ${score10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${session.percent}%)",
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(Modifier.width(12.dp))
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = Color.White.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = examTr(
+                        isEnglish,
+                        "ציון כולל במבחן:\n${score10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${session.percent}%)",
+                        "Overall exam score:\n${score10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${session.percent}%)"
+                    ),
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Black,
+                        fontSize = 17.sp
+                    ),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    maxLines = 2,
+                    overflow = TextOverflow.Clip
+                )
+            }
 
             Row(
-                modifier = Modifier.width(220.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(
-                    onClick = onSave,
-                    modifier = Modifier.weight(1f)
-                ) { Text("שמור", maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = Color.Transparent,
+                    shadowElevation = 12.dp,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(22.dp))
+                            .clickable { onSave() }
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0xFF4C1D95),
+                                        Color(0xFF7C3AED),
+                                        Color(0xFF9333EA)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "💾  ${examTr(isEnglish, "שמור", "Save")}",
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 19.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
 
-                Button(
-                    onClick = onExportPdf,
-                    modifier = Modifier.weight(1f)
-                ) { Text("שתף", maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = Color.Transparent,
+                    shadowElevation = 12.dp,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(22.dp))
+                            .clickable { onExportPdf() }
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0xFF0EA5E9),
+                                        Color(0xFF2563EB),
+                                        Color(0xFF7C3AED)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "📤  ${examTr(isEnglish, "שתף", "Share")}",
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 19.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
     }
@@ -1525,12 +2526,7 @@ private fun buildInternalExamExercisesFromContent(belt: Belt): List<ExamExercise
                 .ifBlank { rawItem.trim() }
 
             val subTopicTitle = findSubTopicTitleForItemInternal(belt, topicTitle, cleanName)
-
-            val topicLabel =
-                if (!subTopicTitle.isNullOrBlank() && subTopicTitle != topicTitle)
-                    "${topicTitle} – ${subTopicTitle}"
-                else
-                    topicTitle
+                ?.takeIf { it.isNotBlank() && it != topicTitle }
 
             val stableId = ContentRepo.makeItemKey(
                 belt = belt,
@@ -1542,7 +2538,8 @@ private fun buildInternalExamExercisesFromContent(belt: Belt): List<ExamExercise
             result += ExamExerciseItem(
                 id = stableId,
                 belt = belt,
-                topic = topicLabel,
+                topic = topicTitle,
+                subTopic = subTopicTitle,
                 name = cleanName
             )
         }

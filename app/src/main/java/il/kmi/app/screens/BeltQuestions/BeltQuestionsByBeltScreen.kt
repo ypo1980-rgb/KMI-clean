@@ -79,6 +79,7 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
+import androidx.compose.ui.graphics.graphicsLayer
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.QuickMenuTriggerMode
@@ -1283,6 +1284,36 @@ internal fun TopicsViewModeToggle(
 /* ----------------------------- כרטיס “נושאים בחגורה” ---------------------------- */
 
 @Composable
+private fun PremiumPulsingLockBadge(
+    modifier: Modifier = Modifier,
+    isDarkTheme: Boolean = false
+) {
+    val pulse = rememberInfiniteTransition(label = "emojiLockPulse")
+
+    val scale by pulse.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 780, easing = FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "emojiLockScale"
+    )
+
+    Text(
+        text = "🔒",
+        modifier = modifier
+            .size(28.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.titleLarge
+    )
+}
+
+@Composable
 private fun TopicsCardForBelt(
     belt: Belt,
     lang: AppLanguage,
@@ -1608,7 +1639,7 @@ private fun TopicsCardForBelt(
 
                                         Spacer(Modifier.width(8.dp))
 
-                                        if (!isEnglish && topicImageRes != null) {
+                                        if (topicImageRes != null) {
                                             Surface(
                                                 shape = RoundedCornerShape(12.dp),
                                                 color = Color.White.copy(alpha = if (isDarkTheme) 0.08f else 0.92f),
@@ -1660,36 +1691,11 @@ private fun TopicsCardForBelt(
                                             }
                                         }
 
-                                        if (isEnglish && topicImageRes != null) {
-                                            Spacer(Modifier.width(10.dp))
-
-                                            Surface(
-                                                shape = RoundedCornerShape(12.dp),
-                                                color = Color.White.copy(alpha = if (isDarkTheme) 0.08f else 0.92f),
-                                                shadowElevation = if (isDarkTheme) 0.dp else 2.dp,
-                                                border = BorderStroke(
-                                                    width = 1.dp,
-                                                    color = belt.color.copy(alpha = 0.18f)
-                                                ),
-                                                modifier = Modifier.size(42.dp)
-                                            ) {
-                                                Image(
-                                                    painter = painterResource(id = topicImageRes),
-                                                    contentDescription = null,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier.fillMaxSize()
-                                                )
-                                            }
-                                        }
-
                                         if (parentLocked) {
                                             Spacer(Modifier.width(8.dp))
 
-                                            Icon(
-                                                imageVector = Icons.Filled.Lock,
-                                                contentDescription = null,
-                                                tint = Color(0xFFF59E0B),
-                                                modifier = Modifier.size(16.dp)
+                                            PremiumPulsingLockBadge(
+                                                isDarkTheme = isDarkTheme
                                             )
                                         }
 
@@ -1790,11 +1796,8 @@ private fun TopicsCardForBelt(
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     if (!isEnglish && parentLocked) {
-                                                        Icon(
-                                                            imageVector = Icons.Filled.Lock,
-                                                            contentDescription = null,
-                                                            tint = Color(0xFFF59E0B),
-                                                            modifier = Modifier.size(16.dp)
+                                                        PremiumPulsingLockBadge(
+                                                            isDarkTheme = isDarkTheme
                                                         )
 
                                                         Spacer(Modifier.width(8.dp))
@@ -1812,11 +1815,8 @@ private fun TopicsCardForBelt(
                                                     if (isEnglish && parentLocked) {
                                                         Spacer(Modifier.width(8.dp))
 
-                                                        Icon(
-                                                            imageVector = Icons.Filled.Lock,
-                                                            contentDescription = null,
-                                                            tint = Color(0xFFF59E0B),
-                                                            modifier = Modifier.size(16.dp)
+                                                        PremiumPulsingLockBadge(
+                                                            isDarkTheme = isDarkTheme
                                                         )
                                                     }
                                                 }

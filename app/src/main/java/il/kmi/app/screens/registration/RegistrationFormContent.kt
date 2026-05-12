@@ -42,6 +42,8 @@ import il.kmi.shared.domain.Belt
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.ui.ext.color
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
 private data class TraineeRankOption(
     val id: String,
@@ -187,6 +189,13 @@ fun RegistrationFormContent(
     var passwordVisible by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
 
+    val languageManager = remember(ctx) { AppLanguageManager(ctx) }
+    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val fieldTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+
     val allGroupsAcrossBranches by remember(ctx, selectedBranches) {
         derivedStateOf {
             selectedBranches
@@ -227,15 +236,17 @@ fun RegistrationFormContent(
         ) {
             // ===== Personal =====
             RegistrationSectionCard(
-                title = "פרטים אישיים"
+                title = tr("פרטים אישיים", "Personal details"),
+                isEnglish = isEnglish
             ) {
-            OutlinedTextField(
-                value = fullName,
-                onValueChange = { onFullNameChange(it) },
-                label = { Text("שם מלא", color = Color.Black) },
-                singleLine = true,
-                isError = fullNameError,
-                modifier = Modifier
+                OutlinedTextField(
+                    value = fullName,
+                    onValueChange = { onFullNameChange(it) },
+                    label = { Text(tr("שם מלא", "Full name"), color = Color.Black) },
+                    singleLine = true,
+                    isError = fullNameError,
+                    textStyle = LocalTextStyle.current.copy(textAlign = fieldTextAlign),
+                    modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 46.dp)
                     .background(Color.White, shape = MaterialTheme.shapes.medium),
@@ -250,13 +261,13 @@ fun RegistrationFormContent(
                 )
             )
             if (fullNameError) {
-                Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+                Text(tr("שדה חובה", "Required field"), color = MaterialTheme.colorScheme.error)
             }
 
             OutlinedTextField(
                 value = phone,
                 onValueChange = { onPhoneChange(it) },
-                label = { Text("טלפון", color = Color.Black) },
+                label = { Text(tr("טלפון", "Phone"), color = Color.Black) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 isError = phoneError,
@@ -264,7 +275,10 @@ fun RegistrationFormContent(
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 46.dp)
                     .background(Color.White, shape = MaterialTheme.shapes.medium),
-                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
+                textStyle = LocalTextStyle.current.copy(
+                    textDirection = TextDirection.Ltr,
+                    textAlign = TextAlign.Left
+                ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = Color.White,
                     unfocusedContainerColor = Color.White,
@@ -276,16 +290,20 @@ fun RegistrationFormContent(
                 )
             )
             if (phoneError) {
-                Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+                Text(tr("שדה חובה", "Required field"), color = MaterialTheme.colorScheme.error)
             }
 
             OutlinedTextField(
                 value = email,
                 onValueChange = { onEmailChange(it) },
-                label = { Text("מייל", color = Color.Black) },
+                label = { Text(tr("מייל", "Email"), color = Color.Black) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 isError = emailError,
+                textStyle = LocalTextStyle.current.copy(
+                    textDirection = TextDirection.Ltr,
+                    textAlign = TextAlign.Left
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 46.dp)
@@ -302,17 +320,19 @@ fun RegistrationFormContent(
             )
             if (emailError) {
                 Text(
-                    "שדה חובה / פורמט מייל לא תקין",
+                    tr("שדה חובה / פורמט מייל לא תקין", "Required field / invalid email format"),
                     color = MaterialTheme.colorScheme.error
                 )
             }
 
-            Text(
-                text = "מין המשתמש",
-                style = MaterialTheme.typography.labelLarge,
-                color = Color(0xFF475569),
-                fontWeight = FontWeight.SemiBold
-            )
+                Text(
+                    text = tr("מין המשתמש", "Gender"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFF475569),
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = fieldTextAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -324,7 +344,7 @@ fun RegistrationFormContent(
                     onClick = { onGenderChange("male") },
                     label = {
                         Text(
-                            "זכר",
+                            tr("זכר", "Male"),
                             textAlign = TextAlign.Center,
                             color = if (gender == "male") Color.White else Color(0xFF475569),
                             modifier = Modifier.fillMaxWidth()
@@ -354,7 +374,7 @@ fun RegistrationFormContent(
                     onClick = { onGenderChange("female") },
                     label = {
                         Text(
-                            "נקבה",
+                            tr("נקבה", "Female"),
                             textAlign = TextAlign.Center,
                             color = if (gender == "female") Color.White else Color(0xFF475569),
                             modifier = Modifier.fillMaxWidth()
@@ -380,38 +400,43 @@ fun RegistrationFormContent(
                 )
             }
             if (genderError) {
-                Text("יש לבחור מין", color = MaterialTheme.colorScheme.error)
+                Text(tr("יש לבחור מין", "Please select gender"), color = MaterialTheme.colorScheme.error)
             }
 
-            Text(
-                text = "תאריך לידה",
-                style = MaterialTheme.typography.labelLarge,
-                color = Color(0xFF475569),
-                fontWeight = FontWeight.SemiBold
-            )
+                Text(
+                    text = tr("תאריך לידה", "Date of birth"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFF475569),
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = fieldTextAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-            BirthDatePicker(
-                year = birthYear,
-                month = birthMonth,
-                day = birthDay,
-                onYearChange = { onBirthYearChange(it) },
-                onMonthChange = { onBirthMonthChange(it) },
-                onDayChange = { onBirthDayChange(it) }
-            )
-        }
+                BirthDatePicker(
+                    year = birthYear,
+                    month = birthMonth,
+                    day = birthDay,
+                    isEnglish = isEnglish,
+                    onYearChange = { onBirthYearChange(it) },
+                    onMonthChange = { onBirthMonthChange(it) },
+                    onDayChange = { onBirthDayChange(it) }
+                )
+            }
 
         // ===== Account =====
         // בכניסה עם Google אין צורך להציג שם משתמש / סיסמה.
         if (!isGoogleAuth) {
             RegistrationSectionCard(
-                title = "חשבון משתמש"
+                title = tr("חשבון משתמש", "User account"),
+                isEnglish = isEnglish
             ) {
                 OutlinedTextField(
                     value = username,
                     onValueChange = { onUsernameChange(it) },
-                    label = { Text("שם משתמש", color = Color.Black) },
+                    label = { Text(tr("שם משתמש", "Username"), color = Color.Black) },
                     singleLine = true,
                     isError = usernameError,
+                    textStyle = LocalTextStyle.current.copy(textAlign = fieldTextAlign),
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 46.dp)
@@ -427,13 +452,13 @@ fun RegistrationFormContent(
                     )
                 )
                 if (usernameError) {
-                    Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+                    Text(tr("שדה חובה", "Required field"), color = MaterialTheme.colorScheme.error)
                 }
 
                 OutlinedTextField(
                     value = password,
                     onValueChange = { onPasswordChange(it) },
-                    label = { Text("סיסמה", color = Color.Black) },
+                    label = { Text(tr("סיסמה", "Password"), color = Color.Black) },
                     singleLine = true,
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(
@@ -449,6 +474,7 @@ fun RegistrationFormContent(
                         }
                     },
                     isError = passwordError,
+                    textStyle = LocalTextStyle.current.copy(textAlign = fieldTextAlign),
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 46.dp)
@@ -464,21 +490,24 @@ fun RegistrationFormContent(
                     )
                 )
                 if (passwordError) {
-                    Text("שדה חובה", color = MaterialTheme.colorScheme.error)
+                    Text(tr("שדה חובה", "Required field"), color = MaterialTheme.colorScheme.error)
                 }
             }
         }
 
         // ===== Branch / Group / Belt =====
-        RegistrationSectionCard(
-            title = "שיוך לסניף"
-        ) {
-            Text(
-                text = "בחירת סוג סניף",
-                style = MaterialTheme.typography.labelLarge,
-                color = Color(0xFF475569),
-                fontWeight = FontWeight.SemiBold
-            )
+            RegistrationSectionCard(
+                title = tr("שיוך לסניף", "Branch assignment"),
+                isEnglish = isEnglish
+            ) {
+                Text(
+                    text = tr("בחירת סוג סניף", "Branch type"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFF475569),
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = fieldTextAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -494,7 +523,7 @@ fun RegistrationFormContent(
                     },
                     label = {
                         Text(
-                            "ישראל",
+                            tr("ישראל", "Israel"),
                             color = if (branchType == "israel") Color.White else Color(0xFF475569)
                         )
                     },
@@ -527,7 +556,7 @@ fun RegistrationFormContent(
                     },
                     label = {
                         Text(
-                            "חו״ל",
+                            tr("חו״ל", "Abroad"),
                             color = if (branchType == "abroad") Color.White else Color(0xFF475569)
                         )
                     },
@@ -553,37 +582,41 @@ fun RegistrationFormContent(
 
             Spacer(Modifier.height(6.dp))
 
-            RegionAndMultiBranchPicker(
-                branchType = branchType,
-                selectedRegion = selectedRegion,
-                selectedBranches = selectedBranches,
-                onRegionChange = onRegionChange,
-                onBranchesConfirm = onBranchesChange,
-                onGroupsChange = onGroupsChange,
-                regionError = regionError,
-                branchError = branchError
-            )
+                RegionAndMultiBranchPicker(
+                    branchType = branchType,
+                    selectedRegion = selectedRegion,
+                    selectedBranches = selectedBranches,
+                    onRegionChange = onRegionChange,
+                    onBranchesConfirm = onBranchesChange,
+                    onGroupsChange = onGroupsChange,
+                    regionError = regionError,
+                    branchError = branchError,
+                    isEnglish = isEnglish
+                )
 
             if (branchType == "israel" && selectedBranches.isNotEmpty()) {
                 MultiGroupsPicker(
                     allGroupsAcrossBranches = allGroupsAcrossBranches,
                     selectedGroups = selectedGroups,
                     onGroupsChange = onGroupsChange,
-                    groupError = groupError
+                    groupError = groupError,
+                    isEnglish = isEnglish
                 )
             }
 
-            BeltPicker(
-                currentBeltId = currentBeltId,
-                onBeltChange = onBeltChange
-            )
-        }
+                BeltPicker(
+                    currentBeltId = currentBeltId,
+                    onBeltChange = onBeltChange,
+                    isEnglish = isEnglish
+                )
+            }
 
             // ===== Preferences =====
-        RegistrationSectionCard(
-            title = "העדפות ואישורים"
-        ) {
-            Row(
+            RegistrationSectionCard(
+                title = tr("העדפות ואישורים", "Preferences and approvals"),
+                isEnglish = isEnglish
+            ) {
+                Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -592,7 +625,14 @@ fun RegistrationFormContent(
                     onCheckedChange = onSubscribeSmsChange
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("ארצה לקבל עדכונים בהודעת SMS לגבי אימונים קרובים")
+                    Text(
+                        text = tr(
+                            "ארצה לקבל עדכונים בהודעת SMS לגבי אימונים קרובים",
+                            "I would like to receive SMS updates about upcoming trainings"
+                        ),
+                        textAlign = fieldTextAlign,
+                        modifier = Modifier.weight(1f)
+                    )
             }
 
             Row(
@@ -617,16 +657,24 @@ fun RegistrationFormContent(
                         ) { onOpenTerms() }
                 ) {
                     Text(
-                        text = "אני מאשר את תנאי השימוש ומדיניות הפרטיות",
-                        style = MaterialTheme.typography.bodySmall
+                        text = tr(
+                            "אני מאשר את תנאי השימוש ומדיניות הפרטיות",
+                            "I approve the Terms of Use and Privacy Policy"
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = fieldTextAlign,
+                        modifier = Modifier.fillMaxWidth()
                     )
                     Text(
-                        "קרא עוד",
+                        text = tr("קרא עוד", "Read more"),
                         color = MaterialTheme.colorScheme.primary,
+                        textAlign = fieldTextAlign,
                         style = MaterialTheme.typography.bodySmall.copy(
                             textDecoration = TextDecoration.Underline
                         ),
-                        modifier = Modifier.padding(top = 2.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp)
                     )
                 }
             }
@@ -649,7 +697,7 @@ fun RegistrationFormContent(
                 )
             ) {
                 Text(
-                    text = "סיום רישום",
+                    text = tr("סיום רישום", "Complete registration"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -664,6 +712,7 @@ fun RegistrationFormContent(
     private fun RegistrationSectionCard(
         title: String,
         modifier: Modifier = Modifier,
+        isEnglish: Boolean = false,
         content: @Composable ColumnScope.() -> Unit
     ) {
         Surface(
@@ -685,7 +734,7 @@ fun RegistrationFormContent(
                     style = MaterialTheme.typography.titleSmall,
                     color = Color(0xFF1F2937),
                     fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Right,
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -763,6 +812,7 @@ private fun BirthDatePicker(
     year: Int,
     month: Int,
     day: Int,
+    isEnglish: Boolean = false,
     onYearChange: (Int) -> Unit,
     onMonthChange: (Int) -> Unit,
     onDayChange: (Int) -> Unit,
@@ -794,7 +844,7 @@ private fun BirthDatePicker(
                     if (v in 1..31) onDayChange(v)
                 }
             },
-            label = { Text("יום") },
+            label = { Text(if (isEnglish) "Day" else "יום") },
             singleLine = true,
             shape = shape,
             colors = fieldColors,
@@ -820,7 +870,7 @@ private fun BirthDatePicker(
             },
             label = {
                 Text(
-                    text = "חודש",
+                    text = if (isEnglish) "Month" else "חודש",
                     maxLines = 1,
                     softWrap = false
                 )
@@ -848,7 +898,7 @@ private fun BirthDatePicker(
                     if (v in 1950..2026) onYearChange(v)
                 }
             },
-            label = { Text("שנה") },
+            label = { Text(if (isEnglish) "Year" else "שנה") },
             singleLine = true,
             shape = shape,
             colors = fieldColors,
@@ -1017,13 +1067,17 @@ private fun RegionAndMultiBranchPicker(
     onGroupsChange: (List<String>) -> Unit,
     regionError: Boolean,
     branchError: Boolean,
+    isEnglish: Boolean = false,
     fieldHeight: Dp = 52.dp
 ) {
     val ctx = LocalContext.current
     val fieldColors = registrationLightFieldColors()
     val fieldShape = RoundedCornerShape(14.dp)
 
-    val regions = remember(ctx, branchType) {
+    fun trLocal(he: String, en: String): String = if (isEnglish) en else he
+    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
+
+    val regions = remember(ctx, branchType, isEnglish) {
         val dbRegions = KmiDatabaseProvider
             .regions(ctx)
             .filter { region ->
@@ -1034,7 +1088,7 @@ private fun RegionAndMultiBranchPicker(
                 }
             }
             .map { region ->
-                if (branchType == "abroad") {
+                if (isEnglish) {
                     region.nameEn.ifBlank { region.nameHe }
                 } else {
                     region.nameHe.ifBlank { region.nameEn }
@@ -1054,7 +1108,7 @@ private fun RegionAndMultiBranchPicker(
         }
     }
 
-    val allBranches = remember(ctx, branchType, selectedRegion) {
+    val allBranches = remember(ctx, branchType, selectedRegion, isEnglish) {
         if (selectedRegion.isBlank()) {
             emptyList()
         } else {
@@ -1065,7 +1119,13 @@ private fun RegionAndMultiBranchPicker(
                             branch.regionEn.equals(selectedRegion, ignoreCase = true) ||
                             branch.regionId.equals(selectedRegion, ignoreCase = true)
                 }
-                .map { dbBranch -> dbBranch.nameHe.ifBlank { dbBranch.nameEn } }
+                .map { dbBranch ->
+                    if (isEnglish) {
+                        dbBranch.nameEn.ifBlank { dbBranch.nameHe }
+                    } else {
+                        dbBranch.nameHe.ifBlank { dbBranch.nameEn }
+                    }
+                }
                 .filter { it.isNotBlank() }
                 .distinct()
 
@@ -1092,7 +1152,11 @@ private fun RegionAndMultiBranchPicker(
             isError = regionError,
             label = {
                 Text(
-                    text = if (branchType == "abroad") "מדינה" else "מחוז / אזור",
+                    text = if (branchType == "abroad") {
+                        trLocal("מדינה", "Country")
+                    } else {
+                        trLocal("מחוז / אזור", "District / Region")
+                    },
                     color = Color(0xFF374151)
                 )
             },
@@ -1108,11 +1172,15 @@ private fun RegionAndMultiBranchPicker(
             shape = fieldShape,
             textStyle = LocalTextStyle.current.copy(
                 color = Color.Black,
-                textAlign = TextAlign.Right
+                textAlign = align
             ),
             placeholder = {
                 Text(
-                    text = if (branchType == "abroad") "בחר/י מדינה" else "בחר/י אזור",
+                    text = if (branchType == "abroad") {
+                        trLocal("בחר/י מדינה", "Select country")
+                    } else {
+                        trLocal("בחר/י אזור", "Select region")
+                    },
                     color = Color(0xFF64748B)
                 )
             }
@@ -1129,7 +1197,7 @@ private fun RegionAndMultiBranchPicker(
                         Text(
                             text = region,
                             color = Color.Black,
-                            textAlign = TextAlign.Right,
+                            textAlign = align,
                             modifier = Modifier.fillMaxWidth()
                         )
                     },
@@ -1144,10 +1212,10 @@ private fun RegionAndMultiBranchPicker(
 
     if (regionError) {
         Text(
-            text = "חובה לבחור אזור",
+            text = trLocal("חובה לבחור אזור", "Region is required"),
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall,
-            textAlign = TextAlign.Right,
+            textAlign = align,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -1175,7 +1243,7 @@ private fun RegionAndMultiBranchPicker(
             isError = branchError,
             label = {
                 Text(
-                    text = "סניפים (עד 3)",
+                    text = trLocal("סניפים (עד 3)", "Branches (up to 3)"),
                     color = Color(0xFF374151)
                 )
             },
@@ -1191,14 +1259,15 @@ private fun RegionAndMultiBranchPicker(
             shape = fieldShape,
             textStyle = LocalTextStyle.current.copy(
                 color = Color.Black,
-                textAlign = TextAlign.Right
+                textAlign = align
             ),
             placeholder = {
                 Text(
-                    text = if (branchType == "abroad")
-                        "בחר/י 1–3 סניפים בחו״ל"
-                    else
-                        "בחר/י 1–3 סניפים",
+                    text = if (branchType == "abroad") {
+                        trLocal("בחר/י 1–3 סניפים בחו״ל", "Select 1–3 abroad branches")
+                    } else {
+                        trLocal("בחר/י 1–3 סניפים", "Select 1–3 branches")
+                    },
                     color = Color(0xFF64748B)
                 )
             }
@@ -1228,7 +1297,7 @@ private fun RegionAndMultiBranchPicker(
                             Text(
                                 text = branch,
                                 color = Color.Black,
-                                textAlign = TextAlign.Right,
+                                textAlign = align,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -1243,7 +1312,7 @@ private fun RegionAndMultiBranchPicker(
                                 } else {
                                     Toast.makeText(
                                         ctx,
-                                        "ניתן לבחור עד 3 סניפים",
+                                        trLocal("ניתן לבחור עד 3 סניפים", "You can select up to 3 branches"),
                                         Toast.LENGTH_SHORT
                                     ).show()
                                     tempSelection
@@ -1265,7 +1334,7 @@ private fun RegionAndMultiBranchPicker(
                 TextButton(
                     onClick = { tempSelection = emptyList() }
                 ) {
-                    Text("נקה", color = Color(0xFF374151))
+                    Text(trLocal("נקה", "Clear"), color = Color(0xFF374151))
                 }
 
                 Button(
@@ -1281,7 +1350,7 @@ private fun RegionAndMultiBranchPicker(
                         branchesExpanded = false
                     }
                 ) {
-                    Text("אישור")
+                    Text(trLocal("אישור", "Confirm"))
                 }
             }
         }
@@ -1289,10 +1358,10 @@ private fun RegionAndMultiBranchPicker(
 
     if (branchError) {
         Text(
-            text = "חובה לבחור לפחות סניף אחד",
+            text = trLocal("חובה לבחור לפחות סניף אחד", "Please select at least one branch"),
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall,
-            textAlign = TextAlign.Right,
+            textAlign = align,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -1303,13 +1372,17 @@ private fun MultiGroupsPicker(
     allGroupsAcrossBranches: List<String>,
     selectedGroups: List<String>,
     onGroupsChange: (List<String>) -> Unit,
-    groupError: Boolean
+    groupError: Boolean,
+    isEnglish: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
     var tempSelection by remember(selectedGroups) {
         mutableStateOf(selectedGroups.toList())
     }
     val ctx = LocalContext.current
+
+    fun trLocal(he: String, en: String): String = if (isEnglish) en else he
+    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -1326,7 +1399,12 @@ private fun MultiGroupsPicker(
             value = display,
             onValueChange = {},
             readOnly = true,
-            label = { Text("בחר/י קבוצה/ות (עד 3)", color = Color.Black) },
+            label = {
+                Text(
+                    text = trLocal("בחר/י קבוצה/ות (עד 3)", "Select group(s) - up to 3"),
+                    color = Color.Black
+                )
+            },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
             },
@@ -1337,6 +1415,10 @@ private fun MultiGroupsPicker(
                 .menuAnchor()
                 .fillMaxWidth()
                 .background(Color.White, shape = MaterialTheme.shapes.medium),
+            textStyle = LocalTextStyle.current.copy(
+                color = Color.Black,
+                textAlign = align
+            ),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = Color.White,
                 unfocusedContainerColor = Color.White,
@@ -1346,7 +1428,14 @@ private fun MultiGroupsPicker(
                 unfocusedBorderColor = Color.Transparent,
                 errorBorderColor = MaterialTheme.colorScheme.error
             ),
-            placeholder = { Text("בחר/י 1–3 קבוצות מכל הסניפים") }
+            placeholder = {
+                Text(
+                    text = trLocal(
+                        "בחר/י 1–3 קבוצות מכל הסניפים",
+                        "Select 1–3 groups from all branches"
+                    )
+                )
+            }
         )
 
         ExposedDropdownMenu(
@@ -1354,23 +1443,31 @@ private fun MultiGroupsPicker(
             onDismissRequest = { expanded = false },
             containerColor = Color.White
         ) {
-
             allGroupsAcrossBranches.forEach { g ->
                 val checked = g in tempSelection
 
                 DropdownMenuItem(
                     text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Checkbox(
                                 checked = checked,
                                 onCheckedChange = null
                             )
+
                             Spacer(Modifier.width(8.dp))
-                            Text(g, color = Color.Black)
+
+                            Text(
+                                text = g,
+                                color = Color.Black,
+                                textAlign = align,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     },
                     onClick = {
-
                         val newSelection =
                             if (checked) {
                                 tempSelection.filterNot { it == g }
@@ -1380,7 +1477,7 @@ private fun MultiGroupsPicker(
                                 } else {
                                     Toast.makeText(
                                         ctx,
-                                        "ניתן לבחור עד 3 קבוצות",
+                                        trLocal("ניתן לבחור עד 3 קבוצות", "You can select up to 3 groups"),
                                         Toast.LENGTH_SHORT
                                     ).show()
                                     tempSelection
@@ -1404,14 +1501,13 @@ private fun MultiGroupsPicker(
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-
                 TextButton(
                     onClick = {
                         tempSelection = emptyList()
                         onGroupsChange(emptyList())
                     }
                 ) {
-                    Text("נקה")
+                    Text(trLocal("נקה", "Clear"))
                 }
 
                 Button(
@@ -1420,7 +1516,7 @@ private fun MultiGroupsPicker(
                         expanded = false
                     }
                 ) {
-                    Text("אישור")
+                    Text(trLocal("אישור", "Confirm"))
                 }
             }
         }
@@ -1428,8 +1524,13 @@ private fun MultiGroupsPicker(
 
     if (groupError) {
         Text(
-            "חובה לבחור לפחות קבוצה אחת (עד 3)",
-            color = MaterialTheme.colorScheme.error
+            text = trLocal(
+                "חובה לבחור לפחות קבוצה אחת (עד 3)",
+                "Please select at least one group (up to 3)"
+            ),
+            color = MaterialTheme.colorScheme.error,
+            textAlign = align,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -1437,7 +1538,8 @@ private fun MultiGroupsPicker(
 @Composable
 private fun BeltPicker(
     currentBeltId: String,
-    onBeltChange: (String) -> Unit
+    onBeltChange: (String) -> Unit,
+    isEnglish: Boolean = false
 ) {
     val beltOptions = remember { traineeRankOptions() }
     var expanded by remember { mutableStateOf(false) }
@@ -1452,16 +1554,40 @@ private fun BeltPicker(
 
     val currentBelt = beltOptions.firstOrNull { it.id == normalizedCurrentBeltId }
 
+    fun beltLabel(option: TraineeRankOption): String {
+        if (!isEnglish) return option.heb
+
+        return when (option.id) {
+            "white" -> "White"
+            "yellow" -> "Yellow"
+            "orange" -> "Orange"
+            "green" -> "Green"
+            "blue" -> "Blue"
+            "brown" -> "Brown"
+            "black" -> "Black Dan 1"
+            "black_dan_2" -> "Black Dan 2"
+            "black_dan_3" -> "Black Dan 3"
+            "black_dan_4" -> "Black Dan 4"
+            "black_dan_5" -> "Black Dan 5"
+            "black_dan_6" -> "Black Dan 6"
+            "black_dan_7" -> "Black Dan 7"
+            "black_dan_8" -> "Black Dan 8"
+            "black_dan_9" -> "Black Dan 9"
+            "black_dan_10" -> "Black Dan 10"
+            else -> option.heb
+        }
+    }
+
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded },
         modifier = Modifier.fillMaxWidth()
     ) {
         OutlinedTextField(
-            value = currentBelt?.heb ?: "",
+            value = currentBelt?.let { beltLabel(it) } ?: "",
             onValueChange = {},
             readOnly = true,
-            label = { Text("דרגת חגורה נוכחית (ק.מ.י)", color = Color.Black) },
+            label = { Text(if (isEnglish) "Current K.M.I belt rank" else "דרגת חגורה נוכחית (ק.מ.י)", color = Color.Black) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .menuAnchor()
@@ -1477,7 +1603,7 @@ private fun BeltPicker(
                 unfocusedBorderColor = Color.Transparent,
                 errorBorderColor = MaterialTheme.colorScheme.error
             ),
-            placeholder = { Text("בחר/י דרגה") }
+            placeholder = { Text(if (isEnglish) "Select rank" else "בחר/י דרגה") }
         )
 
         ExposedDropdownMenu(
@@ -1499,7 +1625,7 @@ private fun BeltPicker(
                             Spacer(Modifier.width(8.dp))
 
                             Text(
-                                text = belt.heb,
+                                text = beltLabel(belt),
                                 color = Color.Black
                             )
                         }

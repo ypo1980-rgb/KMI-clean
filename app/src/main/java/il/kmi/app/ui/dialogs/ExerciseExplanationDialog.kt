@@ -30,6 +30,7 @@ fun ExerciseExplanationDialog(
     noteText: String,
     isFavorite: Boolean,
     accentColor: Color,
+    isEnglish: Boolean = false,
     onDismiss: () -> Unit,
     onEditNote: () -> Unit,
     onToggleFavorite: () -> Unit,
@@ -83,13 +84,13 @@ fun ExerciseExplanationDialog(
                         RoundedCornerShape(18.dp)
                     )
                     .padding(horizontal = 14.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.End
+                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Right,
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                     modifier = Modifier.fillMaxWidth(),
                     color = Color(0xFF1F2937)
                 )
@@ -104,11 +105,14 @@ fun ExerciseExplanationDialog(
                     Text(
                         text = beltLabel,
                         style = MaterialTheme.typography.labelMedium,
-                        textAlign = TextAlign.Right,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                         modifier = Modifier
                             .weight(1f)
-                            .padding(end = 10.dp),
-                        color = accentColor,
+                            .padding(
+                                start = if (isEnglish) 10.dp else 0.dp,
+                                end = if (isEnglish) 0.dp else 10.dp
+                            ),
+                        color = if (isEnglish) Color(0xFFB08900) else accentColor,
                         fontWeight = FontWeight.Bold
                     )
 
@@ -134,7 +138,7 @@ fun ExerciseExplanationDialog(
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Filled.Edit,
-                                    contentDescription = "עריכת הערה",
+                                    contentDescription = if (isEnglish) "Edit note" else "עריכת הערה",
                                     tint = if (noteText.isNotBlank()) {
                                         MaterialTheme.colorScheme.primary
                                     } else {
@@ -160,14 +164,14 @@ fun ExerciseExplanationDialog(
                                 if (isFavorite) {
                                     Icon(
                                         imageVector = Icons.Filled.Star,
-                                        contentDescription = "הסר ממועדפים",
+                                        contentDescription = if (isEnglish) "Remove from favorites" else "הסר ממועדפים",
                                         tint = Color(0xFFFFC107),
                                         modifier = Modifier.size(22.dp)
                                     )
                                 } else {
                                     Icon(
                                         imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = "הוסף למועדפים",
+                                        contentDescription = if (isEnglish) "Add to favorites" else "הוסף למועדפים",
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(22.dp)
                                     )
@@ -203,7 +207,7 @@ fun ExerciseExplanationDialog(
                 StyledExplanationText(
                     raw = explanation,
                     style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Right,
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                     modifier = Modifier.fillMaxWidth(),
                     color = Color(0xFF1B1B1B)
                 )
@@ -212,17 +216,17 @@ fun ExerciseExplanationDialog(
                     HorizontalDivider(color = accentColor.copy(alpha = 0.18f))
 
                     Text(
-                        text = "הערה של המתאמן:",
+                        text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
                         fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Right,
-                        color = accentColor,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        color = if (isEnglish) Color(0xFFB08900) else accentColor,
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     Text(
                         text = noteText,
                         style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Right,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                         modifier = Modifier.fillMaxWidth(),
                         color = Color(0xFF1B1B1B)
                     )
@@ -231,7 +235,10 @@ fun ExerciseExplanationDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("סגור")
+                Text(
+                    text = if (isEnglish) "Close" else "סגור",
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     )
