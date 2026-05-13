@@ -51,6 +51,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.WindowInsets
@@ -74,6 +78,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 
 
 //===========================================================================
+
+private const val FORUM_UNREAD_LIMIT = 100L
+
+private fun forumLastReadKey(branch: String): String =
+    "forum_last_read_at_${branch.trim()}"
 
 @Composable
 fun DrawerMenuCard(
@@ -208,6 +217,131 @@ fun AppDrawerContent(
         if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val userSp = remember(contextLang) {
+        contextLang.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+    }
+
+    val drawerBranch = remember {
+        userSp.getString("branch", "").orEmpty().trim()
+    }
+
+    var forumUnreadCount by remember { mutableIntStateOf(0) }
+
+    fun drawerIconForTitle(title: String): androidx.compose.ui.graphics.vector.ImageVector? {
+        val clean = title.trim()
+
+        return when {
+            clean.contains("Avi", ignoreCase = true) ||
+                    clean.contains("אבי") -> Icons.Filled.Person
+
+            clean.contains("Network Coaches", ignoreCase = true) ||
+                    clean.contains("מאמנים") -> Icons.Filled.Groups
+
+            clean.contains("Method", ignoreCase = true) ||
+                    clean.contains("שיטה") -> Icons.Filled.WorkspacePremium
+
+            clean.contains("Demo", ignoreCase = true) ||
+                    clean.contains("הדגמה") -> Icons.Filled.PlayArrow
+
+            clean.contains("Forms", ignoreCase = true) ||
+                    clean.contains("Payments", ignoreCase = true) ||
+                    clean.contains("טפסים") ||
+                    clean.contains("תשלומים") -> Icons.Filled.Assessment
+
+            clean.contains("Contact", ignoreCase = true) ||
+                    clean.contains("צור קשר") -> Icons.Filled.Campaign
+
+            clean.contains("Forum", ignoreCase = true) ||
+                    clean.contains("פורום") -> Icons.Filled.Groups
+
+            clean.contains("Profile", ignoreCase = true) ||
+                    clean.contains("פרופיל") -> Icons.Filled.Person
+
+            clean.contains("Language", ignoreCase = true) ||
+                    clean.contains("שפה") -> Icons.Filled.Language
+
+            clean.contains("Subscription", ignoreCase = true) ||
+                    clean.contains("מנוי") -> Icons.Filled.WorkspacePremium
+
+            clean.contains("Rate", ignoreCase = true) ||
+                    clean.contains("דרגו") -> Icons.Filled.WorkspacePremium
+
+            clean.contains("Users", ignoreCase = true) ||
+                    clean.contains("משתמשים") -> Icons.Filled.Groups
+
+            clean.contains("Logout", ignoreCase = true) ||
+                    clean.contains("התנתקות") -> Icons.Outlined.Logout
+
+            else -> null
+        }
+    }
+
+    @Composable
+    fun DrawerMenuIconBubble(
+        icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+        content: (@Composable () -> Unit)? = null
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.12f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+            shadowElevation = 2.dp,
+            modifier = Modifier.size(30.dp)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                if (content != null) {
+                    content()
+                } else if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun DrawerUnreadBadge(
+        count: Int,
+        modifier: Modifier = Modifier
+    ) {
+        if (count <= 0) return
+
+        val label = if (count > 99) "99+" else count.toString()
+
+        Surface(
+            modifier = modifier,
+            shape = CircleShape,
+            color = Color(0xFF25D366),
+            shadowElevation = 4.dp,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.55f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+
     // 🔐 בדיקת אדמין שקטה (לא "נתקעים" על false אם uid היה null בזמן הבנייה)
     val auth = remember { FirebaseAuth.getInstance() }
     var authUid by remember { mutableStateOf(auth.currentUser?.uid) }
@@ -218,6 +352,57 @@ fun AppDrawerContent(
         }
         auth.addAuthStateListener(listener)
         onDispose { auth.removeAuthStateListener(listener) }
+    }
+
+    DisposableEffect(drawerBranch, authUid) {
+        if (drawerBranch.isBlank()) {
+            forumUnreadCount = 0
+            onDispose { }
+        } else {
+            val lastReadMillis = userSp.getLong(forumLastReadKey(drawerBranch), 0L)
+
+            if (lastReadMillis <= 0L) {
+                forumUnreadCount = 0
+                onDispose { }
+            } else {
+                val registration = Firebase.firestore
+                    .collection("branches")
+                    .document(drawerBranch)
+                    .collection("messages")
+                    .whereGreaterThan("createdAt", Timestamp(java.util.Date(lastReadMillis)))
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .limit(FORUM_UNREAD_LIMIT)
+                    .addSnapshotListener { snap, error ->
+                        if (error != null) {
+                            Log.e(
+                                "KMI_FORUM_UNREAD",
+                                "Failed listening unread forum messages branch=$drawerBranch",
+                                error
+                            )
+                            forumUnreadCount = 0
+                            return@addSnapshotListener
+                        }
+
+                        val currentUid = auth.currentUser?.uid ?: authUid
+
+                        forumUnreadCount = snap?.documents
+                            ?.count { doc ->
+                                val authorUid = doc.getString("authorUid")
+                                authorUid.isNullOrBlank() || authorUid != currentUid
+                            }
+                            ?: 0
+
+                        Log.e(
+                            "KMI_FORUM_UNREAD",
+                            "unread=$forumUnreadCount branch=$drawerBranch lastRead=$lastReadMillis"
+                        )
+                    }
+
+                onDispose {
+                    registration.remove()
+                }
+            }
+        }
     }
 
     var resolvedIsAdmin by remember { mutableStateOf<Boolean?>(null) }
@@ -268,24 +453,32 @@ fun AppDrawerContent(
             @Composable
             fun DrawerLineItemHe(
                 leading: (@Composable (() -> Unit))? = null,
+                trailing: (@Composable (() -> Unit))? = null,
                 title: String,
                 subtitle: String? = null,
                 onClick: () -> Unit,
                 twoLineTitle: Boolean = false,
                 titleTextStyle: TextStyle = MaterialTheme.typography
-                    .titleMedium.copy(color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    .titleMedium.copy(
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp,
+                        lineHeight = 19.sp
+                    )
             ) {
+                val autoIcon = drawerIconForTitle(title)
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp) // שימוש ב-horizontal במקום start/end קשיח
+                        .padding(start = 16.dp, end = 16.dp)
                         .clickable(onClick = onClick)
-                        .padding(vertical = 10.dp)
+                        .padding(vertical = 8.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                            .padding(horizontal = 4.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(
@@ -296,9 +489,10 @@ fun AppDrawerContent(
                             Text(
                                 text = title,
                                 style = titleTextStyle,
-                                maxLines = if (twoLineTitle) 2 else 1,
-                                softWrap = twoLineTitle,
+                                maxLines = 2,
+                                softWrap = true,
                                 textAlign = TextAlign.Start,
+                                overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -306,10 +500,14 @@ fun AppDrawerContent(
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     text = subtitle,
-                                    maxLines = 1,
+                                    maxLines = 2,
+                                    softWrap = true,
                                     overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodySmall.copy(
-                                        color = Color.White.copy(alpha = 0.72f)
+                                        color = Color.White.copy(alpha = 0.72f),
+                                        fontSize = 13.sp,
+                                        lineHeight = 16.sp,
+                                        fontWeight = FontWeight.SemiBold
                                     ),
                                     textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth()
@@ -317,8 +515,17 @@ fun AppDrawerContent(
                             }
                         }
 
-                        if (leading != null) {
-                            Box(Modifier.padding(start = 10.dp)) { leading() }
+                        if (trailing != null) {
+                            Spacer(Modifier.width(8.dp))
+                            trailing()
+                        }
+
+                        if (leading != null || autoIcon != null) {
+                            Spacer(Modifier.width(8.dp))
+                            DrawerMenuIconBubble(
+                                icon = autoIcon,
+                                content = leading
+                            )
                         }
                     }
 
@@ -332,28 +539,40 @@ fun AppDrawerContent(
             @Composable
             fun DrawerLineItemEn(
                 leading: (@Composable (() -> Unit))? = null,
+                trailing: (@Composable (() -> Unit))? = null,
                 title: String,
                 subtitle: String? = null,
                 onClick: () -> Unit,
                 twoLineTitle: Boolean = false,
                 titleTextStyle: TextStyle = MaterialTheme.typography
-                    .titleMedium.copy(color = Color.White, fontWeight = FontWeight.ExtraBold)
+                    .titleMedium.copy(
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp,
+                        lineHeight = 19.sp
+                    )
             ) {
+                val autoIcon = drawerIconForTitle(title)
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 8.dp, end = 42.dp)
+                        .padding(start = 8.dp, end = 16.dp)
                         .clickable(onClick = onClick)
-                        .padding(vertical = 10.dp)
+                        .padding(vertical = 8.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                            .padding(horizontal = 4.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (leading != null) {
-                            Box(Modifier.padding(end = 10.dp)) { leading() }
+                        if (leading != null || autoIcon != null) {
+                            DrawerMenuIconBubble(
+                                icon = autoIcon,
+                                content = leading
+                            )
+                            Spacer(Modifier.width(8.dp))
                         }
 
                         Column(
@@ -364,9 +583,10 @@ fun AppDrawerContent(
                             Text(
                                 text = title,
                                 style = titleTextStyle,
-                                maxLines = if (twoLineTitle) 2 else 1,
-                                softWrap = twoLineTitle,
+                                maxLines = 2,
+                                softWrap = true,
                                 textAlign = TextAlign.Start,
+                                overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -374,15 +594,24 @@ fun AppDrawerContent(
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     text = subtitle,
-                                    maxLines = 1,
+                                    maxLines = 2,
+                                    softWrap = true,
                                     overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodySmall.copy(
-                                        color = Color.White.copy(alpha = 0.72f)
+                                        color = Color.White.copy(alpha = 0.72f),
+                                        fontSize = 13.sp,
+                                        lineHeight = 16.sp,
+                                        fontWeight = FontWeight.SemiBold
                                     ),
                                     textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
+                        }
+
+                        if (trailing != null) {
+                            Spacer(Modifier.width(8.dp))
+                            trailing()
                         }
                     }
 
@@ -922,6 +1151,9 @@ fun AppDrawerContent(
                         if (isEnglish) {
                             DrawerLineItemEn(
                                 title = "Branch Forum",
+                                trailing = {
+                                    DrawerUnreadBadge(forumUnreadCount)
+                                },
                                 onClick = {
                                     onClose()
                                     onOpenForum()
@@ -930,6 +1162,9 @@ fun AppDrawerContent(
                         } else {
                             DrawerLineItemHe(
                                 title = "פורום הסניף",
+                                trailing = {
+                                    DrawerUnreadBadge(forumUnreadCount)
+                                },
                                 onClick = {
                                     onClose()
                                     onOpenForum()

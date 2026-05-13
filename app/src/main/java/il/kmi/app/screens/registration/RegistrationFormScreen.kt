@@ -1055,8 +1055,9 @@ fun RegistrationFormScreen(
             Spacer(Modifier.height(8.dp))
 
             // טאבים חיצוניים
-            RegistrationTabs(
+            RegistrationTabsBilingual(
                 selectedTab = selectedTab,
+                isEnglish = isEnglish,
                 onTabSelected = { newTab ->
                     // ✅ ADMIN או Super Tester יכולים לבחור חופשי
                     if (isAdmin || isSuperTester) {
@@ -1065,7 +1066,7 @@ fun RegistrationFormScreen(
                             REGISTRATION_LOG,
                             "role tab manually selected by elevated user newTab=$newTab isAdmin=$isAdmin isSuperTester=$isSuperTester"
                         )
-                        return@RegistrationTabs
+                        return@RegistrationTabsBilingual
                     }
 
                     when {
@@ -1093,6 +1094,7 @@ fun RegistrationFormScreen(
 // כל התוכן עבר לפה:
             RegistrationFormContent(
                 isCoach = isCoach,
+                isEnglish = isEnglish,
                 isGoogleAuth = isGoogleAuth,
                 fullName = fullName,
                 onFullNameChange = {
@@ -1211,10 +1213,17 @@ fun RegistrationFormScreen(
 
             if (!acceptedTerms && termsError) {
                 Text(
-                    "חובה לאשר תנאי שימוש ומדיניות פרטיות",
+                    text = if (isEnglish) {
+                        "You must accept the Terms of Use and Privacy Policy"
+                    } else {
+                        "חובה לאשר תנאי שימוש ומדיניות פרטיות"
+                    },
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                 )
             }
         }
@@ -1266,3 +1275,97 @@ fun RegistrationFormScreen(
     }
 }
 
+@Composable
+private fun RegistrationTabsBilingual(
+    selectedTab: Int,
+    isEnglish: Boolean,
+    onTabSelected: (Int) -> Unit
+) {
+    val traineeLabel = if (isEnglish) "Trainee" else "מתאמן"
+    val coachLabel = if (isEnglish) "Coach" else "מאמן"
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(0.dp),
+        color = Color(0xFF6D4FE8).copy(alpha = 0.96f),
+        tonalElevation = 0.dp,
+        shadowElevation = 4.dp
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RegistrationRoleTabButton(
+                    text = traineeLabel,
+                    selected = selectedTab == 0,
+                    onClick = { onTabSelected(0) },
+                    modifier = Modifier.weight(1f)
+                )
+
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(28.dp)
+                        .background(Color.White.copy(alpha = 0.45f))
+                )
+
+                RegistrationRoleTabButton(
+                    text = coachLabel,
+                    selected = selectedTab == 1,
+                    onClick = { onTabSelected(1) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RegistrationRoleTabButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .clickable { onClick() }
+            .background(
+                if (selected) {
+                    Color.White.copy(alpha = 0.14f)
+                } else {
+                    Color.Transparent
+                }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 15.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(0.72f)
+                    .height(3.dp)
+                    .background(
+                        color = Color.White,
+                        shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                    )
+            )
+        }
+    }
+}

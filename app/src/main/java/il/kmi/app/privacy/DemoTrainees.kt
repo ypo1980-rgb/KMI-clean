@@ -5,13 +5,17 @@ import il.kmi.shared.domain.Belt
 data class DemoTrainee(
     val id: String,
     val name: String,
+    val nameEn: String,
     val age: Int,
     val belt: Belt,
     val branch: String,
     val yearsTraining: Int,
     val beltProgressPercent: Int,
     val attendancePercent: Int
-)
+) {
+    fun displayName(isEnglish: Boolean): String =
+        if (isEnglish) nameEn else name
+}
 
 object DemoTrainees {
 
@@ -19,7 +23,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t1",
-            name = "מתאמן 1",
+            name = "איתי כהן",
+            nameEn = "Itay Cohen",
             age = 14,
             belt = Belt.YELLOW,
             branch = "אופק",
@@ -30,7 +35,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t2",
-            name = "מתאמן 2",
+            name = "נועם לוי",
+            nameEn = "Noam Levi",
             age = 16,
             belt = Belt.ORANGE,
             branch = "אופק",
@@ -41,7 +47,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t3",
-            name = "מתאמן 3",
+            name = "אורי מזרחי",
+            nameEn = "Ori Mizrahi",
             age = 18,
             belt = Belt.GREEN,
             branch = "סוקולוב",
@@ -52,7 +59,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t4",
-            name = "מתאמן 4",
+            name = "דניאל פרץ",
+            nameEn = "Daniel Peretz",
             age = 22,
             belt = Belt.BLUE,
             branch = "סוקולוב",
@@ -63,7 +71,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t5",
-            name = "מתאמן 5",
+            name = "עידו אברהם",
+            nameEn = "Ido Avraham",
             age = 19,
             belt = Belt.ORANGE,
             branch = "אופק",
@@ -74,7 +83,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t6",
-            name = "מתאמן 6",
+            name = "רועי בן דוד",
+            nameEn = "Roy Ben David",
             age = 24,
             belt = Belt.GREEN,
             branch = "סוקולוב",
@@ -85,7 +95,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t7",
-            name = "מתאמן 7",
+            name = "יונתן ביטון",
+            nameEn = "Yonatan Biton",
             age = 17,
             belt = Belt.YELLOW,
             branch = "אופק",
@@ -96,7 +107,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t8",
-            name = "מתאמן 8",
+            name = "עומר מלכה",
+            nameEn = "Omer Malka",
             age = 21,
             belt = Belt.BLUE,
             branch = "סוקולוב",
@@ -107,7 +119,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t9",
-            name = "מתאמן 9",
+            name = "אדם ישראלי",
+            nameEn = "Adam Israeli",
             age = 15,
             belt = Belt.YELLOW,
             branch = "אופק",
@@ -118,7 +131,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t10",
-            name = "מתאמן 10",
+            name = "אלון גולן",
+            nameEn = "Alon Golan",
             age = 26,
             belt = Belt.BROWN,
             branch = "סוקולוב",
@@ -129,7 +143,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t11",
-            name = "מתאמן 11",
+            name = "תומר אזולאי",
+            nameEn = "Tomer Azulay",
             age = 20,
             belt = Belt.GREEN,
             branch = "אופק",
@@ -140,7 +155,8 @@ object DemoTrainees {
 
         DemoTrainee(
             id = "t12",
-            name = "מתאמן 12",
+            name = "אריאל הרשקו",
+            nameEn = "Ariel Hershko",
             age = 28,
             belt = Belt.BLACK,
             branch = "סוקולוב",

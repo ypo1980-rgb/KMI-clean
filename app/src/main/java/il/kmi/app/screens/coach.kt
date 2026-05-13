@@ -77,6 +77,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
@@ -86,6 +87,18 @@ data class CoachDateEntry(
     val date: String = "",
     val description: String = ""
 )
+
+private fun nextCoachDateItemName(
+    sectionTitle: String,
+    index: Int
+): String {
+    return when (sectionTitle) {
+        "השתלמויות" -> "השתלמות $index"
+        "מחנות אימונים" -> "מחנה אימונים $index"
+        "הסמכות" -> "הסמכה $index"
+        else -> "פריט $index"
+    }
+}
 
 data class TraineeProfile(
     val id: String,
@@ -130,6 +143,87 @@ private fun beltColorForStats(belt: String): Color {
         normalized.contains("חומ") -> Color(0xFF8B5A2B)
         normalized.contains("שחור") -> Color(0xFF111111)
         else -> Color(0xFF7C3AED)
+    }
+}
+
+private fun coachTr(isEnglish: Boolean, he: String, en: String): String =
+    if (isEnglish) en else he
+
+private fun coachTextAlign(isEnglish: Boolean): TextAlign =
+    if (isEnglish) TextAlign.Left else TextAlign.Right
+
+private fun coachHorizontalAlignment(isEnglish: Boolean): Alignment.Horizontal =
+    if (isEnglish) Alignment.Start else Alignment.End
+
+private fun coachBeltNameForUi(
+    beltName: String,
+    isEnglish: Boolean
+): String {
+    if (!isEnglish) return beltName
+
+    return when (beltName.trim()) {
+        "לבנה" -> "White"
+        "צהובה" -> "Yellow"
+        "כתומה" -> "Orange"
+        "ירוקה" -> "Green"
+        "כחולה" -> "Blue"
+        "חומה" -> "Brown"
+        "שחורה" -> "Black"
+        "ללא דרגה" -> "No rank"
+        "חגורה לבנה" -> "White"
+        "חגורה צהובה" -> "Yellow"
+        "חגורה כתומה" -> "Orange"
+        "חגורה ירוקה" -> "Green"
+        "חגורה כחולה" -> "Blue"
+        "חגורה חומה" -> "Brown"
+        "חגורה שחורה" -> "Black"
+        else -> beltName
+    }
+}
+
+private fun coachSectionTitleForUi(
+    title: String,
+    isEnglish: Boolean
+): String {
+    return when (title) {
+        "השתלמויות" -> coachTr(isEnglish, "השתלמויות", "Seminars")
+        "מחנות אימונים" -> coachTr(isEnglish, "מחנות אימונים", "Training camps")
+        "הסמכות" -> coachTr(isEnglish, "הסמכות", "Certifications")
+        else -> title
+    }
+}
+
+private fun coachDateItemNameForUi(
+    itemName: String,
+    isEnglish: Boolean
+): String {
+    if (!isEnglish) return itemName
+
+    val number = Regex("""\d+""").find(itemName)?.value.orEmpty()
+
+    return when {
+        itemName.startsWith("השתלמות") -> "Seminar $number"
+        itemName.startsWith("מחנה אימונים") -> "Training camp $number"
+        itemName.startsWith("הסמכה") -> "Certification $number"
+        else -> itemName
+    }
+}
+
+private fun coachDateSectionIcon(title: String): String {
+    return when (title) {
+        "השתלמויות" -> "🎓"
+        "מחנות אימונים" -> "👥"
+        "הסמכות" -> "🏅"
+        else -> "⌄"
+    }
+}
+
+private fun coachDateSectionAccent(title: String): Color {
+    return when (title) {
+        "השתלמויות" -> Color(0xFF7C3AED)
+        "מחנות אימונים" -> Color(0xFF2563EB)
+        "הסמכות" -> Color(0xFF0891B2)
+        else -> Color(0xFF6D56B8)
     }
 }
 
@@ -183,6 +277,11 @@ fun CoachTraineesScreen(
 
     val sp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
     val role = sp.getString("user_role", "trainee").orEmpty()
+
+    val langManager = remember(ctx) { AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val screenTextAlign = coachTextAlign(isEnglish)
+    val screenHorizontalAlignment = coachHorizontalAlignment(isEnglish)
 
     // --- branch / groupKey שנעשה בהם שימוש בפועל ---
     var effectiveBranch by remember { mutableStateOf(branch) }
@@ -595,7 +694,7 @@ fun CoachTraineesScreen(
                 val langManager = remember { AppLanguageManager(contextLang) }
 
                 KmiTopBar(
-                    title = "רשימת המתאמנים",
+                    title = coachTr(isEnglish, "רשימת המתאמנים", "Trainees list"),
                     onOpenDrawer = onOpenDrawer,
                     onHome = onOpenHome,
                     showTopHome = false,
@@ -626,7 +725,12 @@ fun CoachTraineesScreen(
                     .background(backgroundBrush),
                 contentAlignment = Alignment.Center
             ) {
-                Text("המסך זמין למאמנים בלבד", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = coachTr(isEnglish, "המסך זמין למאמנים בלבד", "This screen is available for coaches only"),
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                    color = Color.White
+                )
             }
         }
         return
@@ -640,9 +744,11 @@ fun CoachTraineesScreen(
                 val demo = DemoTrainees.trainees.getOrNull(index)
 
                 trainee.copy(
-                    fullName = demo?.name ?: "מתאמן ${index + 1}",
-                    belt = demo?.belt?.heb ?: trainee.belt,
-                    seniority = demo?.yearsTraining?.let { "$it שנים" } ?: trainee.seniority,
+                    fullName = demo?.name ?: coachTr(isEnglish, "מתאמן ${index + 1}", "Trainee ${index + 1}"),
+                    belt = demo?.belt?.let { if (isEnglish) it.en else it.heb } ?: trainee.belt,
+                    seniority = demo?.yearsTraining?.let {
+                        coachTr(isEnglish, "$it שנים", "$it years")
+                    } ?: trainee.seniority,
                     age = demo?.age ?: trainee.age,
                     attendancePct = demo?.attendancePercent ?: trainee.attendancePct
                 )
@@ -682,6 +788,8 @@ fun CoachTraineesScreen(
             .mapValues { it.value.trim() }
             .filterValues { it.isNotBlank() }
 
+        if (cleanedDates.isEmpty()) return
+
         val userDocs = Firebase.firestore.collection("users")
             .whereEqualTo("role", "trainee")
             .whereIn(
@@ -702,9 +810,13 @@ fun CoachTraineesScreen(
             }
 
         if (targetDoc != null) {
+            val updates = cleanedDates.entries.associate { (beltName, dateValue) ->
+                "beltAwardDates.$beltName" to dateValue
+            }
+
             Firebase.firestore.collection("users")
                 .document(targetDoc.id)
-                .update("beltAwardDates", cleanedDates)
+                .update(updates)
                 .await()
         }
     }
@@ -726,6 +838,8 @@ fun CoachTraineesScreen(
                         value["description"].orEmpty().isNotBlank()
             }
 
+        if (cleanedEntries.isEmpty()) return
+
         val userDocs = Firebase.firestore.collection("users")
             .whereEqualTo("role", "trainee")
             .whereIn(
@@ -746,9 +860,13 @@ fun CoachTraineesScreen(
             }
 
         if (targetDoc != null) {
+            val updates = cleanedEntries.entries.associate { (itemName, value) ->
+                "$firestoreFieldName.$itemName" to value
+            }
+
             Firebase.firestore.collection("users")
                 .document(targetDoc.id)
-                .update(firestoreFieldName, cleanedEntries)
+                .update(updates)
                 .await()
         }
     }
@@ -785,7 +903,11 @@ fun CoachTraineesScreen(
             val langManager = remember { AppLanguageManager(contextLang) }
 
             KmiTopBar(
-                title = if (showStatsSheet) "סטטיסטיקת קבוצה" else "רשימת המתאמנים",
+                title = if (showStatsSheet) {
+                    coachTr(isEnglish, "סטטיסטיקת קבוצה", "Group statistics")
+                } else {
+                    coachTr(isEnglish, "רשימת המתאמנים", "Trainees list")
+                },
                 onOpenDrawer = onOpenDrawer,
                 onHome = onOpenHome,
                 showTopHome = false,
@@ -897,7 +1019,7 @@ fun CoachTraineesScreen(
                                     Spacer(Modifier.width(8.dp))
 
                                     Text(
-                                        text = "סטטיסטיקה לקבוצה",
+                                        text = coachTr(isEnglish, "סטטיסטיקה לקבוצה", "Group statistics"),
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White,
                                         style = MaterialTheme.typography.titleMedium
@@ -978,9 +1100,15 @@ fun CoachTraineesScreen(
                                                     )
 
                                                     val metaLine = buildList {
-                                                        if (trainee.belt.isNotBlank()) add(trainee.belt)
-                                                        if (trainee.branch.isNotBlank()) add("סניף: ${trainee.branch}")
-                                                        if (trainee.groupKey.isNotBlank()) add("קבוצה: ${trainee.groupKey}")
+                                                        if (trainee.belt.isNotBlank()) {
+                                                            add(coachBeltNameForUi(trainee.belt, isEnglish))
+                                                        }
+                                                        if (trainee.branch.isNotBlank()) {
+                                                            add(coachTr(isEnglish, "סניף: ${trainee.branch}", "Branch: ${trainee.branch}"))
+                                                        }
+                                                        if (trainee.groupKey.isNotBlank()) {
+                                                            add(coachTr(isEnglish, "קבוצה: ${trainee.groupKey}", "Group: ${trainee.groupKey}"))
+                                                        }
                                                     }.joinToString(" • ")
 
                                                     if (metaLine.isNotBlank()) {
@@ -1018,7 +1146,7 @@ fun CoachTraineesScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        "בחר מתאמן מהרשימה למעלה",
+                                        coachTr(isEnglish, "בחר מתאמן מהרשימה למעלה", "Select a trainee from the list above"),
                                         color = Color(0xFF757575),
                                         style = MaterialTheme.typography.bodyMedium
                                     )
@@ -1036,28 +1164,28 @@ fun CoachTraineesScreen(
                                 color = Color(0xFF212121)
                             )
                             Divider()
-                            LabeledField(
-                                "גיל",
-                                if (selected.age > 0) "${selected.age}" else "—"
-                            )
-                            LabeledField(
-                                "ותק",
-                                selected.seniority.ifBlank { "—" }
-                            )
-                            LabeledField(
-                                "דרגה",
-                                selected.belt.ifBlank { "—" }
-                            )
-                            LabeledField(
-                                "סניף",
-                                selected.branch.ifBlank { "—" }
-                            )
-                            LabeledField(
-                                "קבוצה",
-                                selected.groupKey.ifBlank { "—" }
-                            )
                                     LabeledField(
-                                        "אחוז נוכחות (60 ימים אחרונים)",
+                                        coachTr(isEnglish, "גיל", "Age"),
+                                        if (selected.age > 0) "${selected.age}" else "—"
+                                    )
+                                    LabeledField(
+                                        coachTr(isEnglish, "ותק", "Seniority"),
+                                        selected.seniority.ifBlank { "—" }
+                                    )
+                                    LabeledField(
+                                        coachTr(isEnglish, "דרגה", "Rank"),
+                                        coachBeltNameForUi(selected.belt.ifBlank { "—" }, isEnglish)
+                                    )
+                                    LabeledField(
+                                        coachTr(isEnglish, "סניף", "Branch"),
+                                        selected.branch.ifBlank { "—" }
+                                    )
+                                    LabeledField(
+                                        coachTr(isEnglish, "קבוצה", "Group"),
+                                        selected.groupKey.ifBlank { "—" }
+                                    )
+                                    LabeledField(
+                                        coachTr(isEnglish, "אחוז נוכחות (60 ימים אחרונים)", "Attendance rate — last 60 days"),
                                         if (selected.attendancePct > 0) "${selected.attendancePct}%" else "—"
                                     )
 
@@ -1071,17 +1199,18 @@ fun CoachTraineesScreen(
                                             mutableStateOf(false)
                                         }
 
-                                            PremiumCoachCompactSectionHeader(
-                                                title = "תאריכי קבלת חגורות",
-                                                subtitle = if (isBeltDatesSectionExpanded) {
-                                                    "עדכון תאריכים לפי חגורה"
-                                                } else {
-                                                    "לחצו לפתיחת רשימת החגורות"
-                                                },
-                                                iconText = "📅",
-                                                isExpanded = isBeltDatesSectionExpanded,
-                                                accent = Color(0xFF6D56B8),
-                                                onClick = {
+                                        PremiumCoachCompactSectionHeader(
+                                            title = coachTr(isEnglish, "תאריכי קבלת חגורות", "Belt award dates"),
+                                            subtitle = if (isBeltDatesSectionExpanded) {
+                                                coachTr(isEnglish, "עדכון תאריכים לפי חגורה", "Update dates by belt")
+                                            } else {
+                                                coachTr(isEnglish, "לחצו לפתיחת רשימת החגורות", "Tap to open the belt list")
+                                            },
+                                            iconText = "📅",
+                                            isExpanded = isBeltDatesSectionExpanded,
+                                            accent = Color(0xFF6D56B8),
+                                            isEnglish = isEnglish,
+                                            onClick = {
                                                     isBeltDatesSectionExpanded = !isBeltDatesSectionExpanded
                                                 }
                                             )
@@ -1152,7 +1281,11 @@ fun CoachTraineesScreen(
                                                                 verticalArrangement = Arrangement.spacedBy(2.dp)
                                                             ) {
                                                                 Text(
-                                                                    text = "חגורה $beltName",
+                                                                    text = if (isEnglish) {
+                                                                        coachBeltNameForUi(beltName, true)
+                                                                    } else {
+                                                                        "חגורה $beltName"
+                                                                    },
                                                                     style = MaterialTheme.typography.titleSmall,
                                                                     fontWeight = FontWeight.Bold,
                                                                     color = Color(0xFF1F2937)
@@ -1160,9 +1293,9 @@ fun CoachTraineesScreen(
 
                                                                 Text(
                                                                     text = if (hasDate) {
-                                                                        "תאריך קבלה: $currentDate"
+                                                                        coachTr(isEnglish, "תאריך קבלה: $currentDate", "Award date: $currentDate")
                                                                     } else {
-                                                                        "אין תאריך קבלה"
+                                                                        coachTr(isEnglish, "אין תאריך קבלה", "No award date")
                                                                     },
                                                                     style = MaterialTheme.typography.bodySmall,
                                                                     color = if (hasDate) Color(0xFF0F766E) else Color(0xFF94A3B8)
@@ -1195,7 +1328,7 @@ fun CoachTraineesScreen(
                                                                     current[beltName] = newValue
                                                                     beltAwardDatesState[selected.id] = current
                                                                 },
-                                                                label = { Text("תאריך קבלה") },
+                                                                label = { Text(coachTr(isEnglish, "תאריך קבלה", "Award date")) },
                                                                 placeholder = { Text("YYYY-MM-DD") },
                                                                 modifier = Modifier.fillMaxWidth(),
                                                                 singleLine = true,
@@ -1213,7 +1346,15 @@ fun CoachTraineesScreen(
                                                 onClick = {
                                                     val selectedProfile = selected
                                                     if (selectedProfile != null && !isSavingBeltDates) {
-                                                        val datesToSave = beltAwardDatesState[selectedProfile.id].orEmpty()
+                                                        val datesToSave = beltAwardDatesState[selectedProfile.id]
+                                                            .orEmpty()
+                                                            .filterValues { it.isNotBlank() }
+
+                                                        if (datesToSave.isEmpty()) {
+                                                            beltDatesSaveMessage = coachTr(isEnglish, "אין תאריכים לשמירה", "No dates to save")
+                                                            return@Surface
+                                                        }
+
                                                         screenScope.launch {
                                                             isSavingBeltDates = true
                                                             beltDatesSaveMessage = null
@@ -1224,9 +1365,9 @@ fun CoachTraineesScreen(
                                                                     dates = datesToSave
                                                                 )
                                                             }.onSuccess {
-                                                                beltDatesSaveMessage = "תאריכי החגורות נשמרו"
+                                                                beltDatesSaveMessage = coachTr(isEnglish, "תאריכי החגורות נשמרו", "Belt dates saved")
                                                             }.onFailure {
-                                                                beltDatesSaveMessage = "שמירת תאריכי החגורות נכשלה"
+                                                                beltDatesSaveMessage = coachTr(isEnglish, "שמירת תאריכי החגורות נכשלה", "Failed to save belt dates")
                                                             }
 
                                                             isSavingBeltDates = false
@@ -1255,7 +1396,11 @@ fun CoachTraineesScreen(
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     Text(
-                                                        text = if (isSavingBeltDates) "שומר..." else "שמור תאריכי חגורות",
+                                                        text = if (isSavingBeltDates) {
+                                                            coachTr(isEnglish, "שומר...", "Saving...")
+                                                        } else {
+                                                            coachTr(isEnglish, "שמור תאריכי חגורות", "Save belt dates")
+                                                        },
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.ExtraBold,
                                                         color = Color.White
@@ -1265,7 +1410,7 @@ fun CoachTraineesScreen(
 
                                                 beltDatesSaveMessage?.let { msg ->
                                                     Surface(
-                                                        color = if (msg.contains("נשמרו")) {
+                                                        color = if (msg.contains("נשמרו") || msg.contains("saved", ignoreCase = true)) {
                                                             Color(0xFFDCFCE7)
                                                         } else {
                                                             Color(0xFFFEE2E2)
@@ -1277,7 +1422,7 @@ fun CoachTraineesScreen(
                                                             text = msg,
                                                             style = MaterialTheme.typography.bodySmall,
                                                             fontWeight = FontWeight.Bold,
-                                                            color = if (msg.contains("נשמרו")) Color(0xFF166534) else Color(0xFF991B1B),
+                                                            color = if (msg.contains("נשמרו") || msg.contains("saved", ignoreCase = true)) Color(0xFF166534) else Color(0xFF991B1B),
                                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
                                                         )
                                                     }
@@ -1287,8 +1432,8 @@ fun CoachTraineesScreen(
 
                                     CoachDateSectionCard(
                                         title = "השתלמויות",
-                                        collapsedSubtitle = "לחצו לפתיחת רשימת השתלמויות",
-                                        expandedSubtitle = "הוסיפו תאריך ותיאור להשתלמויות שהמתאמן עבר",
+                                        collapsedSubtitle = coachTr(isEnglish, "לחצו לפתיחת רשימת השתלמויות", "Tap to open the seminar list"),
+                                        expandedSubtitle = coachTr(isEnglish, "הוסיפו תאריך ותיאור להשתלמויות שהמתאמן עבר", "Add a date and description for seminars completed by the trainee"),
                                         defaultItems = listOf(
                                             "השתלמות 1",
                                             "השתלמות 2",
@@ -1299,13 +1444,14 @@ fun CoachTraineesScreen(
                                         firestoreFieldName = "seminarDates",
                                         selectedProfile = selected,
                                         screenScope = screenScope,
+                                        isEnglish = isEnglish,
                                         onSave = ::saveCoachDateSectionForSelected
                                     )
 
                                     CoachDateSectionCard(
                                         title = "מחנות אימונים",
-                                        collapsedSubtitle = "לחצו לפתיחת רשימת מחנות אימונים",
-                                        expandedSubtitle = "הוסיפו תאריך ותיאור למחנות אימונים שבהם המתאמן השתתף",
+                                        collapsedSubtitle = coachTr(isEnglish, "לחצו לפתיחת רשימת מחנות אימונים", "Tap to open the training camp list"),
+                                        expandedSubtitle = coachTr(isEnglish, "הוסיפו תאריך ותיאור למחנות אימונים שבהם המתאמן השתתף", "Add a date and description for training camps attended by the trainee"),
                                         defaultItems = listOf(
                                             "מחנה אימונים 1",
                                             "מחנה אימונים 2",
@@ -1316,13 +1462,14 @@ fun CoachTraineesScreen(
                                         firestoreFieldName = "campDates",
                                         selectedProfile = selected,
                                         screenScope = screenScope,
+                                        isEnglish = isEnglish,
                                         onSave = ::saveCoachDateSectionForSelected
                                     )
 
                                     CoachDateSectionCard(
                                         title = "הסמכות",
-                                        collapsedSubtitle = "לחצו לפתיחת רשימת הסמכות",
-                                        expandedSubtitle = "הוסיפו תאריך ותיאור להסמכות שהמתאמן קיבל",
+                                        collapsedSubtitle = coachTr(isEnglish, "לחצו לפתיחת רשימת הסמכות", "Tap to open the certification list"),
+                                        expandedSubtitle = coachTr(isEnglish, "הוסיפו תאריך ותיאור להסמכות שהמתאמן קיבל", "Add a date and description for certifications received by the trainee"),
                                         defaultItems = listOf(
                                             "הסמכה 1",
                                             "הסמכה 2",
@@ -1333,13 +1480,14 @@ fun CoachTraineesScreen(
                                         firestoreFieldName = "certificationDates",
                                         selectedProfile = selected,
                                         screenScope = screenScope,
+                                        isEnglish = isEnglish,
                                         onSave = ::saveCoachDateSectionForSelected
                                     )
 
                                     OutlinedTextField(
                                         value = coachNotes[selected.id] ?: "",
                                         onValueChange = { coachNotes[selected.id] = it },
-                                        label = { Text("הערות מאמן") },
+                                        label = { Text(coachTr(isEnglish, "הערות מאמן", "Coach notes")) },
                                         modifier = Modifier.fillMaxWidth(),
                                         minLines = 3
                                     )
@@ -1354,6 +1502,7 @@ fun CoachTraineesScreen(
                 CoachGroupStatsPremiumScreen(
                     stats = groupStats,
                     profiles = uiProfiles,
+                    isEnglish = isEnglish,
                     onClose = { showStatsSheet = false }
                 )
             }
@@ -1368,6 +1517,7 @@ private fun PremiumCoachCompactSectionHeader(
     iconText: String,
     isExpanded: Boolean,
     accent: Color,
+    isEnglish: Boolean,
     onClick: () -> Unit
 ) {
     Surface(
@@ -1382,7 +1532,7 @@ private fun PremiumCoachCompactSectionHeader(
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 102.dp)
+            .heightIn(min = 88.dp)
     ) {
         Row(
             modifier = Modifier
@@ -1423,17 +1573,18 @@ private fun PremiumCoachCompactSectionHeader(
 
             Column(
                 modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.End,
+                horizontalAlignment = coachHorizontalAlignment(isEnglish),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Text(
                     text = title,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Right,
-                    maxLines = 1,
+                    textAlign = coachTextAlign(isEnglish),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 18.sp,
-                        lineHeight = 21.sp,
+                        fontSize = 16.sp,
+                        lineHeight = 18.sp,
                         fontWeight = FontWeight.Black,
                         color = Color(0xFF0F172A)
                     )
@@ -1442,11 +1593,12 @@ private fun PremiumCoachCompactSectionHeader(
                 Text(
                     text = subtitle,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Right,
-                    maxLines = 2,
+                    textAlign = coachTextAlign(isEnglish),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 11.sp,
-                        lineHeight = 14.sp,
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFF7A879A)
                     )
@@ -1480,6 +1632,7 @@ private fun CoachDateSectionCard(
     firestoreFieldName: String,
     selectedProfile: TraineeProfile,
     screenScope: kotlinx.coroutines.CoroutineScope,
+    isEnglish: Boolean,
     onSave: suspend (
         selectedProfile: TraineeProfile,
         firestoreFieldName: String,
@@ -1493,37 +1646,51 @@ private fun CoachDateSectionCard(
 
     val selectedEntries = stateMap[selectedId].orEmpty()
 
+    val dynamicItems = remember(selectedEntries, defaultItems, title) {
+        val mergedItems = (defaultItems + selectedEntries.keys)
+            .distinct()
+            .toMutableList()
+
+        val lastItemName = mergedItems.lastOrNull()
+        val lastEntry = lastItemName?.let { selectedEntries[it] }
+
+        val shouldAddNextRow =
+            lastItemName != null &&
+                    lastEntry != null &&
+                    (
+                            lastEntry.date.isNotBlank() ||
+                                    lastEntry.description.isNotBlank()
+                            )
+
+        if (shouldAddNextRow) {
+            mergedItems += nextCoachDateItemName(title, mergedItems.size + 1)
+        }
+
+        mergedItems
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        val sectionIcon = when (title) {
-            "השתלמויות" -> "🎓"
-            "מחנות אימונים" -> "👥"
-            "הסמכות" -> "🏅"
-            else -> "⌄"
-        }
-
-            val sectionAccent = when (title) {
-                "השתלמויות" -> Color(0xFF7C3AED)
-                "מחנות אימונים" -> Color(0xFF2563EB)
-                "הסמכות" -> Color(0xFF0891B2)
-                else -> Color(0xFF6D56B8)
-            }
+        val sectionIcon = coachDateSectionIcon(title)
+        val sectionAccent = coachDateSectionAccent(title)
+        val sectionTitleUi = coachSectionTitleForUi(title, isEnglish)
 
             PremiumCoachCompactSectionHeader(
-                title = title,
+                title = sectionTitleUi,
                 subtitle = if (isExpanded) expandedSubtitle else collapsedSubtitle,
                 iconText = sectionIcon,
                 isExpanded = isExpanded,
                 accent = sectionAccent,
+                isEnglish = isEnglish,
                 onClick = {
                     isExpanded = !isExpanded
                 }
             )
 
             if (isExpanded) {
-                defaultItems.forEach { itemName ->
+                dynamicItems.forEach { itemName ->
                     val currentEntry = selectedEntries[itemName] ?: CoachDateEntry()
                     val hasContent =
                         currentEntry.date.isNotBlank() ||
@@ -1570,7 +1737,7 @@ private fun CoachDateSectionCard(
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     Text(
-                                        text = itemName,
+                                        text = coachDateItemNameForUi(itemName, isEnglish),
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF1F2937)
@@ -1580,15 +1747,23 @@ private fun CoachDateSectionCard(
                                         text = when {
                                             currentEntry.date.isNotBlank() &&
                                                     currentEntry.description.isNotBlank() ->
-                                                "תאריך: ${currentEntry.date} • ${currentEntry.description}"
+                                                coachTr(
+                                                    isEnglish,
+                                                    "תאריך: ${currentEntry.date} • ${currentEntry.description}",
+                                                    "Date: ${currentEntry.date} • ${currentEntry.description}"
+                                                )
 
                                             currentEntry.date.isNotBlank() ->
-                                                "תאריך: ${currentEntry.date}"
+                                                coachTr(
+                                                    isEnglish,
+                                                    "תאריך: ${currentEntry.date}",
+                                                    "Date: ${currentEntry.date}"
+                                                )
 
                                             currentEntry.description.isNotBlank() ->
                                                 currentEntry.description
 
-                                            else -> "אין מידע"
+                                            else -> coachTr(isEnglish, "אין מידע", "No information")
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (hasContent) Color(0xFF0F766E) else Color(0xFF94A3B8)
@@ -1626,7 +1801,7 @@ private fun CoachDateSectionCard(
                                         current[itemName] = oldEntry.copy(date = newValue)
                                         stateMap[selectedId] = current
                                     },
-                                    label = { Text("תאריך") },
+                                    label = { Text(coachTr(isEnglish, "תאריך", "Date")) },
                                     placeholder = { Text("YYYY-MM-DD") },
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true,
@@ -1644,8 +1819,16 @@ private fun CoachDateSectionCard(
                                         current[itemName] = oldEntry.copy(description = newValue)
                                         stateMap[selectedId] = current
                                     },
-                                    label = { Text("תיאור") },
-                                    placeholder = { Text("לדוגמה: השתלמות מדריכים / מחנה קיץ / הסמכת עוזר מדריך") },
+                                    label = { Text(coachTr(isEnglish, "תיאור", "Description")) },
+                                    placeholder = {
+                                        Text(
+                                            coachTr(
+                                                isEnglish,
+                                                "לדוגמה: השתלמות מדריכים / מחנה קיץ / הסמכת עוזר מדריך",
+                                                "Example: instructor seminar / summer camp / assistant instructor certification"
+                                            )
+                                        )
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                     minLines = 2,
                                     shape = RoundedCornerShape(16.dp)
@@ -1659,6 +1842,14 @@ private fun CoachDateSectionCard(
                     onClick = {
                         if (!isSaving) {
                             val entriesToSave = stateMap[selectedId].orEmpty()
+                                .filterValues { entry ->
+                                    entry.date.isNotBlank() || entry.description.isNotBlank()
+                                }
+
+                            if (entriesToSave.isEmpty()) {
+                                saveMessage = coachTr(isEnglish, "אין נתונים לשמירה", "No data to save")
+                                return@Surface
+                            }
 
                             screenScope.launch {
                                 isSaving = true
@@ -1671,9 +1862,17 @@ private fun CoachDateSectionCard(
                                         entriesToSave
                                     )
                                 }.onSuccess {
-                                    saveMessage = "$title נשמרו"
+                                    saveMessage = coachTr(
+                                        isEnglish,
+                                        "${coachSectionTitleForUi(title, false)} נשמרו",
+                                        "${coachSectionTitleForUi(title, true)} saved"
+                                    )
                                 }.onFailure {
-                                    saveMessage = "שמירת $title נכשלה"
+                                    saveMessage = coachTr(
+                                        isEnglish,
+                                        "שמירת ${coachSectionTitleForUi(title, false)} נכשלה",
+                                        "Failed to save ${coachSectionTitleForUi(title, true)}"
+                                    )
                                 }
 
                                 isSaving = false
@@ -1702,7 +1901,15 @@ private fun CoachDateSectionCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = if (isSaving) "שומר..." else "שמור $title",
+                            text = if (isSaving) {
+                                coachTr(isEnglish, "שומר...", "Saving...")
+                            } else {
+                                coachTr(
+                                    isEnglish,
+                                    "שמור ${coachSectionTitleForUi(title, false)}",
+                                    "Save ${coachSectionTitleForUi(title, true)}"
+                                )
+                            },
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White
@@ -1712,7 +1919,7 @@ private fun CoachDateSectionCard(
 
                 saveMessage?.let { msg ->
                     Surface(
-                        color = if (msg.contains("נשמרו")) {
+                        color = if (msg.contains("נשמרו") || msg.contains("saved", ignoreCase = true)) {
                             Color(0xFFDCFCE7)
                         } else {
                             Color(0xFFFEE2E2)
@@ -1724,7 +1931,7 @@ private fun CoachDateSectionCard(
                             text = msg,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (msg.contains("נשמרו")) Color(0xFF166534) else Color(0xFF991B1B),
+                            color = if (msg.contains("נשמרו") || msg.contains("saved", ignoreCase = true)) Color(0xFF166534) else Color(0xFF991B1B),
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
                         )
                     }
@@ -1787,8 +1994,12 @@ private fun StatsInfoRow(label: String, value: String) {
 private fun CoachGroupStatsPremiumScreen(
     stats: GroupStatsUi,
     profiles: List<TraineeProfile>,
+    isEnglish: Boolean,
     onClose: () -> Unit
 ) {
+    val statsTextAlign = coachTextAlign(isEnglish)
+    val statsHorizontalAlignment = coachHorizontalAlignment(isEnglish)
+
     val statsAccent = Color(0xFF4F46E5)
     val glassTop = Color.White.copy(alpha = 0.72f)
     val glassBottom = Color.White.copy(alpha = 0.38f)
@@ -1903,12 +2114,12 @@ private fun CoachGroupStatsPremiumScreen(
                             ) {
                                 Column(
                                     modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.End
+                                    horizontalAlignment = statsHorizontalAlignment
                                 ) {
                                     Text(
-                                        text = "מידע על הקבוצה",
+                                        text = coachTr(isEnglish, "מידע על הקבוצה", "Group information"),
                                         modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Right,
+                                        textAlign = statsTextAlign,
                                         style = MaterialTheme.typography.titleLarge.copy(
                                             fontSize = 22.sp,
                                             lineHeight = 25.sp,
@@ -1918,9 +2129,13 @@ private fun CoachGroupStatsPremiumScreen(
                                     )
 
                                     Text(
-                                        text = "סיכום נוכחות, גיל, ותק וחגורות",
+                                        text = coachTr(
+                                            isEnglish,
+                                            "סיכום נוכחות, גיל, ותק וחגורות",
+                                            "Attendance, age, seniority and belt summary"
+                                        ),
                                         modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Right,
+                                        textAlign = statsTextAlign,
                                         style = MaterialTheme.typography.bodySmall.copy(
                                             fontSize = 12.sp,
                                             lineHeight = 15.sp,
@@ -1943,7 +2158,7 @@ private fun CoachGroupStatsPremiumScreen(
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
                                             imageVector = Icons.Default.Close,
-                                            contentDescription = "סגור",
+                                            contentDescription = coachTr(isEnglish, "סגור", "Close"),
                                             tint = Color(0xFF475569),
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -1979,7 +2194,7 @@ private fun CoachGroupStatsPremiumScreen(
                                                 )
                                             )
                                             .padding(horizontal = 12.dp, vertical = 12.dp),
-                                        horizontalAlignment = Alignment.End,
+                                        horizontalAlignment = statsHorizontalAlignment,
                                         verticalArrangement = Arrangement.Center
                                     ) {
                                         Row(
@@ -1989,7 +2204,7 @@ private fun CoachGroupStatsPremiumScreen(
                                         ) {
                                             Text(
                                                 text = stats.highAttendanceCount.toString(),
-                                                textAlign = TextAlign.Right,
+                                                textAlign = statsTextAlign,
                                                 maxLines = 1,
                                                 style = MaterialTheme.typography.headlineMedium.copy(
                                                     fontSize = 32.sp,
@@ -2009,9 +2224,9 @@ private fun CoachGroupStatsPremiumScreen(
                                         Spacer(Modifier.height(8.dp))
 
                                         Text(
-                                            text = "מעל 80%",
+                                            text = coachTr(isEnglish, "מעל 80%", "Above 80%"),
                                             modifier = Modifier.fillMaxWidth(),
-                                            textAlign = TextAlign.Right,
+                                            textAlign = statsTextAlign,
                                             maxLines = 1,
                                             style = MaterialTheme.typography.bodyMedium.copy(
                                                 fontSize = 14.sp,
@@ -2024,9 +2239,9 @@ private fun CoachGroupStatsPremiumScreen(
                                         Spacer(Modifier.height(2.dp))
 
                                         Text(
-                                            text = "נוכחות",
+                                            text = coachTr(isEnglish, "נוכחות", "Attendance"),
                                             modifier = Modifier.fillMaxWidth(),
-                                            textAlign = TextAlign.Right,
+                                            textAlign = statsTextAlign,
                                             maxLines = 1,
                                             style = MaterialTheme.typography.bodyMedium.copy(
                                                 fontSize = 14.sp,
@@ -2072,7 +2287,7 @@ private fun CoachGroupStatsPremiumScreen(
                                         Spacer(Modifier.height(6.dp))
 
                                         Text(
-                                            text = "נוכחות ממוצעת",
+                                            text = coachTr(isEnglish, "נוכחות ממוצעת", "Average attendance"),
                                             modifier = Modifier.fillMaxWidth(),
                                             textAlign = TextAlign.Center,
                                             maxLines = 1,
@@ -2101,7 +2316,7 @@ private fun CoachGroupStatsPremiumScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         PremiumStatChip(
-                            label = "גיל מינ׳",
+                            label = coachTr(isEnglish, "גיל מינ׳", "Min age"),
                             value = minAge,
                             icon = "📅",
                             gradient = listOf(
@@ -2109,11 +2324,12 @@ private fun CoachGroupStatsPremiumScreen(
                                 Color(0xFF3B82F6),
                                 Color(0xFF93C5FD)
                             ),
+                            isEnglish = isEnglish,
                             modifier = Modifier.weight(1f)
                         )
 
                         PremiumStatChip(
-                            label = "גיל מקס׳",
+                            label = coachTr(isEnglish, "גיל מקס׳", "Max age"),
                             value = maxAge,
                             icon = "🎂",
                             gradient = listOf(
@@ -2121,6 +2337,7 @@ private fun CoachGroupStatsPremiumScreen(
                                 Color(0xFF14B8A6),
                                 Color(0xFF5EEAD4)
                             ),
+                            isEnglish = isEnglish,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -2130,7 +2347,7 @@ private fun CoachGroupStatsPremiumScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         PremiumStatChip(
-                            label = "ותק מינ׳",
+                            label = coachTr(isEnglish, "ותק מינ׳", "Min seniority"),
                             value = minSeniority,
                             icon = "⏱",
                             gradient = listOf(
@@ -2138,11 +2355,12 @@ private fun CoachGroupStatsPremiumScreen(
                                 Color(0xFFA855F7),
                                 Color(0xFFD8B4FE)
                             ),
+                            isEnglish = isEnglish,
                             modifier = Modifier.weight(1f)
                         )
 
                         PremiumStatChip(
-                            label = "ותק מקס׳",
+                            label = coachTr(isEnglish, "ותק מקס׳", "Max seniority"),
                             value = maxSeniority,
                             icon = "🔥",
                             gradient = listOf(
@@ -2150,6 +2368,7 @@ private fun CoachGroupStatsPremiumScreen(
                                 Color(0xFFEC4899),
                                 Color(0xFFF9A8D4)
                             ),
+                            isEnglish = isEnglish,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -2159,18 +2378,20 @@ private fun CoachGroupStatsPremiumScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         PremiumMiniPill(
-                            title = "מתאמנים",
+                            title = coachTr(isEnglish, "מתאמנים", "Trainees"),
                             value = stats.totalTrainees.toString(),
                             icon = "👥",
                             accent = Color(0xFF4F46E5),
+                            isEnglish = isEnglish,
                             modifier = Modifier.weight(1f)
                         )
 
                         PremiumMiniPill(
-                            title = "חגורות שונות",
+                            title = coachTr(isEnglish, "חגורות שונות", "Belt types"),
                             value = stats.beltCounts.size.toString(),
                             icon = "🥋",
                             accent = Color(0xFF0891B2),
+                            isEnglish = isEnglish,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -2203,9 +2424,9 @@ private fun CoachGroupStatsPremiumScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Text(
-                            text = "התפלגות חגורות בסניף",
+                            text = coachTr(isEnglish, "התפלגות חגורות בסניף", "Belt distribution"),
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Right,
+                            textAlign = statsTextAlign,
                             maxLines = 1,
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontSize = 20.sp,
@@ -2217,9 +2438,9 @@ private fun CoachGroupStatsPremiumScreen(
 
                         if (stats.beltCounts.isEmpty()) {
                             Text(
-                                text = "אין נתונים להצגה",
+                                text = coachTr(isEnglish, "אין נתונים להצגה", "No data to display"),
                                 modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Right,
+                                textAlign = statsTextAlign,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Color(0xFF64748B)
                             )
@@ -2261,9 +2482,9 @@ private fun CoachGroupStatsPremiumScreen(
                                         Spacer(modifier = Modifier.width(10.dp))
 
                                         Text(
-                                            text = belt,
+                                            text = coachBeltNameForUi(belt, isEnglish),
                                             modifier = Modifier.weight(1f),
-                                            textAlign = TextAlign.Right,
+                                            textAlign = statsTextAlign,
                                             maxLines = 1,
                                             style = MaterialTheme.typography.titleSmall.copy(
                                                 fontSize = 18.sp,
@@ -2308,6 +2529,7 @@ private fun PremiumStatChip(
     value: String,
     icon: String,
     gradient: List<Color>,
+    isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
     val valueNumber = value.filter { it.isDigit() }.toFloatOrNull() ?: 0f
@@ -2396,13 +2618,13 @@ private fun PremiumStatChip(
 
             Column(
                 modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.End,
+                horizontalAlignment = coachHorizontalAlignment(isEnglish),
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = label,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Right,
+                    textAlign = coachTextAlign(isEnglish),
                     maxLines = 1,
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 12.sp,
@@ -2417,7 +2639,7 @@ private fun PremiumStatChip(
                 Text(
                     text = if (valueNumber > 0f) animatedValue.toInt().toString() else value,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Right,
+                    textAlign = coachTextAlign(isEnglish),
                     maxLines = 1,
                     style = MaterialTheme.typography.headlineSmall.copy(
                         fontSize = 28.sp,
@@ -2521,6 +2743,7 @@ private fun PremiumMiniPill(
     value: String,
     icon: String,
     accent: Color,
+    isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
     val valueNumber = value.filter { it.isDigit() }.toFloatOrNull() ?: 0f
@@ -2605,13 +2828,13 @@ private fun PremiumMiniPill(
 
             Column(
                 modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.End,
+                horizontalAlignment = coachHorizontalAlignment(isEnglish),
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = title,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Right,
+                    textAlign = coachTextAlign(isEnglish),
                     maxLines = 1,
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 12.sp,
@@ -2624,7 +2847,7 @@ private fun PremiumMiniPill(
                 Text(
                     text = if (valueNumber > 0f) animatedValue.toInt().toString() else value,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Right,
+                    textAlign = coachTextAlign(isEnglish),
                     maxLines = 1,
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontSize = 21.sp,

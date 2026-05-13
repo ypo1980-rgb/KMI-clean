@@ -86,10 +86,18 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
     private val _refreshTick = MutableStateFlow(0)
 
     private val membersFlow: Flow<List<GroupMember>> =
-        combine(_branch, _groupKey, _refreshTick) { b, g, _ -> b to g }
-            .flatMapLatest { (b, g) ->
-                if (b.isBlank() || g.isBlank()) flowOf(emptyList())
-                else repo.members(branch = b, groupKey = g)
+        combine(_branch, _groupKey, _refreshTick) { b, g, tick -> Triple(b, g, tick) }
+            .flatMapLatest { (b, g, tick) ->
+                Log.i(
+                    "ATT_MEMBERS_FLOW",
+                    "reading members branch=$b group=$g refreshTick=$tick"
+                )
+
+                if (b.isBlank() || g.isBlank()) {
+                    flowOf(emptyList())
+                } else {
+                    repo.members(branch = b, groupKey = g)
+                }
             }
 
     private val recordsFlow: Flow<List<AttendanceRecord>> =
@@ -130,7 +138,9 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setContext(date: LocalDate, branch: String, groupKey: String) {
         fun String.norm(): String = trim()
-            .replace('־', '-')   // maqaf
+            .replace('־', '-')
+            .replace('–', '-')
+            .replace('—', '-')
             .replace(Regex("\\s+"), " ")
 
         // ✅ תמיד נשתמש בסניף "פעיל" אחד:
@@ -166,35 +176,74 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         if (b.isBlank() || g.isBlank()) return
 
         viewModelScope.launch {
-            val id = repo.ensureSession(date = d, branch = b, groupKey = g)
-            _sessionId.value = id
+            val result = runCatching {
+                repo.ensureSession(date = d, branch = b, groupKey = g)
+            }
+
+            result.onSuccess { id ->
+                _sessionId.value = id
+            }.onFailure { t ->
+                Log.e(
+                    "ATT_SESSION",
+                    "Failed ensuring attendance session date=$d branch=$b group=$g",
+                    t
+                )
+
+                _events.tryEmit(
+                    UiEvent.ReportSaveFailed(
+                        message = "Failed opening attendance session"
+                    )
+                )
+            }
         }
     }
 
-    /** הוספת מתאמן בשם בלבד (כולל נפילות לרפלקציה) + רענון UI */
+    /** הוספת מתאמן בשם בלבד + רענון UI */
     fun addMember(name: String) {
         val b = _branch.value
         val g = _groupKey.value
-        if (b.isBlank() || g.isBlank() || name.isBlank()) return
+        val cleanName = name.trim()
+
+        if (b.isBlank() || g.isBlank() || cleanName.isBlank()) return
 
         viewModelScope.launch {
-            // ניסיון “טיפוסי”
-            val okDirect = runCatching {
-                repo.addMember(branch = b, groupKey = g, displayName = name)
-            }.isSuccess
+            val directResult = runCatching {
+                repo.addMember(branch = b, groupKey = g, displayName = cleanName)
+            }
 
-            if (!okDirect) {
-                // רפלקציה: כל מתודה בשם נפוץ עם 3 מחרוזות
-                runCatching {
+            if (directResult.isFailure) {
+                Log.e(
+                    "ATT_ADD_MEMBER",
+                    "Failed adding member directly branch=$b group=$g name=$cleanName",
+                    directResult.exceptionOrNull()
+                )
+
+                val reflectionResult = runCatching {
                     val m = repo::class.java.methods.firstOrNull { mm ->
                         mm.name in listOf("addMember", "createMember", "insertMember", "add") &&
                                 mm.parameterCount == 3 &&
                                 mm.parameterTypes.all { it == String::class.java }
-                    } ?: return@runCatching
-                    m.invoke(repo, b, g, name)
+                    } ?: error("No compatible addMember/createMember/insertMember/add method found")
+
+                    m.invoke(repo, b, g, cleanName)
+                }
+
+                if (reflectionResult.isFailure) {
+                    Log.e(
+                        "ATT_ADD_MEMBER",
+                        "Failed adding member by fallback branch=$b group=$g name=$cleanName",
+                        reflectionResult.exceptionOrNull()
+                    )
+
+                    _events.tryEmit(
+                        UiEvent.ReportSaveFailed(
+                            message = "Failed adding trainee: $cleanName"
+                        )
+                    )
+                    return@launch
                 }
             }
-            // 🔔 רענון כפוי
+
             _refreshTick.update { it + 1 }
         }
     }
@@ -202,21 +251,44 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
     /** סימון נוכחות למתאמן + רענון קל */
     fun mark(memberId: Long, status: AttendanceStatus) {
         val sid = _sessionId.value ?: return
-        viewModelScope.launch {
-            val ok = runCatching {
-                repo.mark(sessionId = sid, memberId = memberId, status = status)
-            }.isSuccess
 
-            if (!ok) {
-                runCatching {
+        viewModelScope.launch {
+            val directResult = runCatching {
+                repo.mark(sessionId = sid, memberId = memberId, status = status)
+            }
+
+            if (directResult.isFailure) {
+                Log.e(
+                    "ATT_MARK",
+                    "Failed marking attendance sessionId=$sid memberId=$memberId status=$status",
+                    directResult.exceptionOrNull()
+                )
+
+                val reflectionResult = runCatching {
                     val m = repo::class.java.methods.firstOrNull { mm ->
                         mm.name in listOf("mark", "setMark", "markAttendance") &&
                                 mm.parameterCount == 3
-                    } ?: return@runCatching
+                    } ?: error("No compatible mark/setMark/markAttendance method found")
+
                     m.invoke(repo, sid, memberId, status)
                 }
+
+                if (reflectionResult.isFailure) {
+                    Log.e(
+                        "ATT_MARK",
+                        "Failed marking attendance by fallback sessionId=$sid memberId=$memberId status=$status",
+                        reflectionResult.exceptionOrNull()
+                    )
+
+                    _events.tryEmit(
+                        UiEvent.ReportSaveFailed(
+                            message = "Failed marking attendance"
+                        )
+                    )
+                    return@launch
+                }
             }
-            // לרוב DB יפיץ שינוי לבד; אם לא – נכפה רענון קל
+
             _refreshTick.update { it + 1 }
         }
     }
@@ -232,9 +304,25 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         if (b.isBlank() || g.isBlank()) return
 
         viewModelScope.launch {
-            runCatching {
+            val result = runCatching {
                 repo.removeMember(b, g, memberId)
             }
+
+            if (result.isFailure) {
+                Log.e(
+                    "ATT_REMOVE_MEMBER",
+                    "Failed removing member branch=$b group=$g memberId=$memberId",
+                    result.exceptionOrNull()
+                )
+
+                _events.tryEmit(
+                    UiEvent.ReportSaveFailed(
+                        message = "Failed removing trainee"
+                    )
+                )
+                return@launch
+            }
+
             _refreshTick.update { it + 1 }
         }
     }
@@ -258,9 +346,24 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     date = d
                 )
             }.onSuccess {
+                Log.i(
+                    "ATT_SAVE",
+                    "Attendance report saved date=$d branch=$b group=$g"
+                )
+
                 _events.tryEmit(UiEvent.ReportSaved(branch = b, groupKey = g))
             }.onFailure { t ->
-                _events.tryEmit(UiEvent.ReportSaveFailed(message = t.message ?: t.toString()))
+                Log.e(
+                    "ATT_SAVE",
+                    "Failed saving attendance report date=$d branch=$b group=$g",
+                    t
+                )
+
+                _events.tryEmit(
+                    UiEvent.ReportSaveFailed(
+                        message = t.message ?: t.toString()
+                    )
+                )
             }
         }
     }
@@ -383,47 +486,78 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
                 fun splitTokens(raw: String?): List<String> {
                     if (raw.isNullOrBlank()) return emptyList()
+
                     return raw
                         .replace(" • ", ",")
                         .replace("|", ",")
                         .replace("\n", ",")
+                        .replace("+", ",")
+                        .replace("/", ",")
                         .split(',', ';', '；')
                         .map { it.trim() }
                         .filter { it.isNotBlank() }
                         .map { it.norm() }
                 }
 
-                val gList = (get("groups") as? List<*>)?.mapNotNull { it?.toString()?.trim() }?.map { it.norm() }.orEmpty()
+                fun expandGroupAliases(raw: String): List<String> {
+                    val n = raw.norm()
 
-                val primary = getString("primaryGroup")?.trim()?.norm()
-                val groupKeyField = getString("groupKey")?.trim()?.norm()
+                    return buildList {
+                        add(n)
+                        addAll(splitTokens(n))
 
-                // ✅ תוספות נפוצות ב-DBים שונים:
-                val groupField = getString("group")?.trim()?.norm()
-                val groupName = getString("groupName")?.trim()?.norm()
+                        if (n.contains("נוער") && n.contains("בוגרים")) {
+                            add("נוער")
+                            add("בוגרים")
+                            add("נוער ובוגרים")
+                            add("נוער + בוגרים")
+                        }
+
+                        if (n.contains("children", ignoreCase = true)) add("ילדים")
+                        if (n.contains("youth", ignoreCase = true)) add("נוער")
+                        if (n.contains("adults", ignoreCase = true)) add("בוגרים")
+                    }
+                        .map { it.norm() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                }
+
+                val gList = (get("groups") as? List<*>)
+                    ?.mapNotNull { it?.toString()?.trim() }
+                    ?.flatMap { expandGroupAliases(it) }
+                    .orEmpty()
+
+                val primary = getString("primaryGroup")?.trim()
+                val groupKeyField = getString("groupKey")?.trim()
+
+                val groupField = getString("group")?.trim()
+                val groupName = getString("groupName")?.trim()
                 val groupsCsv = getString("groupsCsv")?.trim()
                 val groupCsv = getString("groupCsv")?.trim()
 
                 val tokenBag = buildList {
                     addAll(gList)
-                    addAll(splitTokens(primary))
-                    addAll(splitTokens(groupKeyField))
-                    addAll(splitTokens(groupField))
-                    addAll(splitTokens(groupName))
-                    addAll(splitTokens(groupsCsv))
-                    addAll(splitTokens(groupCsv))
+                    addAll(splitTokens(primary).flatMap { expandGroupAliases(it) })
+                    addAll(splitTokens(groupKeyField).flatMap { expandGroupAliases(it) })
+                    addAll(splitTokens(groupField).flatMap { expandGroupAliases(it) })
+                    addAll(splitTokens(groupName).flatMap { expandGroupAliases(it) })
+                    addAll(splitTokens(groupsCsv).flatMap { expandGroupAliases(it) })
+                    addAll(splitTokens(groupCsv).flatMap { expandGroupAliases(it) })
                 }.filter { it.isNotBlank() }.distinct()
 
-                // ✅ אם אין בכלל מידע על קבוצה במסמך – לא נפיל אותו
                 if (tokenBag.isEmpty()) return true
 
-                val candNorm = groupCandidates.map { it.norm() }.toSet()
+                val candNorm = groupCandidates
+                    .flatMap { expandGroupAliases(it) }
+                    .map { it.norm() }
+                    .toSet()
 
-                // התאמה: == או contains דו-כיווני
                 return tokenBag.any { tok ->
                     tok in candNorm ||
                             candNorm.any { cand ->
-                                cand.length >= 2 && (tok.contains(cand) || cand.contains(tok))
+                                cand.length >= 2 &&
+                                        tok.length >= 2 &&
+                                        (tok.contains(cand) || cand.contains(tok))
                             }
                 }
             }
@@ -544,11 +678,38 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
             Log.i("ATT_BOOT", "VM toAdd=${toAdd.size} skipped=${names.size - toAdd.size}")
 
-            withContext(Dispatchers.Main) {
-                toAdd.forEach { n -> addMember(n) }
+            val repoBranch = _branch.value.ifBlank { b0 }.trim()
+            val repoGroup = _groupKey.value.ifBlank { g0 }.trim()
+
+            Log.i(
+                "ATT_BOOT",
+                "VM writing attendance members to repoBranch=$repoBranch repoGroup=$repoGroup"
+            )
+
+            toAdd.forEach { n ->
+                runCatching {
+                    repo.addMember(
+                        branch = repoBranch,
+                        groupKey = repoGroup,
+                        displayName = n
+                    )
+                }.onSuccess { memberId ->
+                    Log.i(
+                        "ATT_BOOT",
+                        "VM added member to attendanceGroups memberId=$memberId name=$n branch=$repoBranch group=$repoGroup"
+                    )
+                }.onFailure { t ->
+                    Log.e(
+                        "ATT_BOOT",
+                        "VM failed adding member to attendanceGroups name=$n branch=$repoBranch group=$repoGroup",
+                        t
+                    )
+                }
             }
 
-            // ✅ ניקוי כפילויות קיימות ב-DB (מהרצות קודמות / וריאציות שם)
+            _refreshTick.update { it + 1 }
+
+            // ✅ ניקוי כפילויות קיימות ב-DB / Firestore לפי המימוש הנוכחי של ה-Repository
             cleanupDuplicateMembersInDb()
         }
     }

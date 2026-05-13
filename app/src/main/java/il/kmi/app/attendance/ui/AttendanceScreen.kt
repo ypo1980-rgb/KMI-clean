@@ -47,8 +47,6 @@ import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.Explanations
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.screens.parseSearchKey
-import il.kmi.app.privacy.DemoPrivacy
-import il.kmi.app.privacy.DemoTrainees
 import android.app.Activity
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -238,16 +236,6 @@ fun AttendanceScreen(
         state.members.distinctBy { it.displayName.nameKey() }
     }
 
-    val demoUiMap = remember(displayMembers, isEnglish) {
-        displayMembers.mapIndexed { index, member ->
-            val demo = DemoTrainees.trainees.getOrNull(index)
-            member.id to Pair(
-                demo?.name ?: tr("מתאמן ${index + 1}", "Trainee ${index + 1}"),
-                demo?.attendancePercent
-            )
-        }.toMap()
-    }
-
     val totalMembers = displayMembers.size
     val presentCount = displayMembers.count { statusById[it.id] == AttendanceStatus.PRESENT }
     val absentCount  = displayMembers.count { statusById[it.id] == AttendanceStatus.ABSENT }
@@ -368,11 +356,8 @@ fun AttendanceScreen(
                     CompositionLocalProvider(LocalLayoutDirection provides screenLayoutDirection) {
                         Column(Modifier.fillMaxWidth()) {
 
-                            val demoUi = demoUiMap[m.id]
-                            val uiName = if (DemoPrivacy.ENABLED) {
-                                demoUi?.first ?: tr("מתאמן", "Trainee")
-                            } else {
-                                m.displayName
+                            val uiName = m.displayName.ifBlank {
+                                tr("מתאמן ללא שם", "Unnamed trainee")
                             }
 
                             Text(
@@ -382,18 +367,6 @@ fun AttendanceScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color.White
                             )
-
-                            if (DemoPrivacy.ENABLED) {
-                                demoUi?.second?.let { attendancePercent ->
-                                    Text(
-                                        text = tr("נוכחות חודשית: $attendancePercent%", "Monthly attendance: $attendancePercent%"),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF67E8F9),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Start
-                                    )
-                                }
-                            }
 
                             Spacer(Modifier.height(6.dp))
 
@@ -484,10 +457,8 @@ fun AttendanceScreen(
                                     ) {
                                         IconButton(onClick = {
                                             val mid: Long? = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull()
-                                            val uiName = if (DemoPrivacy.ENABLED) {
-                                                demoUiMap[m.id]?.first ?: tr("מתאמן", "Trainee")
-                                            } else {
-                                                m.displayName
+                                            val uiName = m.displayName.ifBlank {
+                                                tr("מתאמן ללא שם", "Unnamed trainee")
                                             }
                                             onOpenMemberStats(mid, uiName)
                                         }) {
@@ -500,10 +471,8 @@ fun AttendanceScreen(
 
                                         IconButton(onClick = {
                                             val id = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull() ?: return@IconButton
-                                            val uiName = if (DemoPrivacy.ENABLED) {
-                                                demoUiMap[m.id]?.first ?: tr("מתאמן", "Trainee")
-                                            } else {
-                                                m.displayName
+                                            val uiName = m.displayName.ifBlank {
+                                                tr("מתאמן ללא שם", "Unnamed trainee")
                                             }
                                             pendingDelete = id to uiName
                                         }) {

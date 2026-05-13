@@ -166,9 +166,25 @@ private fun examTr(isEnglish: Boolean, he: String, en: String): String =
 private fun examBeltNameForUi(belt: Belt, isEnglish: Boolean): String =
     if (isEnglish) belt.en else belt.heb
 
+private fun examBeltShortNameForUi(belt: Belt, isEnglish: Boolean): String {
+    val full = examBeltNameForUi(belt, isEnglish).trim()
+
+    return if (isEnglish) {
+        full
+            .removeSuffix(" Belt")
+            .removeSuffix(" belt")
+            .trim()
+    } else {
+        full
+            .removePrefix("חגורה ")
+            .removePrefix("חגורת ")
+            .trim()
+    }
+}
+
 private fun examBeltMainColor(belt: Belt): Color =
     when (belt) {
-        Belt.YELLOW -> Color(0xFFF59E0B)
+        Belt.YELLOW -> Color(0xFFFDE047)
         Belt.ORANGE -> Color(0xFFFF8A00)
         Belt.GREEN -> Color(0xFF16A34A)
         Belt.BLUE -> Color(0xFF2563EB)
@@ -179,7 +195,7 @@ private fun examBeltMainColor(belt: Belt): Color =
 
 private fun examBeltDarkColor(belt: Belt): Color =
     when (belt) {
-        Belt.YELLOW -> Color(0xFF78350F)
+        Belt.YELLOW -> Color(0xFF854D0E)
         Belt.ORANGE -> Color(0xFF7C2D12)
         Belt.GREEN -> Color(0xFF064E3B)
         Belt.BLUE -> Color(0xFF1E3A8A)
@@ -190,7 +206,7 @@ private fun examBeltDarkColor(belt: Belt): Color =
 
 private fun examBeltSoftColor(belt: Belt): Color =
     when (belt) {
-        Belt.YELLOW -> Color(0xFFFFF7D6)
+        Belt.YELLOW -> Color(0xFFFEFCE8)
         Belt.ORANGE -> Color(0xFFFFEDD5)
         Belt.GREEN -> Color(0xFFDCFCE7)
         Belt.BLUE -> Color(0xFFDBEAFE)
@@ -1535,6 +1551,46 @@ fun InternalExamEntryScreen(
 
     val hasExamProgress = marksMap.isNotEmpty()
 
+    val beltMainColor = when (currentBelt) {
+        Belt.YELLOW -> Color(0xFFFDE047)
+        Belt.ORANGE -> Color(0xFFFF8A00)
+        Belt.GREEN -> Color(0xFF16A34A)
+        Belt.BLUE -> Color(0xFF2563EB)
+        Belt.BROWN -> Color(0xFF7C3F1D)
+        Belt.BLACK -> Color(0xFF111827)
+        else -> Color(0xFF7C3AED)
+    }
+
+    val beltDarkColor = when (currentBelt) {
+        Belt.YELLOW -> Color(0xFF7A5A00)
+        Belt.ORANGE -> Color(0xFF7C2D12)
+        Belt.GREEN -> Color(0xFF064E3B)
+        Belt.BLUE -> Color(0xFF1E3A8A)
+        Belt.BROWN -> Color(0xFF3B1F12)
+        Belt.BLACK -> Color(0xFF020617)
+        else -> Color(0xFF312E81)
+    }
+
+    val beltSoftColor = when (currentBelt) {
+        Belt.YELLOW -> Color(0xFFFEFCE8)
+        Belt.ORANGE -> Color(0xFFFFEDD5)
+        Belt.GREEN -> Color(0xFFDCFCE7)
+        Belt.BLUE -> Color(0xFFDBEAFE)
+        Belt.BROWN -> Color(0xFFF3E8D6)
+        Belt.BLACK -> Color(0xFFE5E7EB)
+        else -> Color(0xFFEDE9FE)
+    }
+
+    val entryCardColor = when (currentBelt) {
+        Belt.YELLOW -> Color(0xFF8B7F00).copy(alpha = 0.94f) // צהוב כהה / זהב, לא כתום
+        Belt.ORANGE -> Color(0xFF7C2D12).copy(alpha = 0.94f)
+        Belt.GREEN -> Color(0xFF0F5132).copy(alpha = 0.94f)
+        Belt.BLUE -> Color(0xFF1E3A8A).copy(alpha = 0.94f)
+        Belt.BROWN -> Color(0xFF5B3716).copy(alpha = 0.94f)
+        Belt.BLACK -> Color(0xFF111827).copy(alpha = 0.94f)
+        else -> Color(0xFF4C1D95).copy(alpha = 0.94f)
+    }
+
     val entrySession by remember {
         derivedStateOf {
             buildInternalExamSessionForUi(
@@ -1632,7 +1688,7 @@ fun InternalExamEntryScreen(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(26.dp),
-                        color = examBeltDarkColor(currentBelt).copy(alpha = 0.86f),
+                        color = entryCardColor,
                         border = BorderStroke(1.dp, examBeltSoftColor(currentBelt).copy(alpha = 0.42f)),
                         shadowElevation = 18.dp
                     ) {
@@ -1852,7 +1908,6 @@ fun InternalExamEntryScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BeltSelector(
     currentBelt: Belt,
@@ -1870,59 +1925,175 @@ private fun BeltSelector(
         Belt.BLACK
     )
 
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
+    val mainColor = examBeltMainColor(currentBelt)
+    val darkColor = examBeltDarkColor(currentBelt)
+    val softColor = examBeltSoftColor(currentBelt)
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 6.dp, vertical = 4.dp)
     ) {
-        OutlinedTextField(
-            value = examBeltNameForUi(currentBelt, isEnglish),
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            shape = RoundedCornerShape(18.dp),
-            label = {
-                Text(
-                    text = examTr(isEnglish, "🥋 חגורה במבחן", "🥋 Exam belt"),
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White
-                )
-            },
-            textStyle = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-                fontSize = 23.sp,
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-            ),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Color(0xFF38BDF8),
-                unfocusedBorderColor = Color(0xFF60A5FA),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedLabelColor = Color.White,
-                unfocusedLabelColor = Color.White.copy(alpha = 0.80f),
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                disabledContainerColor = Color.Transparent,
-                errorContainerColor = Color.Transparent
+        Surface(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(24.dp),
+            color = Color.Transparent,
+            shadowElevation = 14.dp,
+            border = BorderStroke(
+                width = 1.4.dp,
+                color = if (expanded) {
+                    softColor.copy(alpha = 0.90f)
+                } else {
+                    Color.White.copy(alpha = 0.26f)
+                }
             ),
             modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth(),
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded)
-            }
-        )
+                .fillMaxWidth()
+                .height(82.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                            listOf(
+                                darkColor.copy(alpha = 0.96f),
+                                mainColor.copy(alpha = if (currentBelt == Belt.YELLOW) 0.72f else 0.84f),
+                                darkColor.copy(alpha = 0.88f)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.18f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.20f)),
+                        shadowElevation = 8.dp,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🥋",
+                                fontSize = 21.sp
+                            )
+                        }
+                    }
 
-        ExposedDropdownMenu(
+                    Spacer(Modifier.width(8.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                    ) {
+                        Text(
+                            text = examTr(isEnglish, "חגורה במבחן", "Exam belt"),
+                            color = Color.White.copy(alpha = 0.82f),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(Modifier.height(1.dp))
+
+                        Text(
+                            text = examBeltShortNameForUi(currentBelt, isEnglish),
+                            color = Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = if (isEnglish) 21.sp else 21.sp,
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = if (expanded) 0.24f else 0.16f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (expanded) "▲" else "▼",
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        androidx.compose.material3.DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .background(Color(0xFFF8FAFC))
         ) {
             belts.forEach { b ->
                 DropdownMenuItem(
-                    text = { Text(examBeltNameForUi(b, isEnglish)) },
+                    text = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = examBeltSoftColor(b),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = examBeltMainColor(b).copy(alpha = 0.48f)
+                                ),
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "🥋",
+                                        fontSize = 18.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.width(10.dp))
+
+                            Text(
+                                text = examBeltShortNameForUi(b, isEnglish),
+                                fontWeight = if (b == currentBelt) FontWeight.Black else FontWeight.SemiBold,
+                                color = if (b == currentBelt) examBeltDarkColor(b) else Color(0xFF111827),
+                                fontSize = 18.sp,
+                                modifier = Modifier.weight(1f),
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    },
                     onClick = {
                         expanded = false
                         if (b != currentBelt) {

@@ -33,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,11 +44,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import il.kmi.app.attendance.data.AttendanceRepository
 import il.kmi.app.ui.KmiTopBar
@@ -63,6 +66,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import java.time.YearMonth
+import il.kmi.app.localization.rememberIsEnglish
 
 @Composable
 fun AttendanceGroupStatsScreen(
@@ -71,10 +75,21 @@ fun AttendanceGroupStatsScreen(
     groupKey: String,
     onBack: () -> Unit
 ) {
+    val isEnglish = rememberIsEnglish()
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val screenTextAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val screenHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val screenTextDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    val screenTextStyle = TextStyle(textDirection = screenTextDirection)
+
     val reports by repo.reportsLastYear(branch, groupKey).collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
-    val monthTitleFormatter = remember {
-        DateTimeFormatter.ofPattern("MMMM yyyy", Locale("he", "IL"))
+    val monthTitleFormatter = remember(isEnglish) {
+        DateTimeFormatter.ofPattern(
+            "MMMM yyyy",
+            if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
+        )
     }
 
     val reportsByMonth = remember(reports) {
@@ -120,12 +135,11 @@ fun AttendanceGroupStatsScreen(
     Scaffold(
         topBar = {
             KmiTopBar(
-                title = "סטטיסטיקת נוכחות",
+                title = tr("סטטיסטיקת נוכחות", "Attendance statistics"),
                 showTopHome = false,
                 showTopSearch = false,
                 showBottomActions = false,
                 lockSearch = true,
-                onBack = onBack,
                 centerTitle = true
             )
         },
@@ -161,7 +175,8 @@ fun AttendanceGroupStatsScreen(
                         branch = branch,
                         groupKey = groupKey,
                         avgPct = avgPct,
-                        totalSessions = totalSessions
+                        totalSessions = totalSessions,
+                        isEnglish = isEnglish
                     )
                 }
 
@@ -170,17 +185,24 @@ fun AttendanceGroupStatsScreen(
                         avgPct = avgPct,
                         totalSessions = totalSessions,
                         avgPresent = avgPresent,
-                        avgTotal = avgTotal
+                        avgTotal = avgTotal,
+                        isEnglish = isEnglish
                     )
                 }
 
                 item {
                     Text(
-                        text = if (deleteMode) "בחר דו\"חות למחיקה" else "דו\"חות אחרונים (שנה אחורה)",
-                        style = MaterialTheme.typography.titleSmall,
+                        text = if (deleteMode) {
+                            tr("בחר דו\"חות למחיקה", "Select reports to delete")
+                        } else {
+                            tr("דו\"חות אחרונים (שנה אחורה)", "Recent reports - last year")
+                        },
+                        style = MaterialTheme.typography.titleSmall.merge(screenTextStyle),
                         color = Color(0xFFECFEFF),
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth()
+                        textAlign = screenTextAlign,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp)
                     )
                 }
 
@@ -199,7 +221,6 @@ fun AttendanceGroupStatsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    // ✅ תמיד לפי הערך הנוכחי במפה (לא value שתפסנו)
                                     val cur = expandedByMonth[ym] != false
                                     expandedByMonth[ym] = !cur
                                 },
@@ -207,38 +228,60 @@ fun AttendanceGroupStatsScreen(
                             color = Color.White.copy(alpha = 0.08f),
                             border = BorderStroke(1.dp, Color(0xFF334155))
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Icon(
-                                    imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                    contentDescription = null,
-                                    tint = Color(0xFF93C5FD)
-                                )
-
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.End
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Text(
-                                        text = monthTitle,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFECFEFF),
-                                        textAlign = TextAlign.End,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Text(
-                                        text = "${monthReports.size} דו\"חות",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFFBFDBFE),
-                                        textAlign = TextAlign.End,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                    if (!isEnglish) {
+                                        Icon(
+                                            imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                            contentDescription = null,
+                                            tint = Color(0xFF93C5FD)
+                                        )
+                                    }
+
+                                    Box(
+                                        modifier = Modifier.weight(1f),
+                                        contentAlignment = if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                        ) {
+                                            Text(
+                                                text = monthTitle,
+                                                style = MaterialTheme.typography.titleMedium.merge(screenTextStyle),
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFECFEFF),
+                                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+
+                                            Text(
+                                                text = if (isEnglish) {
+                                                    "${monthReports.size} reports"
+                                                } else {
+                                                    "${monthReports.size} דו\"חות"
+                                                },
+                                                style = MaterialTheme.typography.labelSmall.merge(screenTextStyle),
+                                                color = Color(0xFFBFDBFE),
+                                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+
+                                    if (isEnglish) {
+                                        Icon(
+                                            imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                            contentDescription = null,
+                                            tint = Color(0xFF93C5FD)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -268,7 +311,8 @@ fun AttendanceGroupStatsScreen(
                                     present = r.presentCount,
                                     excused = r.excusedCount,
                                     absent = r.absentCount,
-                                    pct = r.percentPresent
+                                    pct = r.percentPresent,
+                                    isEnglish = isEnglish
                                 )
                             }
                         }
@@ -308,9 +352,19 @@ fun AttendanceGroupStatsScreen(
                                 tint = Color.White
                             )
                             Spacer(Modifier.padding(horizontal = 4.dp))
-                            val label = if (!deleteMode) "מחק דוחות"
-                            else "מחק נבחרים (${selectedIds.size})"
-                            Text(label, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            val label = if (!deleteMode) {
+                                tr("מחק דוחות", "Delete reports")
+                            } else {
+                                tr("מחק נבחרים (${selectedIds.size})", "Delete selected (${selectedIds.size})")
+                            }
+
+                            Text(
+                                text = label,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
 
                         // ✅ ביטול מצב בחירה
@@ -325,7 +379,12 @@ fun AttendanceGroupStatsScreen(
                                 border = BorderStroke(1.dp, Color(0xFF93C5FD)),
                                 enabled = !busy
                             ) {
-                                Text("ביטול", fontWeight = FontWeight.SemiBold, color = Color.White)
+                                Text(
+                                    text = tr("ביטול", "Cancel"),
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White,
+                                    maxLines = 1
+                                )
                             }
                         }
 
@@ -342,7 +401,11 @@ fun AttendanceGroupStatsScreen(
                         ) {
                             Icon(Icons.Filled.Refresh, contentDescription = null)
                             Spacer(Modifier.padding(horizontal = 4.dp))
-                            Text("איפוס נוכחות", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = tr("איפוס", "Reset"),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
+                            )
                         }
                     }
                 }
@@ -351,9 +414,13 @@ fun AttendanceGroupStatsScreen(
             // ===== אישור איפוס הכל =====
             if (confirmResetAll) {
                 ConfirmDialog(
-                    title = "איפוס נוכחות לקבוצה",
-                    text = "אזהרה: פעולה זו תמחק את כל נתוני הנוכחות לקבוצה:\n• סימונים (attendance_records)\n• שיעורים (training_sessions)\n• דו\"חות (attendance_reports)\n\nמתאמנים ברשימה נשארים.",
-                    confirmText = "אפס הכל",
+                    title = tr("איפוס נוכחות לקבוצה", "Reset group attendance"),
+                    text = tr(
+                        "אזהרה: פעולה זו תמחק את כל נתוני הנוכחות לקבוצה:\n• סימונים\n• שיעורים\n• דו\"חות\n\nמתאמנים ברשימה נשארים.",
+                        "Warning: this action will delete all attendance data for this group:\n• Attendance marks\n• Sessions\n• Reports\n\nThe trainee list will remain."
+                    ),
+                    confirmText = tr("אפס הכל", "Reset all"),
+                    dismissText = tr("ביטול", "Cancel"),
                     danger = true,
                     onConfirm = {
                         confirmResetAll = false
@@ -376,9 +443,13 @@ fun AttendanceGroupStatsScreen(
             // ===== אישור מחיקת דו"חות נבחרים =====
             if (confirmDeleteSelected) {
                 ConfirmDialog(
-                    title = "מחיקת דו\"חות",
-                    text = "למחוק ${selectedIds.size} דו\"חות מסומנים?",
-                    confirmText = "מחק",
+                    title = tr("מחיקת דו\"חות", "Delete reports"),
+                    text = tr(
+                        "למחוק ${selectedIds.size} דו\"חות מסומנים?",
+                        "Delete ${selectedIds.size} selected reports?"
+                    ),
+                    confirmText = tr("מחק", "Delete"),
+                    dismissText = tr("ביטול", "Cancel"),
                     danger = true,
                     onConfirm = {
                         confirmDeleteSelected = false
@@ -411,79 +482,116 @@ private fun StatsHeroCard(
     branch: String,
     groupKey: String,
     avgPct: Int,
-    totalSessions: Int
+    totalSessions: Int,
+    isEnglish: Boolean
 ) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val textStyle = TextStyle(
+        textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    )
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = Color.White.copy(alpha = 0.08f),
-        tonalElevation = 0.dp
+        shape = RoundedCornerShape(26.dp),
+        color = Color.White.copy(alpha = 0.10f),
+        tonalElevation = 0.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
     ) {
-        val rtlStyle = TextStyle(textDirection = TextDirection.Rtl)
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Text(
-                        text = "$branch · $groupKey",
-                        style = MaterialTheme.typography.labelSmall.merge(rtlStyle),
-                        color = Color(0xFFE5E7EB),
-                        textAlign = TextAlign.Right,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = "שיעורים עם דו\"ח: $totalSessions",
-                        style = MaterialTheme.typography.labelSmall.merge(rtlStyle),
-                        color = Color(0xFFBFDBFE),
-                        textAlign = TextAlign.Right,
-                        maxLines = 1,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .padding(start = 10.dp)
-                        .background(
-                            brush = Brush.radialGradient(
-                                listOf(Color(0xFF38BDF8), Color(0xFF1E40AF))
-                            ),
-                            shape = CircleShape
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.08f),
+                            Color(0xFF1D4ED8).copy(alpha = 0.22f)
                         )
-                        .padding(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Warning,
-                        contentDescription = null,
-                        tint = Color.White
                     )
+                )
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = horizontalAlignment
+        ) {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!isEnglish) {
+                        StatsGlowIcon()
+                        Spacer(Modifier.padding(horizontal = 6.dp))
+                    }
+
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = horizontalAlignment
+                        ) {
+                            Text(
+                                text = "$branch · $groupKey",
+                                style = MaterialTheme.typography.labelMedium.merge(textStyle),
+                                color = Color(0xFFE5E7EB),
+                                textAlign = align,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Text(
+                                text = tr("שיעורים עם דו\"ח: $totalSessions", "Reported sessions: $totalSessions"),
+                                style = MaterialTheme.typography.labelMedium.merge(textStyle),
+                                color = Color(0xFFBFDBFE),
+                                textAlign = align,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    if (isEnglish) {
+                        Spacer(Modifier.padding(horizontal = 6.dp))
+                        StatsGlowIcon()
+                    }
                 }
             }
 
             Text(
-                text = "ממוצע נוכחות (שנה): $avgPct%",
-                style = MaterialTheme.typography.titleMedium.merge(rtlStyle),
-                fontWeight = FontWeight.Bold,
+                text = tr("ממוצע נוכחות שנה: $avgPct%", "Year attendance average: $avgPct%"),
+                style = MaterialTheme.typography.titleMedium.merge(textStyle),
+                fontWeight = FontWeight.Black,
                 color = Color(0xFF22D3EE),
-                textAlign = TextAlign.Right,
+                textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+}
+
+@Composable
+private fun StatsGlowIcon() {
+    Box(
+        modifier = Modifier
+            .background(
+                brush = Brush.radialGradient(
+                    listOf(Color(0xFF38BDF8), Color(0xFF1E40AF))
+                ),
+                shape = CircleShape
+            )
+            .padding(12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Warning,
+            contentDescription = null,
+            tint = Color.White
+        )
     }
 }
 
@@ -492,39 +600,83 @@ private fun StatsSummaryCard(
     avgPct: Int,
     totalSessions: Int,
     avgPresent: Int,
-    avgTotal: Int
+    avgTotal: Int,
+    isEnglish: Boolean
 ) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val textStyle = TextStyle(
+        textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    )
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(26.dp),
+        color = Color.White.copy(alpha = 0.10f),
         tonalElevation = 0.dp,
-        border = BorderStroke(1.dp, Color(0xFF1E3A8A))
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            Color(0xFF1D4ED8).copy(alpha = 0.18f),
+                            Color.White.copy(alpha = 0.06f)
+                        )
+                    )
+                )
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = Alignment.End
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = horizontalAlignment
         ) {
             Text(
-                text = "סיכום שנה אחורה",
-                style = MaterialTheme.typography.titleSmall,
+                text = tr("סיכום שנה אחורה", "Last year summary"),
+                style = MaterialTheme.typography.titleMedium.merge(textStyle),
+                fontWeight = FontWeight.Black,
                 color = Color(0xFFECFEFF),
-                textAlign = TextAlign.End,
+                textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                StatBox(label = "שיעורים", value = totalSessions.toString())
-                StatBox(label = "ממוצע הגיעו", value = avgPresent.toString())
-                StatBox(label = "ממוצע סה\"כ", value = avgTotal.toString())
-                StatBox(label = "% ממוצע", value = "$avgPct%")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    StatBox(
+                        label = tr("שיעורים", "Sessions"),
+                        value = totalSessions.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatBox(
+                        label = tr("ממוצע הגיעו", "Avg. present"),
+                        value = avgPresent.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    StatBox(
+                        label = tr("ממוצע סה״כ", "Avg. total"),
+                        value = avgTotal.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatBox(
+                        label = tr("ממוצע נוכחות", "Avg. attendance"),
+                        value = "$avgPct%",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
     }
@@ -537,20 +689,31 @@ private fun ReportRowCard(
     present: Int,
     excused: Int,
     absent: Int,
-    pct: Int
+    pct: Int,
+    isEnglish: Boolean
 ) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val textStyle = TextStyle(
+        textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    )
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(22.dp),
+        color = Color.White.copy(alpha = 0.10f),
         tonalElevation = 0.dp,
-        border = BorderStroke(1.dp, Color(0xFF334155))
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
     ) {
-        val rtlStyle = TextStyle(textDirection = TextDirection.Rtl)
-        val datePretty = remember(dateText) {
+        val datePretty = remember(dateText, isEnglish) {
             runCatching {
                 val d = java.time.LocalDate.parse(dateText)
-                val fmt = DateTimeFormatter.ofPattern("dd.MM.yyyy", Locale("he", "IL"))
+                val fmt = DateTimeFormatter.ofPattern(
+                    "dd.MM.yyyy",
+                    if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
+                )
                 d.format(fmt)
             }.getOrElse { dateText }
         }
@@ -558,33 +721,51 @@ private fun ReportRowCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            horizontalAlignment = Alignment.End
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = horizontalAlignment
         ) {
             Text(
                 text = datePretty,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Black,
                 color = Color.White,
-                textAlign = TextAlign.Right,
-                style = MaterialTheme.typography.titleSmall.merge(rtlStyle),
+                textAlign = align,
+                style = MaterialTheme.typography.titleMedium.merge(textStyle),
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Text(
-                text = "סה\"כ: $total | הגיעו: $present | מוצדקים: $excused | לא הגיעו: $absent",
-                color = Color(0xFFE5E7EB),
-                textAlign = TextAlign.Right,
-                style = MaterialTheme.typography.bodySmall.merge(rtlStyle),
-                modifier = Modifier.fillMaxWidth()
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MiniReportStat(
+                    label = tr("סה״כ", "Total"),
+                    value = total.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                MiniReportStat(
+                    label = tr("הגיעו", "Present"),
+                    value = present.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                MiniReportStat(
+                    label = tr("מוצדקים", "Excused"),
+                    value = excused.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                MiniReportStat(
+                    label = tr("נעדרו", "Absent"),
+                    value = absent.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+            }
 
             Text(
-                text = "נוכחות: $pct%",
+                text = tr("נוכחות: $pct%", "Attendance: $pct%"),
                 color = Color(0xFF22D3EE),
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Right,
-                style = MaterialTheme.typography.bodySmall.merge(rtlStyle),
+                fontWeight = FontWeight.Black,
+                textAlign = align,
+                style = MaterialTheme.typography.bodyMedium.merge(textStyle),
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -592,22 +773,78 @@ private fun ReportRowCard(
 }
 
 @Composable
-private fun StatBox(label: String, value: String) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+private fun StatBox(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
     ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFFCBD5F5)
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                maxLines = 1
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFFCBD5F5),
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                lineHeight = MaterialTheme.typography.labelSmall.lineHeight
+            )
+        }
+    }
+}
+
+@Composable
+private fun MiniReportStat(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White.copy(alpha = 0.07f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = value,
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1
+            )
+            Text(
+                text = label,
+                color = Color(0xFFCBD5F5),
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -616,6 +853,7 @@ private fun ConfirmDialog(
     title: String,
     text: String,
     confirmText: String,
+    dismissText: String,
     danger: Boolean,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
@@ -630,7 +868,9 @@ private fun ConfirmDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("ביטול") }
+            TextButton(onClick = onDismiss) {
+                Text(dismissText)
+            }
         }
     )
 }

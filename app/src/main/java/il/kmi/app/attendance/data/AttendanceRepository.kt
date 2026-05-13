@@ -1,115 +1,421 @@
 package il.kmi.app.attendance.data
 
 import android.app.Application
-import androidx.room.Room
+import android.util.Log
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.tasks.await
+import java.security.MessageDigest
 import java.time.LocalDate
 
 class AttendanceRepository private constructor(
-    private val db: AttendanceDatabase
+    private val app: Application
 ) {
-    private val dao: AttendanceDao = db.dao()
+    private val firestore = Firebase.firestore
 
-    /**
-     * רשימת מתאמנים לקבוצה – נתוני אמת מה-DB.
-     * אין הגבלה ל-10 ואין דמו.
-     */
-    fun members(branch: String, groupKey: String): Flow<List<GroupMember>> =
-        dao.members(branch, groupKey)
+    private val sessionPathById = mutableMapOf<Long, Pair<String, String>>()
 
-    suspend fun addMember(branch: String, groupKey: String, displayName: String): Long =
-        dao.upsertMember(
-            GroupMember(
-                id = 0,
-                branch = branch,
-                groupKey = groupKey,
-                displayName = displayName.trim()
-            )
-        )
-
-    /**
-     * מחיקת מתאמן לפי מזהה.
-     */
-    suspend fun removeMember(branch: String, groupKey: String, memberId: Long) {
-        val membersInGroup = dao.members(branch, groupKey).first()
-        val member = membersInGroup.firstOrNull { it.id == memberId } ?: return
-        dao.deleteMember(member)
+    private fun groupDocId(branch: String, groupKey: String): String {
+        return "g_${stablePositiveLong("${branch.trim()}|${groupKey.trim()}")}"
     }
 
+    private fun sessionDocId(date: LocalDate): String {
+        return date.toString()
+    }
+
+    private fun stablePositiveLong(raw: String): Long {
+        val bytes = MessageDigest
+            .getInstance("SHA-256")
+            .digest(raw.trim().lowercase().toByteArray())
+
+        var value = 0L
+        for (i in 0 until 8) {
+            value = (value shl 8) or (bytes[i].toLong() and 0xFF)
+        }
+
+        val positive = value and Long.MAX_VALUE
+        return if (positive == 0L) 1L else positive
+    }
+
+    private fun String.nameKey(): String = this
+        .trim()
+        .replace('־', '-')
+        .replace('–', '-')
+        .replace('—', '-')
+        .replace(Regex("\\s+"), " ")
+        .replace(Regex("""[."'\u05F3\u05F4,;:()\[\]{}]"""), "")
+        .lowercase()
+
+    private fun groupRef(branch: String, groupKey: String) =
+        firestore.collection("attendanceGroups")
+            .document(groupDocId(branch, groupKey))
+
+    private fun membersRef(branch: String, groupKey: String) =
+        groupRef(branch, groupKey).collection("members")
+
+    private fun sessionsRef(branch: String, groupKey: String) =
+        groupRef(branch, groupKey).collection("sessions")
+
+    private fun reportsRef(branch: String, groupKey: String) =
+        groupRef(branch, groupKey).collection("reports")
 
     /**
-     * מבטיח שתהיה ישיבת אימון ל־(תאריך+סניף+קבוצה) ומחזיר את ה-id שלה.
+     * רשימת מתאמנים לקבוצה — מקור אמת Firestore.
+     */
+    fun members(branch: String, groupKey: String): Flow<List<GroupMember>> = callbackFlow {
+        if (branch.isBlank() || groupKey.isBlank()) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
+
+        val groupId = groupDocId(branch, groupKey)
+
+        Log.i(
+            "ATT_FIRESTORE",
+            "members listener START groupId=$groupId branch=$branch group=$groupKey"
+        )
+
+        val registration: ListenerRegistration = membersRef(branch, groupKey)
+            .orderBy("displayName")
+            .addSnapshotListener { snap, error ->
+                if (error != null) {
+                    Log.e(
+                        "ATT_FIRESTORE",
+                        "members listener FAILED groupId=$groupId branch=$branch group=$groupKey",
+                        error
+                    )
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+
+                val docsCount = snap?.documents?.size ?: 0
+
+                val list = snap?.documents
+                    ?.mapNotNull { doc ->
+                        val name = doc.getString("displayName").orEmpty().trim()
+                        if (name.isBlank()) return@mapNotNull null
+
+                        GroupMember(
+                            id = doc.getLong("id") ?: stablePositiveLong(doc.id),
+                            branch = doc.getString("branch") ?: branch,
+                            groupKey = doc.getString("groupKey") ?: groupKey,
+                            displayName = name,
+                            phone = doc.getString("phone"),
+                            notes = doc.getString("notes")
+                        )
+                    }
+                    ?: emptyList()
+
+                Log.i(
+                    "ATT_FIRESTORE",
+                    "members listener RESULT groupId=$groupId docs=$docsCount list=${list.size} names=${list.map { it.displayName }}"
+                )
+
+                trySend(list)
+            }
+
+        awaitClose {
+            registration.remove()
+        }
+    }
+
+    /**
+     * הוספת מתאמן ל־Firestore.
+     * משתמשים ב־displayNameKey כדי למנוע כפילויות לפי שם.
+     */
+    suspend fun addMember(branch: String, groupKey: String, displayName: String): Long {
+        val cleanName = displayName.trim()
+        if (branch.isBlank() || groupKey.isBlank() || cleanName.isBlank()) return 0L
+
+        val key = cleanName.nameKey()
+        val existing = membersRef(branch, groupKey)
+            .whereEqualTo("displayNameKey", key)
+            .limit(1)
+            .get()
+            .await()
+            .documents
+            .firstOrNull()
+
+        if (existing != null) {
+            return existing.getLong("id") ?: stablePositiveLong(existing.id)
+        }
+
+        val memberId = stablePositiveLong("$branch|$groupKey|$key")
+        val docRef = membersRef(branch, groupKey).document(memberId.toString())
+
+        val data = mapOf(
+            "id" to memberId,
+            "branch" to branch,
+            "groupKey" to groupKey,
+            "displayName" to cleanName,
+            "displayNameKey" to key,
+            "createdAtMillis" to System.currentTimeMillis(),
+            "updatedAtMillis" to System.currentTimeMillis()
+        )
+
+        docRef.set(data, SetOptions.merge()).await()
+
+        Log.i(
+            "ATT_FIRESTORE",
+            "member added/merged branch=$branch group=$groupKey memberId=$memberId name=$cleanName"
+        )
+
+        return memberId
+    }
+
+    /**
+     * מחיקת מתאמן מהקבוצה.
+     * מוחק גם סימוני נוכחות שלו מתוך כל השיעורים של הקבוצה.
+     */
+    suspend fun removeMember(branch: String, groupKey: String, memberId: Long) {
+        if (branch.isBlank() || groupKey.isBlank()) return
+
+        membersRef(branch, groupKey)
+            .document(memberId.toString())
+            .delete()
+            .await()
+
+        val sessions = sessionsRef(branch, groupKey)
+            .get()
+            .await()
+            .documents
+
+        sessions.forEach { session ->
+            runCatching {
+                session.reference
+                    .collection("records")
+                    .document(memberId.toString())
+                    .delete()
+                    .await()
+            }.onFailure {
+                Log.e(
+                    "ATT_FIRESTORE",
+                    "failed deleting record for memberId=$memberId session=${session.id}",
+                    it
+                )
+            }
+        }
+
+        Log.i(
+            "ATT_FIRESTORE",
+            "member removed branch=$branch group=$groupKey memberId=$memberId"
+        )
+    }
+
+    /**
+     * מבטיח שתהיה ישיבת אימון ל־(תאריך+סניף+קבוצה) ומחזיר id יציב.
      */
     suspend fun ensureSession(
         date: LocalDate,
         branch: String,
         groupKey: String
     ): Long {
-        val existing = dao.findSession(date, branch, groupKey)
-        if (existing != null) return existing.id
+        if (branch.isBlank() || groupKey.isBlank()) return 0L
 
-        val insertedId = dao.insertSession(
-            TrainingSession(
-                date = date,
-                branch = branch,
-                groupKey = groupKey
-            )
+        val sessionDocId = sessionDocId(date)
+        val sessionId = stablePositiveLong("$branch|$groupKey|$sessionDocId")
+
+        val groupId = groupDocId(branch, groupKey)
+        sessionPathById[sessionId] = groupId to sessionDocId
+
+        val sessionData = mapOf(
+            "id" to sessionId,
+            "date" to date.toString(),
+            "branch" to branch,
+            "groupKey" to groupKey,
+            "updatedAtMillis" to System.currentTimeMillis()
         )
 
-        return if (insertedId > 0L) insertedId
-        else requireNotNull(dao.findSession(date, branch, groupKey)).id
+        sessionsRef(branch, groupKey)
+            .document(sessionDocId)
+            .set(sessionData, SetOptions.merge())
+            .await()
+
+        return sessionId
     }
 
-    /** רשומות נוכחות ליום מסוים (לפי סניף+קבוצה+תאריך) */
+    /**
+     * רשומות נוכחות ליום מסוים — Firestore.
+     */
     fun attendanceForDay(
         branch: String,
         groupKey: String,
         date: LocalDate
-    ): Flow<List<AttendanceRecord>> =
-        dao.attendanceForDay(branch, groupKey, date)
+    ): Flow<List<AttendanceRecord>> = callbackFlow {
+        if (branch.isBlank() || groupKey.isBlank()) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
+
+        val sessionDocId = sessionDocId(date)
+        val sessionId = stablePositiveLong("$branch|$groupKey|$sessionDocId")
+        sessionPathById[sessionId] = groupDocId(branch, groupKey) to sessionDocId
+
+        val registration = sessionsRef(branch, groupKey)
+            .document(sessionDocId)
+            .collection("records")
+            .addSnapshotListener { snap, error ->
+                if (error != null) {
+                    Log.e(
+                        "ATT_FIRESTORE",
+                        "attendanceForDay listener failed branch=$branch group=$groupKey date=$date",
+                        error
+                    )
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+
+                val records = snap?.documents
+                    ?.mapNotNull { doc ->
+                        val statusRaw = doc.getString("status").orEmpty()
+                        val status = runCatching {
+                            AttendanceStatus.valueOf(statusRaw)
+                        }.getOrDefault(AttendanceStatus.ABSENT)
+
+                        val memberId = doc.getLong("memberId")
+                            ?: doc.id.toLongOrNull()
+                            ?: return@mapNotNull null
+
+                        AttendanceRecord(
+                            id = doc.getLong("id") ?: stablePositiveLong("${sessionId}|$memberId"),
+                            sessionId = sessionId,
+                            memberId = memberId,
+                            status = status,
+                            markedAtMillis = doc.getLong("markedAtMillis") ?: 0L
+                        )
+                    }
+                    ?: emptyList()
+
+                trySend(records)
+            }
+
+        awaitClose {
+            registration.remove()
+        }
+    }
 
     /**
-     * סימון נוכחות/היעדרות לחבר מסוים במפגש נתון.
-     * אם אין עדיין רשומה (sessionId+memberId) – ניצור אחת.
+     * סימון נוכחות.
+     * Firestore הוא מקור האמת.
      */
     suspend fun mark(
         sessionId: Long,
         memberId: Long,
         status: AttendanceStatus
     ) {
-        val ts = System.currentTimeMillis()
+        val path = sessionPathById[sessionId]
+            ?: error("Missing Firestore session path for sessionId=$sessionId. ensureSession() must run before mark().")
 
-        val updated = dao.updateStatus(
-            sessionId = sessionId,
-            memberId = memberId,
-            status = status,
-            ts = ts
+        val (groupDocId, sessionDocId) = path
+        val ts = System.currentTimeMillis()
+        val recordId = stablePositiveLong("$sessionId|$memberId")
+
+        val data = mapOf(
+            "id" to recordId,
+            "sessionId" to sessionId,
+            "memberId" to memberId,
+            "status" to status.name,
+            "markedAtMillis" to ts,
+            "updatedAtMillis" to ts
         )
 
-        if (updated == 0) {
-            dao.upsertRecord(
-                AttendanceRecord(
-                    sessionId = sessionId,
-                    memberId = memberId,
-                    status = status,
-                    markedAtMillis = ts
-                )
-            )
-        }
+        firestore.collection("attendanceGroups")
+            .document(groupDocId)
+            .collection("sessions")
+            .document(sessionDocId)
+            .collection("records")
+            .document(memberId.toString())
+            .set(data, SetOptions.merge())
+            .await()
+
+        Log.i(
+            "ATT_FIRESTORE",
+            "marked sessionId=$sessionId memberId=$memberId status=$status"
+        )
     }
 
-    /** סטטיסטיקות נוכחות לפי טווח תאריכים */
+    /**
+     * סטטיסטיקות נוכחות לפי טווח תאריכים.
+     * מחשוב מתוך Firestore.
+     */
     fun stats(
         branch: String,
         groupKey: String,
         from: LocalDate,
         to: LocalDate
-    ): Flow<List<MemberPresenceStat>> =
-        dao.presenceStats(branch, groupKey, from, to)
+    ): Flow<List<MemberPresenceStat>> = flow {
+        if (branch.isBlank() || groupKey.isBlank()) {
+            emit(emptyList())
+            return@flow
+        }
+
+        val members = members(branch, groupKey).first()
+
+        if (members.isEmpty()) {
+            emit(emptyList())
+            return@flow
+        }
+
+        val sessions = sessionsRef(branch, groupKey)
+            .whereGreaterThanOrEqualTo("date", from.toString())
+            .whereLessThanOrEqualTo("date", to.toString())
+            .get()
+            .await()
+            .documents
+
+        val presentByMember = mutableMapOf<Long, Int>()
+        val markedByMember = mutableMapOf<Long, Int>()
+
+        sessions.forEach { session ->
+            val records = session.reference
+                .collection("records")
+                .get()
+                .await()
+                .documents
+
+            records.forEach { doc ->
+                val memberId = doc.getLong("memberId")
+                    ?: doc.id.toLongOrNull()
+                    ?: return@forEach
+
+                val statusRaw = doc.getString("status").orEmpty()
+                val status = runCatching {
+                    AttendanceStatus.valueOf(statusRaw)
+                }.getOrDefault(AttendanceStatus.ABSENT)
+
+                markedByMember[memberId] = (markedByMember[memberId] ?: 0) + 1
+
+                if (status == AttendanceStatus.PRESENT) {
+                    presentByMember[memberId] = (presentByMember[memberId] ?: 0) + 1
+                }
+            }
+        }
+
+        val result = members.map { member ->
+            val marked = markedByMember[member.id] ?: 0
+            val present = presentByMember[member.id] ?: 0
+
+            MemberPresenceStat(
+                memberId = member.id,
+                presenceRatio = if (marked > 0) present.toDouble() / marked.toDouble() else null
+            )
+        }.sortedByDescending { it.presenceRatio ?: -1.0 }
+
+        emit(result)
+    }
 
     /**
-     * מחשב דו"ח נוכחות ליום מסוים ושומר אותו בטבלת attendance_reports.
+     * מחשב דו"ח נוכחות ליום מסוים ושומר אותו ב־Firestore.
      */
     suspend fun saveReportForDate(
         branch: String,
@@ -120,7 +426,6 @@ class AttendanceRepository private constructor(
 
         val members = members(branch, groupKey).first()
         val records = attendanceForDay(branch, groupKey, date).first()
-
         val byMember = records.associateBy { it.memberId }
 
         var present = 0
@@ -138,8 +443,11 @@ class AttendanceRepository private constructor(
 
         val total = present + excused + absent
         val percent = if (total > 0) (present * 100.0 / total).toInt() else 0
+        val now = System.currentTimeMillis()
+        val reportId = stablePositiveLong("$branch|$groupKey|${date}|$sessionId")
 
         val report = AttendanceReport(
+            id = reportId,
             branch = branch,
             groupKey = groupKey,
             date = date,
@@ -149,51 +457,193 @@ class AttendanceRepository private constructor(
             excusedCount = excused,
             absentCount = absent,
             percentPresent = percent,
-            createdAtMillis = System.currentTimeMillis()
+            createdAtMillis = now
         )
 
-        dao.upsertReport(report)
+        val data = mapOf(
+            "id" to report.id,
+            "branch" to report.branch,
+            "groupKey" to report.groupKey,
+            "date" to report.date.toString(),
+            "sessionId" to report.sessionId,
+            "totalMembers" to report.totalMembers,
+            "presentCount" to report.presentCount,
+            "excusedCount" to report.excusedCount,
+            "absentCount" to report.absentCount,
+            "percentPresent" to report.percentPresent,
+            "createdAtMillis" to report.createdAtMillis,
+            "updatedAtMillis" to now
+        )
 
-        // ✅ שומרים לפחות שנה: מוחקים מה שיותר משנה
-        val oneYearAgo = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
-        dao.deleteReportsOlderThan(branch, groupKey, oneYearAgo)
+        reportsRef(branch, groupKey)
+            .document(reportId.toString())
+            .set(data, SetOptions.merge())
+            .await()
+
+        deleteReportsOlderThanOneYear(branch, groupKey)
+
+        Log.i(
+            "ATT_FIRESTORE",
+            "report saved branch=$branch group=$groupKey date=$date total=$total percent=$percent"
+        )
     }
 
-    // ✅ מחיקה לפי IDs (מהמסך החדש עם צ'קבוקסים)
+    private suspend fun deleteReportsOlderThanOneYear(branch: String, groupKey: String) {
+        val oneYearAgo = System.currentTimeMillis() - 365L * 24L * 60L * 60L * 1000L
+
+        val oldReports = reportsRef(branch, groupKey)
+            .whereLessThan("createdAtMillis", oneYearAgo)
+            .get()
+            .await()
+            .documents
+
+        oldReports.forEach { doc ->
+            doc.reference.delete().await()
+        }
+    }
+
     suspend fun deleteReportsByIds(
         branch: String,
         groupKey: String,
         reportIds: List<Long>
     ): Int {
         if (reportIds.isEmpty()) return 0
-        return dao.deleteReportsByIds(branch, groupKey, reportIds)
+
+        var deleted = 0
+
+        reportIds.forEach { id ->
+            runCatching {
+                reportsRef(branch, groupKey)
+                    .document(id.toString())
+                    .delete()
+                    .await()
+                deleted++
+            }.onFailure {
+                Log.e("ATT_FIRESTORE", "failed deleting report id=$id", it)
+            }
+        }
+
+        return deleted
     }
 
     fun reportsLastYear(branch: String, groupKey: String): Flow<List<AttendanceReport>> {
-        val oneYearAgo = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
-        return dao.reportsSince(branch, groupKey, oneYearAgo)
+        val oneYearAgo = System.currentTimeMillis() - 365L * 24L * 60L * 60L * 1000L
+
+        return reportsFlow(
+            branch = branch,
+            groupKey = groupKey,
+            fromMillis = oneYearAgo,
+            limit = null
+        )
     }
 
-    /**
-     * החזרה של N הדו"חות האחרונים לקבוצה.
-     */
     fun lastReports(
         branch: String,
         groupKey: String,
         limit: Int = 5
-    ): Flow<List<AttendanceReport>> =
-        dao.lastReportsForGroup(branch, groupKey, limit)
-
-    // ✅ NEW: מחיקת כל הדו"חות לקבוצה (לא נוגע בסימונים)
-    suspend fun clearReports(branch: String, groupKey: String): Int {
-        return dao.deleteReportsForGroup(branch, groupKey)
+    ): Flow<List<AttendanceReport>> {
+        return reportsFlow(
+            branch = branch,
+            groupKey = groupKey,
+            fromMillis = null,
+            limit = limit
+        )
     }
 
-    // ✅ NEW: איפוס נוכחות לקבוצה (מוחק סימונים+שיעורים+דו"חות, משאיר מתאמנים)
+    private fun reportsFlow(
+        branch: String,
+        groupKey: String,
+        fromMillis: Long?,
+        limit: Int?
+    ): Flow<List<AttendanceReport>> = callbackFlow {
+        if (branch.isBlank() || groupKey.isBlank()) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
+        }
+
+        var query: Query = reportsRef(branch, groupKey)
+            .orderBy("createdAtMillis", Query.Direction.DESCENDING)
+
+        if (fromMillis != null) {
+            query = query.whereGreaterThanOrEqualTo("createdAtMillis", fromMillis)
+        }
+
+        if (limit != null) {
+            query = query.limit(limit.toLong())
+        }
+
+        val registration = query.addSnapshotListener { snap, error ->
+            if (error != null) {
+                Log.e("ATT_FIRESTORE", "reports listener failed branch=$branch group=$groupKey", error)
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+
+            val reports = snap?.documents
+                ?.mapNotNull { doc ->
+                    val dateString = doc.getString("date") ?: return@mapNotNull null
+                    val date = runCatching { LocalDate.parse(dateString) }.getOrNull()
+                        ?: return@mapNotNull null
+
+                    AttendanceReport(
+                        id = doc.getLong("id") ?: doc.id.toLongOrNull() ?: stablePositiveLong(doc.id),
+                        branch = doc.getString("branch") ?: branch,
+                        groupKey = doc.getString("groupKey") ?: groupKey,
+                        date = date,
+                        sessionId = doc.getLong("sessionId") ?: 0L,
+                        totalMembers = (doc.getLong("totalMembers") ?: 0L).toInt(),
+                        presentCount = (doc.getLong("presentCount") ?: 0L).toInt(),
+                        excusedCount = (doc.getLong("excusedCount") ?: 0L).toInt(),
+                        absentCount = (doc.getLong("absentCount") ?: 0L).toInt(),
+                        percentPresent = (doc.getLong("percentPresent") ?: 0L).toInt(),
+                        createdAtMillis = doc.getLong("createdAtMillis") ?: 0L
+                    )
+                }
+                ?: emptyList()
+
+            trySend(reports)
+        }
+
+        awaitClose {
+            registration.remove()
+        }
+    }
+
+    suspend fun clearReports(branch: String, groupKey: String): Int {
+        val docs = reportsRef(branch, groupKey)
+            .get()
+            .await()
+            .documents
+
+        docs.forEach { it.reference.delete().await() }
+
+        return docs.size
+    }
+
     suspend fun resetAttendanceForGroup(branch: String, groupKey: String) {
-        dao.deleteAttendanceRecordsForGroup(branch, groupKey)
-        dao.deleteSessionsForGroup(branch, groupKey)
-        dao.deleteReportsForGroup(branch, groupKey)
+        val sessions = sessionsRef(branch, groupKey)
+            .get()
+            .await()
+            .documents
+
+        sessions.forEach { session ->
+            val records = session.reference
+                .collection("records")
+                .get()
+                .await()
+                .documents
+
+            records.forEach { it.reference.delete().await() }
+            session.reference.delete().await()
+        }
+
+        clearReports(branch, groupKey)
+
+        Log.i(
+            "ATT_FIRESTORE",
+            "attendance reset branch=$branch group=$groupKey"
+        )
     }
 
     companion object {
@@ -202,15 +652,7 @@ class AttendanceRepository private constructor(
 
         fun get(app: Application): AttendanceRepository =
             INSTANCE ?: synchronized(this) {
-                val db = Room.databaseBuilder(
-                    app,
-                    AttendanceDatabase::class.java,
-                    "attendance.db"
-                )
-                    .fallbackToDestructiveMigration()
-                    .build()
-
-                AttendanceRepository(db).also { INSTANCE = it }
+                AttendanceRepository(app).also { INSTANCE = it }
             }
     }
 }

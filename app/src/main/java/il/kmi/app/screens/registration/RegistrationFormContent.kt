@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,8 +41,6 @@ import il.kmi.shared.domain.Belt
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.ui.ext.color
-import il.kmi.shared.localization.AppLanguage
-import il.kmi.shared.localization.AppLanguageManager
 
 private data class TraineeRankOption(
     val id: String,
@@ -139,6 +136,7 @@ private fun traineeRankOptions(): List<TraineeRankOption> {
 @Composable
 fun RegistrationFormContent(
     isCoach: Boolean,
+    isEnglish: Boolean,
     isGoogleAuth: Boolean = false,
     fullName: String,
     onFullNameChange: (String) -> Unit,
@@ -188,9 +186,6 @@ fun RegistrationFormContent(
     val scroll = rememberScrollState()
     var passwordVisible by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
-
-    val languageManager = remember(ctx) { AppLanguageManager(ctx) }
-    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 

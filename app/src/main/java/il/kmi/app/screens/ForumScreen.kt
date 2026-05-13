@@ -64,14 +64,15 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.Explanations
 import il.kmi.app.subscription.KmiAccess   // 👈 חדש – בדיקת גישת מנוי/ניסיון
-import il.kmi.app.privacy.DemoTrainees
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+import il.kmi.app.localization.rememberIsEnglish
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.datetime.Instant
@@ -107,6 +108,19 @@ private data class ForumParticipantUi(
     val isMe: Boolean
 )
 
+private fun forumTr(isEnglish: Boolean, he: String, en: String): String =
+    if (isEnglish) en else he
+
+private fun forumTextAlign(isEnglish: Boolean): TextAlign =
+    if (isEnglish) TextAlign.Left else TextAlign.Right
+
+private const val FORUM_MESSAGE_RETENTION_DAYS = 90L
+private const val FORUM_MESSAGE_RETENTION_MILLIS =
+    FORUM_MESSAGE_RETENTION_DAYS * 24L * 60L * 60L * 1000L
+
+private fun forumLastReadKey(branch: String): String =
+    "forum_last_read_at_${branch.trim()}"
+
 @Composable
 fun ForumScreen(
     sp: SharedPreferences,
@@ -118,6 +132,9 @@ fun ForumScreen(
     val ctx = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+
+    val isEnglish = rememberIsEnglish()
+    val screenTextAlign = forumTextAlign(isEnglish)
 
     val systemDark = isSystemInDarkTheme()
 
@@ -347,6 +364,19 @@ fun ForumScreen(
     }
     val email = remember { userSp.getString("email", "") ?: "" }
 
+    LaunchedEffect(branch) {
+        if (branch.isNotBlank()) {
+            userSp.edit()
+                .putLong(forumLastReadKey(branch), System.currentTimeMillis())
+                .apply()
+
+            android.util.Log.e(
+                "KMI_FORUM_UNREAD",
+                "last forum read updated branch=$branch"
+            )
+        }
+    }
+
     val db = remember { Firebase.firestore }
     val storage = remember { Firebase.storage }    // 👈 storage זמין
     val scope = rememberCoroutineScope()
@@ -379,85 +409,162 @@ fun ForumScreen(
     }
 
     // ================== האזנה בזמן אמת ==================
-    LaunchedEffect(branch, groupKey) {
+    DisposableEffect(branch, groupKey) {
         // חייב לפחות סניף; קבוצה משמשת רק כתווית בחדר, לא לסינון
-        if (branch.isBlank()) return@LaunchedEffect
+        if (branch.isBlank()) {
+            messages = emptyList()
+            onDispose { }
+        } else {
+            val registration = db.collection("branches")
+                .document(branch)
+                .collection("messages")
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .limit(200)
+                .addSnapshotListener { snap, error ->
 
-        // 🔹 פורום לפי סניף בלבד – רואים את כל ההודעות של כל הקבוצות באותו סניף
-        db.collection("branches")
-            .document(branch)
-            .collection("messages")
-            .addSnapshotListener { snap, _ ->
-
-                val currentUid = FirebaseAuth.getInstance().currentUser?.uid
-
-                val uiList = snap?.documents
-                    ?.mapNotNull { doc ->
-                        val rawTs = doc.getTimestamp("createdAt")
-                        val instant = rawTs
-                            ?.toDate()
-                            ?.toInstant()
-                            ?.toKotlinInstant()
-                            ?: return@mapNotNull null
-
-                        // 👇 שם השולח – מנסה כמה שדות: authorName / fullName / name / displayName
-                        val authorNameDoc =
-                            doc.getString("authorName")
-                                ?: doc.getString("fullName")
-                                ?: doc.getString("name")
-                                ?: doc.getString("displayName")
-                                ?: ""
-
-                        val authorEmailDoc = doc.getString("authorEmail") ?: ""
-                        val authorUidDoc = doc.getString("authorUid")
-
-                        ForumUiMessage(
-                            id = doc.id,
-                            branch = doc.getString("branch") ?: branch,
-                            groupKey = doc.getString("groupKey") ?: groupKey,
-                            authorName = authorNameDoc,
-                            authorEmail = authorEmailDoc,
-                            authorUid = authorUidDoc,
-                            text = doc.getString("text") ?: "",
-                            createdAt = instant,
-                            mediaUrl = doc.getString("mediaUrl"),
-                            mediaType = doc.getString("mediaType"),
-                            isMine = (authorUidDoc != null && authorUidDoc == currentUid)
+                    if (error != null) {
+                        android.util.Log.e(
+                            "KMI_FORUM",
+                            "Failed listening to forum messages branch=$branch groupKey=$groupKey",
+                            error
                         )
+                        return@addSnapshotListener
                     }
-                    ?.sortedByDescending { it.createdAt }
-                    ?: emptyList()
 
-                messages = uiList
+                    val currentUid = FirebaseAuth.getInstance().currentUser?.uid
 
-                scope.launch {
-                    listState.animateScrollToItem(0)
+                    val uiList = snap?.documents
+                        ?.mapNotNull { doc ->
+                            val rawTs = doc.getTimestamp("createdAt")
+                            val instant = rawTs
+                                ?.toDate()
+                                ?.toInstant()
+                                ?.toKotlinInstant()
+                                ?: return@mapNotNull null
+
+                            // 👇 שם השולח – מנסה כמה שדות: authorName / fullName / name / displayName
+                            val authorNameDoc =
+                                doc.getString("authorName")
+                                    ?: doc.getString("fullName")
+                                    ?: doc.getString("name")
+                                    ?: doc.getString("displayName")
+                                    ?: ""
+
+                            val authorEmailDoc = doc.getString("authorEmail") ?: ""
+                            val authorUidDoc = doc.getString("authorUid")
+
+                            ForumUiMessage(
+                                id = doc.id,
+                                branch = doc.getString("branch") ?: branch,
+                                groupKey = doc.getString("groupKey") ?: groupKey,
+                                authorName = authorNameDoc,
+                                authorEmail = authorEmailDoc,
+                                authorUid = authorUidDoc,
+                                text = doc.getString("text") ?: "",
+                                createdAt = instant,
+                                mediaUrl = doc.getString("mediaUrl"),
+                                mediaType = doc.getString("mediaType"),
+                                isMine = (authorUidDoc != null && authorUidDoc == currentUid)
+                            )
+                        }
+                        ?: emptyList()
+
+                    messages = uiList
+
+                    scope.launch {
+                        if (uiList.isNotEmpty()) {
+                            listState.animateScrollToItem(0)
+                        }
+                    }
                 }
+
+            onDispose {
+                registration.remove()
+                messages = emptyList()
             }
+        }
     }
 
-    // ================== משתתפים בפורום — מחוברים לקובץ DemoTrainees ==================
-    // כרגע הפורום מציג משתתפי דמו פעילים במקום משתמשים אמיתיים מ-Firestore.
-    DisposableEffect(branch) {
-        val demoParticipants = DemoTrainees.trainees
-            .mapIndexed { index, demo ->
-                ForumParticipantUi(
-                    id = demo.id.ifBlank { "demo_forum_${index + 1}" },
-                    name = demo.name.ifBlank { "מתאמן דמו ${index + 1}" },
-                    isMe = false
-                )
-            }
-            .distinctBy { it.id }
-
-        participantsByUsers = demoParticipants
-
-        android.util.Log.e(
-            "KMI_FORUM_DEMO",
-            "Forum participants loaded from DemoTrainees count=${demoParticipants.size} branch=$branch"
-        )
-
-        onDispose {
+    // ================== משתתפים בפורום — משתמשים אמיתיים מ-Firestore ==================
+    // מסך אמת: אין שימוש ב-DemoTrainees. המשתתפים נטענים לפי סניף המשתמש.
+    DisposableEffect(branch, fullName, email) {
+        if (branch.isBlank()) {
             participantsByUsers = emptyList()
+            onDispose { }
+        } else {
+            val currentUid = FirebaseAuth.getInstance().currentUser?.uid
+            val currentEmail = email.trim()
+
+            val registration = db.collection("users")
+                .whereEqualTo("branch", branch)
+                .addSnapshotListener { snap, error ->
+                    if (error != null) {
+                        android.util.Log.e(
+                            "KMI_FORUM_USERS",
+                            "Failed loading real forum participants for branch=$branch",
+                            error
+                        )
+                        participantsByUsers = emptyList()
+                        return@addSnapshotListener
+                    }
+
+                    val realParticipants = snap?.documents
+                        ?.mapNotNull { doc ->
+                            val role = doc.getString("role").orEmpty().trim().lowercase()
+
+                            // מציגים בפורום בעיקר מתאמנים ומאמנים.
+                            // אם אין role במסמך, לא נפסול כדי לא להעלים משתמשים קיימים ישנים.
+                            val isAllowedRole =
+                                role.isBlank() ||
+                                        role.contains("trainee") ||
+                                        role.contains("coach") ||
+                                        role.contains("מתאמן") ||
+                                        role.contains("מאמן")
+
+                            if (!isAllowedRole) return@mapNotNull null
+
+                            val docName =
+                                doc.getString("fullName")
+                                    ?: doc.getString("name")
+                                    ?: doc.getString("displayName")
+                                    ?: doc.getString("email")
+                                    ?: ""
+
+                            val cleanName = docName.trim()
+                            if (cleanName.isBlank()) return@mapNotNull null
+
+                            val docEmail = doc.getString("email").orEmpty().trim()
+                            val docUid =
+                                doc.getString("uid")
+                                    ?: doc.getString("authUid")
+                                    ?: doc.id
+
+                            ForumParticipantUi(
+                                id = docUid.ifBlank { doc.id },
+                                name = cleanName,
+                                isMe = (
+                                        (currentUid != null && docUid == currentUid) ||
+                                                (currentEmail.isNotBlank() && docEmail == currentEmail) ||
+                                                cleanName == fullName.trim()
+                                        )
+                            )
+                        }
+                        ?.distinctBy { it.id }
+                        ?.sortedBy { it.name }
+                        ?: emptyList()
+
+                    participantsByUsers = realParticipants
+
+                    android.util.Log.e(
+                        "KMI_FORUM_USERS",
+                        "Forum participants loaded from Firestore count=${realParticipants.size} branch=$branch"
+                    )
+                }
+
+            onDispose {
+                registration.remove()
+                participantsByUsers = emptyList()
+            }
         }
     }
 
@@ -503,13 +610,26 @@ fun ForumScreen(
             }
 
             // דאטה בסיסי להודעה
+            val safeAuthorName = fullName
+                .ifBlank { userSp.getString("displayName", "").orEmpty() }
+                .ifBlank { userSp.getString("name", "").orEmpty() }
+                .ifBlank { email }
+                .ifBlank { forumTr(isEnglish, "משתתף", "Participant") }
+
+            val expiresAtDate = Date(
+                System.currentTimeMillis() + FORUM_MESSAGE_RETENTION_MILLIS
+            )
+
             val baseData = mutableMapOf<String, Any?>(
                 "branch" to branch,
                 "groupKey" to groupKey,
-                "authorName" to fullName,
+                "authorName" to safeAuthorName,
                 "authorEmail" to email,
                 "authorUid" to currentUid,
                 "text" to text,
+                "expiresAt" to com.google.firebase.Timestamp(expiresAtDate),
+                "retentionDays" to FORUM_MESSAGE_RETENTION_DAYS,
+                "isPinned" to false
             )
 
             if (mediaUrl != null && mediaType != null) {
@@ -518,16 +638,21 @@ fun ForumScreen(
             }
 
             if (editingMessage == null) {
-                // הודעה חדשה
+                // הודעה חדשה — מוגדרת למחיקה אוטומטית אחרי 90 יום דרך Firestore TTL
                 baseData["createdAt"] = FieldValue.serverTimestamp()
+
                 db.collection("branches")
                     .document(branch)
                     .collection("messages")
                     .add(baseData.filterValues { it != null })
                     .await()
             } else {
-                // עדכון הודעה קיימת
+                // עדכון הודעה קיימת — לא מאריכים את expiresAt בעריכה
+                baseData.remove("expiresAt")
+                baseData.remove("retentionDays")
+                baseData.remove("isPinned")
                 baseData["updatedAt"] = FieldValue.serverTimestamp()
+
                 db.collection("branches")
                     .document(branch)
                     .collection("messages")
@@ -554,7 +679,11 @@ fun ForumScreen(
             android.util.Log.e("KMI_FORUM", "sendMessageInternal failed", e)
             Toast.makeText(
                 ctx,
-                "שגיאה בשמירת ההודעה: ${e.localizedMessage ?: "בדוק חיבור לאינטרנט"}",
+                forumTr(
+                    isEnglish,
+                    "שגיאה בשמירת ההודעה: ${e.localizedMessage ?: "בדוק חיבור לאינטרנט"}",
+                    "Error saving message: ${e.localizedMessage ?: "Check your internet connection"}"
+                ),
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -621,7 +750,7 @@ fun ForumScreen(
     Scaffold(
         topBar = {
             il.kmi.app.ui.KmiTopBar(
-                title = "פורום הסניף",
+                title = forumTr(isEnglish, "פורום הסניף", "Branch Forum"),
                 onPickSearchResult = { key -> pickedKey = key },
                 onHome = onGoHome,          // 👈 כאן התיקון – הבית באמת הולך הביתה
                 onSearch = { },
@@ -655,12 +784,23 @@ fun ForumScreen(
                 // 🔒 קודם כל – נעילת מסך הפורום לפי מנוי / ניסיון
                 if (!canUseExtras) {
                     val lockText = when {
-                        isTrial && !hasFull ->
-                            "במהלך תקופת הניסיון מסך הפורום נעול.\nאחרי רכישת מנוי המסך ייפתח עבורך."
-                        !isTrial && !hasFull ->
-                            "מסך הפורום זמין למנויים בלבד.\nכדי להמשיך יש לרכוש מנוי פעיל."
-                        else ->
-                            "מסך הפורום זמין למנויים בלבד."
+                        isTrial && !hasFull -> forumTr(
+                            isEnglish,
+                            "במהלך תקופת הניסיון מסך הפורום נעול.\nאחרי רכישת מנוי המסך ייפתח עבורך.",
+                            "During the trial period, the forum is locked.\nAfter purchasing a subscription, this screen will be available."
+                        )
+
+                        !isTrial && !hasFull -> forumTr(
+                            isEnglish,
+                            "מסך הפורום זמין למנויים בלבד.\nכדי להמשיך יש לרכוש מנוי פעיל.",
+                            "The forum is available to subscribers only.\nTo continue, please purchase an active subscription."
+                        )
+
+                        else -> forumTr(
+                            isEnglish,
+                            "מסך הפורום זמין למנויים בלבד.",
+                            "The forum is available to subscribers only."
+                        )
                     }
 
                     Surface(
@@ -709,7 +849,7 @@ fun ForumScreen(
                             Spacer(Modifier.height(12.dp))
 
                             Text(
-                                text = "גישה לפורום",
+                                text = forumTr(isEnglish, "גישה לפורום", "Forum Access"),
                                 color = if (isDarkMode) Color(0xFFBFDBFE) else Color(0xFF1E3A8A),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
@@ -733,13 +873,17 @@ fun ForumScreen(
                                 shape = RoundedCornerShape(999.dp)
                             ) {
                                 Text(
-                                    text = "עבור למסך המנוי",
+                                    text = forumTr(isEnglish, "עבור למסך המנוי", "Go to Subscription"),
                                     fontWeight = FontWeight.Bold
                                 )
                             }
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                text = "ניתן לחזור תמיד למסך זה לאחר רכישת מנוי.",
+                                text = forumTr(
+                                    isEnglish,
+                                    "ניתן לחזור תמיד למסך זה לאחר רכישת מנוי.",
+                                    "You can always return to this screen after purchasing a subscription."
+                                ),
                                 color = if (isDarkMode) Color(0xFF9CA3AF) else Color(0xFF64748B),
                                 style = MaterialTheme.typography.bodySmall,
                                 textAlign = TextAlign.Center,
@@ -755,15 +899,25 @@ fun ForumScreen(
                 // רק אם יש גישה – בודקים שהמשתמש משויך לסניף/קבוצה
                 if (branch.isBlank() || groupKey.isBlank()) {
                     Text(
-                        "לא אותרו סניף/קבוצה במשתמש.\nודאו ש־\"branch\" ו־\"groupKey\" מוגדרים בפרופיל.",
+                        text = forumTr(
+                            isEnglish,
+                            "לא אותרו סניף/קבוצה במשתמש.\nודאו ש־\"branch\" ו־\"groupKey\" מוגדרים בפרופיל.",
+                            "No branch/group was found for this user.\nPlease make sure \"branch\" and \"groupKey\" are set in the profile."
+                        ),
                         color = Color(0xFFFF6B6B),
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = screenTextAlign,
+                        modifier = Modifier.fillMaxWidth()
                     )
                     return@Column
                 }
 
                 // כותרת בולטת לסניף / קבוצה
-                val roomLabel = "סניף: $branch  •  קבוצה: $groupKey"
+                val roomLabel = forumTr(
+                    isEnglish,
+                    "סניף: $branch  •  קבוצה: $groupKey",
+                    "Branch: $branch  •  Group: $groupKey"
+                )
 
                 Surface(
                     modifier = Modifier
@@ -797,7 +951,10 @@ fun ForumScreen(
                         .mapNotNull { (_, msgs) ->
                             val sample = msgs.firstOrNull() ?: return@mapNotNull null
                             val displayName =
-                                sample.authorName.ifBlank { sample.authorEmail }.ifBlank { "משתתף" }
+                                sample.authorName
+                                    .ifBlank { sample.authorEmail }
+                                    .ifBlank { forumTr(isEnglish, "משתתף", "Participant") }
+
                             val id = sample.authorUid
                                 ?: sample.authorEmail.ifBlank { sample.authorName.ifBlank { displayName } }
 
@@ -826,7 +983,11 @@ fun ForumScreen(
                         border = BorderStroke(1.dp, forumHeaderBorder)
                     ) {
                         Text(
-                            text = "משתתפים בפורום (${participants.size})",
+                            text = forumTr(
+                                isEnglish,
+                                "משתתפים בפורום (${participants.size})",
+                                "Forum participants (${participants.size})"
+                            ),
                             style = MaterialTheme.typography.labelMedium,
                             color = participantsText,
                             fontWeight = FontWeight.Medium,
@@ -843,9 +1004,13 @@ fun ForumScreen(
                         onDismissRequest = { showParticipantsDialog = false },
                         title = {
                             Text(
-                                text = "משתתפים בפורום (${participants.size})",
+                                text = forumTr(
+                                    isEnglish,
+                                    "משתתפים בפורום (${participants.size})",
+                                    "Forum participants (${participants.size})"
+                                ),
                                 style = MaterialTheme.typography.titleMedium,
-                                textAlign = TextAlign.Right,
+                                textAlign = screenTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         },
@@ -863,9 +1028,13 @@ fun ForumScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(
-                                            text = if (p.isMe) "${p.name} (אני)" else p.name,
+                                            text = if (p.isMe) {
+                                                forumTr(isEnglish, "${p.name} (אני)", "${p.name} (me)")
+                                            } else {
+                                                p.name
+                                            },
                                             style = MaterialTheme.typography.bodyMedium,
-                                            textAlign = TextAlign.Right,
+                                            textAlign = screenTextAlign,
                                             modifier = Modifier.weight(1f)
                                         )
                                     }
@@ -874,7 +1043,7 @@ fun ForumScreen(
                         },
                         confirmButton = {
                             TextButton(onClick = { showParticipantsDialog = false }) {
-                                Text("סגור")
+                                Text(forumTr(isEnglish, "סגור", "Close"))
                             }
                         }
                     )
@@ -918,16 +1087,45 @@ fun ForumScreen(
                                 ) {
                                     Column(
                                         modifier = Modifier
-                                            .widthIn(max = 240.dp)
+                                            .widthIn(max = 260.dp)
                                             .padding(horizontal = 10.dp, vertical = 7.dp),
                                         verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
+                                        val participantNameByUid = msg.authorUid
+                                            ?.let { uid ->
+                                                participantsByUsers.firstOrNull { it.id == uid }?.name
+                                            }
+                                            .orEmpty()
+
+                                        val messageAuthorName = msg.authorName
+                                            .ifBlank { participantNameByUid }
+                                            .ifBlank { msg.authorEmail }
+                                            .ifBlank { forumTr(isEnglish, "משתתף", "Participant") }
+
+                                        Text(
+                                            text = if (msg.isMine) {
+                                                forumTr(
+                                                    isEnglish,
+                                                    "$messageAuthorName • אני",
+                                                    "$messageAuthorName • me"
+                                                )
+                                            } else {
+                                                messageAuthorName
+                                            },
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = textColor.copy(alpha = 0.78f),
+                                            fontWeight = FontWeight.Black,
+                                            textAlign = screenTextAlign,
+                                            maxLines = 1,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
                                         if (msg.text.isNotBlank()) {
                                             Text(
                                                 text = msg.text,
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 color = textColor,
-                                                textAlign = TextAlign.Right,
+                                                textAlign = screenTextAlign,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                         }
@@ -942,7 +1140,7 @@ fun ForumScreen(
                                                     ) {
                                                         AsyncImage(
                                                             model = url,
-                                                            contentDescription = "תמונה מצורפת",
+                                                            contentDescription = forumTr(isEnglish, "תמונה מצורפת", "Attached image"),
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
                                                                 .heightIn(min = 120.dp, max = 220.dp)
@@ -968,17 +1166,21 @@ fun ForumScreen(
                                                         ) {
                                                             Column(
                                                                 modifier = Modifier.weight(1f),
-                                                                horizontalAlignment = Alignment.End
+                                                                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                                             ) {
                                                                 Text(
-                                                                    "סרטון מצורף",
+                                                                    text = forumTr(isEnglish, "סרטון מצורף", "Attached video"),
                                                                     color = Color.White,
-                                                                    fontWeight = FontWeight.SemiBold
+                                                                    fontWeight = FontWeight.SemiBold,
+                                                                    textAlign = screenTextAlign,
+                                                                    modifier = Modifier.fillMaxWidth()
                                                                 )
                                                                 Text(
-                                                                    "לחיצה לפתיחה בנגן",
+                                                                    text = forumTr(isEnglish, "לחיצה לפתיחה בנגן", "Tap to open in player"),
                                                                     color = Color.White.copy(alpha = 0.78f),
-                                                                    style = MaterialTheme.typography.labelSmall
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    textAlign = screenTextAlign,
+                                                                    modifier = Modifier.fillMaxWidth()
                                                                 )
                                                             }
                                                             FilledTonalButton(
@@ -1001,7 +1203,7 @@ fun ForumScreen(
                                                                     contentDescription = null
                                                                 )
                                                                 Spacer(Modifier.width(6.dp))
-                                                                Text("פתח")
+                                                                Text(forumTr(isEnglish, "פתח", "Open"))
                                                             }
                                                         }
                                                     }
@@ -1013,7 +1215,11 @@ fun ForumScreen(
 
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.End,
+                                            horizontalArrangement = if (isEnglish) {
+                                                Arrangement.End
+                                            } else {
+                                                Arrangement.Start
+                                            },
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             if (msg.isMine) {
@@ -1029,7 +1235,7 @@ fun ForumScreen(
                                                 ) {
                                                     Icon(
                                                         Icons.Filled.Edit,
-                                                        contentDescription = "עריכת הודעה",
+                                                        contentDescription = forumTr(isEnglish, "עריכת הודעה", "Edit message"),
                                                         tint = textColor.copy(alpha = 0.72f)
                                                     )
                                                 }
@@ -1049,7 +1255,7 @@ fun ForumScreen(
                                                 ) {
                                                     Icon(
                                                         Icons.Filled.Delete,
-                                                        contentDescription = "מחיקת הודעה",
+                                                        contentDescription = forumTr(isEnglish, "מחיקת הודעה", "Delete message"),
                                                         tint = textColor.copy(alpha = 0.72f)
                                                     )
                                                 }
@@ -1060,7 +1266,7 @@ fun ForumScreen(
                                                 text = formatInstant(msg.createdAt),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = textColor.copy(alpha = 0.62f),
-                                                textAlign = TextAlign.Right
+                                                textAlign = screenTextAlign
                                             )
                                         }
                                     }
@@ -1116,9 +1322,9 @@ fun ForumScreen(
                         ) {
                             Text(
                                 text = when (attachedMediaType) {
-                                    "image" -> "תמונה מצורפת לשליחה"
-                                    "video" -> "סרטון מצורף לשליחה"
-                                    else -> "קובץ מצורף"
+                                    "image" -> forumTr(isEnglish, "תמונה מצורפת לשליחה", "Image attached")
+                                    "video" -> forumTr(isEnglish, "סרטון מצורף לשליחה", "Video attached")
+                                    else -> forumTr(isEnglish, "קובץ מצורף", "Attachment")
                                 },
                                 color = attachmentChipText,
                                 style = MaterialTheme.typography.labelMedium
@@ -1127,7 +1333,7 @@ fun ForumScreen(
                                 attachedUri = null
                                 attachedMediaType = null
                             }) {
-                                Text("הסר")
+                                Text(forumTr(isEnglish, "הסר", "Remove"))
                             }
                         }
                     }
@@ -1170,7 +1376,7 @@ fun ForumScreen(
                             ) {
                                 Icon(
                                     Icons.Outlined.Add,
-                                    contentDescription = "צרף תמונה",
+                                    contentDescription = forumTr(isEnglish, "צרף תמונה", "Attach image"),
                                     tint = inputIconTint
                                 )
                             }
@@ -1189,7 +1395,7 @@ fun ForumScreen(
                                     .fillMaxHeight(),
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                                     color = inputTextColor,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = screenTextAlign,
                                     fontWeight = FontWeight.SemiBold,
                                     lineHeight = 22.sp
                                 ),
@@ -1200,16 +1406,20 @@ fun ForumScreen(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .padding(horizontal = 8.dp),
-                                        contentAlignment = Alignment.CenterEnd
+                                        contentAlignment = if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
                                     ) {
                                         val currentText =
                                             if (editingMessage != null) editText else input
 
                                         if (currentText.isBlank()) {
                                             Text(
-                                                text = if (editingMessage != null) "עריכת הודעה..." else "הודעה",
+                                                text = if (editingMessage != null) {
+                                                    forumTr(isEnglish, "עריכת הודעה...", "Editing message...")
+                                                } else {
+                                                    forumTr(isEnglish, "הודעה", "Message")
+                                                },
                                                 color = inputPlaceholderColor,
-                                                textAlign = TextAlign.Right,
+                                                textAlign = screenTextAlign,
                                                 style = MaterialTheme.typography.bodyMedium.copy(
                                                     lineHeight = 22.sp
                                                 ),
@@ -1219,7 +1429,7 @@ fun ForumScreen(
 
                                         Box(
                                             modifier = Modifier.fillMaxWidth(),
-                                            contentAlignment = Alignment.CenterEnd
+                                            contentAlignment = if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
                                         ) {
                                             innerTextField()
                                         }
@@ -1233,7 +1443,7 @@ fun ForumScreen(
                             ) {
                                 Icon(
                                     Icons.Filled.VideoLibrary,
-                                    contentDescription = "צרף וידאו",
+                                    contentDescription = forumTr(isEnglish, "צרף וידאו", "Attach video"),
                                     tint = inputIconTint
                                 )
                             }
@@ -1261,9 +1471,13 @@ fun ForumScreen(
                             Icon(
                                 imageVector = if (canSend) Icons.Filled.Send else Icons.Outlined.Mic,
                                 contentDescription = if (canSend) {
-                                    if (editingMessage != null) "עדכן הודעה" else "שלח"
+                                    if (editingMessage != null) {
+                                        forumTr(isEnglish, "עדכן הודעה", "Update message")
+                                    } else {
+                                        forumTr(isEnglish, "שלח", "Send")
+                                    }
                                 } else {
-                                    "הקלטה"
+                                    forumTr(isEnglish, "הקלטה", "Voice recording")
                                 },
                                 tint = Color.White
                             )
@@ -1280,11 +1494,12 @@ fun ForumScreen(
                     .displayName(item)
                     .ifBlank { item }
 
-                val explanation = remember(belt, item) {
+                val explanation = remember(belt, item, isEnglish) {
                     findExplanationForHit(
                         belt = belt,
                         rawItem = item,
-                        topic = topic
+                        topic = topic,
+                        isEnglish = isEnglish
                     )
                 }
 
@@ -1307,13 +1522,13 @@ fun ForumScreen(
                                     text = displayName,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = screenTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Text(
-                                    text = "(${belt.heb})",
+                                    text = if (isEnglish) "(${belt.en})" else "(${belt.heb})",
                                     style = MaterialTheme.typography.labelMedium,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = screenTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -1325,13 +1540,13 @@ fun ForumScreen(
                                 if (isFav) {
                                     Icon(
                                         imageVector = Icons.Filled.Star,
-                                        contentDescription = "מועדף",
+                                        contentDescription = forumTr(isEnglish, "מועדף", "Favorite"),
                                         tint = Color(0xFFFFC107)
                                     )
                                 } else {
                                     Icon(
                                         imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = "הוסף למועדפים",
+                                        contentDescription = forumTr(isEnglish, "הוסף למועדפים", "Add to favorites"),
                                     )
                                 }
                             }
@@ -1341,13 +1556,13 @@ fun ForumScreen(
                         Text(
                             text = explanation,
                             style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Right,
+                            textAlign = screenTextAlign,
                             modifier = Modifier.fillMaxWidth()
                         )
                     },
                     confirmButton = {
                         TextButton(onClick = { pickedKey = null }) {
-                            Text("סגור")
+                            Text(forumTr(isEnglish, "סגור", "Close"))
                         }
                     }
                 )
@@ -1360,7 +1575,8 @@ fun ForumScreen(
 private fun findExplanationForHit(
     belt: Belt,
     rawItem: String,
-    topic: String
+    topic: String,
+    isEnglish: Boolean
 ): String {
     val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
 
@@ -1387,7 +1603,11 @@ private fun findExplanationForHit(
         }
     }
 
-    return "אין כרגע הסבר לתרגיל הזה."
+    return if (isEnglish) {
+        "There is currently no explanation for this exercise."
+    } else {
+        "אין כרגע הסבר לתרגיל הזה."
+    }
 }
 
 
