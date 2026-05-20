@@ -39,8 +39,15 @@ import androidx.compose.material.icons.filled.Close
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import android.app.Activity
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.zIndex
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.tasks.await
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
 // ----- מודל נתונים להזנה נוחה -----
 data class UserProfileInfo(
@@ -58,6 +65,34 @@ data class UserProfileInfo(
     val accountUserName: String = "user_123",
     val password: String = "••••••••"
 )
+
+private data class FirestoreProfileInfo(
+    val fullName: String = "",
+    val email: String = "",
+    val phone: String = "",
+    val username: String = "",
+    val region: String = "",
+    val branch: String = "",
+    val group: String = "",
+    val belt: String = "",
+    val role: String = ""
+)
+
+private fun profileTr(isEnglish: Boolean, he: String, en: String): String {
+    return if (isEnglish) en else he
+}
+
+private fun profileTextAlign(isEnglish: Boolean): TextAlign {
+    return if (isEnglish) TextAlign.Left else TextAlign.Right
+}
+
+private fun profileHorizontalAlignment(isEnglish: Boolean): Alignment.Horizontal {
+    return if (isEnglish) Alignment.Start else Alignment.End
+}
+
+private fun profileLayoutDirection(isEnglish: Boolean): LayoutDirection {
+    return if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+}
 
 private fun traineeRankDisplayName(rawId: String?): String {
     return when (rawId?.trim().orEmpty()) {
@@ -113,6 +148,167 @@ private fun nextTraineeRankDisplayName(rawId: String?): String {
     }
 }
 
+private fun traineeRankDisplayNameForUi(
+    rawId: String?,
+    isEnglish: Boolean
+): String {
+    if (!isEnglish) {
+        return traineeRankDisplayName(rawId)
+    }
+
+    return when (rawId?.trim().orEmpty()) {
+        "white", "לבנה" -> "White"
+        "yellow", "צהובה" -> "Yellow"
+        "orange", "כתומה" -> "Orange"
+        "green", "ירוקה" -> "Green"
+        "blue", "כחולה" -> "Blue"
+        "brown", "חומה" -> "Brown"
+
+        "black",
+        "שחורה",
+        "שחורה דאן 1" -> "Black Dan 1"
+
+        "black_dan_2", "שחורה דאן 2" -> "Black Dan 2"
+        "black_dan_3", "שחורה דאן 3" -> "Black Dan 3"
+        "black_dan_4", "שחורה דאן 4" -> "Black Dan 4"
+        "black_dan_5", "שחורה דאן 5" -> "Black Dan 5"
+        "black_dan_6", "שחורה דאן 6" -> "Black Dan 6"
+        "black_dan_7", "שחורה דאן 7" -> "Black Dan 7"
+        "black_dan_8", "שחורה דאן 8" -> "Black Dan 8"
+        "black_dan_9", "שחורה דאן 9" -> "Black Dan 9"
+        "black_dan_10", "שחורה דאן 10" -> "Black Dan 10"
+
+        else -> ""
+    }
+}
+
+private fun nextTraineeRankDisplayNameForUi(
+    rawId: String?,
+    isEnglish: Boolean
+): String {
+    if (!isEnglish) {
+        return nextTraineeRankDisplayName(rawId)
+    }
+
+    return when (rawId?.trim().orEmpty()) {
+        "white" -> "Yellow"
+        "yellow" -> "Orange"
+        "orange" -> "Green"
+        "green" -> "Blue"
+        "blue" -> "Brown"
+        "brown" -> "Black Dan 1"
+
+        "black",
+        "שחורה",
+        "שחורה דאן 1" -> "Black Dan 2"
+
+        "black_dan_2", "שחורה דאן 2" -> "Black Dan 3"
+        "black_dan_3", "שחורה דאן 3" -> "Black Dan 4"
+        "black_dan_4", "שחורה דאן 4" -> "Black Dan 5"
+        "black_dan_5", "שחורה דאן 5" -> "Black Dan 6"
+        "black_dan_6", "שחורה דאן 6" -> "Black Dan 7"
+        "black_dan_7", "שחורה דאן 7" -> "Black Dan 8"
+        "black_dan_8", "שחורה דאן 8" -> "Black Dan 9"
+        "black_dan_9", "שחורה דאן 9" -> "Black Dan 10"
+        "black_dan_10", "שחורה דאן 10" -> "—"
+
+        else -> "—"
+    }
+}
+
+private fun firestoreProfileFirstString(
+    data: Map<String, Any?>,
+    vararg keys: String
+): String {
+    for (key in keys) {
+        val value = data[key]
+
+        when (value) {
+            is String -> {
+                if (value.trim().isNotBlank()) return value.trim()
+            }
+
+            is List<*> -> {
+                val joined = value
+                    .mapNotNull { it?.toString()?.trim() }
+                    .filter { it.isNotBlank() }
+                    .joinToString(", ")
+
+                if (joined.isNotBlank()) return joined
+            }
+        }
+    }
+
+    return ""
+}
+
+private fun firestoreProfileFromMap(data: Map<String, Any?>): FirestoreProfileInfo {
+    return FirestoreProfileInfo(
+        fullName = firestoreProfileFirstString(
+            data,
+            "fullName",
+            "name",
+            "displayName"
+        ),
+        email = firestoreProfileFirstString(
+            data,
+            "email"
+        ),
+        phone = firestoreProfileFirstString(
+            data,
+            "phone",
+            "phoneNumber",
+            "phone_number"
+        ),
+        username = firestoreProfileFirstString(
+            data,
+            "username",
+            "userName",
+            "accountUserName"
+        ),
+        region = firestoreProfileFirstString(
+            data,
+            "region",
+            "activeRegion",
+            "active_region"
+        ),
+        branch = firestoreProfileFirstString(
+            data,
+            "activeBranch",
+            "active_branch",
+            "branch",
+            "branchesCsv",
+            "branches"
+        ),
+        group = firestoreProfileFirstString(
+            data,
+            "activeGroup",
+            "active_group",
+            "primaryGroup",
+            "groupKey",
+            "group_key",
+            "age_group",
+            "group",
+            "groupsCsv",
+            "groups"
+        ),
+        belt = firestoreProfileFirstString(
+            data,
+            "current_belt",
+            "belt_current",
+            "belt",
+            "rank"
+        ),
+        role = firestoreProfileFirstString(
+            data,
+            "role",
+            "user_role",
+            "userType",
+            "type"
+        )
+    )
+}
+
 /**
  * מסך פרופיל – בונה את המידע מתוך ה־Prefs ומציג כרטיס יוקרתי
  */
@@ -134,22 +330,127 @@ fun MyProfileScreen(
     val userSp = remember(key1 = ctx) { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
     val scroll = rememberScrollState()   // ✅ גלילה
 
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        // קריאה מה־Prefs (KmiPrefs מקור אמת; SP/UserSP פולבאק)
-        val fullName = prefStr(kmiPrefs.fullName, sp.getString("fullName", ""))
-        val email = prefStr(kmiPrefs.email, sp.getString("email", ""))
-        val phone = prefStr(kmiPrefs.phone, sp.getString("phone", ""))
-        val username = prefStr(kmiPrefs.username, sp.getString("username", ""))
-        val password = prefStr(kmiPrefs.password, sp.getString("password", ""))
+    val langManager = remember(ctx) { AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val screenLayoutDirection = profileLayoutDirection(isEnglish)
 
-        val branchRaw = prefStr(kmiPrefs.branch, sp.getString("branch", ""))
+    var firestoreProfile by remember {
+        mutableStateOf(FirestoreProfileInfo())
+    }
+
+    var isLoadingFirestoreProfile by remember {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(Unit) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+
+        if (!uid.isNullOrBlank()) {
+            isLoadingFirestoreProfile = true
+
+            runCatching {
+                Firebase.firestore
+                    .collection("users")
+                    .document(uid)
+                    .get()
+                    .await()
+            }.onSuccess { snap ->
+                firestoreProfile = firestoreProfileFromMap(snap.data.orEmpty())
+
+                val p = firestoreProfile
+
+                // מיישר גם את SharedPreferences כדי ששאר המסכים ייהנו מהמידע.
+                userSp.edit()
+                    .putString("fullName", p.fullName)
+                    .putString("email", p.email)
+                    .putString("phone", p.phone)
+                    .putString("branch", p.branch)
+                    .putString("activeBranch", p.branch)
+                    .putString("active_branch", p.branch)
+                    .putString("group", p.group)
+                    .putString("activeGroup", p.group)
+                    .putString("active_group", p.group)
+                    .putString("groupKey", p.group)
+                    .putString("age_group", p.group)
+                    .putString("belt", p.belt)
+                    .putString("current_belt", p.belt)
+                    .putString("user_role", p.role)
+                    .apply()
+            }.onFailure {
+                // לא מפילים את המסך — ממשיכים עם KmiPrefs/SharedPreferences.
+            }
+
+            isLoadingFirestoreProfile = false
+        }
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides screenLayoutDirection) {
+        // קריאה מה־Prefs (KmiPrefs מקור אמת; SP/UserSP פולבאק)
+        val fullName = prefStr(
+            kmiPrefs.fullName,
+            sp.getString("fullName", ""),
+            userSp.getString("fullName", ""),
+            firestoreProfile.fullName
+        )
+
+        val email = prefStr(
+            kmiPrefs.email,
+            sp.getString("email", ""),
+            userSp.getString("email", ""),
+            firestoreProfile.email
+        )
+
+        val phone = prefStr(
+            kmiPrefs.phone,
+            sp.getString("phone", ""),
+            userSp.getString("phone", ""),
+            firestoreProfile.phone
+        )
+
+        val username = prefStr(
+            kmiPrefs.username,
+            sp.getString("username", ""),
+            userSp.getString("username", ""),
+            firestoreProfile.username
+        )
+
+        val password = prefStr(
+            kmiPrefs.password,
+            sp.getString("password", "")
+        )
+
+        val branchRaw = prefStr(
+            kmiPrefs.branch,
+            sp.getString("activeBranch", ""),
+            sp.getString("active_branch", ""),
+            sp.getString("branch", ""),
+            userSp.getString("activeBranch", ""),
+            userSp.getString("active_branch", ""),
+            userSp.getString("branch", ""),
+            firestoreProfile.branch
+        )
         fun splitBranches(s: String): List<String> =
             s.split('\n', '|', ';', ',').map { it.trim() }.filter { it.isNotEmpty() }
         val branchesList: List<String> = splitBranches(branchRaw)
         val primaryBranch: String = branchesList.firstOrNull().orEmpty()
 
         val group = TrainingCatalog.normalizeGroupName(
-            prefStr(kmiPrefs.ageGroup, sp.getString("age_group", ""), sp.getString("group", ""))
+            prefStr(
+                kmiPrefs.ageGroup,
+                sp.getString("activeGroup", ""),
+                sp.getString("active_group", ""),
+                sp.getString("groupKey", ""),
+                sp.getString("group_key", ""),
+                sp.getString("age_group", ""),
+                sp.getString("group", ""),
+                userSp.getString("activeGroup", ""),
+                userSp.getString("active_group", ""),
+                userSp.getString("groupKey", ""),
+                userSp.getString("group_key", ""),
+                userSp.getString("age_group", ""),
+                userSp.getString("group", ""),
+                firestoreProfile.group
+            )
         )
 
         fun dbGroupMatches(
@@ -241,9 +542,9 @@ fun MyProfileScreen(
 
                     DbNextTrainingForProfile(
                         cal = cal,
-                        place = dbBranch.displayPlace(isEnglish = false),
-                        address = dbBranch.displayAddress(isEnglish = false),
-                        coach = trainingDay.displayCoachName(isEnglish = false)
+                        place = dbBranch.displayPlace(isEnglish = isEnglish),
+                        address = dbBranch.displayAddress(isEnglish = isEnglish),
+                        coach = trainingDay.displayCoachName(isEnglish = isEnglish)
                     )
                 }
                 .minByOrNull { it.cal.timeInMillis }
@@ -256,7 +557,8 @@ fun MyProfileScreen(
             sp.getString("belt", ""),
             userSp.getString("current_belt", ""),
             userSp.getString("belt_current", ""),
-            userSp.getString("belt", "")
+            userSp.getString("belt", ""),
+            firestoreProfile.belt
         )
 
         val currentBelt = Belt.fromAny(
@@ -267,9 +569,13 @@ fun MyProfileScreen(
             }
         )
 
-        val beltHeb = traineeRankDisplayName(beltId)
+        val beltHeb = traineeRankDisplayNameForUi(beltId, isEnglish)
             .ifBlank {
-                currentBelt?.heb ?: beltId.ifBlank { "לא הוגדר" }
+                if (isEnglish) {
+                    currentBelt?.id ?: beltId.ifBlank { "Not set" }
+                } else {
+                    currentBelt?.heb ?: beltId.ifBlank { "לא הוגדר" }
+                }
             }
 
         // ✅ אימון הבא + מאמן – קודם branches.json, ואם אין התאמה fallback ל־TrainingCatalog
@@ -298,14 +604,26 @@ fun MyProfileScreen(
 
         val nextTraining: String = when {
             dbUpcoming != null -> {
-                val fmtDay = java.text.SimpleDateFormat("EEEE", java.util.Locale("he", "IL"))
-                val fmtTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale("he", "IL"))
+                val locale = if (isEnglish) {
+                    java.util.Locale.US
+                } else {
+                    java.util.Locale("he", "IL")
+                }
+
+                val fmtDay = java.text.SimpleDateFormat("EEEE", locale)
+                val fmtTime = java.text.SimpleDateFormat("HH:mm", locale)
                 "${fmtDay.format(dbUpcoming.cal.time)} • ${fmtTime.format(dbUpcoming.cal.time)}\n${dbUpcoming.place}"
             }
 
             upcoming != null -> {
-                val fmtDay = java.text.SimpleDateFormat("EEEE", java.util.Locale("he", "IL"))
-                val fmtTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale("he", "IL"))
+                val locale = if (isEnglish) {
+                    java.util.Locale.US
+                } else {
+                    java.util.Locale("he", "IL")
+                }
+
+                val fmtDay = java.text.SimpleDateFormat("EEEE", locale)
+                val fmtTime = java.text.SimpleDateFormat("HH:mm", locale)
                 "${fmtDay.format(upcoming.cal.time)} • ${fmtTime.format(upcoming.cal.time)}\n${upcoming.place}"
             }
 
@@ -313,7 +631,7 @@ fun MyProfileScreen(
         }
 
         // ✅ הדרגה הבאה בתור, כולל דאן 2–10
-        val nextBeltText: String = nextTraineeRankDisplayName(beltId)
+        val nextBeltText: String = nextTraineeRankDisplayNameForUi(beltId, isEnglish)
 
         // --- תיקון: כתובות לסניפים מרובים (שורה לכל סניף) ---
         fun fallbackCityVenue(b: String): String {
@@ -331,7 +649,7 @@ fun MyProfileScreen(
             branchesList.joinToString("\n") { b ->
                 val dbAddress = KmiDatabaseProvider
                     .branchByName(ctx, b)
-                    ?.displayAddress(isEnglish = false)
+                    ?.displayAddress(isEnglish = isEnglish)
                     ?.trim()
                     .orEmpty()
 
@@ -346,12 +664,18 @@ fun MyProfileScreen(
         // --- סוף תיקון הכתובת ---
 
         val info = UserProfileInfo(
-            userName = if (fullName.isNotBlank()) fullName else username.ifBlank { "שם המשתמש" },
+            userName = if (fullName.isNotBlank()) {
+                fullName
+            } else {
+                username.ifBlank {
+                    profileTr(isEnglish, "שם המשתמש", "User name")
+                }
+            },
             belt = beltHeb,
-            branch = branchDisplay,                    // ⬅️ כל הסניפים בשורות
-            branchAddress = branchAddressResolved,     // ⬅️ כתובת לכל סניף בשורה
+            branch = branchDisplay,
+            branchAddress = branchAddressResolved,
             group = group.ifBlank { "—" },
-            headCoach = "איציק ביטון",
+            headCoach = profileTr(isEnglish, "איציק ביטון", "Itzik Biton"),
             coach = coachName,
             nextTraining = nextTraining,
             trainingTowardsBelt = nextBeltText,
@@ -400,13 +724,45 @@ fun MyProfileScreen(
                         tint = Color.White
                     )
                 }
+
+                if (isLoadingFirestoreProfile) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
+                            .padding(top = 10.dp)
+                            .zIndex(11f),
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color.White.copy(alpha = 0.14f),
+                        border = BorderStroke(
+                            1.dp,
+                            Color.White.copy(alpha = 0.24f)
+                        )
+                    ) {
+                        Text(
+                            text = profileTr(
+                                isEnglish,
+                                "מסנכרן פרופיל...",
+                                "Syncing profile..."
+                            ),
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .wrapContentHeight()
                         .align(Alignment.TopCenter)
                 ) {
-                    UserProfileCard(info = info)
+                    UserProfileCard(
+                        info = info,
+                        isEnglish = isEnglish
+                    )
                 }
             }
         }
@@ -419,6 +775,7 @@ fun MyProfileScreen(
 @Composable
 private fun UserProfileCard(
     info: UserProfileInfo,
+    isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(28.dp)
@@ -445,7 +802,7 @@ private fun UserProfileCard(
         Column(
             modifier = Modifier
                 .padding(horizontal = 22.dp, vertical = 22.dp),
-            horizontalAlignment = Alignment.End
+            horizontalAlignment = profileHorizontalAlignment(isEnglish)
         ) {
             // כותרת ראשית – שם המשתמש
             Text(
@@ -459,7 +816,7 @@ private fun UserProfileCard(
                 overflow = TextOverflow.Ellipsis,
                 color = Color.White,
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Right
+                textAlign = profileTextAlign(isEnglish)
             )
 
             // תת-כותרת – חגורה
@@ -471,7 +828,7 @@ private fun UserProfileCard(
                     color = Color(0xFFBFD7FF)
                 ),
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Right
+                textAlign = profileTextAlign(isEnglish)
             )
 
             // מפריד דק
@@ -506,22 +863,62 @@ private fun UserProfileCard(
                 .removePrefix("אימון הבא -").removePrefix("אימון הבא")
                 .trim().ifBlank { "—" }
 
-            LabeledValueBlock(label = "סניף:",        value = branchValue)
-            LabeledValueBlock(label = "כתובת הסניף:", value = addrValue)
-            LabeledValueBlock(label = "קבוצה:",       value = groupValue)
-            LabeledValueBlock(label = "מאמן בכיר:",   value = headCoachValue)
-            LabeledValueBlock(label = "מאמן:",        value = coachValue)
-            LabeledValueBlock(label = "אימון הבא:",   value = nextTrainingValue)
+            LabeledValueBlock(
+                label = profileTr(isEnglish, "סניף:", "Branch:"),
+                value = branchValue,
+                isEnglish = isEnglish
+            )
+            LabeledValueBlock(
+                label = profileTr(isEnglish, "כתובת הסניף:", "Branch address:"),
+                value = addrValue,
+                isEnglish = isEnglish
+            )
+            LabeledValueBlock(
+                label = profileTr(isEnglish, "קבוצה:", "Group:"),
+                value = groupValue,
+                isEnglish = isEnglish
+            )
+            LabeledValueBlock(
+                label = profileTr(isEnglish, "מאמן בכיר:", "Head coach:"),
+                value = headCoachValue,
+                isEnglish = isEnglish
+            )
+            LabeledValueBlock(
+                label = profileTr(isEnglish, "מאמן:", "Coach:"),
+                value = coachValue,
+                isEnglish = isEnglish
+            )
+            LabeledValueBlock(
+                label = profileTr(isEnglish, "אימון הבא:", "Next training:"),
+                value = nextTrainingValue,
+                isEnglish = isEnglish
+            )
 
             // --- פרטי חשבון ---
             Spacer(Modifier.height(6.dp))
             Divider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
             Spacer(Modifier.height(6.dp))
 
-            LabeledValueBlock(label = "מייל:",       value = info.email)
-            LabeledValueBlock(label = "טלפון:",      value = info.phone)
-            LabeledValueBlock(label = "שם משתמש:",  value = info.accountUserName)
-            PasswordRow(label = "סיסמה", password = info.password)
+            LabeledValueBlock(
+                label = profileTr(isEnglish, "מייל:", "Email:"),
+                value = info.email,
+                isEnglish = isEnglish
+            )
+            LabeledValueBlock(
+                label = profileTr(isEnglish, "טלפון:", "Phone:"),
+                value = info.phone,
+                isEnglish = isEnglish
+            )
+            LabeledValueBlock(
+                label = profileTr(isEnglish, "שם משתמש:", "Username:"),
+                value = info.accountUserName,
+                isEnglish = isEnglish
+            )
+            PasswordRow(
+                label = profileTr(isEnglish, "סיסמה", "Password"),
+                password = info.password,
+                isEnglish = isEnglish
+            )
 
             // מפריד קטן לפני השורה התחתונה
             Spacer(Modifier.height(8.dp))
@@ -534,12 +931,16 @@ private fun UserProfileCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "מתאמן לחגורה",
+                    text = profileTr(
+                        isEnglish,
+                        "מתאמן לחגורה",
+                        "Training toward belt"
+                    ),
                     style = MaterialTheme.typography.titleSmall.copy(
                         color = Color.White.copy(alpha = 0.85f),
                         fontWeight = FontWeight.SemiBold
                     ),
-                    textAlign = TextAlign.Right
+                    textAlign = profileTextAlign(isEnglish)
                 )
                 Spacer(Modifier.weight(1f))
                 Surface(
@@ -558,7 +959,9 @@ private fun UserProfileCard(
                     Text(
                         text = info.trainingTowardsBelt
                             .removePrefix("מתאמן לחגורה")
-                            .trim().ifEmpty { info.trainingTowardsBelt },
+                            .removePrefix("Training toward belt")
+                            .trim()
+                            .ifEmpty { info.trainingTowardsBelt },
                         style = MaterialTheme.typography.titleSmall.copy(
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFDAE8FF)
@@ -578,13 +981,14 @@ private fun UserProfileCard(
 @Composable
 private fun LabeledValueBlock(
     label: String,
-    value: String
+    value: String,
+    isEnglish: Boolean
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.End
+        horizontalAlignment = profileHorizontalAlignment(isEnglish)
     ) {
         // תגית
         Text(
@@ -593,7 +997,7 @@ private fun LabeledValueBlock(
                 color = Color.White.copy(alpha = 0.78f),
                 fontWeight = FontWeight.Medium
             ),
-            textAlign = TextAlign.Right,
+            textAlign = profileTextAlign(isEnglish),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(2.dp))
@@ -604,7 +1008,7 @@ private fun LabeledValueBlock(
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             ),
-            textAlign = TextAlign.Right,
+            textAlign = profileTextAlign(isEnglish),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(8.dp))
@@ -625,7 +1029,8 @@ private tailrec fun android.content.Context.findActivity(): android.app.Activity
 @Composable
 private fun PasswordRow(
     label: String,
-    password: String
+    password: String,
+    isEnglish: Boolean
 ) {
     var visible by remember { mutableStateOf(false) }
 
@@ -641,7 +1046,7 @@ private fun PasswordRow(
                 color = Color.White.copy(alpha = 0.78f),
                 fontWeight = FontWeight.Medium
             ),
-            textAlign = TextAlign.Right
+            textAlign = profileTextAlign(isEnglish)
         )
         Spacer(Modifier.weight(1f))
 
@@ -652,13 +1057,17 @@ private fun PasswordRow(
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 ),
-                textAlign = TextAlign.Left
+                textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left
             )
             Spacer(Modifier.width(8.dp))   // תוקן
             IconButton(onClick = { visible = !visible }) {
                 Icon(
                     imageVector = if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                    contentDescription = if (visible) "הסתר סיסמה" else "הצג סיסמה",
+                    contentDescription = if (visible) {
+                        profileTr(isEnglish, "הסתר סיסמה", "Hide password")
+                    } else {
+                        profileTr(isEnglish, "הצג סיסמה", "Show password")
+                    },
                     tint = Color.White.copy(alpha = 0.9f)
                 )
             }

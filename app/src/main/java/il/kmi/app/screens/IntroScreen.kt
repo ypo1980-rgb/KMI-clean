@@ -452,7 +452,7 @@ fun IntroScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = if (isEnglish) "K.M.I" else "ק.מ.י",
+                    text = if (isEnglish) "K.A.M.I" else "ק.מ.י",
                     fontSize = 58.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White,

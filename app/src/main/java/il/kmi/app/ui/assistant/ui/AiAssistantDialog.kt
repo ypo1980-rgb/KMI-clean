@@ -895,7 +895,7 @@ private fun normalizeForTts(text: String): String {
     return text
         .replace("ק.מ.י", "קמי")
         .replace("ק מ י", "קמי")
-        .replace("K.M.I", "KAMI", ignoreCase = true)
+        .replace("K.A.M.I", "KAMI", ignoreCase = true)
         .replace("K M I", "KAMI", ignoreCase = true)
         .replace("יובל", "יוּבַל")
         .replace("שלך", "שֶלְחָה")
@@ -1066,7 +1066,7 @@ fun AiAssistantDialog(
                                 "• תרגיל / חיפוש לפי חגורה\n" +
                                 "• רשימת תרגילים לפי חגורה/נושא",
                     en =
-                        "K.M.I material mode is active.\n" +
+                        "K.A.M.I material mode is active.\n" +
                                 "You can ask for:\n" +
                                 "• A topic (for example: \"Outside defenses\")\n" +
                                 "• A sub-topic\n" +
@@ -1893,7 +1893,7 @@ fun AiAssistantDialog(
                                     null -> tr("בחר מצב כדי להתחיל", "Choose a mode to begin")
                                     AssistantMode.EXERCISE -> tr("מצב: מידע / הסבר על תרגיל", "Mode: Exercise info / explanation")
                                     AssistantMode.TRAININGS -> tr("מצב: מידע על אימונים", "Mode: Training information")
-                                    AssistantMode.KMI_MATERIAL -> tr("מצב: חומר ק.מ.י", "Mode: K.M.I material")
+                                    AssistantMode.KMI_MATERIAL -> tr("מצב: חומר ק.מ.י", "Mode: K.A.M.I material")
                                 },
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.titleSmall,
@@ -2055,7 +2055,7 @@ fun AiAssistantDialog(
                             )
 
                             ModeButton(
-                                title = tr("חומר ק.מ.י", "K.M.I material"),
+                                title = tr("חומר ק.מ.י", "K.A.M.I material"),
                                 icon = Icons.Filled.MenuBook,
                                 selected = assistantMode == AssistantMode.KMI_MATERIAL,
                                 onClick = {
@@ -2065,7 +2065,7 @@ fun AiAssistantDialog(
                                     speak(
                                         tr(
                                             "מעולה. מצב חומר ק.מ.י פעיל. תגיד נושא או שם תרגיל ואני אחפש לך במאגר.",
-                                            "Great. K.M.I material mode is active. Say a topic or exercise name and I will search it in the database."
+                                            "Great. K.A.M.I material mode is active. Say a topic or exercise name and I will search it in the database."
                                         )
                                     )
                                 }

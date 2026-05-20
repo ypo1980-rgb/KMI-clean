@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -111,6 +112,8 @@ fun AttendanceGroupStatsScreen(
             expandedByMonth.putIfAbsent(ym, true)
         }
     }
+
+    val hasRealReports = reports.isNotEmpty()
 
     val avgPct = remember(reports) {
         if (reports.isEmpty()) 0
@@ -208,6 +211,16 @@ fun AttendanceGroupStatsScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 2.dp)
                     )
+                }
+
+                if (!hasRealReports) {
+                    item {
+                        EmptyAttendanceReportsCard(
+                            branch = branch,
+                            groupKey = groupKey,
+                            isEnglish = isEnglish
+                        )
+                    }
                 }
 
                 reportsByMonth.forEach { (ym, monthReports) ->
@@ -357,6 +370,8 @@ fun AttendanceGroupStatsScreen(
                         // ✅ "מחק דוחות" => מצב בחירה | במצב בחירה => "מחק נבחרים"
                         OutlinedButton(
                             onClick = {
+                                if (!hasRealReports) return@OutlinedButton
+
                                 if (!deleteMode) {
                                     deleteMode = true
                                     selected.clear()
@@ -368,8 +383,11 @@ fun AttendanceGroupStatsScreen(
                             },
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                             shape = RoundedCornerShape(20.dp),
-                            border = BorderStroke(1.dp, Color(0xFF93C5FD)),
-                            enabled = !busy
+                            border = BorderStroke(
+                                1.dp,
+                                if (hasRealReports) Color(0xFF93C5FD) else Color(0xFF475569)
+                            ),
+                            enabled = !busy && hasRealReports
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Delete,
@@ -415,14 +433,20 @@ fun AttendanceGroupStatsScreen(
 
                         // ✅ איפוס הכל (כמו שעשית) – מוחק records/sessions/reports (לא מתאמנים)
                         Button(
-                            onClick = { confirmResetAll = true },
+                            onClick = {
+                                if (hasRealReports) {
+                                    confirmResetAll = true
+                                }
+                            },
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                             shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFFEF4444),
-                                contentColor = Color.White
+                                contentColor = Color.White,
+                                disabledContainerColor = Color(0xFF475569),
+                                disabledContentColor = Color(0xFFCBD5E1)
                             ),
-                            enabled = !busy
+                            enabled = !busy && hasRealReports
                         ) {
                             Icon(Icons.Filled.Refresh, contentDescription = null)
                             Spacer(Modifier.padding(horizontal = 4.dp))
@@ -497,6 +521,101 @@ fun AttendanceGroupStatsScreen(
                     },
                     onDismiss = { confirmDeleteSelected = false }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyAttendanceReportsCard(
+    branch: String,
+    groupKey: String,
+    isEnglish: Boolean
+) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val textStyle = TextStyle(
+        textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    )
+    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+        tonalElevation = 0.dp
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.08f),
+                                Color(0xFF1D4ED8).copy(alpha = 0.18f)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = Color(0xFF38BDF8),
+                    modifier = Modifier.padding(end = if (isEnglish) 12.dp else 0.dp)
+                )
+
+                if (!isEnglish) {
+                    Spacer(Modifier.padding(horizontal = 6.dp))
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = horizontalAlignment,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = tr(
+                            "אין עדיין דוחות נוכחות שמורים",
+                            "No saved attendance reports yet"
+                        ),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall.merge(textStyle),
+                        textAlign = align,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = tr(
+                            "המסך מחובר לשרת. לאחר שמירת דוח ממסך הנוכחות, הוא יופיע כאן לפי חודש עם פירוט מלא.",
+                            "This screen is connected to the server. Once an attendance report is saved, it will appear here by month with full details."
+                        ),
+                        color = Color(0xFFBFDBFE),
+                        style = MaterialTheme.typography.bodySmall.merge(textStyle),
+                        textAlign = align,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = tr(
+                            "סניף: ${branch.ifBlank { "—" }} · קבוצה: ${groupKey.ifBlank { "—" }}",
+                            "Branch: ${branch.ifBlank { "—" }} · Group: ${groupKey.ifBlank { "—" }}"
+                        ),
+                        color = Color(0xFFE0F2FE),
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelSmall.merge(textStyle),
+                        textAlign = align,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
@@ -846,20 +965,47 @@ private fun ReportAttendanceDetailsCard(
     val members by repo.members(branch, groupKey).collectAsState(initial = emptyList())
     val records by repo.attendanceForDay(branch, groupKey, date).collectAsState(initial = emptyList())
 
+    fun String.detailsNameKey(): String = this
+        .trim()
+        .replace('־', '-')
+        .replace('–', '-')
+        .replace('—', '-')
+        .replace(Regex("\\s+"), " ")
+        .replace(Regex("""[."'\u05F3\u05F4,;:()\[\]{}]"""), "")
+        .lowercase()
+
+    fun String.isDemoOrPlaceholderDetailsName(): Boolean {
+        val key = detailsNameKey()
+        return key.isBlank() ||
+                key == "מתאמן" ||
+                key.startsWith("מתאמן ") ||
+                key.startsWith("מתאמן_") ||
+                key == "demo" ||
+                key.startsWith("demo ") ||
+                key == "trainee" ||
+                key.startsWith("trainee ")
+    }
+
+    val realMembers = remember(members) {
+        members
+            .filterNot { it.displayName.isDemoOrPlaceholderDetailsName() }
+            .distinctBy { it.displayName.detailsNameKey() }
+    }
+
     val statusByMemberId = remember(records) {
         records.associate { it.memberId to it.status }
     }
 
-    val presentMembers = remember(members, statusByMemberId) {
-        members.filter { statusByMemberId[it.id] == AttendanceStatus.PRESENT }
+    val presentMembers = remember(realMembers, statusByMemberId) {
+        realMembers.filter { statusByMemberId[it.id] == AttendanceStatus.PRESENT }
     }
 
-    val excusedMembers = remember(members, statusByMemberId) {
-        members.filter { statusByMemberId[it.id] == AttendanceStatus.EXCUSED }
+    val excusedMembers = remember(realMembers, statusByMemberId) {
+        realMembers.filter { statusByMemberId[it.id] == AttendanceStatus.EXCUSED }
     }
 
-    val absentMembers = remember(members, statusByMemberId) {
-        members.filter { member ->
+    val absentMembers = remember(realMembers, statusByMemberId) {
+        realMembers.filter { member ->
             val status = statusByMemberId[member.id]
             status == AttendanceStatus.ABSENT || status == null
         }

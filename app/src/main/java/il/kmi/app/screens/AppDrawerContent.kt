@@ -1124,7 +1124,7 @@ fun AppDrawerContent(
                         if (isEnglish) {
                             DrawerLineItemEn(
                                 title = "About the Method",
-                                subtitle = "K.M.I",
+                                subtitle = "K.A.M.I",
                                 onClick = {
                                     onClose()
                                     onOpenAboutMethod()
@@ -1133,7 +1133,7 @@ fun AppDrawerContent(
                         } else {
                             DrawerLineItemHe(
                                 title = "אודות השיטה",
-                                subtitle = "K.M.I",
+                                subtitle = "K.A.M.I",
                                 onClick = {
                                     onClose()
                                     onOpenAboutMethod()
@@ -1395,7 +1395,7 @@ fun AppDrawerContent(
 
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "© K.M.I",
+                        text = "© K.A.M.I",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFB8C4DA),
                         textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,

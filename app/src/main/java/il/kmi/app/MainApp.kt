@@ -134,6 +134,29 @@ fun MainApp(
     val currentRoute = mainBackStackEntry?.destination?.route
     val activeRouteForDrawer = currentRoute ?: resolvedStartDestination
 
+    val ctxForForumPush = LocalContext.current.applicationContext
+    val forumPushSp = remember(ctxForForumPush) {
+        ctxForForumPush.getSharedPreferences("kmi_forum_push", Context.MODE_PRIVATE)
+    }
+
+    var forumPushTick by remember {
+        mutableStateOf(0)
+    }
+
+    DisposableEffect(forumPushSp) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "has_pending_forum_push") {
+                forumPushTick++
+            }
+        }
+
+        forumPushSp.registerOnSharedPreferenceChangeListener(listener)
+
+        onDispose {
+            forumPushSp.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
     fun isRegistrationOrEntryRoute(route: String?): Boolean {
         return route == Route.RegistrationLanding.route ||
                 route == Route.Registration.route ||
@@ -146,6 +169,44 @@ fun MainApp(
 
     val isRegistrationRouteForDrawer =
         isRegistrationOrEntryRoute(activeRouteForDrawer)
+
+    LaunchedEffect(currentRoute, forumPushTick, isRegistrationRouteForDrawer) {
+        val routeReady = currentRoute != null
+        val hasPendingForumPush =
+            forumPushSp.getBoolean("has_pending_forum_push", false)
+
+        if (!routeReady || !hasPendingForumPush) {
+            return@LaunchedEffect
+        }
+
+        // במסכי רישום/כניסה לא דוחפים את המשתמש בכוח לפורום.
+        // אחרי כניסה לאפליקציה, ה-effect ירוץ שוב ויפתח את הפורום.
+        if (isRegistrationRouteForDrawer) {
+            android.util.Log.e(
+                "KMI_FORUM_PUSH",
+                "pending forum push exists but current route is registration/entry route=$currentRoute"
+            )
+            return@LaunchedEffect
+        }
+
+        val roomId = forumPushSp.getString("forum_room_id", "").orEmpty()
+        val messageId = forumPushSp.getString("forum_message_id", "").orEmpty()
+        val branchId = forumPushSp.getString("forum_branch_id", "").orEmpty()
+        val groupKey = forumPushSp.getString("forum_group_key", "").orEmpty()
+
+        android.util.Log.e(
+            "KMI_FORUM_PUSH",
+            "opening forum from pending push roomId=$roomId messageId=$messageId branchId=$branchId groupKey=$groupKey currentRoute=$currentRoute"
+        )
+
+        forumPushSp.edit()
+            .putBoolean("has_pending_forum_push", false)
+            .apply()
+
+        nav.navigate(Route.Forum.route) {
+            launchSingleTop = true
+        }
+    }
 
     // להדליק ניווט מפוצל כברירת מחדל
     LaunchedEffect(Unit) {

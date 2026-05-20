@@ -368,7 +368,7 @@ private fun TariffCard() {
 
                 Text(
                     text = if (isEnglish) {
-                        "Price comparison between regular users and K.M.I. association members"
+                        "Price comparison between regular users and K.A.M.I. association members"
                     } else {
                         "השוואת מחירים בין משתמש רגיל לבין חבר עמותת ק.מ.י"
                     },
@@ -411,7 +411,7 @@ private fun TariffCard() {
                         PremiumTariffDivider()
 
                         PremiumTariffRow(
-                            label = if (isEnglish) "K.M.I. member" else "חבר עמותת ק.מ.י",
+                            label = if (isEnglish) "K.A.M.I. member" else "חבר עמותת ק.מ.י",
                             monthly = "₪20",
                             yearly = "₪200",
                             highlight = true
@@ -434,7 +434,7 @@ private fun TariffCard() {
                     ) {
                         Text(
                             text = if (isEnglish) {
-                                "K.M.I. members save ₪$yearlySaving per year"
+                                "K.A.M.I. members save ₪$yearlySaving per year"
                             } else {
                                 "חבר עמותת ק.מ.י חוסך ₪$yearlySaving בשנה"
                             },
@@ -564,7 +564,7 @@ private fun JoinAssociationCard(
             ) {
                 Text(
                     text = if (isEnglish) {
-                        "Join the K.M.I. association"
+                        "Join the K.A.M.I. association"
                     } else {
                         "הצטרפות לעמותת ק.מ.י"
                     },

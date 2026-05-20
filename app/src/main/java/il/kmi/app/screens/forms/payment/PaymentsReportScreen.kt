@@ -45,9 +45,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,15 +60,279 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import il.kmi.app.privacy.DemoTrainees
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private const val MEMBERSHIP_REQUIRED_AMOUNT = 150.0
+
+private fun paymentNowDateText(): String {
+    return SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+}
+
+private fun paymentCurrentYear(): Int {
+    return SimpleDateFormat("yyyy", Locale.getDefault())
+        .format(Date())
+        .toIntOrNull()
+        ?: 0
+}
+
+private fun paymentStatusFromAmount(
+    paidAmount: Double,
+    requiredAmount: Double = MEMBERSHIP_REQUIRED_AMOUNT
+): PaymentStatus {
+    return when {
+        paidAmount <= 0.0 -> PaymentStatus.UNPAID
+        paidAmount < requiredAmount -> PaymentStatus.PARTIAL
+        else -> PaymentStatus.PAID
+    }
+}
+
+private fun paymentMethodFromString(value: String?): PaymentMethod {
+    val clean = value.orEmpty().trim()
+
+    return PaymentMethod.entries.firstOrNull {
+        it.name.equals(clean, ignoreCase = true)
+    } ?: PaymentMethod.MANUAL
+}
+
+private fun paymentStatusToFirestore(status: PaymentStatus): String {
+    return status.name
+}
+
+private fun paymentMethodToFirestore(method: PaymentMethod): String {
+    return method.name
+}
+
+private fun DocumentSnapshot.paymentUserName(): String {
+    return getString("fullName")?.takeIf { it.isNotBlank() }
+        ?: getString("name")?.takeIf { it.isNotBlank() }
+        ?: getString("displayName")?.takeIf { it.isNotBlank() }
+        ?: getString("email")?.takeIf { it.isNotBlank() }
+        ?: id
+}
+
+private fun DocumentSnapshot.paymentUserPhone(): String {
+    return getString("phone")?.takeIf { it.isNotBlank() }
+        ?: getString("phoneNumber")?.takeIf { it.isNotBlank() }
+        ?: getString("phone_number")?.takeIf { it.isNotBlank() }
+        ?: ""
+}
+
+private fun DocumentSnapshot.paymentUserBranch(): String {
+    val branchesList = get("branches") as? List<*>
+    val firstBranchFromList = branchesList
+        ?.mapNotNull { it?.toString()?.trim() }
+        ?.firstOrNull { it.isNotBlank() }
+        .orEmpty()
+
+    return getString("activeBranch")?.takeIf { it.isNotBlank() }
+        ?: getString("active_branch")?.takeIf { it.isNotBlank() }
+        ?: getString("branch")?.takeIf { it.isNotBlank() }
+        ?: getString("branchesCsv")?.split(",")?.firstOrNull()?.trim()?.takeIf { it.isNotBlank() }
+        ?: firstBranchFromList
+}
+
+private fun DocumentSnapshot.isPaymentRelevantTrainee(): Boolean {
+    val role = (
+            getString("role")
+                ?: getString("userType")
+                ?: getString("type")
+                ?: ""
+            ).trim().lowercase()
+
+    val statusText = (
+            getString("status")
+                ?: getString("active")
+                ?: ""
+            ).trim().lowercase()
+
+    val isActive = getBoolean("isActive") != false &&
+            statusText != "inactive" &&
+            statusText != "disabled" &&
+            statusText != "blocked" &&
+            statusText != "לא פעיל"
+
+    val isTrainee =
+        role.isBlank() ||
+                role == "trainee" ||
+                role.contains("trainee") ||
+                role.contains("student") ||
+                role.contains("מתאמן") ||
+                role.contains("חניך")
+
+    return isActive && isTrainee
+}
+
+private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
+    val db = Firebase.firestore
+
+    val usersDocs = db.collection("users")
+        .get()
+        .await()
+        .documents
+        .filter { it.isPaymentRelevantTrainee() }
+
+    val paymentDocs = db.collection("membershipPayments")
+        .get()
+        .await()
+        .documents
+
+    val paymentDocsByTraineeId = buildMap<String, DocumentSnapshot> {
+        paymentDocs.forEach { doc ->
+            val keys = listOf(
+                doc.id,
+                doc.getString("traineeId"),
+                doc.getString("userDocId"),
+                doc.getString("uid"),
+                doc.getString("authUid")
+            )
+                .mapNotNull { it?.trim()?.takeIf { key -> key.isNotBlank() } }
+                .distinct()
+
+            keys.forEach { key ->
+                put(key, doc)
+            }
+        }
+    }
+
+    return usersDocs
+        .map { userDoc ->
+            val traineeId = userDoc.getString("uid")
+                ?: userDoc.getString("authUid")
+                ?: userDoc.id
+
+            val paymentDoc = paymentDocsByTraineeId[traineeId]
+                ?: paymentDocsByTraineeId[userDoc.id]
+
+            val requiredAmount = paymentDoc?.getDouble("requiredAmount")
+                ?: MEMBERSHIP_REQUIRED_AMOUNT
+
+            val paidAmount = paymentDoc?.getDouble("paidAmount")
+                ?: 0.0
+
+            val status = paymentStatusFromAmount(
+                paidAmount = paidAmount,
+                requiredAmount = requiredAmount
+            )
+
+            val method = paymentMethodFromString(
+                paymentDoc?.getString("paymentMethod")
+            )
+
+            PaymentReportItem(
+                traineeId = traineeId,
+                fullName = paymentDoc?.getString("fullName")
+                    ?: userDoc.paymentUserName(),
+                branchName = paymentDoc?.getString("branchName")
+                    ?: userDoc.paymentUserBranch(),
+                phone = paymentDoc?.getString("phone")
+                    ?: userDoc.paymentUserPhone(),
+                requiredAmount = requiredAmount,
+                paidAmount = paidAmount,
+                status = status,
+                paymentMethod = method,
+                paymentDate = paymentDoc?.getString("paymentDate").orEmpty(),
+                notes = paymentDoc?.getString("notes").orEmpty()
+            )
+        }
+        .sortedWith(
+            compareBy<PaymentReportItem> { it.branchName }
+                .thenBy { it.fullName }
+        )
+}
+
+private suspend fun saveManualMembershipPaymentToFirestore(
+    item: PaymentReportItem,
+    amountToAdd: Double,
+    method: PaymentMethod,
+    notes: String
+): PaymentReportItem {
+    val db = Firebase.firestore
+
+    val newPaidAmount = item.paidAmount + amountToAdd
+    val newStatus = paymentStatusFromAmount(
+        paidAmount = newPaidAmount,
+        requiredAmount = item.requiredAmount
+    )
+
+    val paymentDate = paymentNowDateText()
+
+    val cleanMethod = method
+
+    val updatedItem = item.copy(
+        paidAmount = newPaidAmount,
+        status = newStatus,
+        paymentMethod = cleanMethod,
+        paymentDate = paymentDate,
+        notes = notes
+    )
+
+    val data = mapOf(
+        "traineeId" to updatedItem.traineeId,
+        "userDocId" to updatedItem.traineeId,
+        "fullName" to updatedItem.fullName,
+        "branchName" to updatedItem.branchName,
+        "phone" to updatedItem.phone,
+        "requiredAmount" to updatedItem.requiredAmount,
+        "paidAmount" to updatedItem.paidAmount,
+        "status" to paymentStatusToFirestore(updatedItem.status),
+        "paymentMethod" to paymentMethodToFirestore(cleanMethod),
+        "paymentDate" to updatedItem.paymentDate,
+        "paymentYear" to paymentCurrentYear(),
+        "lastPaymentAmount" to amountToAdd,
+        "notes" to updatedItem.notes,
+        "updatedAt" to FieldValue.serverTimestamp(),
+        "updatedAtMillis" to System.currentTimeMillis(),
+        "source" to "android_payments_report"
+    )
+
+    val paymentDocRef = db.collection("membershipPayments")
+        .document(updatedItem.traineeId)
+
+    paymentDocRef
+        .set(data, SetOptions.merge())
+        .await()
+
+    val historyData = mapOf(
+        "traineeId" to updatedItem.traineeId,
+        "fullName" to updatedItem.fullName,
+        "branchName" to updatedItem.branchName,
+        "amount" to amountToAdd,
+        "paidAmountAfterUpdate" to updatedItem.paidAmount,
+        "requiredAmount" to updatedItem.requiredAmount,
+        "statusAfterUpdate" to paymentStatusToFirestore(updatedItem.status),
+        "paymentMethod" to paymentMethodToFirestore(cleanMethod),
+        "paymentDate" to updatedItem.paymentDate,
+        "paymentYear" to paymentCurrentYear(),
+        "notes" to notes,
+        "createdAt" to FieldValue.serverTimestamp(),
+        "createdAtMillis" to System.currentTimeMillis(),
+        "source" to "android_payments_report_history"
+    )
+
+    paymentDocRef
+        .collection("history")
+        .document()
+        .set(historyData)
+        .await()
+
+    return updatedItem
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaymentsReportScreen(
     isEnglish: Boolean = false,
     onClose: () -> Unit = {},
-    onOpenDemoTrainees: () -> Unit = {},
-    initialItems: List<PaymentReportItem> = demoPaymentsReportItems(),
+    initialItems: List<PaymentReportItem> = emptyList(),
     onSaveManualPayment: (traineeId: String, amount: Double, method: PaymentMethod, notes: String) -> Unit = { _, _, _, _ -> }
 ) {
     var items by remember { mutableStateOf(initialItems) }
@@ -74,13 +340,45 @@ fun PaymentsReportScreen(
     var filter by rememberSaveable { mutableStateOf("ALL") }
     var manualDialogItem by remember { mutableStateOf<PaymentReportItem?>(null) }
 
+    var isLoadingPayments by remember { mutableStateOf(true) }
+    var paymentsError by remember { mutableStateOf<String?>(null) }
+    val screenScope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        isLoadingPayments = true
+        paymentsError = null
+
+        runCatching {
+            loadRealPaymentsReportItems()
+        }.onSuccess { realItems ->
+            items = realItems
+            isLoadingPayments = false
+        }.onFailure { error ->
+            paymentsError = error.localizedMessage ?: "Unknown error"
+            isLoadingPayments = false
+        }
+    }
+
     val title = if (isEnglish) "Payments Report" else "דו\"ח תשלומים"
     val paidText = if (isEnglish) "Paid 150" else "שילמו"
     val unpaidText = if (isEnglish) "Not paid 150" else "לא שילמו"
 
-    val branchOptions = remember {
-        listOf(if (isEnglish) "All Branches" else "כל הסניפים") +
-                il.kmi.app.training.TrainingCatalog.allVisibleBranches()
+    val allBranchesLabel = if (isEnglish) "All Branches" else "כל הסניפים"
+
+    val branchOptions = remember(isEnglish, items) {
+        val catalogBranches = il.kmi.app.training.TrainingCatalog.allVisibleBranches()
+
+        val realBranches = items
+            .map { it.branchName.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        listOf(allBranchesLabel) +
+                (catalogBranches + realBranches)
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .sorted()
     }
 
     var selectedBranch by rememberSaveable {
@@ -106,7 +404,7 @@ fun PaymentsReportScreen(
         }
 
         val matchesBranch =
-            selectedBranch == (if (isEnglish) "All Branches" else "כל הסניפים") ||
+            selectedBranch == allBranchesLabel ||
                     item.branchName == selectedBranch
 
         matchesQuery && matchesFilter && matchesBranch
@@ -191,7 +489,7 @@ fun PaymentsReportScreen(
 
                                 Text(
                                     text = if (isEnglish)
-                                        "Collected ₪${"%.0f".format(totalPaid)} מתוך ₪${"%.0f".format(totalRequired)}"
+                                        "Collected ₪${"%.0f".format(totalPaid)} of ₪${"%.0f".format(totalRequired)}"
                                     else
                                         "נגבה ₪${"%.0f".format(totalPaid)} מתוך ₪${"%.0f".format(totalRequired)}",
                                     style = MaterialTheme.typography.titleMedium,
@@ -265,7 +563,7 @@ fun PaymentsReportScreen(
                             }
 
                             Surface(
-                                onClick = onOpenDemoTrainees,
+                                onClick = { filter = "ALL" },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(132.dp),
@@ -421,15 +719,94 @@ fun PaymentsReportScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    filteredItems.forEach { item ->
-                        PaymentReportRow(
-                            item = item,
-                            isEnglish = isEnglish,
-                            onManualUpdate = { manualDialogItem = item }
-                        )
+                    when {
+                        isLoadingPayments -> {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color.White.copy(alpha = 0.94f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(18.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = if (isEnglish) {
+                                            "Loading real payment data..."
+                                        } else {
+                                            "טוען נתוני תשלום אמיתיים..."
+                                        },
+                                        color = Color(0xFF1F2A52),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+
+                        paymentsError != null -> {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFFFE4E6)
+                                )
+                            ) {
+                                Text(
+                                    text = if (isEnglish) {
+                                        "Failed loading payments: $paymentsError"
+                                    } else {
+                                        "טעינת התשלומים נכשלה: $paymentsError"
+                                    },
+                                    color = Color(0xFF991B1B),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(16.dp),
+                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                                )
+                            }
+                        }
+
+                        filteredItems.isEmpty() -> {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color.White.copy(alpha = 0.94f)
+                                )
+                            ) {
+                                Text(
+                                    text = if (isEnglish) {
+                                        "No trainees matched the current filters."
+                                    } else {
+                                        "לא נמצאו מתאמנים בהתאם לסינון הנוכחי."
+                                    },
+                                    color = Color(0xFF1F2A52),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(16.dp),
+                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                                )
+                            }
+                        }
+
+                        else -> {
+                            filteredItems.forEach { item ->
+                                PaymentReportRow(
+                                    item = item,
+                                    isEnglish = isEnglish,
+                                    onManualUpdate = { manualDialogItem = item }
+                                )
+                            }
+                        }
                     }
 
-                    // ✅ רווח תחתון כדי שאפשר יהיה לגלול עד סוף הרשימה בנוחות.
                     Spacer(Modifier.height(36.dp))
                 }
             }
@@ -440,27 +817,36 @@ fun PaymentsReportScreen(
                     item = selected,
                     onDismiss = { manualDialogItem = null },
                     onSave = { amount, method, notes ->
-                        val newPaidAmount = (selected.paidAmount + amount)
-                        val newStatus = when {
-                            newPaidAmount <= 0.0 -> PaymentStatus.UNPAID
-                            newPaidAmount < selected.requiredAmount -> PaymentStatus.PARTIAL
-                            else -> PaymentStatus.PAID
-                        }
-
-                        items = items.map { current ->
-                            if (current.traineeId == selected.traineeId) {
-                                current.copy(
-                                    paidAmount = newPaidAmount,
-                                    status = newStatus,
-                                    paymentMethod = method,
-                                    paymentDate = "10/04/2026",
+                        screenScope.launch {
+                            runCatching {
+                                saveManualMembershipPaymentToFirestore(
+                                    item = selected,
+                                    amountToAdd = amount,
+                                    method = method,
                                     notes = notes
                                 )
-                            } else current
-                        }
+                            }.onSuccess { updatedItem ->
+                                items = items.map { current ->
+                                    if (current.traineeId == selected.traineeId) {
+                                        updatedItem
+                                    } else {
+                                        current
+                                    }
+                                }
 
-                        onSaveManualPayment(selected.traineeId, amount, method, notes)
-                        manualDialogItem = null
+                                onSaveManualPayment(
+                                    selected.traineeId,
+                                    amount,
+                                    method,
+                                    notes
+                                )
+
+                                manualDialogItem = null
+                            }.onFailure { error ->
+                                paymentsError = error.localizedMessage ?: "Failed saving payment"
+                                manualDialogItem = null
+                            }
+                        }
                     }
                 )
             }
@@ -688,7 +1074,7 @@ private fun PaymentReportRow(
                     color = statusColor(item.status).copy(alpha = 0.18f)
                 ) {
                     Text(
-                        text = statusLabel(item.status),
+                        text = statusLabel(item.status, isEnglish),
                         color = statusColor(item.status),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelLarge
@@ -853,66 +1239,17 @@ private fun reportFieldColors() = OutlinedTextFieldDefaults.colors(
     cursorColor = Color.White
 )
 
-private fun statusLabel(status: PaymentStatus): String = when (status) {
-    PaymentStatus.PAID -> "שולם"
-    PaymentStatus.UNPAID -> "לא שולם"
-    PaymentStatus.PARTIAL -> "שולם חלקית"
+private fun statusLabel(
+    status: PaymentStatus,
+    isEnglish: Boolean
+): String = when (status) {
+    PaymentStatus.PAID -> if (isEnglish) "Paid" else "שולם"
+    PaymentStatus.UNPAID -> if (isEnglish) "Unpaid" else "לא שולם"
+    PaymentStatus.PARTIAL -> if (isEnglish) "Partial" else "שולם חלקית"
 }
 
 private fun statusColor(status: PaymentStatus): Color = when (status) {
     PaymentStatus.PAID -> Color(0xFF66D17A)
     PaymentStatus.UNPAID -> Color(0xFFFF7A7A)
     PaymentStatus.PARTIAL -> Color(0xFFFFC857)
-}
-
-private fun demoPaymentsReportItems(): List<PaymentReportItem> {
-    val membershipFee = 150.0
-
-    // ✅ חיבור אמיתי לקובץ המתאמנים Demo הקיים באפליקציה.
-    // כאן אנחנו יוצרים דוח תשלומים מתוך DemoTrainees.trainees
-    // ולא מחזיקים יותר רשימה ידנית כפולה.
-    return DemoTrainees.trainees.mapIndexed { index, trainee ->
-
-        val paidAmount = when {
-            // חלק מהמתאמנים שילמו מלא
-            index % 3 == 0 -> membershipFee
-
-            // חלק שילמו חלקית
-            index % 3 == 1 -> 80.0
-
-            // חלק לא שילמו בכלל
-            else -> 0.0
-        }
-
-        val status = when {
-            paidAmount >= membershipFee -> PaymentStatus.PAID
-            paidAmount > 0.0 -> PaymentStatus.PARTIAL
-            else -> PaymentStatus.UNPAID
-        }
-
-        val method = when (status) {
-            PaymentStatus.PAID -> PaymentMethod.CREDIT_CARD
-            PaymentStatus.PARTIAL -> PaymentMethod.CASH
-            PaymentStatus.UNPAID -> PaymentMethod.MANUAL
-        }
-
-        PaymentReportItem(
-            traineeId = trainee.id,
-            fullName = trainee.name,
-            branchName = trainee.branch,
-            phone = "050-0000${(index + 1).toString().padStart(2, '0')}",
-            requiredAmount = membershipFee,
-            paidAmount = paidAmount,
-            status = status,
-            paymentMethod = method,
-            paymentDate = when (status) {
-                PaymentStatus.PAID -> "09/04/2026"
-                PaymentStatus.PARTIAL -> "08/04/2026"
-
-                // ✅ PaymentReportItem מצפה ל-String ולא ל-String?
-                // לכן לא מחזירים null אלא מחרוזת ריקה.
-                PaymentStatus.UNPAID -> ""
-            }
-        )
-    }
 }

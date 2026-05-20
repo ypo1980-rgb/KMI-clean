@@ -1304,6 +1304,11 @@ fun RegistrationFormScreen(
                     branchType = newType
                     sp.edit().putString("branch_type", newType).apply()
                 },
+                submitButtonText = if (startAtProfile) {
+                    if (isEnglish) "Save profile" else "שמירת פרופיל"
+                } else {
+                    if (isEnglish) "Complete registration" else "סיום רישום"
+                },
                 onSubmitRegistration = {
                     submitRegistration()
                 }
@@ -1391,7 +1396,9 @@ private fun RegistrationTabsBilingual(
         tonalElevation = 0.dp,
         shadowElevation = 4.dp
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        // ✅ תמיד: מתאמן בצד ימין, מאמן בצד שמאל
+        // נשאר תואם גם באנגלית: Trainee מימין, Coach משמאל.
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

@@ -23,13 +23,25 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "onNewToken: $token")
 
-        // שמירת ה-token החדש במסמך המשתמש (דרך ה־manager הקיים באפליקציה)
+        val cleanToken = token.trim()
+
+        if (cleanToken.isBlank()) {
+            Log.w(TAG, "onNewToken: blank token, skipping")
+            return
+        }
+
+        Log.e(
+            TAG,
+            "onNewToken: received new token tokenPrefix=${cleanToken.take(18)}..."
+        )
+
+        // חשוב: שומרים את הטוקן שקיבלנו מ-Firebase ישירות,
+        // ולא מבקשים שוב token חדש מ-FirebaseMessaging.
         try {
-            FcmTokenManager.refreshTokenForCurrentUser(applicationContext)
+            FcmTokenManager.saveProvidedTokenForCurrentUser(cleanToken)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to refreshTokenForCurrentUser from onNewToken", e)
+            Log.e(TAG, "onNewToken: failed to save provided token", e)
         }
     }
 
@@ -93,9 +105,16 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
 
             putExtra("fcm_type", type)
+
             data["broadcastId"]?.let { putExtra("broadcastId", it) }
             data["branchId"]?.let { putExtra("branchId", it) }
             data["groupKey"]?.let { putExtra("groupKey", it) }
+
+            // נתוני פורום — לשימוש עתידי בפתיחה ישירה לחדר/הודעה
+            data["roomId"]?.let { putExtra("forumRoomId", it) }
+            data["roomName"]?.let { putExtra("forumRoomName", it) }
+            data["messageId"]?.let { putExtra("forumMessageId", it) }
+            data["senderId"]?.let { putExtra("forumSenderId", it) }
 
             // ✅ אם זו הודעת מאמן – פותחים קודם "כרטיס הודעה" לפני מסך הכניסה
             val isCoachBroadcast =
@@ -152,8 +171,22 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
 
-        with(NotificationManagerCompat.from(context)) {
-            notify(requestCode, builder.build())
+        try {
+            with(NotificationManagerCompat.from(context)) {
+                notify(requestCode, builder.build())
+            }
+        } catch (e: SecurityException) {
+            Log.e(
+                TAG,
+                "showNotification: missing notification permission, cannot show notification",
+                e
+            )
+        } catch (e: Exception) {
+            Log.e(
+                TAG,
+                "showNotification: failed to show notification",
+                e
+            )
         }
     }
 

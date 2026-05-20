@@ -263,7 +263,7 @@ fun ContactUsScreen(
 
                                     Text(
                                         text = if (effectiveEnglish) {
-                                            "K.M.I representative will contact you soon."
+                                            "K.A.M.I representative will contact you soon."
                                         } else {
                                             "נציג מטעם ק.מ.י יחזור אליכם בהקדם."
                                         },

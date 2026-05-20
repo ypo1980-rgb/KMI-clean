@@ -9,6 +9,9 @@ import il.kmi.app.domain.Explanations
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.reminders.DailyExercisePicker
 import il.kmi.app.favorites.FavoritesStore
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.shared.domain.content.ExerciseTitlesEn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -56,6 +59,55 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 
+private fun reminderTr(
+    isEnglish: Boolean,
+    he: String,
+    en: String
+): String = if (isEnglish) en else he
+
+private fun reminderTextAlign(isEnglish: Boolean): TextAlign =
+    if (isEnglish) TextAlign.Left else TextAlign.Right
+
+private fun reminderHorizontalAlignment(isEnglish: Boolean): Alignment.Horizontal =
+    if (isEnglish) Alignment.Start else Alignment.End
+
+private fun reminderBeltNameForUi(
+    beltId: String,
+    isEnglish: Boolean
+): String {
+    val belt = Belt.fromId(beltId) ?: return beltId
+
+    return if (isEnglish) {
+        belt.en
+    } else {
+        belt.heb
+    }
+}
+
+private fun reminderTitleForUi(
+    raw: String,
+    isEnglish: Boolean
+): String {
+    val clean = raw.trim()
+    if (clean.isBlank()) return clean
+
+    return if (isEnglish) {
+        ExerciseTitlesEn.getOrSame(clean)
+    } else {
+        clean
+    }
+}
+
+private fun reminderFallbackExplanation(
+    isEnglish: Boolean
+): String {
+    return reminderTr(
+        isEnglish,
+        "אין כרגע הסבר לתרגיל הזה.",
+        "No explanation is available for this exercise right now."
+    )
+}
+
 class DailyReminderCardActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,10 +119,14 @@ class DailyReminderCardActivity : ComponentActivity() {
         val explanationFromIntent = intent.getStringExtra("daily_reminder_explanation") ?: ""
         val extraCount = intent.getIntExtra("daily_reminder_extra_count", 0)
 
+        val isEnglishForContent =
+            AppLanguageManager(this).getCurrentLanguage() == AppLanguage.ENGLISH
+
         val explanation = resolveDailyReminderExplanation(
             beltId = belt,
             item = item,
-            explanationFromIntent = explanationFromIntent
+            explanationFromIntent = explanationFromIntent,
+            isEnglish = isEnglishForContent
         )
 
         android.util.Log.e(
@@ -84,11 +140,15 @@ class DailyReminderCardActivity : ComponentActivity() {
         setContent {
 
             val favorites by FavoritesStore.favoritesFlow.collectAsState(initial = emptySet())
+            val isEnglish = remember(this) {
+                AppLanguageManager(this).getCurrentLanguage() == AppLanguage.ENGLISH
+            }
 
             ReminderCardUI(
                 belt = belt,
                 topic = topic,
                 item = item,
+                isEnglish = isEnglish,
                 explanation = explanation,
                 extraCount = extraCount,
                 isFavorite = favorites.contains(item),
@@ -100,6 +160,10 @@ class DailyReminderCardActivity : ComponentActivity() {
                     startActivity(
                         Intent(this, MainActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            putExtra("open_from_daily_reminder", true)
+                            putExtra("daily_reminder_belt_id", belt)
+                            putExtra("daily_reminder_topic", topic)
+                            putExtra("daily_reminder_item", item)
                         }
                     )
                     finish()
@@ -126,7 +190,8 @@ class DailyReminderCardActivity : ComponentActivity() {
                             val nextExplanation = resolveDailyReminderExplanation(
                                 beltId = nextPicked.belt.id,
                                 item = nextPicked.item,
-                                explanationFromIntent = nextRawExplanation
+                                explanationFromIntent = nextRawExplanation,
+                                isEnglish = isEnglish
                             )
 
                             startActivity(
@@ -152,6 +217,7 @@ private fun ReminderCardUI(
     belt: String,
     topic: String,
     item: String,
+    isEnglish: Boolean,
     explanation: String,
     extraCount: Int,
     isFavorite: Boolean,
@@ -170,6 +236,11 @@ private fun ReminderCardUI(
 
     LaunchedEffect(Unit) { visible = true }
 
+    val uiBeltName = reminderBeltNameForUi(belt, isEnglish)
+    val uiTopic = reminderTitleForUi(topic, isEnglish)
+    val uiItem = reminderTitleForUi(item, isEnglish)
+    val uiTextAlign = reminderTextAlign(isEnglish)
+
     val backgroundBrush = Brush.linearGradient(
         colors = listOf(
             Color(0xFF061018),
@@ -184,13 +255,6 @@ private fun ReminderCardUI(
             Color(0x443BD8FF),
             Color(0x225B6CFF),
             Color.Transparent
-        )
-    )
-
-    val cardBrush = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFFF8F5FC).copy(alpha = 0.97f),
-            Color(0xFFF1ECF8).copy(alpha = 0.95f)
         )
     )
 
@@ -307,11 +371,11 @@ private fun ReminderCardUI(
                             ) {
                                 Icon(
                                     imageVector = if (localFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                                    contentDescription = "favorite",
+                                    contentDescription = reminderTr(isEnglish, "מועדף", "Favorite"),
                                     tint = if (localFavorite) Color(0xFFFFC42D) else Color(0xFF6B6174)
                                 )
                                 Text(
-                                    text = "מועדף",
+                                    text = reminderTr(isEnglish, "מועדף", "Favorite"),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color(0xFF463C50)
                                 )
@@ -319,7 +383,7 @@ private fun ReminderCardUI(
                         }
 
                         Text(
-                            text = "התרגיל היומי שלך",
+                            text = reminderTr(isEnglish, "התרגיל היומי שלך", "Your daily exercise"),
                             maxLines = 1,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
@@ -339,7 +403,7 @@ private fun ReminderCardUI(
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Close,
-                                    contentDescription = "close",
+                                    contentDescription = reminderTr(isEnglish, "סגור", "Close"),
                                     tint = Color(0xFF382F42)
                                 )
                             }
@@ -359,20 +423,20 @@ private fun ReminderCardUI(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "$topic • $belt",
+                                text = "$uiTopic • $uiBeltName",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Color(0xFF6A6071),
-                                textAlign = TextAlign.Right,
+                                textAlign = uiTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
                             Text(
-                                text = item,
+                                text = uiItem,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 lineHeight = 24.sp,
                                 color = Color(0xFF1E1723),
-                                textAlign = TextAlign.Right,
+                                textAlign = uiTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -396,11 +460,11 @@ private fun ReminderCardUI(
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
                             Text(
-                                text = "הסבר",
+                                text = reminderTr(isEnglish, "הסבר", "Explanation"),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF2A2230),
-                                textAlign = TextAlign.Right,
+                                textAlign = uiTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -417,11 +481,17 @@ private fun ReminderCardUI(
                                         .padding(bottom = 20.dp)
                                 ) {
                                     Text(
-                                        text = explanation.ifBlank { "אין הסבר זמין כרגע." },
+                                        text = explanation.ifBlank {
+                                            reminderTr(
+                                                isEnglish,
+                                                "אין הסבר זמין כרגע.",
+                                                "No explanation is available right now."
+                                            )
+                                        },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = Color(0xFF302735),
                                         lineHeight = 19.sp,
-                                        textAlign = TextAlign.Right,
+                                        textAlign = uiTextAlign,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
@@ -477,19 +547,19 @@ private fun ReminderCardUI(
 
                     if (extraCount < 3) {
                         GradientActionButton(
-                            text = "תרגיל נוסף להיום",
+                            text = reminderTr(isEnglish, "תרגיל נוסף להיום", "Another exercise today"),
                             brush = primaryButtonBrush,
                             onClick = onAnotherExercise
                         )
                     }
 
                     PremiumOutlinedActionButton(
-                        text = "אפשר תזמון מדויק",
+                        text = reminderTr(isEnglish, "אפשר תזמון מדויק", "Allow exact scheduling"),
                         onClick = onOpenExactAlarmSettings
                     )
 
                     PremiumOutlinedActionButton(
-                        text = "הגדרות חיסכון סוללה",
+                        text = reminderTr(isEnglish, "הגדרות חיסכון סוללה", "Battery optimization settings"),
                         icon = Icons.Filled.Settings,
                         onClick = onOpenBatteryOptimizationSettings
                     )
@@ -501,13 +571,13 @@ private fun ReminderCardUI(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         PremiumOutlinedActionButton(
-                            text = "סגור",
+                            text = reminderTr(isEnglish, "סגור", "Close"),
                             onClick = onClose,
                             modifier = Modifier.weight(1f)
                         )
 
                         GradientActionButton(
-                            text = "פתח באפליקציה",
+                            text = reminderTr(isEnglish, "פתח באפליקציה", "Open in app"),
                             icon = Icons.Filled.OpenInNew,
                             brush = Brush.horizontalGradient(
                                 colors = listOf(
@@ -643,7 +713,8 @@ private fun PremiumOutlinedActionButton(
 private fun resolveDailyReminderExplanation(
     beltId: String,
     item: String,
-    explanationFromIntent: String
+    explanationFromIntent: String,
+    isEnglish: Boolean = false
 ): String {
     val cleanedIntentExplanation = cleanupDailyReminderExplanation(explanationFromIntent)
 
@@ -654,7 +725,7 @@ private fun resolveDailyReminderExplanation(
         return cleanedIntentExplanation
     }
 
-    val belt = Belt.fromId(beltId) ?: return "אין כרגע הסבר לתרגיל הזה."
+    val belt = Belt.fromId(beltId) ?: return reminderFallbackExplanation(isEnglish)
 
     fun String.cleanExerciseName(): String {
         return this
@@ -699,7 +770,7 @@ private fun resolveDailyReminderExplanation(
         }
     }
 
-    return "אין כרגע הסבר לתרגיל הזה."
+    return reminderFallbackExplanation(isEnglish)
 }
 
 private fun cleanupDailyReminderExplanation(raw: String): String {

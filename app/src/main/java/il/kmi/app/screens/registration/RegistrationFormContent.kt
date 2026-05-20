@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -181,6 +183,7 @@ fun RegistrationFormContent(
     onOpenTerms: () -> Unit,
     branchType: String,
     onBranchTypeChange: (String) -> Unit,
+    submitButtonText: String? = null,
     onSubmitRegistration: () -> Unit,
 ) {
     val scroll = rememberScrollState()
@@ -190,6 +193,8 @@ fun RegistrationFormContent(
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
     val fieldTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val fieldTextDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    val screenLayoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
 
     val allGroupsAcrossBranches by remember(ctx, selectedBranches) {
         derivedStateOf {
@@ -219,7 +224,8 @@ fun RegistrationFormContent(
     }
 
     CompositionLocalProvider(
-        LocalTextStyle provides MaterialTheme.typography.bodySmall
+        LocalTextStyle provides MaterialTheme.typography.bodySmall,
+        LocalLayoutDirection provides screenLayoutDirection
     ) {
         Column(
             modifier = Modifier
@@ -240,7 +246,10 @@ fun RegistrationFormContent(
                     label = { Text(tr("שם מלא", "Full name"), color = Color.Black) },
                     singleLine = true,
                     isError = fullNameError,
-                    textStyle = LocalTextStyle.current.copy(textAlign = fieldTextAlign),
+                    textStyle = LocalTextStyle.current.copy(
+                        textAlign = fieldTextAlign,
+                        textDirection = fieldTextDirection
+                    ),
                     modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 46.dp)
@@ -431,7 +440,10 @@ fun RegistrationFormContent(
                     label = { Text(tr("שם משתמש", "Username"), color = Color.Black) },
                     singleLine = true,
                     isError = usernameError,
-                    textStyle = LocalTextStyle.current.copy(textAlign = fieldTextAlign),
+                    textStyle = LocalTextStyle.current.copy(
+                        textAlign = fieldTextAlign,
+                        textDirection = fieldTextDirection
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 46.dp)
@@ -469,7 +481,10 @@ fun RegistrationFormContent(
                         }
                     },
                     isError = passwordError,
-                    textStyle = LocalTextStyle.current.copy(textAlign = fieldTextAlign),
+                    textStyle = LocalTextStyle.current.copy(
+                        textAlign = fieldTextAlign,
+                        textDirection = fieldTextDirection
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 46.dp)
@@ -692,7 +707,7 @@ fun RegistrationFormContent(
                 )
             ) {
                 Text(
-                    text = tr("סיום רישום", "Complete registration"),
+                    text = submitButtonText ?: tr("סיום רישום", "Complete registration"),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -777,7 +792,8 @@ private fun registrationLightFieldColors() = OutlinedTextFieldDefaults.colors(
 @Composable
 private fun RegistrationSectionTitle(
     title: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isEnglish: Boolean = false
 ) {
     Column(
         modifier = modifier.fillMaxWidth()
@@ -787,7 +803,7 @@ private fun RegistrationSectionTitle(
             style = MaterialTheme.typography.titleSmall,
             color = Color(0xFF1F2937),
             fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Right,
+            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -1582,7 +1598,7 @@ private fun BeltPicker(
             value = currentBelt?.let { beltLabel(it) } ?: "",
             onValueChange = {},
             readOnly = true,
-            label = { Text(if (isEnglish) "Current K.M.I belt rank" else "דרגת חגורה נוכחית (ק.מ.י)", color = Color.Black) },
+            label = { Text(if (isEnglish) "Current K.A.M.I belt rank" else "דרגת חגורה נוכחית (ק.מ.י)", color = Color.Black) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .menuAnchor()
@@ -1598,7 +1614,18 @@ private fun BeltPicker(
                 unfocusedBorderColor = Color.Transparent,
                 errorBorderColor = MaterialTheme.colorScheme.error
             ),
-            placeholder = { Text(if (isEnglish) "Select rank" else "בחר/י דרגה") }
+            textStyle = LocalTextStyle.current.copy(
+                color = Color.Black,
+                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+            ),
+            placeholder = {
+                Text(
+                    text = if (isEnglish) "Select rank" else "בחר/י דרגה",
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         )
 
         ExposedDropdownMenu(
@@ -1609,7 +1636,10 @@ private fun BeltPicker(
             beltOptions.forEach { belt ->
                 DropdownMenuItem(
                     text = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Surface(
                                 color = belt.color,
                                 tonalElevation = 0.dp,
@@ -1621,7 +1651,9 @@ private fun BeltPicker(
 
                             Text(
                                 text = beltLabel(belt),
-                                color = Color.Black
+                                color = Color.Black,
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     },

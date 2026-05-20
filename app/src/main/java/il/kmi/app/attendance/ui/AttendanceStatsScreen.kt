@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.TextStyle
+import il.kmi.app.localization.rememberIsEnglish
 
 @Composable
 fun AttendanceStatsScreen(
@@ -53,11 +54,15 @@ fun AttendanceStatsScreen(
     val repo = remember(app) { AttendanceRepository.get(app) }
     val scope = rememberCoroutineScope()
 
+    val isEnglish = rememberIsEnglish()
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
     var monthlyPercent by remember { mutableStateOf(0) }
     var yearlyPercent by remember { mutableStateOf(0) }
     var streakDays by remember { mutableStateOf(0) }
     var bestDays by remember { mutableStateOf<List<String>>(emptyList()) }
     var lastSessions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var hasRealAttendanceData by remember { mutableStateOf(false) }
 
     // קארוסל דו"חות שמורים
     var reports by remember { mutableStateOf<List<AttendanceReport>>(emptyList()) }
@@ -72,6 +77,7 @@ fun AttendanceStatsScreen(
         streakDays = 0
         bestDays = emptyList()
         lastSessions = emptyList()
+        hasRealAttendanceData = false
 
         if (branch.isBlank() || groupKey.isBlank()) return@LaunchedEffect
 
@@ -94,15 +100,17 @@ fun AttendanceStatsScreen(
         while (d.isAfter(yearBack) || d.isEqual(yearBack)) {
             val records = repo.attendanceForDay(branch, groupKey, d).firstOrNull().orEmpty()
 
-            // רלוונטי למתאמן ספציפי (אם memberId != null) או לכל הקבוצה (אם null)
+            // מקור אמת: AttendanceRecord typed fields, בלי reflection
             val relevant = if (memberId != null) {
-                records.filter { recordMatchesMember(it, memberId) }
+                records.filter { it.memberId == memberId }
             } else {
                 records
             }
 
             if (relevant.isNotEmpty()) {
-                val statuses = relevant.mapNotNull { recordStatus(it) }
+                hasRealAttendanceData = true
+
+                val statuses = relevant.map { it.status }
                 val presentToday = statuses.count { it == AttendanceStatus.PRESENT }
                 val totalToday = statuses.size
 
@@ -131,13 +139,20 @@ fun AttendanceStatsScreen(
                 // 5 אימונים אחרונים
                 if (tmpLastSessions.size < 5) {
                     val statusLabel = when {
-                        statuses.all { it == AttendanceStatus.PRESENT } -> "הגיע"
+                        statuses.all { it == AttendanceStatus.PRESENT } -> tr("הגיע", "Present")
                         statuses.any { it == AttendanceStatus.PRESENT } &&
-                                statuses.any { it == AttendanceStatus.EXCUSED } -> "הגיע (חלקי/מוצדק)"
-                        statuses.any { it == AttendanceStatus.EXCUSED } -> "מוצדק"
-                        else -> "לא הגיע"
+                                statuses.any { it == AttendanceStatus.EXCUSED } -> tr("הגיע חלקית / מוצדק", "Partial / excused")
+                        statuses.any { it == AttendanceStatus.EXCUSED } -> tr("מוצדק", "Excused")
+                        else -> tr("לא הגיע", "Absent")
                     }
-                    tmpLastSessions.add("${formatDateHeb(d)} · $statusLabel")
+
+                    val dateText = if (isEnglish) {
+                        d.toString()
+                    } else {
+                        formatDateHeb(d)
+                    }
+
+                    tmpLastSessions.add("$dateText · $statusLabel")
                 }
 
             } else {
@@ -167,12 +182,13 @@ fun AttendanceStatsScreen(
         repo.lastReports(branch, groupKey, limit = 5).collect { reports = it }
     }
 
-    val name = memberName?.takeIf { it.isNotBlank() } ?: "מתאמן"
+    val name = memberName?.trim()?.takeIf { it.isNotBlank() }
+        ?: tr("מתאמן לא נבחר", "No trainee selected")
 
     Scaffold(
         topBar = {
             KmiTopBar(
-                title = "סטטיסטיקת נוכחות",
+                title = tr("סטטיסטיקת נוכחות", "Attendance statistics"),
                 showTopHome = false,
                 showTopSearch = false,
                 showBottomActions = true, // סרגל האייקונים למטה
@@ -215,7 +231,8 @@ fun AttendanceStatsScreen(
                     groupKey = groupKey,
                     today = today,
                     monthlyPercent = monthlyPercent,
-                    yearlyPercent = yearlyPercent
+                    yearlyPercent = yearlyPercent,
+                    isEnglish = isEnglish
                 )
 
                 // ───── כרטיסי אחוזים (חודש / שנה) ─────
@@ -224,20 +241,31 @@ fun AttendanceStatsScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     AttendanceMetricCard(
-                        title = "נוכחות חודשית",
+                        title = tr("נוכחות חודשית", "Monthly attendance"),
                         percent = monthlyPercent,
                         gradient = Brush.verticalGradient(
                             listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))
                         ),
+                        isEnglish = isEnglish,
                         modifier = Modifier.weight(1f)
                     )
                     AttendanceMetricCard(
-                        title = "נוכחות שנתית",
+                        title = tr("נוכחות שנתית", "Yearly attendance"),
                         percent = yearlyPercent,
                         gradient = Brush.verticalGradient(
                             listOf(Color(0xFF22C55E), Color(0xFF14B8A6))
                         ),
+                        isEnglish = isEnglish,
                         modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (!hasRealAttendanceData) {
+                    EmptyMemberAttendanceStatsCard(
+                        branch = branch,
+                        groupKey = groupKey,
+                        memberName = name,
+                        isEnglish = isEnglish
                     )
                 }
 
@@ -455,14 +483,100 @@ private fun rtlLine(s: String): String = "\u200F" + s + "\u200F"
 /* ───── Hero: כרטיס עליון גדול לסיכום ───── */
 
 @Composable
+private fun EmptyMemberAttendanceStatsCard(
+    branch: String,
+    groupKey: String,
+    memberName: String,
+    isEnglish: Boolean
+) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val direction = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+        tonalElevation = 0.dp
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.08f),
+                                Color(0xFF1D4ED8).copy(alpha = 0.18f)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+            ) {
+                Text(
+                    text = tr(
+                        "אין עדיין נתוני נוכחות למתאמן",
+                        "No attendance data for this trainee yet"
+                    ),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall.merge(
+                        TextStyle(textDirection = direction)
+                    ),
+                    textAlign = align,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = tr(
+                        "המסך מחובר לשרת. לאחר סימון ושמירת נוכחות במסך הנוכחות, הנתונים של $memberName יופיעו כאן.",
+                        "This screen is connected to the server. After attendance is marked and saved, $memberName's data will appear here."
+                    ),
+                    color = Color(0xFFBFDBFE),
+                    style = MaterialTheme.typography.bodySmall.merge(
+                        TextStyle(textDirection = direction)
+                    ),
+                    textAlign = align,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = tr(
+                        "סניף: ${branch.ifBlank { "—" }} · קבוצה: ${groupKey.ifBlank { "—" }}",
+                        "Branch: ${branch.ifBlank { "—" }} · Group: ${groupKey.ifBlank { "—" }}"
+                    ),
+                    color = Color(0xFFE0F2FE),
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelSmall.merge(
+                        TextStyle(textDirection = direction)
+                    ),
+                    textAlign = align,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun HeroAttendanceHeader(
     name: String,
     branch: String,
     groupKey: String,
     today: LocalDate,
     monthlyPercent: Int,
-    yearlyPercent: Int
+    yearlyPercent: Int,
+    isEnglish: Boolean
 ) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -502,7 +616,11 @@ private fun HeroAttendanceHeader(
                         )
 
                         Text(
-                            text = "יום ${hebDay(today.dayOfWeek)}, ${formatDateHeb(today)}",
+                            text = if (isEnglish) {
+                                "${today.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }}, $today"
+                            } else {
+                                "יום ${hebDay(today.dayOfWeek)}, ${formatDateHeb(today)}"
+                            },
                             style = MaterialTheme.typography.labelSmall.merge(rtlStyle),
                             color = Color(0xFFE5E7EB),
                             textAlign = TextAlign.Right,     // ✅
@@ -540,7 +658,7 @@ private fun HeroAttendanceHeader(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "חודשי: $monthlyPercent%",
+                        text = tr("חודשי: $monthlyPercent%", "Monthly: $monthlyPercent%"),
                         style = MaterialTheme.typography.labelLarge.merge(rtlStyle),
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF22D3EE),
@@ -548,7 +666,7 @@ private fun HeroAttendanceHeader(
                     )
                     Spacer(Modifier.width(14.dp))
                     Text(
-                        text = "שנתי: $yearlyPercent%",
+                        text = tr("שנתי: $yearlyPercent%", "Yearly: $yearlyPercent%"),
                         style = MaterialTheme.typography.labelLarge.merge(rtlStyle),
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF9CA3AF),
@@ -603,8 +721,8 @@ private fun HeroAttendanceHeader(
                         .filter { it.isNotBlank() }
                 }
 
-                InfoRow("סניף", branchLines)
-                InfoRow("קבוצה", groupLines)
+                InfoRow(tr("סניף", "Branch"), branchLines)
+                InfoRow(tr("קבוצה", "Group"), groupLines)
             }
         }
     }
@@ -616,8 +734,11 @@ private fun AttendanceMetricCard(
     title: String,
     percent: Int,
     gradient: Brush,
+    isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(24.dp),
@@ -678,9 +799,9 @@ private fun AttendanceMetricCard(
 
             Text(
                 text = when {
-                    percent >= 85 -> "מצוין 💜"
-                    percent >= 70 -> "טוב מאוד"
-                    else -> "אפשר לשפר"
+                    percent >= 85 -> tr("מצוין 💜", "Excellent 💜")
+                    percent >= 70 -> tr("טוב מאוד", "Very good")
+                    else -> tr("אפשר לשפר", "Can improve")
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = Color(0xFFE5E7EB),
@@ -728,45 +849,6 @@ private fun AttendanceReportChip(
             )
         }
     }
-}
-
-/* ===== עזר לרפלקציה על AttendanceRecord ===== */
-
-private fun recordMatchesMember(record: Any, memberId: Long): Boolean {
-    val cls = record.javaClass
-    return cls.declaredFields.any { f ->
-        try {
-            f.isAccessible = true
-            val v = f.get(record)
-            when (v) {
-                is Long -> v == memberId
-                is Int -> v.toLong() == memberId
-                else -> false
-            }
-        } catch (_: Throwable) {
-            false
-        }
-    }
-}
-
-private fun recordStatus(record: Any): AttendanceStatus? {
-    val cls = record.javaClass
-    cls.declaredFields.forEach { f ->
-        try {
-            f.isAccessible = true
-            val v = f.get(record)
-            if (v is AttendanceStatus) return v
-        } catch (_: Throwable) {}
-    }
-    cls.declaredFields.forEach { f ->
-        try {
-            if (!f.name.contains("status", ignoreCase = true)) return@forEach
-            f.isAccessible = true
-            val v = f.get(record) as? String ?: return@forEach
-            return runCatching { AttendanceStatus.valueOf(v) }.getOrNull()
-        } catch (_: Throwable) {}
-    }
-    return null
 }
 
 /* ===== עזר לפורמט תאריך ויום בשבוע ===== */

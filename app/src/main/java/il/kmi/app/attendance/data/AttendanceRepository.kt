@@ -2,6 +2,8 @@ package il.kmi.app.attendance.data
 
 import android.app.Application
 import android.util.Log
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
@@ -23,8 +25,42 @@ class AttendanceRepository private constructor(
 
     private val sessionPathById = mutableMapOf<Long, Pair<String, String>>()
 
+    private fun currentCoachUidOrNull(): String? {
+        return FirebaseAuth.getInstance().currentUser?.uid
+    }
+
+    private fun currentCoachEmailOrNull(): String? {
+        return FirebaseAuth.getInstance().currentUser?.email?.trim()?.takeIf { it.isNotBlank() }
+    }
+
     private fun groupDocId(branch: String, groupKey: String): String {
         return "g_${stablePositiveLong("${branch.trim()}|${groupKey.trim()}")}"
+    }
+
+    private suspend fun ensureGroupMetadata(branch: String, groupKey: String) {
+        val cleanBranch = branch.trim()
+        val cleanGroup = groupKey.trim()
+        if (cleanBranch.isBlank() || cleanGroup.isBlank()) return
+
+        val now = System.currentTimeMillis()
+        val coachUid = currentCoachUidOrNull().orEmpty()
+        val coachEmail = currentCoachEmailOrNull().orEmpty()
+
+        val data = mapOf(
+            "id" to groupDocId(cleanBranch, cleanGroup),
+            "branch" to cleanBranch,
+            "groupKey" to cleanGroup,
+            "coachUid" to coachUid,
+            "coachEmail" to coachEmail,
+            "source" to "android_firestore_attendance",
+            "createdAtMillis" to now,
+            "updatedAtMillis" to now,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+
+        groupRef(cleanBranch, cleanGroup)
+            .set(data, SetOptions.merge())
+            .await()
     }
 
     private fun sessionDocId(date: LocalDate): String {
@@ -136,6 +172,8 @@ class AttendanceRepository private constructor(
         val cleanName = displayName.trim()
         if (branch.isBlank() || groupKey.isBlank() || cleanName.isBlank()) return 0L
 
+        ensureGroupMetadata(branch, groupKey)
+
         val key = cleanName.nameKey()
         val existing = membersRef(branch, groupKey)
             .whereEqualTo("displayNameKey", key)
@@ -152,14 +190,19 @@ class AttendanceRepository private constructor(
         val memberId = stablePositiveLong("$branch|$groupKey|$key")
         val docRef = membersRef(branch, groupKey).document(memberId.toString())
 
+        val now = System.currentTimeMillis()
         val data = mapOf(
             "id" to memberId,
-            "branch" to branch,
-            "groupKey" to groupKey,
+            "branch" to branch.trim(),
+            "groupKey" to groupKey.trim(),
             "displayName" to cleanName,
             "displayNameKey" to key,
-            "createdAtMillis" to System.currentTimeMillis(),
-            "updatedAtMillis" to System.currentTimeMillis()
+            "coachUid" to currentCoachUidOrNull().orEmpty(),
+            "coachEmail" to currentCoachEmailOrNull().orEmpty(),
+            "source" to "manual_or_bootstrap",
+            "createdAtMillis" to now,
+            "updatedAtMillis" to now,
+            "updatedAt" to FieldValue.serverTimestamp()
         )
 
         docRef.set(data, SetOptions.merge()).await()
@@ -178,6 +221,8 @@ class AttendanceRepository private constructor(
      */
     suspend fun removeMember(branch: String, groupKey: String, memberId: Long) {
         if (branch.isBlank() || groupKey.isBlank()) return
+
+        ensureGroupMetadata(branch, groupKey)
 
         membersRef(branch, groupKey)
             .document(memberId.toString())
@@ -221,18 +266,26 @@ class AttendanceRepository private constructor(
     ): Long {
         if (branch.isBlank() || groupKey.isBlank()) return 0L
 
+        ensureGroupMetadata(branch, groupKey)
+
         val sessionDocId = sessionDocId(date)
         val sessionId = stablePositiveLong("$branch|$groupKey|$sessionDocId")
 
         val groupId = groupDocId(branch, groupKey)
         sessionPathById[sessionId] = groupId to sessionDocId
 
+        val now = System.currentTimeMillis()
         val sessionData = mapOf(
             "id" to sessionId,
             "date" to date.toString(),
-            "branch" to branch,
-            "groupKey" to groupKey,
-            "updatedAtMillis" to System.currentTimeMillis()
+            "branch" to branch.trim(),
+            "groupKey" to groupKey.trim(),
+            "coachUid" to currentCoachUidOrNull().orEmpty(),
+            "coachEmail" to currentCoachEmailOrNull().orEmpty(),
+            "status" to "open",
+            "createdAtMillis" to now,
+            "updatedAtMillis" to now,
+            "updatedAt" to FieldValue.serverTimestamp()
         )
 
         sessionsRef(branch, groupKey)
@@ -325,8 +378,11 @@ class AttendanceRepository private constructor(
             "sessionId" to sessionId,
             "memberId" to memberId,
             "status" to status.name,
+            "coachUid" to currentCoachUidOrNull().orEmpty(),
+            "coachEmail" to currentCoachEmailOrNull().orEmpty(),
             "markedAtMillis" to ts,
-            "updatedAtMillis" to ts
+            "updatedAtMillis" to ts,
+            "updatedAt" to FieldValue.serverTimestamp()
         )
 
         firestore.collection("attendanceGroups")
@@ -422,6 +478,8 @@ class AttendanceRepository private constructor(
         groupKey: String,
         date: LocalDate
     ) {
+        ensureGroupMetadata(branch, groupKey)
+
         val sessionId = ensureSession(date, branch, groupKey)
 
         val members = members(branch, groupKey).first()
@@ -466,13 +524,16 @@ class AttendanceRepository private constructor(
             "groupKey" to report.groupKey,
             "date" to report.date.toString(),
             "sessionId" to report.sessionId,
+            "coachUid" to currentCoachUidOrNull().orEmpty(),
+            "coachEmail" to currentCoachEmailOrNull().orEmpty(),
             "totalMembers" to report.totalMembers,
             "presentCount" to report.presentCount,
             "excusedCount" to report.excusedCount,
             "absentCount" to report.absentCount,
             "percentPresent" to report.percentPresent,
             "createdAtMillis" to report.createdAtMillis,
-            "updatedAtMillis" to now
+            "updatedAtMillis" to now,
+            "updatedAt" to FieldValue.serverTimestamp()
         )
 
         reportsRef(branch, groupKey)
@@ -622,6 +683,8 @@ class AttendanceRepository private constructor(
     }
 
     suspend fun resetAttendanceForGroup(branch: String, groupKey: String) {
+        ensureGroupMetadata(branch, groupKey)
+
         val sessions = sessionsRef(branch, groupKey)
             .get()
             .await()

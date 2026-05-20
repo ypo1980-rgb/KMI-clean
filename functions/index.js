@@ -32,63 +32,194 @@ function chunkArray(arr, size) {
 
 /**
  * ====================================================
- * 1. טריגר לפורום – הודעה חדשה בקבוצת הפורום
- *    branches/{branchId}/messages/{messageId}
+ * 1. טריגר לפורום – הודעה חדשה בחדר קבוצה אמיתי
+ *    branches/{branchId}/forumRooms/{roomId}/messages/{messageId}
  * ====================================================
  */
 exports.onForumMessageCreated = functions.firestore
-  .document("branches/{branchId}/messages/{messageId}")
+  .document("branches/{branchId}/forumRooms/{roomId}/messages/{messageId}")
   .onCreate(async (snap, context) => {
     const data = snap.data() || {};
-    const branchId = context.params.branchId;
-    const groupKey = data.groupKey || "";
 
-    console.log("New forum message created:", {
+    const branchId = (context.params.branchId || "").toString();
+    const roomId = (context.params.roomId || "").toString();
+    const messageId = (context.params.messageId || snap.id).toString();
+
+    const groupKey = (data.groupKey || "").toString();
+    const authorUid = (data.authorUid || "").toString();
+    const authorName = (data.authorName || "משתתף").toString();
+
+    const text = (data.text || "").toString().trim();
+    const messagePreview = (
+      data.messagePreview ||
+      (text ? text.slice(0, 120) : "הודעה חדשה")
+    ).toString();
+
+    console.log("New forum room message created:", {
       branchId,
+      roomId,
+      messageId,
       groupKey,
-      text: (data.text || "").toString().slice(0, 80),
+      authorUid,
+      preview: messagePreview.slice(0, 80),
     });
 
-    // אם אין groupKey – אין למי לשלוח
+    if (!branchId || !roomId || !messageId) {
+      console.log("Missing forum path params, skipping push", {
+        branchId,
+        roomId,
+        messageId,
+      });
+
+      await snap.ref.update({
+        pushStatus: "skipped_missing_path",
+        pushCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => null);
+
+      return null;
+    }
+
     if (!groupKey) {
-      console.log("No groupKey on message, skipping push");
+      console.log("No groupKey on forum message, skipping push", {
+        branchId,
+        roomId,
+        messageId,
+      });
+
+      await snap.ref.update({
+        pushStatus: "skipped_missing_group",
+        pushCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => null);
+
       return null;
     }
 
-    // ===== 1. שליפת כל המשתמשים בקבוצה הזו =====
-    let usersSnap;
-    try {
-      usersSnap = await db
-        .collection("users")
-        // עובדים לפי השדה groups (מערך)
-        .where("groups", "array-contains", groupKey)
-        .get();
-    } catch (e) {
-      console.error("Failed to query users:", e);
+    const roomRef = db
+      .collection("branches")
+      .doc(branchId)
+      .collection("forumRooms")
+      .doc(roomId);
+
+    const roomSnap = await roomRef.get();
+
+    if (!roomSnap.exists) {
+      console.log("Forum room doc not found, skipping push", {
+        branchId,
+        roomId,
+        messageId,
+      });
+
+      await snap.ref.update({
+        pushStatus: "skipped_room_not_found",
+        pushCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => null);
+
       return null;
     }
 
-    if (usersSnap.empty) {
-      console.log("No users found for group:", groupKey);
+    const room = roomSnap.data() || {};
+
+    if (room.pushEnabled === false) {
+      console.log("Forum room push disabled, skipping", {
+        branchId,
+        roomId,
+        messageId,
+      });
+
+      await snap.ref.update({
+        pushStatus: "skipped_push_disabled",
+        pushCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => null);
+
       return null;
     }
 
-    const tokens = [];
-    usersSnap.forEach((doc) => {
-      const t = doc.get("fcmToken");
-      if (t) tokens.push(t);
-    });
+    const participantIds = Array.isArray(room.participantIds)
+      ? room.participantIds
+          .map((v) => (v || "").toString().trim())
+          .filter((v) => v.length > 0)
+      : [];
+
+    const targetUids = [...new Set(
+      participantIds.filter((uid) => uid && uid !== authorUid)
+    )];
+
+    if (targetUids.length === 0) {
+      console.log("No target participants for forum push", {
+        branchId,
+        roomId,
+        messageId,
+        participantCount: participantIds.length,
+      });
+
+      await snap.ref.update({
+        pushStatus: "no_targets",
+        pushTargetCount: 0,
+        pushCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => null);
+
+      return null;
+    }
+
+    const tokenResults = await Promise.all(
+      targetUids.map(async (uid) => {
+        try {
+          const userDoc = await db.collection("users").doc(uid).get();
+
+          if (!userDoc.exists) {
+            console.log("Forum push target user not found", { uid });
+            return [];
+          }
+
+          const user = userDoc.data() || {};
+          const tokens = [];
+
+          const singleToken = (user.fcmToken || "").toString().trim();
+          if (singleToken) tokens.push(singleToken);
+
+          if (Array.isArray(user.fcmTokens)) {
+            user.fcmTokens.forEach((token) => {
+              const clean = (token || "").toString().trim();
+              if (clean) tokens.push(clean);
+            });
+          }
+
+          return tokens;
+        } catch (e) {
+          console.error("Failed reading forum target user", {
+            uid,
+            error: String(e),
+          });
+          return [];
+        }
+      })
+    );
+
+    const tokens = [...new Set(tokenResults.flat())];
 
     if (tokens.length === 0) {
-      console.log("No FCM tokens for users in group:", groupKey);
+      console.log("No FCM tokens found for forum room participants", {
+        branchId,
+        roomId,
+        messageId,
+        targetUidsCount: targetUids.length,
+      });
+
+      await snap.ref.update({
+        pushStatus: "no_tokens",
+        pushTargetCount: targetUids.length,
+        pushTokenCount: 0,
+        pushCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => null);
+
       return null;
     }
 
-    // ===== 2. בניית הודעת ה-Push =====
-    const title = "הודעה חדשה בפורום";
-    const body = `נוספה הודעה חדשה בקבוצה "${groupKey}"`;
+    const title = `פורום ${groupKey}`;
+    const body = `${authorName}: ${messagePreview}`;
 
-    const payload = {
+    const multicastMessage = {
+      tokens,
       notification: {
         title,
         body,
@@ -96,26 +227,98 @@ exports.onForumMessageCreated = functions.firestore
       data: {
         type: "forum_message",
         branchId,
+        roomId,
         groupKey,
-        messageId: snap.id,
+        messageId,
+        authorUid,
+        click_action: "OPEN_FORUM",
+      },
+      android: {
+        priority: "high",
+        notification: {
+          channelId: "forum_messages",
+          sound: "default",
+          clickAction: "OPEN_FORUM",
+        },
       },
     };
 
-    // ===== 3. שליחה לכל ה-tokens =====
     try {
-      const res = await admin.messaging().sendEachForMulticast({
-        tokens,
-        ...payload,
+      const res = await admin.messaging().sendEachForMulticast(multicastMessage);
+
+      console.log("Forum room push sent:", {
+        branchId,
+        roomId,
+        messageId,
+        targetUidsCount: targetUids.length,
+        tokenCount: tokens.length,
+        successCount: res.successCount,
+        failureCount: res.failureCount,
       });
 
-      console.log(
-        `Push sent to ${tokens.length} tokens. ` +
-          `success=${res.successCount}, failure=${res.failureCount}`
-      );
+      await snap.ref.update({
+        pushStatus: "sent",
+        pushTargetCount: targetUids.length,
+        pushTokenCount: tokens.length,
+        pushSuccessCount: res.successCount,
+        pushFailureCount: res.failureCount,
+        pushSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch((e) => {
+        console.error("Failed updating forum message push status", e);
+      });
+
+      await roomRef.set(
+        {
+          lastPushMessageId: messageId,
+          lastPushSuccessCount: res.successCount,
+          lastPushFailureCount: res.failureCount,
+          lastPushSentAt: admin.firestore.FieldValue.serverTimestamp(),
+          pendingPushMessageId: admin.firestore.FieldValue.delete(),
+          pendingPushAuthorUid: admin.firestore.FieldValue.delete(),
+          pendingPushPreview: admin.firestore.FieldValue.delete(),
+          pendingPushAt: admin.firestore.FieldValue.delete(),
+          pendingPushAtMillis: admin.firestore.FieldValue.delete(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAtMillis: Date.now(),
+        },
+        { merge: true }
+      ).catch((e) => {
+        console.error("Failed updating forum room push fields", e);
+      });
+
+      res.responses.forEach((r, index) => {
+        if (!r.success) {
+          console.error("Forum push token failed:", {
+            branchId,
+            roomId,
+            messageId,
+            tokenIndex: index,
+            errorCode: r.error && r.error.code,
+            errorMessage: r.error && r.error.message,
+          });
+        }
+      });
 
       return null;
     } catch (e) {
-      console.error("Failed to send FCM multicast:", e);
+      console.error("Failed to send forum room FCM:", e);
+
+      await snap.ref.update({
+        pushStatus: "failed",
+        pushError: String(e),
+        pushFailedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => null);
+
+      await roomRef.set(
+        {
+          lastPushError: String(e),
+          lastPushFailedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAtMillis: Date.now(),
+        },
+        { merge: true }
+      ).catch(() => null);
+
       return null;
     }
   });

@@ -1,5 +1,6 @@
 package il.kmi.app.navigation
 
+import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import androidx.compose.runtime.Composable
@@ -111,6 +112,98 @@ fun MainNavHost(
     startDestination: String = Route.Splash.route
 ) {
     val ctx = LocalContext.current
+
+    val forumPushSp = remember(ctx) {
+        ctx.applicationContext.getSharedPreferences(
+            "kmi_forum_push",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    val dailyReminderSp = remember(ctx) {
+        ctx.applicationContext.getSharedPreferences(
+            "kmi_daily_reminder_nav",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    fun consumePendingDailyReminderAndNavigate(source: String): Boolean {
+        val hasPendingDailyReminder =
+            dailyReminderSp.getBoolean("has_pending_daily_reminder", false)
+
+        if (!hasPendingDailyReminder) {
+            return false
+        }
+
+        val beltId = dailyReminderSp.getString("daily_reminder_belt_id", "").orEmpty()
+        val topic = dailyReminderSp.getString("daily_reminder_topic", "").orEmpty()
+        val item = dailyReminderSp.getString("daily_reminder_item", "").orEmpty()
+
+        Log.e(
+            "KMI_DAILY_REMINDER_NAV",
+            "consume pending daily reminder source=$source beltId=$beltId topic=$topic item=$item"
+        )
+
+        dailyReminderSp.edit()
+            .putBoolean("has_pending_daily_reminder", false)
+            .remove("daily_reminder_belt_id")
+            .remove("daily_reminder_topic")
+            .remove("daily_reminder_item")
+            .remove("received_at")
+            .apply()
+
+        val targetRoute = if (beltId.isNotBlank() && topic.isNotBlank()) {
+            Route.TopicExercises.makeId(
+                beltId = beltId,
+                topic = topic,
+                sub = null
+            )
+        } else {
+            Route.BeltQ.route
+        }
+
+        Log.e(
+            "KMI_DAILY_REMINDER_NAV",
+            "navigate daily reminder targetRoute=$targetRoute item=$item"
+        )
+
+        nav.navigate(targetRoute) {
+            launchSingleTop = true
+            restoreState = false
+        }
+
+        return true
+    }
+
+    fun consumePendingForumPushAndNavigate(source: String): Boolean {
+        val hasPendingForumPush =
+            forumPushSp.getBoolean("has_pending_forum_push", false)
+
+        if (!hasPendingForumPush) {
+            return false
+        }
+
+        val roomId = forumPushSp.getString("forum_room_id", "").orEmpty()
+        val messageId = forumPushSp.getString("forum_message_id", "").orEmpty()
+        val branchId = forumPushSp.getString("forum_branch_id", "").orEmpty()
+        val groupKey = forumPushSp.getString("forum_group_key", "").orEmpty()
+
+        Log.e(
+            "KMI_FORUM_PUSH",
+            "consume pending forum push source=$source roomId=$roomId messageId=$messageId branchId=$branchId groupKey=$groupKey"
+        )
+
+        forumPushSp.edit()
+            .putBoolean("has_pending_forum_push", false)
+            .apply()
+
+        nav.navigate(Route.Forum.route) {
+            launchSingleTop = true
+            restoreState = false
+        }
+
+        return true
+    }
 
     val userPrefsForEntry = remember(ctx) {
         ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
@@ -384,6 +477,14 @@ fun MainNavHost(
                         if (isProfileCompletedLocally(sp, userPrefsForEntry, uid)) {
                             Log.e(NAV_LOG, "splash -> home because LOCAL profile_completed=true uid=$uid")
 
+                            if (consumePendingDailyReminderAndNavigate("splash_local_profile_completed")) {
+                                return@KmiStartupLoadingScreen
+                            }
+
+                            if (consumePendingForumPushAndNavigate("splash_local_profile_completed")) {
+                                return@KmiStartupLoadingScreen
+                            }
+
                             nav.navigate(Route.Home.route) {
                                 popUpTo(Route.Splash.route) { inclusive = true }
                                 launchSingleTop = true
@@ -425,6 +526,14 @@ fun MainNavHost(
                                 Log.e(NAV_LOG, "splash hydrate result=$hydrated uid=$uid")
 
                                 markProfileCompletedLocally(sp, userPrefsForEntry, uid)
+
+                                if (consumePendingDailyReminderAndNavigate("splash_remote_profile_completed")) {
+                                    return@launch
+                                }
+
+                                if (consumePendingForumPushAndNavigate("splash_remote_profile_completed")) {
+                                    return@launch
+                                }
 
                                 nav.navigate(Route.Home.route) {
                                     popUpTo(Route.Splash.route) { inclusive = true }

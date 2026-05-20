@@ -42,7 +42,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.ui.AbsoluteAlignment
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.KmiTtsManager.speak
 import il.kmi.app.ui.ext.lightColor
@@ -62,6 +61,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import il.kmi.shared.domain.content.ExerciseTitlesEn
 
 //==========================================================================
 
@@ -70,7 +70,8 @@ private const val TOPICS_PICK_TOKEN = "__TOPICS_PICK__"
 
 private fun findExplanationForPractice(
     belt: Belt,
-    rawItem: String
+    rawItem: String,
+    isEnglish: Boolean = false
 ): String {
 
     val display = il.kmi.shared.questions.model.util.ExerciseTitleFormatter
@@ -96,7 +97,11 @@ private fun findExplanationForPractice(
         if (got.isNotBlank()) return got
     }
 
-    return "No explanation is currently available for this exercise."
+    return if (isEnglish) {
+        "No explanation is currently available for this exercise."
+    } else {
+        "אין עדיין הסבר זמין לתרגיל זה."
+    }
 }
 
 private fun normalizeFavoriteId(raw: String): String =
@@ -902,13 +907,46 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
     var showHelp by rememberSaveable { mutableStateOf(false) }
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
-    val searchResults by remember(searchQuery, globalSearchItems) {
+
+    fun searchTitleForUi(rawItem: String): String {
+        val display = displayName(rawItem).ifBlank { rawItem }.trim()
+        return if (isEnglish) {
+            ExerciseTitlesEn.getOrSame(display)
+        } else {
+            display
+        }
+    }
+
+    fun topicTitleForUi(rawTopic: String): String {
+        return if (isEnglish) {
+            ExerciseTitlesEn.getOrSame(rawTopic.trim())
+        } else {
+            rawTopic.trim()
+        }
+    }
+
+    val searchResults by remember(searchQuery, globalSearchItems, isEnglish) {
         mutableStateOf(
-            if (searchQuery.isBlank()) emptyList()
-            else {
+            if (searchQuery.isBlank()) {
+                emptyList()
+            } else {
                 val q = searchQuery.trim()
+
                 globalSearchItems
-                    .filter { (_, _, item) -> item.contains(q, ignoreCase = true) }
+                    .filter { (hitBelt, hitTopic, hitItem) ->
+                        val rawItem = hitItem.trim()
+                        val displayItem = displayName(hitItem).ifBlank { hitItem }.trim()
+                        val translatedItem = ExerciseTitlesEn.getOrSame(displayItem)
+                        val translatedTopic = ExerciseTitlesEn.getOrSame(hitTopic.trim())
+                        val beltName = if (isEnglish) hitBelt.en else hitBelt.heb
+
+                        rawItem.contains(q, ignoreCase = true) ||
+                                displayItem.contains(q, ignoreCase = true) ||
+                                translatedItem.contains(q, ignoreCase = true) ||
+                                hitTopic.contains(q, ignoreCase = true) ||
+                                translatedTopic.contains(q, ignoreCase = true) ||
+                                beltName.contains(q, ignoreCase = true)
+                    }
                     .take(50)
             }
         )
@@ -1141,9 +1179,25 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
             pickedSearchHit != null -> {
                 val (b, t, item) = pickedSearchHit!!
 
-                val explanation = remember(b, item, t) {
-                    findExplanationForPractice(b, item)
+                val explanation = remember(b, item, t, isEnglish) {
+                    findExplanationForPractice(
+                        belt = b,
+                        rawItem = item,
+                        isEnglish = isEnglish
+                    )
                 }
+
+                val itemTitleUi = remember(item, isEnglish) {
+                    searchTitleForUi(item)
+                }
+
+                val topicTitleUi = remember(t, isEnglish) {
+                    topicTitleForUi(t)
+                }
+
+                val sheetTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                val sheetHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                val actionAlignment = if (isEnglish) Alignment.Start else Alignment.End
 
                 val favId = remember(item) { normalizeFavoriteId(item) }
                 val isFav = favorites.contains(favId)
@@ -1187,7 +1241,7 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                 .padding(bottom = 12.dp)
                         ) {
                             Row(
-                                modifier = Modifier.align(AbsoluteAlignment.CenterLeft),
+                                modifier = Modifier.align(if (isEnglish) Alignment.CenterEnd else Alignment.CenterStart),
                                 horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 IconButton(onClick = { toggleFav() }) {
@@ -1216,21 +1270,25 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
 
                             Column(
                                 modifier = Modifier
-                                    .align(AbsoluteAlignment.CenterRight)
-                                    .fillMaxWidth(),
-                                horizontalAlignment = Alignment.End
+                                    .align(if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd)
+                                    .fillMaxWidth()
+                                    .padding(
+                                        start = if (isEnglish) 0.dp else 92.dp,
+                                        end = if (isEnglish) 92.dp else 0.dp
+                                    ),
+                                horizontalAlignment = sheetHorizontalAlignment
                             ) {
                                 Text(
-                                    text = item,
+                                    text = itemTitleUi,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = sheetTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Text(
-                                    text = "${t} • ${if (isEnglish) b.en else b.heb}",
+                                    text = "$topicTitleUi • ${if (isEnglish) b.en else b.heb}",
                                     style = MaterialTheme.typography.labelMedium,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = sheetTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -1238,12 +1296,12 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
 
                         Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.End
+                            horizontalAlignment = sheetHorizontalAlignment
                         ) {
                             Text(
                                 text = explanation,
                                 style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Right,
+                                textAlign = sheetTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -1256,7 +1314,7 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                     text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = sheetTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
 
@@ -1265,7 +1323,7 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                 Text(
                                     text = noteText,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = sheetTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -1275,7 +1333,7 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
                         ) {
                             TextButton(onClick = {
                                 pickedSearchHit = null
@@ -1334,15 +1392,30 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
             showHelp -> {
                 val item = weightedItems.getOrNull(currentIndex)
 
-                val explanation = remember(belt, item) {
+                val explanation = remember(belt, item, isEnglish) {
                     if (item.isNullOrBlank()) {
                         if (isEnglish) "No exercise selected to display." else "לא נבחר תרגיל להצגה."
                     } else {
-                        findExplanationForPractice(belt, item)
+                        findExplanationForPractice(
+                            belt = belt,
+                            rawItem = item,
+                            isEnglish = isEnglish
+                        )
                     }
                 }
 
                 val safeItem = item.orEmpty()
+
+                val safeItemTitleUi = remember(safeItem, isEnglish) {
+                    if (safeItem.isBlank()) {
+                        if (isEnglish) "Exercise" else "תרגיל"
+                    } else {
+                        searchTitleForUi(safeItem)
+                    }
+                }
+
+                val helpTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                val helpHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
 
                 val favId = remember(safeItem) { normalizeFavoriteId(safeItem) }
 
@@ -1385,20 +1458,20 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                 .padding(bottom = 12.dp)
                         ) {
                             Row(
-                                modifier = Modifier.align(Alignment.CenterStart),
+                                modifier = Modifier.align(if (isEnglish) Alignment.CenterEnd else Alignment.CenterStart),
                                 horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 IconButton(onClick = { toggleFav() }) {
                                     if (isFav) {
                                         Icon(
                                             imageVector = Icons.Filled.Star,
-                                            contentDescription = "הסר ממועדפים",
+                                            contentDescription = if (isEnglish) "Remove from favorites" else "הסר ממועדפים",
                                             tint = Color(0xFFFFC107)
                                         )
                                     } else {
                                         Icon(
                                             imageVector = Icons.Outlined.StarBorder,
-                                            contentDescription = "הוסף למועדפים"
+                                            contentDescription = if (isEnglish) "Add to favorites" else "הוסף למועדפים"
                                         )
                                     }
                                 }
@@ -1406,7 +1479,7 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                 IconButton(onClick = { showNoteEditor = true }) {
                                     Icon(
                                         imageVector = Icons.Filled.Edit,
-                                        contentDescription = "ערוך הערה",
+                                        contentDescription = if (isEnglish) "Edit note" else "ערוך הערה",
                                         tint = Color(0xFF42A5F5)
                                     )
                                 }
@@ -1414,21 +1487,25 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
 
                             Column(
                                 modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .fillMaxWidth(),
-                                horizontalAlignment = Alignment.End
+                                    .align(if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd)
+                                    .fillMaxWidth()
+                                    .padding(
+                                        start = if (isEnglish) 0.dp else 92.dp,
+                                        end = if (isEnglish) 92.dp else 0.dp
+                                    ),
+                                horizontalAlignment = helpHorizontalAlignment
                             ) {
                                 Text(
-                                    text = item ?: if (isEnglish) "Exercise" else "תרגיל",
+                                    text = safeItemTitleUi,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = helpTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 Text(
                                     text = "(${if (isEnglish) belt.en else belt.heb})",
                                     style = MaterialTheme.typography.labelMedium,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = helpTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -1436,12 +1513,12 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
 
                         Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.End
+                            horizontalAlignment = helpHorizontalAlignment
                         ) {
                             Text(
                                 text = explanation,
                                 style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Right,
+                                textAlign = helpTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -1454,7 +1531,7 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                     text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = helpTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
 
@@ -1463,7 +1540,7 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                 Text(
                                     text = noteText,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = helpTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -1473,7 +1550,7 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
                         ) {
                             TextButton(onClick = { showHelp = false }) {
                                 Text(if (isEnglish) "Close" else "סגור")
@@ -1489,8 +1566,8 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                         onDismissRequest = { showNoteEditor = false },
                         title = {
                             Text(
-                                text = "הערה לתרגיל",
-                                textAlign = TextAlign.Right,
+                                text = if (isEnglish) "Exercise Note" else "הערה לתרגיל",
+                                textAlign = helpTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         },
@@ -1499,8 +1576,8 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                 value = noteText,
                                 onValueChange = { noteText = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
-                                label = { Text("כתוב הערה") }
+                                textStyle = LocalTextStyle.current.copy(textAlign = helpTextAlign),
+                                label = { Text(if (isEnglish) "Write a note" else "כתוב הערה") }
                             )
                         },
                         confirmButton = {
@@ -1512,12 +1589,12 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                     showNoteEditor = false
                                 }
                             ) {
-                                Text("שמור")
+                                Text(if (isEnglish) "Save" else "שמור")
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showNoteEditor = false }) {
-                                Text("ביטול")
+                                Text(if (isEnglish) "Cancel" else "ביטול")
                             }
                         }
                     )
@@ -1579,6 +1656,11 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 searchResults.forEach { (hitBelt, hitTopic, hitItem) ->
+                                    val resultTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                                    val resultHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                    val hitItemUi = searchTitleForUi(hitItem)
+                                    val hitTopicUi = topicTitleForUi(hitTopic)
+
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
                                         tonalElevation = 1.dp,
@@ -1596,18 +1678,18 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(horizontal = 12.dp, vertical = 10.dp),
-                                            horizontalAlignment = Alignment.End
+                                            horizontalAlignment = resultHorizontalAlignment
                                         ) {
                                             Text(
-                                                text = hitItem,
+                                                text = hitItemUi,
                                                 style = MaterialTheme.typography.titleMedium,
-                                                textAlign = TextAlign.Right,
+                                                textAlign = resultTextAlign,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                             Text(
-                                                text = "(${if (isEnglish) hitBelt.en else hitBelt.heb})",
+                                                text = "$hitTopicUi • ${if (isEnglish) hitBelt.en else hitBelt.heb}",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                textAlign = TextAlign.Right,
+                                                textAlign = resultTextAlign,
                                                 modifier = Modifier.fillMaxWidth(),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )

@@ -51,7 +51,7 @@ fun AboutAviAbisidonScreen(
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
     val screenTitle = if (isEnglish) {
-        "Founder of the K.M.I Method"
+        "Founder of the K.A.M.I Method"
     } else {
         "מייסד שיטת ק.מ.י - קרב מגן ישראלי"
     }
@@ -157,7 +157,7 @@ fun AboutAviAbisidonScreen(
 
                                 Text(
                                     text = if (isEnglish) {
-                                        "Avi Abisidon, 10th Dan, Head of the K.M.I method and Chairman of the K.M.I association."
+                                        "Avi Abisidon, 10th Dan, Head of the K.A.M.I method and Chairman of the K.A.M.I association."
                                     } else {
                                         "אבי אביסידון דאן 10 ראש שיטת ק.מ.י ויו\"ר עמותת ק.מ.י."
                                     },
@@ -206,7 +206,7 @@ fun AboutAviAbisidonScreen(
 
                             Text(
                                 text = if (isEnglish) {
-                                    "At that stage, Eli Avikzar began shaping the idea of formalizing the improvements and refinements he had developed in Krav Maga and uniting them into a new discipline called K.M.I. - Krav Magen Israeli. Eli turned to his senior student Avi, who became his deputy and right-hand man in establishing and implementing the method."
+                                    "At that stage, Eli Avikzar began shaping the idea of formalizing the improvements and refinements he had developed in Krav Maga and uniting them into a new discipline called K.A.M.I. - Krav Magen Israeli. Eli turned to his senior student Avi, who became his deputy and right-hand man in establishing and implementing the method."
                                 } else {
                                     "בשלב זה, החל להרקם אצל אלי אביקזר רעיון מיסוד השינויים והשיפורים שפיתח בתרגילי קרב המגע ואיחודם למקצוע חדש בשם ק.מ.י. - קרב מגן ישראלי. אלי פנה לתלמידו הבכיר אבי, שהיה לסגנו ויד ימינו בהקמת והטמעת השיטה."
                                 },
@@ -217,7 +217,7 @@ fun AboutAviAbisidonScreen(
 
                             Text(
                                 text = if (isEnglish) {
-                                    "For about 15 years, Avi Abisidon served as Deputy Head of the K.M.I. method and Deputy Chairman of the K.M.I. association. Ranks 5th Dan through 7th Dan were awarded to Avi by K.M.I founder Eli Avikzar."
+                                    "For about 15 years, Avi Abisidon served as Deputy Head of the K.A.M.I. method and Deputy Chairman of the K.A.M.I. association. Ranks 5th Dan through 7th Dan were awarded to Avi by K.A.M.I founder Eli Avikzar."
                                 } else {
                                     "כ-15 שנה שימש אבי אביסידון בתפקיד סגן ראש שיטת ק.מ.י. וסגן יו\"ר עמותת ק.מ.י.\nדרגות דאן 5 ועד דאן 7 הוענקו לאבי ע\"י מייסד ק.מ.י. אלי אביקזר."
                                 },
@@ -228,7 +228,7 @@ fun AboutAviAbisidonScreen(
 
                             Text(
                                 text = if (isEnglish) {
-                                    "After Eli Avikzar's passing, Avi Abisidon was elected in June 2004 as Head of the K.M.I. method and Chairman of the K.M.I. association. Avi Abisidon is certified by the Wingate Institute."
+                                    "After Eli Avikzar's passing, Avi Abisidon was elected in June 2004 as Head of the K.A.M.I. method and Chairman of the K.A.M.I. association. Avi Abisidon is certified by the Wingate Institute."
                                 } else {
                                     "לאחר פטירת אלי אביקזר, נבחר אבי אביסידון ביוני 2004 לראש שיטת ק.מ.י. וליו\"ר עמותת ק.מ.י.\nאבי אביסידון מוסמך מטעם מכון וינגייט."
                                 },
@@ -381,7 +381,7 @@ fun AboutAviAbisidonScreen(
 
                             Text(
                                 text = if (isEnglish) {
-                                    "Avi Abisidon's vision: to strengthen and expand the K.M.I method in Israel and around the world."
+                                    "Avi Abisidon's vision: to strengthen and expand the K.A.M.I method in Israel and around the world."
                                 } else {
                                     "החזון של אבי אביסידון: העצמת שיטת ק.מ.י בארץ ובעולם."
                                 },

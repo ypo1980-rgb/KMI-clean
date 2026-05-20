@@ -75,7 +75,7 @@ fun AboutMethodScreen(
                     Text(
                         text = amText(
                             "אודות שיטת ק.מ.י - קרב מגן ישראלי",
-                            "About the K.M.I Method - Israeli Protective Combat",
+                            "About the K.A.M.I Method - Israeli Protective Combat",
                             isEnglish
                         ),
                         style = MaterialTheme.typography.headlineSmall,
@@ -111,12 +111,12 @@ fun AboutMethodScreen(
 השם "קרב מגן ישראלי" מסמל אפוא את השיטה.
                                 """.trimIndent(),
                                 """
-Israeli Protective Combat - K.M.I is an Israeli self-defense method.
-The goal of K.M.I is self-defense and effective response in close-range combat. The method evolved from Krav Maga and was founded by Eli Avikzar in 1989.
+Israeli Protective Combat - K.A.M.I is an Israeli self-defense method.
+The goal of K.A.M.I is self-defense and effective response in close-range combat. The method evolved from Krav Maga and was founded by Eli Avikzar in 1989.
 
-After the founder passed away in 2004, Avi Avisidon was appointed head of the method and chairman of the K.M.I association.
+After the founder passed away in 2004, Avi Avisidon was appointed head of the method and chairman of the K.A.M.I association.
 
-K.M.I is based on the natural movements of the human body and stands out for its simplicity, speed, and effectiveness.
+K.A.M.I is based on the natural movements of the human body and stands out for its simplicity, speed, and effectiveness.
 
 Meaning of the name "Israeli Protective Combat":
 "Protective Combat" - the purpose of the drills and combat is to protect life.
@@ -135,7 +135,7 @@ Thus, the name symbolizes the method itself.
                         Text(
                             text = amText(
                                 "ההבדל בין ק.מ.י לקרב מגע",
-                                "The Difference Between K.M.I and Krav Maga",
+                                "The Difference Between K.A.M.I and Krav Maga",
                                 isEnglish
                             ),
                             style = MaterialTheme.typography.titleMedium,
@@ -172,27 +172,27 @@ Thus, the name symbolizes the method itself.
 שיטת ק.מ.י מאושרת על ידי המרכז האקדמי לוינסקי־וינגייט. מורים לחינוך גופני משתלמים במרכז האקדמי בקורסים להגנה עצמית מטעם ק.מ.י. השיטה הומלצה לנעמ"ת על ידי משטרת ישראל להעברת סדנאות להגנה עצמית לנערות ולנשים. שיטת ק.מ.י משמשת בזרועות הביטחון השונות, מבוקשת ברחבי העולם וזכתה להכרה בין־לאומית.
                                 """.trimIndent(),
                                 """
-K.M.I — Israeli Protective Combat — is a method that grew out of the Krav Maga family and remains an integral part of the general, generic name "Krav Maga".
+K.A.M.I — Israeli Protective Combat — is a method that grew out of the Krav Maga family and remains an integral part of the general, generic name "Krav Maga".
 
-The founder of K.M.I, Eliyahu (Eli) Avikzar, was a student of Krav Maga founder Imi Lichtenfeld Sde-Or, and was the first person to receive a belt from Imi.
+The founder of K.A.M.I, Eliyahu (Eli) Avikzar, was a student of Krav Maga founder Imi Lichtenfeld Sde-Or, and was the first person to receive a belt from Imi.
 
 For many years, Eli worked closely with Imi. Later, when Imi retired from the army, Eli was chosen to replace him as head of the Krav Maga section in the IDF.
 
 When Eli retired from the army, he suggested adding the word "Israel" to the name Krav Maga, in order to distinguish between the general, generic name "Krav Maga" and a unique, specific name that included the country of origin — Israel. Imi rejected the idea, arguing that the word "Israel" might discourage people abroad from learning Israeli Krav Maga.
 
-In 1987, with Imi's blessing, Eli left the Krav Maga association in order to establish a method named "Israeli Krav Maga", abbreviated in Hebrew as K.M.I. Since Imi objected to the name Israeli Krav Maga, and because Eli respected Imi, Eli replaced the Hebrew word "contact" with "protective", while keeping the same Hebrew initials K.M.I. In this way, the word "Israeli" was added to "Protective Combat", making K.M.I a specific name rather than a generic one.
+In 1987, with Imi's blessing, Eli left the Krav Maga association in order to establish a method named "Israeli Krav Maga", abbreviated in Hebrew as K.A.M.I. Since Imi objected to the name Israeli Krav Maga, and because Eli respected Imi, Eli replaced the Hebrew word "contact" with "protective", while keeping the same Hebrew initials K.A.M.I. In this way, the word "Israeli" was added to "Protective Combat", making K.A.M.I a specific name rather than a generic one.
 
-Changing the word to "protective" matched the purpose of the method, which was founded to teach self-defense to the public, while still keeping the method within the Krav Maga family. Eli also decided that the K.M.I training uniform would be blue and white, like the colors of the Israeli flag.
+Changing the word to "protective" matched the purpose of the method, which was founded to teach self-defense to the public, while still keeping the method within the Krav Maga family. Eli also decided that the K.A.M.I training uniform would be blue and white, like the colors of the Israeli flag.
 
 The method continues to evolve, change, and adapt its techniques to modern and current situations and threats.
 
-The name "Krav Maga" is still used as a general, generic name, and anyone may use it and teach Krav Maga without professional supervision. In contrast, the K.M.I association is registered in Israel and worldwide; the name and symbols of K.M.I are registered and protected in Israel and worldwide; and the curriculum is structured and consistent, so the techniques are taught uniformly around the world under professional supervision.
+The name "Krav Maga" is still used as a general, generic name, and anyone may use it and teach Krav Maga without professional supervision. In contrast, the K.A.M.I association is registered in Israel and worldwide; the name and symbols of K.A.M.I are registered and protected in Israel and worldwide; and the curriculum is structured and consistent, so the techniques are taught uniformly around the world under professional supervision.
 
-Today, K.M.I is the largest organization in Israel in the field of Krav Maga and is under constant professional supervision by the association.
+Today, K.A.M.I is the largest organization in Israel in the field of Krav Maga and is under constant professional supervision by the association.
 
 Instructors, from assistant instructor level to expert level, undergo training supervised and approved by the Levinsky-Wingate Academic Center and the Israeli Ministry of Sports.
 
-The K.M.I method is approved by the Levinsky-Wingate Academic Center. Physical education teachers train at the academic center in self-defense courses conducted by K.M.I. The method was recommended to Na'amat by the Israel Police for self-defense workshops for girls and women. K.M.I is used by various security branches, is sought after around the world, and has received international recognition.
+The K.A.M.I method is approved by the Levinsky-Wingate Academic Center. Physical education teachers train at the academic center in self-defense courses conducted by K.A.M.I. The method was recommended to Na'amat by the Israel Police for self-defense workshops for girls and women. K.A.M.I is used by various security branches, is sought after around the world, and has received international recognition.
                                 """.trimIndent(),
                                 isEnglish
                             ),
@@ -206,7 +206,7 @@ The K.M.I method is approved by the Levinsky-Wingate Academic Center. Physical e
                         Text(
                             text = amText(
                                 "האידיאולוגיה של ק.מ.י מאופיינת בכללים:",
-                                "The ideology of K.M.I is characterized by these principles:",
+                                "The ideology of K.A.M.I is characterized by these principles:",
                                 isEnglish
                             ),
                             style = MaterialTheme.typography.titleMedium,
@@ -241,7 +241,7 @@ The K.M.I method is approved by the Levinsky-Wingate Academic Center. Physical e
 שיטת ק.מ.י מאושרת על ידי המכללה האקדמית בוינגייט. מורים לחינוך גופני משתלמים במכללה האקדמית בוינגייט בקורסים להגנה עצמית מטעם ק.מ.י. השיטה הומלצה לנעמ"ת על ידי משטרת ישראל להעברת סדנאות להגנה עצמית לנערות ולנשים. שיטת ק.מ.י משמשת בזרועות הביטחון השונים ומבוקשת ברחבי העולם. שיטת ק.מ.י זכתה להכרה בין־לאומית.
                                 """.trimIndent(),
                                 """
-The K.M.I method is approved by the Wingate Academic College. Physical education teachers receive training there in self-defense courses conducted by K.M.I. The method was recommended to Na'amat by the Israel Police for self-defense workshops for girls and women. K.M.I is used in various security branches and is sought after around the world. The method has received international recognition.
+The K.A.M.I method is approved by the Wingate Academic College. Physical education teachers receive training there in self-defense courses conducted by K.A.M.I. The method was recommended to Na'amat by the Israel Police for self-defense workshops for girls and women. K.A.M.I is used in various security branches and is sought after around the world. The method has received international recognition.
                                 """.trimIndent(),
                                 isEnglish
                             ),
@@ -255,7 +255,7 @@ The K.M.I method is approved by the Wingate Academic College. Physical education
                         Text(
                             text = amText(
                                 "קרב מגן ישראלי - ק.מ.י, מתמקד בשני תחומים:",
-                                "Israeli Protective Combat - K.M.I focuses on two main areas:",
+                                "Israeli Protective Combat - K.A.M.I focuses on two main areas:",
                                 isEnglish
                             ),
                             style = MaterialTheme.typography.titleMedium,
@@ -297,7 +297,7 @@ The K.M.I method is approved by the Wingate Academic College. Physical education
                         Text(
                             text = amText(
                                 "התרגילים הנלמדים בשיטת ק.מ.י:",
-                                "The techniques taught in the K.M.I method:",
+                                "The techniques taught in the K.A.M.I method:",
                                 isEnglish
                             ),
                             style = MaterialTheme.typography.titleMedium,
@@ -352,7 +352,7 @@ The K.M.I method is approved by the Wingate Academic College. Physical education
 מכאן המשפט שטבע אלי אביקזר: "מינימום הגנה נגד מקסימום התקפה".
                                 """.trimIndent(),
                                 """
-K.M.I techniques were developed according to the principle of simplicity: a natural and simple movement is a fast movement. Fast movement generates power. Using a basic, non-complicated motion creates minimum defensive movement against maximum attacking movement and enables every person to defend themselves and neutralize an attacker.
+K.A.M.I techniques were developed according to the principle of simplicity: a natural and simple movement is a fast movement. Fast movement generates power. Using a basic, non-complicated motion creates minimum defensive movement against maximum attacking movement and enables every person to defend themselves and neutralize an attacker.
 
 From this came Eli Avikzar's phrase: "Minimum defense against maximum attack."
                                 """.trimIndent(),
@@ -381,7 +381,7 @@ From this came Eli Avikzar's phrase: "Minimum defense against maximum attack."
 בניגוד לשיטות לחימה מסורתיות, ק.מ.י מתאים את עצמו למציאות המשתנה ברחוב ולסכנות המידיות. ק.מ.י מחדש, משפר, מוסיף או גורע תרגילים ומציע פתרונות עדכניים. השלמות היא שאיפה — אך המטרה היא שמירת החיים, שליטה וריסון עצמי.
                                 """.trimIndent(),
                                 """
-Unlike traditional martial arts, K.M.I adapts itself to the changing reality of the street and to immediate threats. K.M.I renews, improves, adds, or removes techniques and offers updated solutions. Perfection is an aspiration — but the true goal is preserving life, control, and self-restraint.
+Unlike traditional martial arts, K.A.M.I adapts itself to the changing reality of the street and to immediate threats. K.A.M.I renews, improves, adds, or removes techniques and offers updated solutions. Perfection is an aspiration — but the true goal is preserving life, control, and self-restraint.
                                 """.trimIndent(),
                                 isEnglish
                             ),
@@ -428,7 +428,7 @@ Unlike traditional martial arts, K.M.I adapts itself to the changing reality of 
                         Text(
                             text = amText(
                                 "מתאמני ק.מ.י מציינים שיפור בתנועה ובקואורדינציה, עלייה בביטחון האישי והעצמי, אומץ לב, קור רוח, משמעת ושליטה עצמית, והתרחקות ממוקדי אלימות.",
-                                "K.M.I trainees report improvement in movement and coordination, increased personal confidence and self-confidence, courage, composure, discipline, self-control, and distancing themselves from violent environments.",
+                                "K.A.M.I trainees report improvement in movement and coordination, increased personal confidence and self-confidence, courage, composure, discipline, self-control, and distancing themselves from violent environments.",
                                 isEnglish
                             ),
                             style = MaterialTheme.typography.bodyLarge,

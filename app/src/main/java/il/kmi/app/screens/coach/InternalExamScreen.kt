@@ -1,6 +1,8 @@
 package il.kmi.app.screens.coach
 
 import android.content.Context
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -69,7 +71,6 @@ import il.kmi.app.search.KmiSearchBridge
 import il.kmi.app.localization.rememberIsEnglish
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.SubTopicRegistry
-import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.time.LocalDate
@@ -90,7 +91,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.focus.focusRequester
 import android.graphics.Color as AColor
 import androidx.compose.ui.focus.FocusRequester
-
+import kotlinx.coroutines.tasks.await
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 // ======================
 // מודלים ולוגיקה
@@ -150,6 +158,15 @@ private data class BeltScore(
     val score10: Double
         get() = if (max == 0.0) 0.0 else (total / max) * 10.0
 }
+
+private data class RecentInternalExamResultUi(
+    val resultId: String,
+    val traineeName: String,
+    val beltName: String,
+    val score10: Double,
+    val percent: Int,
+    val completedAtMillis: Long
+)
 
 // הדפסה יפה של ניקוד
 private fun Double.toScoreString(): String {
@@ -312,6 +329,41 @@ private fun examSummaryText(percent: Int, isEnglish: Boolean): String {
     }
 }
 
+private fun buildCompletedExamShareSummary(
+    session: InternalExamSession,
+    isEnglish: Boolean
+): String {
+    val score10 = if (session.maxScore == 0.0) {
+        0.0
+    } else {
+        (session.totalScore / session.maxScore) * 10.0
+    }
+
+    val dateText = session.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+    val beltName = examBeltNameForUi(session.belt, isEnglish)
+    val statusText = examStatusText(session.percent, isEnglish)
+
+    return if (isEnglish) {
+        """
+        Internal Exam Summary
+        Trainee: ${session.traineeName}
+        Belt: $beltName
+        Date: $dateText
+        Score: ${score10.coerceIn(0.0, 10.0).toScoreString()} / 10 (${session.percent}%)
+        Status: $statusText
+        """.trimIndent()
+    } else {
+        """
+        סיכום מבחן פנימי
+        נבחן: ${session.traineeName}
+        חגורה: $beltName
+        תאריך: $dateText
+        ציון: ${score10.coerceIn(0.0, 10.0).toScoreString()} / 10 (${session.percent}%)
+        סטטוס: $statusText
+        """.trimIndent()
+    }
+}
+
 // כל החגורות מהצהובה ועד החגורה הנבחנת
 private fun beltsUpTo(target: Belt): List<Belt> {
     val all = listOf(
@@ -350,7 +402,11 @@ private fun buildInternalExamSessionForUi(
 
  object InternalExamPdf {
 
-    fun createPdf(context: Context, session: InternalExamSession): Uri? {
+     fun createPdf(
+         context: Context,
+         session: InternalExamSession,
+         isEnglish: Boolean = false
+     ): Uri? {
         return try {
             val document = PdfDocument()
 
@@ -366,6 +422,36 @@ private fun buildInternalExamSessionForUi(
 
             val contentTop = 40f + headerH
             val contentBottom = (pageH - 40).toFloat() - footerH
+
+            fun pdfTr(he: String, en: String): String =
+                if (isEnglish) en else he
+
+            fun pdfBeltName(belt: Belt): String =
+                if (isEnglish) belt.en else belt.heb
+
+            fun pdfExerciseTitle(raw: String): String =
+                if (isEnglish) ExerciseTitlesEn.getOrSame(raw.trim()) else raw
+
+            fun pdfStatusText(percent: Int): String =
+                examStatusText(percent, isEnglish)
+
+            fun pdfPillLabel(percent: Int): String {
+                return if (isEnglish) {
+                    when {
+                        percent >= 85 -> "Excellent"
+                        percent >= 70 -> "Good"
+                        percent >= 50 -> "Average"
+                        else -> "Weak"
+                    }
+                } else {
+                    when {
+                        percent >= 85 -> "מצוין"
+                        percent >= 70 -> "טוב"
+                        percent >= 50 -> "בינוני"
+                        else -> "חלש"
+                    }
+                }
+            }
 
             fun percentColor(p: Int): Int {
                 // אדום -> צהוב -> ירוק
@@ -476,6 +562,22 @@ private fun buildInternalExamSessionForUi(
                 canvas.drawText(text, rightMargin - w, y, paint)
             }
 
+            fun drawStart(canvas: android.graphics.Canvas, text: String, y: Float, paint: Paint) {
+                if (isEnglish) {
+                    canvas.drawText(text, leftMargin, y, paint)
+                } else {
+                    drawRight(canvas, text, y, paint)
+                }
+            }
+
+            fun drawOpposite(canvas: android.graphics.Canvas, text: String, y: Float, paint: Paint) {
+                if (isEnglish) {
+                    drawRight(canvas, text, y, paint)
+                } else {
+                    canvas.drawText(text, leftMargin, y, paint)
+                }
+            }
+
             fun drawHeader(canvas: android.graphics.Canvas, pageNumber: Int) {
                 // header bg
                 canvas.drawRect(0f, 0f, pageW.toFloat(), headerH, headerBg)
@@ -493,22 +595,39 @@ private fun buildInternalExamSessionForUi(
                 }
                 canvas.drawText("KMI", leftMargin + 10f, 22f + 28f, logoText)
 
-                // title + subtitle (ימין)
-                val title = "דו\"ח מבחן פנימי"
-                val sub = "חגורה: ${session.belt.heb}"
+                val title = pdfTr(
+                    "דו\"ח מבחן פנימי",
+                    "Internal Exam Report"
+                )
 
-                drawRight(canvas, title, 44f, headerTitle)
-                drawRight(canvas, sub, 66f, headerSub)
+                val sub = pdfTr(
+                    "חגורה: ${pdfBeltName(session.belt)}",
+                    "Belt: ${pdfBeltName(session.belt)}"
+                )
 
-                // page number קטן בצד שמאל למעלה
-                val pn = "עמוד $pageNumber"
-                canvas.drawText(pn, leftMargin + 56f, 66f, headerSub)
+                drawStart(canvas, title, 44f, headerTitle)
+                drawStart(canvas, sub, 66f, headerSub)
+
+                val pn = pdfTr(
+                    "עמוד $pageNumber",
+                    "Page $pageNumber"
+                )
+
+                drawOpposite(canvas, pn, 66f, headerSub)
             }
 
             fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int) {
                 val y = (pageH - 18).toFloat()
-                val left = "נוצר ע\"י KMI"
-                val right = "עמוד $pageNumber"
+                val left = pdfTr(
+                    "נוצר ע\"י KMI",
+                    "Generated by KMI"
+                )
+
+                val right = pdfTr(
+                    "עמוד $pageNumber",
+                    "Page $pageNumber"
+                )
+
                 canvas.drawText(left, leftMargin, y, footerPaint)
                 drawRight(canvas, right, y, footerPaint)
             }
@@ -539,9 +658,23 @@ private fun buildInternalExamSessionForUi(
                 val x2 = leftMargin + cardW + gap
                 val x3 = leftMargin + (cardW + gap) * 2
 
-                card(x1, "שם מתאמן", session.traineeName.ifBlank { "—" })
-                card(x2, "חגורה במבחן", session.belt.heb)
-                card(x3, "תאריך", dateStr)
+                card(
+                    x1,
+                    pdfTr("שם מתאמן", "Trainee name"),
+                    session.traineeName.ifBlank { "—" }
+                )
+
+                card(
+                    x2,
+                    pdfTr("חגורה במבחן", "Exam belt"),
+                    pdfBeltName(session.belt)
+                )
+
+                card(
+                    x3,
+                    pdfTr("תאריך", "Date"),
+                    dateStr
+                )
 
                 y += cardH + 16f
                 return y
@@ -570,8 +703,15 @@ private fun buildInternalExamSessionForUi(
                     typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                 }
 
-                val scoreLine = "ציון: ${session.totalScore.toInt()} / ${session.maxScore.toInt()}  (${p}%)"
-                val statusLine = "סטטוס: ${session.summaryText}"
+                val scoreLine = pdfTr(
+                    "ציון: ${session.totalScore.toInt()} / ${session.maxScore.toInt()}  (${p}%)",
+                    "Score: ${session.totalScore.toInt()} / ${session.maxScore.toInt()}  (${p}%)"
+                )
+
+                val statusLine = pdfTr(
+                    "סטטוס: ${pdfStatusText(p)}",
+                    "Status: ${pdfStatusText(p)}"
+                )
 
                 val scorePaint = Paint().apply {
                     isAntiAlias = true
@@ -586,17 +726,11 @@ private fun buildInternalExamSessionForUi(
                     typeface = Typeface.create("sans-serif", Typeface.NORMAL)
                 }
 
-                // ימין (השורות)
-                drawRight(canvas, scoreLine, y + 40f, scorePaint)
-                drawRight(canvas, statusLine, y + 62f, statusPaint)
+                drawStart(canvas, scoreLine, y + 40f, scorePaint)
+                drawStart(canvas, statusLine, y + 62f, statusPaint)
 
                 // טקסט בתוך ה-pill
-                val pillLabel = when {
-                    p >= 85 -> "מצוין"
-                    p >= 70 -> "טוב"
-                    p >= 50 -> "בינוני"
-                    else -> "חלש"
-                }
+                val pillLabel = pdfPillLabel(p)
                 val tw = pillText.measureText(pillLabel)
                 canvas.drawText(
                     pillLabel,
@@ -621,9 +755,30 @@ private fun buildInternalExamSessionForUi(
                 canvas.drawText(s, r.centerX() - tw / 2f, r.centerY() + 5f, scoreBoxText)
             }
 
-            fun drawRightWithin(canvas: android.graphics.Canvas, text: String, xRight: Float, y: Float, paint: Paint) {
-                val w = paint.measureText(text)
-                canvas.drawText(text, xRight - w, y, paint)
+            fun drawTextWithin(
+                canvas: android.graphics.Canvas,
+                text: String,
+                xRight: Float,
+                y: Float,
+                paint: Paint
+            ) {
+                if (isEnglish) {
+                    val maxWidth = xRight - leftMargin - 8f
+                    var clean = text.trim()
+
+                    while (clean.isNotBlank() && paint.measureText(clean) > maxWidth) {
+                        clean = clean.dropLast(1)
+                    }
+
+                    if (clean.length < text.trim().length && clean.length > 3) {
+                        clean = clean.dropLast(3) + "..."
+                    }
+
+                    canvas.drawText(clean, leftMargin, y, paint)
+                } else {
+                    val w = paint.measureText(text)
+                    canvas.drawText(text, xRight - w, y, paint)
+                }
             }
 
             // ====== רינדור עם ריבוי עמודים ======
@@ -639,7 +794,12 @@ private fun buildInternalExamSessionForUi(
             y = drawScoreBadge(canvas, y)
 
             // Section Title
-            drawRight(canvas, "פירוט תרגילים", y, sectionTitle)
+            drawStart(
+                canvas,
+                pdfTr("פירוט תרגילים", "Exercise details"),
+                y,
+                sectionTitle
+            )
             y += 16f
             canvas.drawLine(leftMargin, y, rightMargin, y, divider)
             y += 16f
@@ -655,8 +815,8 @@ private fun buildInternalExamSessionForUi(
                 session.exercises.mapIndexedNotNull { index, ex ->
                     val score = session.marks.getOrNull(index) ?: return@mapIndexedNotNull null
                     PdfRow(
-                        topic = ex.topic,
-                        name = ex.name,
+                        topic = pdfExerciseTitle(ex.topic),
+                        name = pdfExerciseTitle(ex.name),
                         score = clampScore10(score)
                     )
                 }
@@ -673,7 +833,15 @@ private fun buildInternalExamSessionForUi(
                 drawHeader(canvas, pageNumber)
                 y = contentTop
 
-                drawRight(canvas, "פירוט תרגילים (המשך)", y, sectionTitle)
+                drawStart(
+                    canvas,
+                    pdfTr(
+                        "פירוט תרגילים (המשך)",
+                        "Exercise details — continued"
+                    ),
+                    y,
+                    sectionTitle
+                )
                 y += 16f
                 canvas.drawLine(leftMargin, y, rightMargin, y, divider)
                 y += 16f
@@ -699,12 +867,20 @@ private fun buildInternalExamSessionForUi(
                         newPage()
                     }
 
-                    drawRight(canvas, "נושא: ${currentTopic}", y, topicTitle)
+                    drawStart(
+                        canvas,
+                        pdfTr(
+                            "נושא: ${currentTopic}",
+                            "Topic: ${currentTopic}"
+                        ),
+                        y,
+                        topicTitle
+                    )
                     y += 18f
                 }
 
                 // ✅ שם התרגיל עד nameRight (לא נכנס לתיבת הציון)
-                drawRightWithin(canvas, r.name, nameRight, y, lineText)
+                drawTextWithin(canvas, r.name, nameRight, y, lineText)
 
                 // ✅ תיבת ציון תמיד בקצה ימין
                 drawScoreBox(canvas, xRight = rightMargin, yTop = y, score = r.score)
@@ -733,17 +909,28 @@ private fun buildInternalExamSessionForUi(
         }
     }
 
-    fun sharePdf(context: Context, uri: Uri) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/pdf"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(
-            Intent.createChooser(intent, "שיתוף דו\"ח מבחן פנימי")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-    }
+     fun sharePdf(
+         context: Context,
+         uri: Uri,
+         isEnglish: Boolean = false
+     ) {
+         val intent = Intent(Intent.ACTION_SEND).apply {
+             type = "application/pdf"
+             putExtra(Intent.EXTRA_STREAM, uri)
+             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+         }
+
+         val chooserTitle = examTr(
+             isEnglish,
+             "שיתוף דו\"ח מבחן פנימי",
+             "Share internal exam report"
+         )
+
+         context.startActivity(
+             Intent.createChooser(intent, chooserTitle)
+                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+         )
+     }
 }
 
 // ======================
@@ -768,9 +955,9 @@ fun InternalExamScreen(
     val ctx = LocalContext.current
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val scope = rememberCoroutineScope()
 
     val isEnglish = rememberIsEnglish()
-    val screenTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
     // ✅ דיאלוג "נבחנים אחרונים"
     var showPickTraineeDialog by remember { mutableStateOf(false) }
     var recentTrainees by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -789,7 +976,10 @@ fun InternalExamScreen(
 
         pushRecentTrainee(ctx, name, 20)
         saveLastTrainee(ctx, name)
-        recentTrainees = loadRecentTrainees(ctx, 20)
+
+        scope.launch {
+            recentTrainees = loadRecentTrainees(ctx, 20)
+        }
 
         focusManager.clearFocus()
         keyboard?.hide()
@@ -801,6 +991,8 @@ fun InternalExamScreen(
     var showExitDialog by remember { mutableStateOf(false) }
     var showResumeDialog by remember { mutableStateOf(false) }
     var pendingLoadedDraft by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+
+    var isSavingFinalResult by remember { mutableStateOf(false) }
 
     // ✅ כדי שלא נפתח דיאלוג על כל אות בזמן שמקלידים שם
     var resumeCheckedKey by remember { mutableStateOf<String?>(null) }
@@ -832,9 +1024,18 @@ fun InternalExamScreen(
 
     // 🔽 פעולה אחת לשיתוף ה-PDF (משותפת לטופ-בר ולבאר התחתון)
     val onExportPdf: () -> Unit = {
-        val uri = InternalExamPdf.createPdf(ctx, session)
+        val uri = InternalExamPdf.createPdf(
+            context = ctx,
+            session = session,
+            isEnglish = isEnglish
+        )
+
         if (uri != null) {
-            InternalExamPdf.sharePdf(ctx, uri)
+            InternalExamPdf.sharePdf(
+                context = ctx,
+                uri = uri,
+                isEnglish = isEnglish
+            )
         } else {
             Toast.makeText(
                 ctx,
@@ -844,12 +1045,12 @@ fun InternalExamScreen(
         }
     }
 
-    // ✅ טעינת Draft (אם קיים) בכניסה למסך
+    // ✅ טעינת Draft מהשרת אם קיים
     LaunchedEffect(traineeName, belt) {
         val name = traineeName.trim()
         if (name.isBlank()) return@LaunchedEffect
 
-        val key = draftKey(name, belt)
+        val key = "${belt.name}_${internalExamTraineeKey(name)}"
         if (resumeCheckedKey == key) return@LaunchedEffect
         resumeCheckedKey = key
 
@@ -940,8 +1141,10 @@ fun InternalExamScreen(
 
                                 Button(
                                     onClick = {
-                                        recentTrainees = loadRecentTrainees(ctx, 20)
-                                        showPickTraineeDialog = true
+                                        scope.launch {
+                                            recentTrainees = loadRecentTrainees(ctx, 20)
+                                            showPickTraineeDialog = true
+                                        }
                                     }
                                 ) { Text(examTr(isEnglish, "החלף", "Change")) }
 
@@ -1103,6 +1306,13 @@ fun InternalExamScreen(
                                                     } else {
                                                         marksMap[ex.id] = clampScore10(newScore)
                                                     }
+
+                                                    val activeName = traineeName.trim()
+                                                    if (activeName.isNotBlank()) {
+                                                        scope.launch {
+                                                            saveExamDraft(ctx, activeName, belt, marksMap)
+                                                        }
+                                                    }
                                                 }
                                             )
                                         }
@@ -1143,6 +1353,13 @@ fun InternalExamScreen(
                                                     } else {
                                                         marksMap[ex.id] = clampScore10(newScore)
                                                     }
+
+                                                    val activeName = traineeName.trim()
+                                                    if (activeName.isNotBlank()) {
+                                                        scope.launch {
+                                                            saveExamDraft(ctx, activeName, belt, marksMap)
+                                                        }
+                                                    }
                                                 }
                                             )
                                         }
@@ -1164,6 +1381,13 @@ fun InternalExamScreen(
                                             } else {
                                                 marksMap[ex.id] = clampScore10(newScore)
                                             }
+
+                                            val activeName = traineeName.trim()
+                                            if (activeName.isNotBlank()) {
+                                                scope.launch {
+                                                    saveExamDraft(ctx, activeName, belt, marksMap)
+                                                }
+                                            }
                                         }
                                     )
                                 }
@@ -1171,8 +1395,96 @@ fun InternalExamScreen(
                         }
                     }
 
-                    item { Spacer(modifier = Modifier.height(82.dp)) }
+                    item { Spacer(modifier = Modifier.height(24.dp)) }
                 }
+
+                BottomActionBar(
+                    session = session,
+                    isEnglish = isEnglish,
+                    isSaving = isSavingFinalResult,
+                    onSave = {
+                        val activeName = traineeName.trim()
+
+                        if (activeName.isBlank()) {
+                            Toast.makeText(
+                                ctx,
+                                examTr(
+                                    isEnglish,
+                                    "נא להזין שם נבחן לפני שמירה",
+                                    "Please enter a trainee name before saving"
+                                ),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@BottomActionBar
+                        }
+
+                        if (marksMap.isEmpty()) {
+                            Toast.makeText(
+                                ctx,
+                                examTr(
+                                    isEnglish,
+                                    "אין ציונים לשמירה",
+                                    "There are no scores to save"
+                                ),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@BottomActionBar
+                        }
+
+                        if (isSavingFinalResult) {
+                            return@BottomActionBar
+                        }
+
+                        scope.launch {
+                            isSavingFinalResult = true
+
+                            runCatching {
+                                saveExamDraft(ctx, activeName, belt, marksMap)
+
+                                val resultId = saveCompletedInternalExamResult(
+                                    traineeName = activeName,
+                                    belt = belt,
+                                    marksMap = marksMap
+                                )
+
+                                deleteExamDraftAfterCompletion(
+                                    traineeName = activeName,
+                                    belt = belt
+                                )
+
+                                resultId
+                            }.onSuccess { resultId ->
+                                pushRecentTrainee(ctx, activeName, 20)
+                                saveLastTrainee(ctx, activeName)
+                                hasUnsavedChanges = false
+                                resumeCheckedKey = "${belt.name}_${internalExamTraineeKey(activeName)}"
+
+                                Toast.makeText(
+                                    ctx,
+                                    examTr(
+                                        isEnglish,
+                                        "המבחן נשמר כתוצאה סופית",
+                                        "The exam was saved as a final result"
+                                    ),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }.onFailure { error ->
+                                Toast.makeText(
+                                    ctx,
+                                    examTr(
+                                        isEnglish,
+                                        "שמירת המבחן נכשלה",
+                                        "Saving the exam failed"
+                                    ) + ": ${error.localizedMessage ?: ""}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+
+                            isSavingFinalResult = false
+                        }
+                    },
+                    onExportPdf = onExportPdf
+                )
 
                 // --- תחתית במסך התרגילים: מעבר חזרה למסך הראשי לבחירת חגורה אחרת ---
                 ChangeBeltBottomBar(
@@ -1291,11 +1603,8 @@ fun InternalExamScreen(
                                 centerColor = Color(0xFF2563EB),
                                 endColor = Color(0xFF7C3AED),
                                 onClick = {
-                                    // ✅ מבחן חדש
+                                    // ✅ מבחן חדש מקומי במסך — לא מוחקים מהשרת כאן
                                     marksMap.clear()
-
-                                    val sp = ctx.getSharedPreferences("kmi_internal_exam_drafts", Context.MODE_PRIVATE)
-                                    sp.edit().remove(draftKey(traineeName.trim(), belt)).apply()
 
                                     onTraineeNameChange("")
                                     showTraineeNameBox = true
@@ -1571,11 +1880,15 @@ fun InternalExamEntryScreen(
     val isEnglish = rememberIsEnglish()
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val scope = rememberCoroutineScope()
 
     var traineeName by rememberSaveable { mutableStateOf("") }
     var currentBelt by remember { mutableStateOf(Belt.YELLOW) }
 
-    var recentTrainees by remember { mutableStateOf(loadRecentTrainees(ctx, 20)) }
+    var recentTrainees by remember { mutableStateOf<List<String>>(emptyList()) }
+    var recentCompletedResults by remember { mutableStateOf<List<RecentInternalExamResultUi>>(emptyList()) }
+    var isLoadingCompletedPreview by remember { mutableStateOf(false) }
+    var completedPreviewSession by remember { mutableStateOf<InternalExamSession?>(null) }
     var expanded by remember { mutableStateOf(false) }
 
     val traineeFocusRequester = remember { FocusRequester() }
@@ -1598,10 +1911,13 @@ fun InternalExamEntryScreen(
         // לא בוחרים נבחן אוטומטית.
         // המשתמש צריך לבחור נבחן מהרשימה או ללחוץ על "נבחן חדש".
         recentTrainees = loadRecentTrainees(ctx, 20)
+        recentCompletedResults = loadRecentCompletedExamResults(limit = 8)
     }
 
-    LaunchedEffect(traineeName) {
-        recentTrainees = loadRecentTrainees(ctx, 20)
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            recentTrainees = loadRecentTrainees(ctx, 20)
+        }
     }
 
     val exercises = remember(currentBelt) {
@@ -1772,9 +2088,13 @@ fun InternalExamEntryScreen(
 
                                     if (shouldExpand) {
                                         allowTraineeKeyboard = false
-                                        recentTrainees = loadRecentTrainees(ctx, 20)
                                         keyboard?.hide()
                                         focusManager.clearFocus(force = true)
+
+                                        scope.launch {
+                                            recentTrainees = loadRecentTrainees(ctx, 20)
+                                            recentCompletedResults = loadRecentCompletedExamResults(limit = 8)
+                                        }
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth()
@@ -1793,10 +2113,13 @@ fun InternalExamEntryScreen(
                                         .fillMaxWidth()
                                         .clickable {
                                             allowTraineeKeyboard = false
-                                            recentTrainees = loadRecentTrainees(ctx, 20)
                                             keyboard?.hide()
                                             focusManager.clearFocus(force = true)
                                             expanded = true
+
+                                            scope.launch {
+                                                recentTrainees = loadRecentTrainees(ctx, 20)
+                                            }
                                         },
                                     singleLine = true,
                                     shape = RoundedCornerShape(18.dp),
@@ -1911,18 +2234,19 @@ fun InternalExamEntryScreen(
                                                 val cleanName = name.trim()
                                                 traineeName = cleanName
 
-                                                // ✅ טוען את המבחן השמור של הנבחן לפי החגורה הנוכחית
-                                                val savedDraft = loadExamDraft(ctx, cleanName, currentBelt)
+                                                scope.launch {
+                                                    val savedDraft = loadExamDraft(ctx, cleanName, currentBelt)
 
-                                                marksMap.clear()
-                                                if (savedDraft.isNotEmpty()) {
-                                                    marksMap.putAll(savedDraft)
+                                                    marksMap.clear()
+                                                    if (savedDraft.isNotEmpty()) {
+                                                        marksMap.putAll(savedDraft)
+                                                    }
+
+                                                    saveLastTrainee(ctx, cleanName)
+                                                    recentTrainees = loadRecentTrainees(ctx, 20)
+
+                                                    traineeSessionKey++
                                                 }
-
-                                                saveLastTrainee(ctx, cleanName)
-                                                recentTrainees = loadRecentTrainees(ctx, 20)
-
-                                                traineeSessionKey++
                                             }
                                         )
                                     }
@@ -1961,20 +2285,21 @@ fun InternalExamEntryScreen(
                                     } else {
                                         traineeName = cleanName
 
-                                        // ✅ לפני הכניסה למסך המבחן, טוען ציונים שמורים אם קיימים
-                                        // ✅ לפני הכניסה למסך המבחן, טוען ציונים שמורים אם קיימים
-                                        val savedDraft = loadExamDraft(ctx, cleanName, currentBelt)
-                                        if (savedDraft.isNotEmpty()) {
-                                            marksMap.clear()
-                                            marksMap.putAll(savedDraft)
+                                        scope.launch {
+                                            val savedDraft = loadExamDraft(ctx, cleanName, currentBelt)
+
+                                            if (savedDraft.isNotEmpty()) {
+                                                marksMap.clear()
+                                                marksMap.putAll(savedDraft)
+                                            }
+
+                                            pushRecentTrainee(ctx, cleanName, 20)
+                                            saveLastTrainee(ctx, cleanName)
+                                            recentTrainees = loadRecentTrainees(ctx, 20)
+
+                                            traineeSessionKey++
+                                            examStarted = true
                                         }
-
-                                        pushRecentTrainee(ctx, cleanName, 20)
-                                        saveLastTrainee(ctx, cleanName)
-                                        recentTrainees = loadRecentTrainees(ctx, 20)
-
-                                        traineeSessionKey++
-                                        examStarted = true
                                     }
                                 }
                             )
@@ -2000,7 +2325,10 @@ fun InternalExamEntryScreen(
                                         saveExamDraft(ctx, cleanName, currentBelt, marksMap)
                                         pushRecentTrainee(ctx, cleanName, 20)
                                         saveLastTrainee(ctx, cleanName)
-                                        recentTrainees = loadRecentTrainees(ctx, 20)
+
+                                        scope.launch {
+                                            recentTrainees = loadRecentTrainees(ctx, 20)
+                                        }
 
                                         Toast.makeText(
                                             ctx,
@@ -2029,9 +2357,18 @@ fun InternalExamEntryScreen(
                                             marksMap = marksMap
                                         )
 
-                                        val uri = InternalExamPdf.createPdf(ctx, pdfSession)
+                                        val uri = InternalExamPdf.createPdf(
+                                            context = ctx,
+                                            session = pdfSession,
+                                            isEnglish = isEnglish
+                                        )
+
                                         if (uri != null) {
-                                            InternalExamPdf.sharePdf(ctx, uri)
+                                            InternalExamPdf.sharePdf(
+                                                context = ctx,
+                                                uri = uri,
+                                                isEnglish = isEnglish
+                                            )
                                         } else {
                                             Toast.makeText(
                                                 ctx,
@@ -2044,8 +2381,74 @@ fun InternalExamEntryScreen(
                             )
                         }
                     }
+
+                    RecentCompletedExamResultsCard(
+                        results = recentCompletedResults,
+                        isEnglish = isEnglish,
+                        currentBelt = currentBelt,
+                        onOpenResult = { result ->
+                            if (isLoadingCompletedPreview) {
+                                return@RecentCompletedExamResultsCard
+                            }
+
+                            scope.launch {
+                                isLoadingCompletedPreview = true
+
+                                runCatching {
+                                    loadCompletedInternalExamSessionForPdf(
+                                        resultId = result.resultId
+                                    ) ?: error("Missing completed exam data")
+                                }.onSuccess { completedSession ->
+                                    completedPreviewSession = completedSession
+                                }.onFailure { error ->
+                                    Toast.makeText(
+                                        ctx,
+                                        examTr(
+                                            isEnglish,
+                                            "פתיחת המבחן האחרון נכשלה",
+                                            "Opening the recent exam failed"
+                                        ) + ": ${error.localizedMessage ?: ""}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+
+                                isLoadingCompletedPreview = false
+                            }
+                        }
+                    )
                 }
             }
+        }
+        completedPreviewSession?.let { previewSession ->
+            CompletedExamPreviewDialog(
+                session = previewSession,
+                isEnglish = isEnglish,
+                currentBelt = currentBelt,
+                onDismiss = {
+                    completedPreviewSession = null
+                },
+                onSharePdf = {
+                    val uri = InternalExamPdf.createPdf(
+                        context = ctx,
+                        session = previewSession,
+                        isEnglish = isEnglish
+                    )
+
+                    if (uri != null) {
+                        InternalExamPdf.sharePdf(
+                            context = ctx,
+                            uri = uri,
+                            isEnglish = isEnglish
+                        )
+                    } else {
+                        Toast.makeText(
+                            ctx,
+                            examTr(isEnglish, "שגיאה ביצירת PDF", "Error creating PDF"),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            )
         }
     } else {
         key(traineeSessionKey) {
@@ -2057,10 +2460,479 @@ fun InternalExamEntryScreen(
                 onBeltChange = { newBelt -> currentBelt = newBelt },
                 onBack = {
                     examStarted = false
+
+                    scope.launch {
+                        recentTrainees = loadRecentTrainees(ctx, 20)
+                        recentCompletedResults = loadRecentCompletedExamResults(limit = 8)
+                    }
                 },
                 sharedMarksMap = marksMap,
                 showSetupHeader = false
             )
+        }
+    }
+}
+
+@Composable
+private fun CompletedExamPreviewDialog(
+    session: InternalExamSession,
+    isEnglish: Boolean,
+    currentBelt: Belt,
+    onDismiss: () -> Unit,
+    onSharePdf: () -> Unit
+) {
+    val context = LocalContext.current
+    val score10 = if (session.maxScore == 0.0) {
+        0.0
+    } else {
+        (session.totalScore / session.maxScore) * 10.0
+    }
+
+    val answeredCount = session.marks.count { it != null }
+    val dateText = session.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(30.dp),
+            color = Color(0xFFF8FAFC),
+            border = BorderStroke(
+                width = 1.dp,
+                color = examBeltMainColor(currentBelt).copy(alpha = 0.28f)
+            ),
+            shadowElevation = 24.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(
+                                Color.White,
+                                examBeltSoftColor(currentBelt).copy(alpha = 0.82f),
+                                Color.White
+                            )
+                        )
+                    )
+                    .padding(horizontal = 18.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = examBeltMainColor(currentBelt).copy(alpha = 0.20f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = examBeltDarkColor(currentBelt).copy(alpha = 0.18f)
+                        ),
+                        modifier = Modifier.size(54.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${session.percent}%",
+                                color = examBeltDarkColor(currentBelt),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 15.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                    ) {
+                        Text(
+                            text = examTr(
+                                isEnglish,
+                                "תצוגת מבחן שהושלם",
+                                "Completed exam preview"
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            color = Color(0xFF111827),
+                            fontWeight = FontWeight.Black,
+                            fontSize = 20.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Text(
+                            text = session.traineeName,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            color = Color(0xFF475569),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Divider(color = Color(0xFFCBD5E1).copy(alpha = 0.55f))
+
+                PreviewInfoLine(
+                    label = examTr(isEnglish, "חגורה", "Belt"),
+                    value = examBeltNameForUi(session.belt, isEnglish),
+                    isEnglish = isEnglish
+                )
+
+                PreviewInfoLine(
+                    label = examTr(isEnglish, "תאריך", "Date"),
+                    value = dateText,
+                    isEnglish = isEnglish
+                )
+
+                PreviewInfoLine(
+                    label = examTr(isEnglish, "ציון", "Score"),
+                    value = "${score10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${session.percent}%)",
+                    isEnglish = isEnglish
+                )
+
+                PreviewInfoLine(
+                    label = examTr(isEnglish, "תרגילים שנוקדו", "Scored exercises"),
+                    value = answeredCount.toString(),
+                    isEnglish = isEnglish
+                )
+
+                PreviewInfoLine(
+                    label = examTr(isEnglish, "סטטוס", "Status"),
+                    value = examStatusText(session.percent, isEnglish),
+                    isEnglish = isEnglish
+                )
+
+                Divider(color = Color(0xFFCBD5E1).copy(alpha = 0.55f))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.White.copy(alpha = 0.78f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color(0xFFCBD5E1)
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable { onDismiss() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = examTr(isEnglish, "סגור", "Close"),
+                                color = Color(0xFF334155),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.White.copy(alpha = 0.86f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = examBeltMainColor(currentBelt).copy(alpha = 0.32f)
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clickable {
+                                    val summaryText = buildCompletedExamShareSummary(
+                                        session = session,
+                                        isEnglish = isEnglish
+                                    )
+
+                                    val clipboard = context.getSystemService(
+                                        Context.CLIPBOARD_SERVICE
+                                    ) as ClipboardManager
+
+                                    clipboard.setPrimaryClip(
+                                        ClipData.newPlainText(
+                                            examTr(
+                                                isEnglish,
+                                                "סיכום מבחן פנימי",
+                                                "Internal exam summary"
+                                            ),
+                                            summaryText
+                                        )
+                                    )
+
+                                    Toast.makeText(
+                                        context,
+                                        examTr(
+                                            isEnglish,
+                                            "הסיכום הועתק",
+                                            "Summary copied"
+                                        ),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = examTr(isEnglish, "העתק", "Copy"),
+                                color = examBeltDarkColor(currentBelt),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.Transparent,
+                        shadowElevation = 12.dp
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(20.dp))
+                                .clickable { onSharePdf() }
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                        listOf(
+                                            examBeltDarkColor(currentBelt),
+                                            examBeltMainColor(currentBelt),
+                                            Color(0xFF7C3AED)
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = examTr(isEnglish, "שתף PDF", "PDF"),
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewInfoLine(
+    label: String,
+    value: String,
+    isEnglish: Boolean
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (isEnglish) {
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Left,
+                color = Color(0xFF64748B),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = value,
+                modifier = Modifier.weight(1.35f),
+                textAlign = TextAlign.Right,
+                color = Color(0xFF111827),
+                fontWeight = FontWeight.Black,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        } else {
+            Text(
+                text = value,
+                modifier = Modifier.weight(1.35f),
+                textAlign = TextAlign.Left,
+                color = Color(0xFF111827),
+                fontWeight = FontWeight.Black,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Right,
+                color = Color(0xFF64748B),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecentCompletedExamResultsCard(
+    results: List<RecentInternalExamResultUi>,
+    isEnglish: Boolean,
+    currentBelt: Belt,
+    onOpenResult: (RecentInternalExamResultUi) -> Unit
+) {
+    if (results.isEmpty()) return
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White.copy(alpha = 0.86f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = examBeltMainColor(currentBelt).copy(alpha = 0.24f)
+        ),
+        shadowElevation = 10.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+        ) {
+            Text(
+                text = examTr(
+                    isEnglish,
+                    "מבחנים אחרונים שהושלמו",
+                    "Recent completed exams"
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                color = Color(0xFF111827),
+                fontWeight = FontWeight.Black,
+                fontSize = 17.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = examTr(
+                    isEnglish,
+                    "לחיצה על מבחן תפתח שיתוף PDF מחדש",
+                    "Tap an exam to share the PDF again"
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                color = Color(0xFF64748B),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            results.take(5).forEach { result ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenResult(result) },
+                    shape = RoundedCornerShape(18.dp),
+                    color = examBeltSoftColor(currentBelt).copy(alpha = 0.72f),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = examBeltDarkColor(currentBelt).copy(alpha = 0.14f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = examBeltMainColor(currentBelt).copy(alpha = 0.22f),
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${result.percent}%",
+                                    color = examBeltDarkColor(currentBelt),
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 12.sp,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                        ) {
+                            Text(
+                                text = result.traineeName,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                color = Color(0xFF111827),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            Text(
+                                text = "${result.beltName} • ${result.score10.coerceIn(0.0, 10.0).toScoreString()} / 10",
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                color = Color(0xFF475569),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Text(
+                            text = "📤",
+                            fontSize = 20.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -2794,6 +3666,7 @@ private fun ChangeBeltBottomBar(
 private fun BottomActionBar(
     session: InternalExamSession,
     isEnglish: Boolean,
+    isSaving: Boolean = false,
     onSave: () -> Unit,
     onExportPdf: () -> Unit
 ) {
@@ -2863,7 +3736,7 @@ private fun BottomActionBar(
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(22.dp))
-                            .clickable { onSave() }
+                            .clickable(enabled = !isSaving) { onSave() }
                             .background(
                                 brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
                                     listOf(
@@ -2876,7 +3749,11 @@ private fun BottomActionBar(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "💾  ${examTr(isEnglish, "שמור", "Save")}",
+                            text = if (isSaving) {
+                                "⏳  ${examTr(isEnglish, "שומר...", "Saving...")}"
+                            } else {
+                                "💾  ${examTr(isEnglish, "שמור", "Save")}"
+                            },
                             color = Color.White,
                             fontWeight = FontWeight.Black,
                             fontSize = 19.sp,
@@ -3016,8 +3893,26 @@ private fun itemsForTopicFlattenInternal(belt: Belt, topicTitle: String): List<S
     return emptyList()
 }
 
-private fun draftKey(traineeName: String, belt: Belt): String =
-    "draft_${traineeName.trim()}_${belt.name}"
+private fun internalExamCoachUid(): String? {
+    return FirebaseAuth.getInstance().currentUser?.uid
+}
+
+private fun internalExamTraineeKey(name: String): String {
+    return name
+        .trim()
+        .lowercase()
+        .replace(Regex("[^a-z0-9א-ת]+"), "_")
+        .trim('_')
+        .ifBlank { "unknown_trainee" }
+}
+
+private fun internalExamDraftId(
+    coachUid: String,
+    traineeName: String,
+    belt: Belt
+): String {
+    return "${coachUid}_${belt.name}_${internalExamTraineeKey(traineeName)}"
+}
 
 private fun saveExamDraft(
     context: Context,
@@ -3025,36 +3920,207 @@ private fun saveExamDraft(
     belt: Belt,
     marksMap: Map<String, Int>
 ) {
-    val sp = context.getSharedPreferences("kmi_internal_exam_drafts", Context.MODE_PRIVATE)
+    val cleanName = traineeName.trim()
+    if (cleanName.isBlank()) return
 
-    val obj = JSONObject()
-    marksMap.forEach { (id, score) ->
-        obj.put(id, clampScore10(score))
-    }
+    val coachUid = internalExamCoachUid() ?: return
 
-    sp.edit()
-        .putString(draftKey(traineeName, belt), obj.toString())
-        .apply()
+    val session = buildInternalExamSessionForUi(
+        traineeName = cleanName,
+        belt = belt,
+        marksMap = marksMap
+    )
+
+    val safeMarks = marksMap
+        .filterKeys { it.isNotBlank() }
+        .mapValues { (_, score) -> clampScore10(score) }
+
+    val docId = internalExamDraftId(coachUid, cleanName, belt)
+
+    val data = hashMapOf(
+        "examId" to docId,
+        "coachUid" to coachUid,
+        "traineeName" to cleanName,
+        "traineeKey" to internalExamTraineeKey(cleanName),
+        "belt" to belt.name,
+        "beltHeb" to belt.heb,
+        "beltEn" to belt.en,
+        "status" to "draft",
+        "marks" to safeMarks,
+        "totalScore" to session.totalScore,
+        "maxScore" to session.maxScore,
+        "percent" to session.percent,
+        "summaryText" to session.summaryText,
+        "summaryTextHe" to examStatusText(session.percent, false),
+        "summaryTextEn" to examStatusText(session.percent, true),
+        "updatedAtMillis" to System.currentTimeMillis(),
+        "updatedAt" to FieldValue.serverTimestamp()
+    )
+
+    FirebaseFirestore.getInstance()
+        .collection("internalExamDrafts")
+        .document(docId)
+        .set(data, SetOptions.merge())
+
+    pushRecentTrainee(context, cleanName, 20)
+    saveLastTrainee(context, cleanName)
 }
 
-private fun loadExamDraft(
+private suspend fun saveCompletedInternalExamResult(
+    traineeName: String,
+    belt: Belt,
+    marksMap: Map<String, Int>
+): String {
+    val cleanName = traineeName.trim()
+    if (cleanName.isBlank()) {
+        error("Missing trainee name")
+    }
+
+    val coachUid = internalExamCoachUid()
+        ?: error("Missing coach uid")
+
+    val session = buildInternalExamSessionForUi(
+        traineeName = cleanName,
+        belt = belt,
+        marksMap = marksMap
+    )
+
+    val safeMarks = marksMap
+        .filterKeys { it.isNotBlank() }
+        .mapValues { (_, score) -> clampScore10(score) }
+
+    val answeredExercisesSnapshot = session.exercises
+        .mapNotNull { exercise ->
+            val score = safeMarks[exercise.id] ?: return@mapNotNull null
+
+            mapOf(
+                "exerciseId" to exercise.id,
+                "belt" to exercise.belt.name,
+                "beltHeb" to exercise.belt.heb,
+                "beltEn" to exercise.belt.en,
+                "topic" to exercise.topic,
+                "subTopic" to exercise.subTopic.orEmpty(),
+                "name" to exercise.name,
+                "score" to score
+            )
+        }
+
+    val score10 = if (session.maxScore == 0.0) {
+        0.0
+    } else {
+        (session.totalScore / session.maxScore) * 10.0
+    }
+
+    val shareSummaryHe = buildCompletedExamShareSummary(
+        session = session,
+        isEnglish = false
+    )
+
+    val shareSummaryEn = buildCompletedExamShareSummary(
+        session = session,
+        isEnglish = true
+    )
+
+    val db = FirebaseFirestore.getInstance()
+    val docRef = db.collection("internalExamResults").document()
+    val resultId = docRef.id
+
+    val data = hashMapOf(
+        "resultId" to resultId,
+        "coachUid" to coachUid,
+
+        "traineeName" to cleanName,
+        "traineeKey" to internalExamTraineeKey(cleanName),
+
+        "belt" to belt.name,
+        "beltHeb" to belt.heb,
+        "beltEn" to belt.en,
+
+        "status" to "completed",
+
+        "marks" to safeMarks,
+        "answeredExercises" to answeredExercisesSnapshot,
+        "answeredCount" to answeredExercisesSnapshot.size,
+        "totalExerciseCount" to session.exercises.size,
+
+        "totalScore" to session.totalScore,
+        "maxScore" to session.maxScore,
+        "score10" to score10,
+        "percent" to session.percent,
+
+        "summaryTextHe" to examStatusText(session.percent, false),
+        "summaryTextEn" to examStatusText(session.percent, true),
+        "shareSummaryHe" to shareSummaryHe,
+        "shareSummaryEn" to shareSummaryEn,
+
+        "completedAtMillis" to System.currentTimeMillis(),
+        "completedAt" to FieldValue.serverTimestamp(),
+
+        "source" to "android_internal_exam"
+    )
+
+    docRef.set(data, SetOptions.merge()).await()
+
+    return resultId
+}
+
+private suspend fun deleteExamDraftAfterCompletion(
+    traineeName: String,
+    belt: Belt
+) {
+    val cleanName = traineeName.trim()
+    if (cleanName.isBlank()) return
+
+    val coachUid = internalExamCoachUid() ?: return
+    val docId = internalExamDraftId(coachUid, cleanName, belt)
+
+    FirebaseFirestore.getInstance()
+        .collection("internalExamDrafts")
+        .document(docId)
+        .delete()
+        .await()
+}
+
+private suspend fun loadExamDraft(
     context: Context,
     traineeName: String,
     belt: Belt
 ): Map<String, Int> {
-    val sp = context.getSharedPreferences("kmi_internal_exam_drafts", Context.MODE_PRIVATE)
-    val raw = sp.getString(draftKey(traineeName, belt), null) ?: return emptyMap()
+    val cleanName = traineeName.trim()
+    if (cleanName.isBlank()) return emptyMap()
+
+    val coachUid = internalExamCoachUid() ?: return emptyMap()
+    val docId = internalExamDraftId(coachUid, cleanName, belt)
 
     return runCatching {
-        val obj = JSONObject(raw)
-        val out = mutableMapOf<String, Int>()
-        val it = obj.keys()
-        while (it.hasNext()) {
-            val id = it.next()
-            val v = obj.optInt(id, -1)
-            if (v >= 0) out[id] = clampScore10(v)
+        val snap = FirebaseFirestore.getInstance()
+            .collection("internalExamDrafts")
+            .document(docId)
+            .get()
+            .await()
+
+        if (!snap.exists()) {
+            return@runCatching emptyMap<String, Int>()
         }
-        out
+
+        val rawMarks = snap.get("marks") as? Map<*, *> ?: return@runCatching emptyMap<String, Int>()
+
+        rawMarks.mapNotNull { (key, value) ->
+            val id = key?.toString()?.trim().orEmpty()
+            val score = when (value) {
+                is Long -> value.toInt()
+                is Int -> value
+                is Double -> value.toInt()
+                is Number -> value.toInt()
+                else -> null
+            }
+
+            if (id.isNotBlank() && score != null) {
+                id to clampScore10(score)
+            } else {
+                null
+            }
+        }.toMap()
     }.getOrDefault(emptyMap())
 }
 
@@ -3102,55 +4168,208 @@ private fun findSubTopicTitleForItemInternal(belt: Belt, topic: String, item: St
     return null
 }
 
-private const val PREFS_EXAM_RECENTS = "kmi_internal_exam_recents"
-private const val KEY_RECENT_TRAINEES = "recent_trainees"
-private const val KEY_LAST_TRAINEE = "last_trainee"
-
 private fun saveLastTrainee(context: Context, name: String) {
-    context.getSharedPreferences(PREFS_EXAM_RECENTS, Context.MODE_PRIVATE)
-        .edit().putString(KEY_LAST_TRAINEE, name.trim()).apply()
+    val clean = name.trim()
+    if (clean.isBlank()) return
+
+    val coachUid = internalExamCoachUid() ?: return
+
+    FirebaseFirestore.getInstance()
+        .collection("internalExamCoachState")
+        .document(coachUid)
+        .set(
+            mapOf(
+                "lastTraineeName" to clean,
+                "lastTraineeKey" to internalExamTraineeKey(clean),
+                "updatedAtMillis" to System.currentTimeMillis(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            ),
+            SetOptions.merge()
+        )
 }
 
 private fun loadLastTrainee(context: Context): String {
-    return context.getSharedPreferences(PREFS_EXAM_RECENTS, Context.MODE_PRIVATE)
-        .getString(KEY_LAST_TRAINEE, "") ?: ""
+    // לא בוחרים נבחן אוטומטית במסך הכניסה.
+    // הפונקציה נשארת כדי לא לשבור קריאות קיימות.
+    return ""
 }
 
-private fun loadRecentTrainees(context: Context, limit: Int = 20): List<String> {
-    val raw = context.getSharedPreferences(PREFS_EXAM_RECENTS, Context.MODE_PRIVATE)
-        .getString(KEY_RECENT_TRAINEES, null) ?: return emptyList()
+private suspend fun loadRecentTrainees(context: Context, limit: Int = 20): List<String> {
+    val coachUid = internalExamCoachUid() ?: return emptyList()
 
     return runCatching {
-        val arr = JSONObject(raw).optJSONArray("list")
-        if (arr == null) {
-            emptyList()
-        } else {
-            buildList {
-                for (i in 0 until minOf(arr.length(), limit)) {
-                    val s = arr.optString(i).trim()
-                    if (s.isNotBlank()) add(s)
-                }
+        FirebaseFirestore.getInstance()
+            .collection("internalExamRecentTrainees")
+            .document(coachUid)
+            .collection("trainees")
+            .orderBy("updatedAtMillis", Query.Direction.DESCENDING)
+            .limit(limit.toLong())
+            .get()
+            .await()
+            .documents
+            .mapNotNull { doc ->
+                doc.getString("name")?.trim()?.takeIf { it.isNotBlank() }
             }
-        }
     }.getOrDefault(emptyList())
+}
+
+private suspend fun loadRecentCompletedExamResults(
+    limit: Int = 8
+): List<RecentInternalExamResultUi> {
+    val coachUid = internalExamCoachUid() ?: return emptyList()
+
+    return runCatching {
+        FirebaseFirestore.getInstance()
+            .collection("internalExamResults")
+            .whereEqualTo("coachUid", coachUid)
+            .whereEqualTo("status", "completed")
+            .orderBy("completedAtMillis", Query.Direction.DESCENDING)
+            .limit(limit.toLong())
+            .get()
+            .await()
+            .documents
+            .mapNotNull { doc ->
+                val traineeName = doc.getString("traineeName")
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: return@mapNotNull null
+
+                val beltName =
+                    doc.getString("beltHeb")
+                        ?: doc.getString("beltEn")
+                        ?: doc.getString("belt")
+                        ?: "—"
+
+                RecentInternalExamResultUi(
+                    resultId = doc.getString("resultId") ?: doc.id,
+                    traineeName = traineeName,
+                    beltName = beltName,
+                    score10 = doc.getDouble("score10") ?: 0.0,
+                    percent = (doc.getLong("percent") ?: 0L).toInt(),
+                    completedAtMillis = doc.getLong("completedAtMillis") ?: 0L
+                )
+            }
+    }.getOrDefault(emptyList())
+}
+
+private suspend fun loadCompletedInternalExamSessionForPdf(
+    resultId: String
+): InternalExamSession? {
+    val cleanResultId = resultId.trim()
+    if (cleanResultId.isBlank()) return null
+
+    val snap = FirebaseFirestore.getInstance()
+        .collection("internalExamResults")
+        .document(cleanResultId)
+        .get()
+        .await()
+
+    if (!snap.exists()) return null
+
+    val traineeName = snap.getString("traineeName")
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+
+    val belt = runCatching {
+        Belt.valueOf(snap.getString("belt").orEmpty())
+    }.getOrNull() ?: Belt.YELLOW
+
+    val completedAtMillis = snap.getLong("completedAtMillis") ?: 0L
+    val examDate = if (completedAtMillis > 0L) {
+        java.time.Instant.ofEpochMilli(completedAtMillis)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
+    } else {
+        LocalDate.now()
+    }
+
+    val rawAnsweredExercises = snap.get("answeredExercises") as? List<*> ?: emptyList<Any>()
+
+    val exercises = mutableListOf<ExamExerciseItem>()
+    val marks = mutableListOf<Int?>()
+
+    rawAnsweredExercises.forEachIndexed { index, rawItem ->
+        val map = rawItem as? Map<*, *> ?: return@forEachIndexed
+
+        val exerciseId = map["exerciseId"]
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: "completed_${cleanResultId}_$index"
+
+        val exerciseBelt = runCatching {
+            Belt.valueOf(map["belt"]?.toString().orEmpty())
+        }.getOrNull() ?: belt
+
+        val topic = map["topic"]
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: "—"
+
+        val subTopic = map["subTopic"]
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+        val name = map["name"]
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: "—"
+
+        val score = when (val rawScore = map["score"]) {
+            is Long -> rawScore.toInt()
+            is Int -> rawScore
+            is Double -> rawScore.toInt()
+            is Number -> rawScore.toInt()
+            is String -> rawScore.toIntOrNull()
+            else -> null
+        }?.let { clampScore10(it) }
+
+        exercises += ExamExerciseItem(
+            id = exerciseId,
+            belt = exerciseBelt,
+            topic = topic,
+            subTopic = subTopic,
+            name = name
+        )
+
+        marks += score
+    }
+
+    if (exercises.isEmpty()) return null
+
+    return InternalExamSession(
+        traineeName = traineeName,
+        belt = belt,
+        date = examDate,
+        exercises = exercises,
+        marks = marks
+    )
 }
 
 private fun pushRecentTrainee(context: Context, name: String, limit: Int = 20) {
     val clean = name.trim()
     if (clean.isBlank()) return
 
-    val current = loadRecentTrainees(context, limit = 50).toMutableList()
-    current.removeAll { it.equals(clean, ignoreCase = true) }
-    current.add(0, clean)
+    val coachUid = internalExamCoachUid() ?: return
+    val traineeKey = internalExamTraineeKey(clean)
 
-    val trimmed = current.take(limit)
-    val obj = JSONObject()
-    val arr = org.json.JSONArray()
-    trimmed.forEach { arr.put(it) }
-    obj.put("list", arr)
-
-    context.getSharedPreferences(PREFS_EXAM_RECENTS, Context.MODE_PRIVATE)
-        .edit()
-        .putString(KEY_RECENT_TRAINEES, obj.toString())
-        .apply()
+    FirebaseFirestore.getInstance()
+        .collection("internalExamRecentTrainees")
+        .document(coachUid)
+        .collection("trainees")
+        .document(traineeKey)
+        .set(
+            mapOf(
+                "name" to clean,
+                "traineeKey" to traineeKey,
+                "coachUid" to coachUid,
+                "updatedAtMillis" to System.currentTimeMillis(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            ),
+            SetOptions.merge()
+        )
 }

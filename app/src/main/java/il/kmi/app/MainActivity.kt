@@ -19,8 +19,8 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.subscription.BillingRepository
 
 // Firebase
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessaging
@@ -64,6 +64,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
         // 👇 חדש: קליטה מהתראה (גם כשהאפליקציה סגורה)
         handleCoachGateIntent(intent)
+        handleForumPushIntent(intent)
+        handleDailyReminderIntent(intent)
 
         // ✅ חובה: אתחול מנהל ה-TTS כדי ש-speak() לא ייעצר לפני init()
         KmiTtsManager.init(this)
@@ -188,6 +190,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleCoachGateIntent(intent)
+        handleForumPushIntent(intent)
+        handleDailyReminderIntent(intent)
     }
 
     // 👇 חדש: שומר “הודעה ממתינה להצגה” ב-SharedPreferences ייעודי
@@ -210,6 +214,98 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             .putLong(CoachGate.SP_SENT_AT, sentAt)
             .putString(CoachGate.SP_BROADCAST_ID, broadcastId)
             .apply()
+    }
+
+    private fun handleForumPushIntent(i: Intent?) {
+        val intent = i ?: return
+
+        val type = intent.getStringExtra("fcm_type").orEmpty()
+        if (type != "forum_message") return
+
+        val roomId = intent.getStringExtra("forumRoomId")
+            ?: intent.getStringExtra("roomId")
+            ?: ""
+
+        val roomName = intent.getStringExtra("forumRoomName")
+            ?: intent.getStringExtra("roomName")
+            ?: ""
+
+        val messageId = intent.getStringExtra("forumMessageId")
+            ?: intent.getStringExtra("messageId")
+            ?: ""
+
+        val branchId = intent.getStringExtra("branchId").orEmpty()
+        val groupKey = intent.getStringExtra("groupKey").orEmpty()
+        val senderId = intent.getStringExtra("forumSenderId")
+            ?: intent.getStringExtra("senderId")
+            ?: ""
+
+        if (roomId.isBlank() && messageId.isBlank()) {
+            android.util.Log.e(
+                "KMI_FORUM_PUSH",
+                "forum push intent ignored - missing roomId/messageId"
+            )
+            return
+        }
+
+        val forumSp = getSharedPreferences("kmi_forum_push", Context.MODE_PRIVATE)
+
+        forumSp.edit()
+            .putBoolean("has_pending_forum_push", true)
+            .putString("forum_room_id", roomId)
+            .putString("forum_room_name", roomName)
+            .putString("forum_message_id", messageId)
+            .putString("forum_branch_id", branchId)
+            .putString("forum_group_key", groupKey)
+            .putString("forum_sender_id", senderId)
+            .putLong("received_at", System.currentTimeMillis())
+            .apply()
+
+        android.util.Log.e(
+            "KMI_FORUM_PUSH",
+            "pending forum push saved roomId=$roomId messageId=$messageId branchId=$branchId groupKey=$groupKey"
+        )
+    }
+
+    private fun handleDailyReminderIntent(i: Intent?) {
+        val intent = i ?: return
+
+        val openFromDailyReminder =
+            intent.getBooleanExtra("open_from_daily_reminder", false)
+
+        if (!openFromDailyReminder) {
+            return
+        }
+
+        val beltId = intent.getStringExtra("daily_reminder_belt_id").orEmpty()
+        val topic = intent.getStringExtra("daily_reminder_topic").orEmpty()
+        val item = intent.getStringExtra("daily_reminder_item").orEmpty()
+
+        if (beltId.isBlank() && topic.isBlank() && item.isBlank()) {
+            android.util.Log.e(
+                "KMI_DAILY_REMINDER_NAV",
+                "daily reminder intent ignored - missing belt/topic/item"
+            )
+            return
+        }
+
+        val dailyReminderSp = getSharedPreferences(
+            "kmi_daily_reminder_nav",
+            Context.MODE_PRIVATE
+        )
+
+        dailyReminderSp.edit()
+            .putBoolean("has_pending_daily_reminder", true)
+            .putString("daily_reminder_belt_id", beltId)
+            .putString("daily_reminder_topic", topic)
+            .putString("daily_reminder_item", item)
+            .putLong("received_at", System.currentTimeMillis())
+            .apply()
+
+        android.util.Log.e(
+            "KMI_DAILY_REMINDER_NAV",
+            "pending daily reminder saved beltId=$beltId topic=$topic item=$item"
+        )
     }
 
     private fun ensureNotificationPermission() {
@@ -306,28 +402,57 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             token: String,
             reason: String
         ) {
-            if (userDocId.isBlank()) return
+            val cleanUserDocId = userDocId.trim()
+            val cleanToken = token.trim()
+
+            if (cleanUserDocId.isBlank()) {
+                android.util.Log.e(
+                    "KMI_FCM_TOKEN",
+                    "skip saving fcm token - blank userDocId reason=$reason"
+                )
+                return
+            }
+
+            if (cleanToken.isBlank()) {
+                android.util.Log.e(
+                    "KMI_FCM_TOKEN",
+                    "skip saving fcm token - blank token userDocId=$cleanUserDocId reason=$reason"
+                )
+                return
+            }
+
+            val now = Timestamp.now()
 
             db.collection("users")
-                .document(userDocId)
+                .document(cleanUserDocId)
                 .set(
                     mapOf(
-                        "uid" to userDocId,
-                        "fcmToken" to token,
-                        "fcmTokenUpdatedAt" to FieldValue.serverTimestamp()
+                        "uid" to cleanUserDocId,
+
+                        // תאימות אחורה / טוקן אחרון
+                        "fcmToken" to cleanToken,
+                        "fcmTokenUpdatedAt" to now,
+
+                        // מבנה מרובה טוקנים עבור Cloud Function
+                        "fcmTokens.$cleanToken" to mapOf(
+                            "token" to cleanToken,
+                            "platform" to "android",
+                            "updatedAt" to now,
+                            "reason" to reason
+                        )
                     ),
                     SetOptions.merge()
                 )
                 .addOnSuccessListener {
                     android.util.Log.e(
                         "KMI_FCM_TOKEN",
-                        "fcm token saved userDocId=$userDocId reason=$reason tokenPrefix=${token.take(18)}..."
+                        "fcm token + fcmTokens saved userDocId=$cleanUserDocId reason=$reason tokenPrefix=${cleanToken.take(18)}..."
                     )
                 }
                 .addOnFailureListener { e ->
                     android.util.Log.e(
                         "KMI_FCM_TOKEN",
-                        "failed saving fcm token userDocId=$userDocId reason=$reason",
+                        "failed saving fcm token/fcmTokens userDocId=$cleanUserDocId reason=$reason",
                         e
                     )
                 }

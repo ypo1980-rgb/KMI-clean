@@ -91,9 +91,11 @@ fun ExercisesTabsScreen(
      // --- item list כמו ב-MaterialsScreen ---
     data class TopicItems(val topic: String, val items: Set<String>)
 
-    // ✅ Source of truth דרך ה-Bridge (רץ בפועל על SharedContentRepo)
+    // ✅ Source of truth דרך ContentRepo
     fun String.normTitle(): String = this
-        .replace("\u200F", "").replace("\u200E", "").replace("\u00A0", " ")
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
         .replace(Regex("[\u0591-\u05C7]"), "")
         .replace('־', '-')
         .replace('–', '-')
@@ -103,17 +105,47 @@ fun ExercisesTabsScreen(
     fun dec(s: String) =
         try { java.net.URLDecoder.decode(s, "UTF-8") } catch (_: Exception) { s }
 
+    fun contentItemsForTopicIncludingSubTopics(
+        belt: Belt,
+        topicTitle: String
+    ): List<String> {
+        val directItems = ContentRepo.listItemTitles(
+            belt = belt,
+            topicTitle = topicTitle,
+            subTopicTitle = null
+        )
+
+        val subTopicItems = ContentRepo
+            .listSubTopicTitles(belt, topicTitle)
+            .flatMap { subTitle ->
+                ContentRepo.listItemTitles(
+                    belt = belt,
+                    topicTitle = topicTitle,
+                    subTopicTitle = subTitle
+                )
+            }
+
+        return (directItems + subTopicItems)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
     val allTopicItems: List<TopicItems> = remember(belt, topic) {
         if (topic != "__ALL__") return@remember emptyList()
 
         val topicTitles = ContentRepo.listTopicTitles(belt)
+
         topicTitles.mapNotNull { tpTitle ->
             val title = tpTitle.trim()
             if (title.isBlank()) return@mapNotNull null
 
-            val items = ContentRepo
-                .listItemTitles(belt, title, subTopicTitle = null)
-                .toSet()
+            val items = contentItemsForTopicIncludingSubTopics(
+                belt = belt,
+                topicTitle = title
+            ).toSet()
+
+            if (items.isEmpty()) return@mapNotNull null
 
             TopicItems(title, items)
         }
@@ -155,13 +187,19 @@ fun ExercisesTabsScreen(
             return@remember emptyList()
         }
 
-        // ללא סינון תת-נושא: כל הפריטים של הנושא (כולל תתי נושאים)
-        val byTopic = ContentRepo.listItemTitles(belt, topic, subTopicTitle = null)
+        // ללא סינון תת-נושא: כל הפריטים של הנושא, כולל תתי־נושאים
+        val byTopic = contentItemsForTopicIncludingSubTopics(
+            belt = belt,
+            topicTitle = topic
+        )
+
         if (byTopic.isNotEmpty()) return@remember byTopic
 
         // fallback: bridge לפי נושא
-        val byTopicBridge = runCatching { il.kmi.app.search.KmiSearchBridge.itemsFor(belt, topic) }
-            .getOrDefault(emptyList())
+        val byTopicBridge = runCatching {
+            il.kmi.app.search.KmiSearchBridge.itemsFor(belt, topic)
+        }.getOrDefault(emptyList())
+
         if (byTopicBridge.isNotEmpty()) return@remember byTopicBridge
 
         emptyList()
@@ -253,8 +291,7 @@ fun ExercisesTabsScreen(
     }
 
     fun toggleFavorite(rawId: String) {
-        val cleanId = normalizeItemId(rawId)
-        FavoritesStore.toggle(cleanId)
+        FavoritesStore.toggle(normalizeItemId(rawId))
     }
 
     /**
@@ -570,7 +607,7 @@ fun ExercisesTabsScreen(
                     val itemHasNote = hasNote(item)
 
                     CompositionLocalProvider(
-                        LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Ltr
+                        LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
                     ) {
                         Row(
                             modifier = Modifier
@@ -593,8 +630,7 @@ fun ExercisesTabsScreen(
                                     }
                                 },
                                 onToggleFavorite = {
-                                    val cleanId = normalizeItemId(item)
-                                    FavoritesStore.toggle(cleanId)
+                                    FavoritesStore.toggle(item)
                                 },
                                 onEditNote = {
                                     noteEditorFor = item
@@ -609,29 +645,27 @@ fun ExercisesTabsScreen(
 
                             Spacer(Modifier.width(10.dp))
 
-                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { explainFromSearch = item },
-                                    horizontalAlignment = androidx.compose.ui.AbsoluteAlignment.Right
-                                ) {
-                                    Text(
-                                        text = displayName,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                        color = MaterialTheme.colorScheme.onBackground
-                                    )
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { explainFromSearch = item },
+                                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                            ) {
+                                Text(
+                                    text = displayName,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
 
-                                    if (itemHasNote) {
-                                        Text(
-                                            text = tr("יש הערה שמורה", "Saved note exists"),
-                                            modifier = Modifier.fillMaxWidth(),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
-                                        )
-                                    }
+                                if (itemHasNote) {
+                                    Text(
+                                        text = tr("יש הערה שמורה", "Saved note exists"),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+                                    )
                                 }
                             }
                         }

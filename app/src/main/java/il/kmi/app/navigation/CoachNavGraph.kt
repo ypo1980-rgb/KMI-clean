@@ -1,21 +1,13 @@
 package il.kmi.app.navigation
 
-import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.Timestamp
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.ktx.firestore
-import java.util.Date
-import com.google.firebase.ktx.Firebase
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.attendance.ui.AttendanceScreen
@@ -37,12 +29,6 @@ fun NavGraphBuilder.coachNavGraph(
 
         val ctx = LocalContext.current
 
-        // אפשר להביא את שם המאמן מה-SharedPreferences של המשתמש
-        val userSp = remember {
-            ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-        }
-        val coachName = userSp.getString("fullName", "") ?: ""
-
         il.kmi.app.screens.coach.CoachBroadcastScreen(
             branchesByRegion = TrainingCatalog.branchesByRegion,
             defaultRegion = regionDefault,
@@ -61,20 +47,24 @@ fun NavGraphBuilder.coachNavGraph(
             onOpenSms = { numbers, message ->
                 if (numbers.isEmpty()) return@CoachBroadcastScreen
 
-                // "smsto:" + מספרים מופרדים ב-';'
                 val uri = "smsto:" + numbers.joinToString(";")
                 val intent = Intent(Intent.ACTION_SENDTO).apply {
                     data = Uri.parse(uri)
                     putExtra("sms_body", message)
                 }
 
-                // ננסה לפתוח Activity שתומכת ב-SMS
                 runCatching {
                     ctx.startActivity(intent)
+                }.onFailure { e ->
+                    android.util.Log.e(
+                        "CoachBroadcast",
+                        "failed to open SMS app numbers=${numbers.size}",
+                        e
+                    )
                 }
             },
 
-            // שיתוף טקסט כללי (וואטסאפ / מייל / טלגרם וכו')
+            // שיתוף טקסט כללי: וואטסאפ / מייל / טלגרם וכו'
             onShareText = { message ->
                 if (message.isBlank()) return@CoachBroadcastScreen
 
@@ -83,66 +73,19 @@ fun NavGraphBuilder.coachNavGraph(
                     putExtra(Intent.EXTRA_TEXT, message)
                 }
 
-                val chooser = Intent.createChooser(shareIntent, "שתף הודעת מאמן")
+                val chooser = Intent.createChooser(
+                    shareIntent,
+                    "שתף הודעת מאמן"
+                )
+
                 runCatching {
                     ctx.startActivity(chooser)
-                }
-            },
-
-            // שמירת השידור ב-Firestore כדי ש-Cloud Function תוכל לשלוח FCM
-// כולל רשימת ה-UIDs של הנמענים המסומנים
-            onPersistBroadcast = { region, branch, message, targetUids ->
-                val auth = FirebaseAuth.getInstance()
-                val uid = auth.currentUser?.uid
-
-                if (uid == null) {
+                }.onFailure { e ->
                     android.util.Log.e(
                         "CoachBroadcast",
-                        "No logged-in user, aborting broadcast"
+                        "failed to open share sheet",
+                        e
                     )
-                } else {
-                    // ⭐ groupKey לפי קבוצת הגיל / קבוצה של המשתמש (כמו בפורום)
-                    val groupKey = TrainingCatalog.normalizeGroupName(
-                        name = kmiPrefs.ageGroup.orEmpty()
-                    )
-
-                    // נוסיף גם את המאמן עצמו לרשימת היעד, בלי כפילויות
-                    val allTargets = (targetUids + uid).distinct()
-
-                    val expiresAtMillis =
-                        System.currentTimeMillis() + 30L * 24L * 60L * 60L * 1000L
-
-                    val db = Firebase.firestore
-                    val data = hashMapOf(
-                        "region" to region,
-                        "branch" to branch,
-                        "groupKey" to groupKey,          // ← למסך הבית / פונקציות
-                        // שדות זהות למשתמש המאמן
-                        "authorUid" to uid,              // 👈 חשוב ל-rules
-                        "coachUid" to uid,
-                        "coachName" to coachName,
-                        // תוכן ההודעה
-                        "message" to message,            // 👈 שם כללי ופשוט
-                        "text" to message,               // אם ה-Cloud Function משתמש בזה
-                        // נמענים (כולל המאמן)
-                        "targetUids" to allTargets,
-                        // חותמת זמן
-                        "createdAt" to FieldValue.serverTimestamp(),
-                        // TTL — מחיקה אוטומטית אחרי 30 יום
-                        "expiresAt" to Timestamp(Date(expiresAtMillis))
-                    )
-
-                    db.collection("coachBroadcasts")
-                        .add(data)
-                        .addOnSuccessListener {
-                            android.util.Log.d(
-                                "CoachBroadcast",
-                                "broadcast saved for branch=$branch, targets=${allTargets.size}"
-                            )
-                        }
-                        .addOnFailureListener { e ->
-                            android.util.Log.e("CoachBroadcast", "failed to save broadcast", e)
-                        }
                 }
             }
         )

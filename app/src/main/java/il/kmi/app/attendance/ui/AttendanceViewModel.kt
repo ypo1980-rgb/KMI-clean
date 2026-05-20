@@ -76,6 +76,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
     // ✅ NEW: bootstrap state
     private var bootstrapJob: Job? = null
     private var lastBootstrapKey: String? = null
+    private var lastCleanupKey: String? = null
 
     private val _date = MutableStateFlow(LocalDate.now())
     private val _branch = MutableStateFlow("")
@@ -135,6 +136,37 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             SharingStarted.WhileSubscribed(5_000),
             AttendanceUiState()
         )
+
+    init {
+        viewModelScope.launch {
+            uiState
+                .map { state ->
+                    Triple(
+                        state.branch.trim(),
+                        state.groupKey.trim(),
+                        state.members.map { it.displayName.trim().lowercase() }
+                    )
+                }
+                .distinctUntilChanged()
+                .collect { (branch, groupKey, names) ->
+                    if (branch.isBlank() || groupKey.isBlank()) return@collect
+                    if (names.size <= 1) return@collect
+
+                    val key = "$branch|$groupKey"
+                    if (lastCleanupKey == key) return@collect
+
+                    val hasDuplicates = names
+                        .filter { it.isNotBlank() }
+                        .groupBy { it }
+                        .any { (_, sameNames) -> sameNames.size > 1 }
+
+                    if (hasDuplicates) {
+                        lastCleanupKey = key
+                        cleanupDuplicateMembersInDb()
+                    }
+                }
+        }
+    }
 
     fun setContext(date: LocalDate, branch: String, groupKey: String) {
         fun String.norm(): String = trim()
@@ -200,96 +232,87 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
     /** הוספת מתאמן בשם בלבד + רענון UI */
     fun addMember(name: String) {
-        val b = _branch.value
-        val g = _groupKey.value
+        val b = _branch.value.trim()
+        val g = _groupKey.value.trim()
         val cleanName = name.trim()
 
         if (b.isBlank() || g.isBlank() || cleanName.isBlank()) return
 
         viewModelScope.launch {
-            val directResult = runCatching {
-                repo.addMember(branch = b, groupKey = g, displayName = cleanName)
-            }
-
-            if (directResult.isFailure) {
-                Log.e(
+            runCatching {
+                repo.addMember(
+                    branch = b,
+                    groupKey = g,
+                    displayName = cleanName
+                )
+            }.onSuccess { memberId ->
+                Log.i(
                     "ATT_ADD_MEMBER",
-                    "Failed adding member directly branch=$b group=$g name=$cleanName",
-                    directResult.exceptionOrNull()
+                    "member added branch=$b group=$g memberId=$memberId name=$cleanName"
                 )
 
-                val reflectionResult = runCatching {
-                    val m = repo::class.java.methods.firstOrNull { mm ->
-                        mm.name in listOf("addMember", "createMember", "insertMember", "add") &&
-                                mm.parameterCount == 3 &&
-                                mm.parameterTypes.all { it == String::class.java }
-                    } ?: error("No compatible addMember/createMember/insertMember/add method found")
+                _refreshTick.update { it + 1 }
+            }.onFailure { t ->
+                Log.e(
+                    "ATT_ADD_MEMBER",
+                    "Failed adding member branch=$b group=$g name=$cleanName",
+                    t
+                )
 
-                    m.invoke(repo, b, g, cleanName)
-                }
-
-                if (reflectionResult.isFailure) {
-                    Log.e(
-                        "ATT_ADD_MEMBER",
-                        "Failed adding member by fallback branch=$b group=$g name=$cleanName",
-                        reflectionResult.exceptionOrNull()
+                _events.tryEmit(
+                    UiEvent.ReportSaveFailed(
+                        message = "Failed adding trainee: $cleanName"
                     )
-
-                    _events.tryEmit(
-                        UiEvent.ReportSaveFailed(
-                            message = "Failed adding trainee: $cleanName"
-                        )
-                    )
-                    return@launch
-                }
+                )
             }
-
-            _refreshTick.update { it + 1 }
         }
     }
 
     /** סימון נוכחות למתאמן + רענון קל */
     fun mark(memberId: Long, status: AttendanceStatus) {
-        val sid = _sessionId.value ?: return
+        val sid = _sessionId.value
+
+        if (sid == null) {
+            Log.e(
+                "ATT_MARK",
+                "Cannot mark attendance: sessionId is null memberId=$memberId status=$status"
+            )
+
+            _events.tryEmit(
+                UiEvent.ReportSaveFailed(
+                    message = "Attendance session is not ready yet"
+                )
+            )
+            return
+        }
 
         viewModelScope.launch {
-            val directResult = runCatching {
-                repo.mark(sessionId = sid, memberId = memberId, status = status)
-            }
+            runCatching {
+                repo.mark(
+                    sessionId = sid,
+                    memberId = memberId,
+                    status = status
+                )
+            }.onSuccess {
+                Log.i(
+                    "ATT_MARK",
+                    "attendance marked sessionId=$sid memberId=$memberId status=$status"
+                )
 
-            if (directResult.isFailure) {
+                _refreshTick.update { it + 1 }
+            }.onFailure { t ->
                 Log.e(
                     "ATT_MARK",
                     "Failed marking attendance sessionId=$sid memberId=$memberId status=$status",
-                    directResult.exceptionOrNull()
+                    t
                 )
 
-                val reflectionResult = runCatching {
-                    val m = repo::class.java.methods.firstOrNull { mm ->
-                        mm.name in listOf("mark", "setMark", "markAttendance") &&
-                                mm.parameterCount == 3
-                    } ?: error("No compatible mark/setMark/markAttendance method found")
-
-                    m.invoke(repo, sid, memberId, status)
-                }
-
-                if (reflectionResult.isFailure) {
-                    Log.e(
-                        "ATT_MARK",
-                        "Failed marking attendance by fallback sessionId=$sid memberId=$memberId status=$status",
-                        reflectionResult.exceptionOrNull()
+                _events.tryEmit(
+                    UiEvent.ReportSaveFailed(
+                        message = "Failed marking attendance"
                     )
-
-                    _events.tryEmit(
-                        UiEvent.ReportSaveFailed(
-                            message = "Failed marking attendance"
-                        )
-                    )
-                    return@launch
-                }
+                )
             }
-
-            _refreshTick.update { it + 1 }
         }
     }
 
@@ -378,7 +401,11 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         if (b0.isBlank()) return
 
         val key = "$b0|$g0"
-        if (lastBootstrapKey == key) return
+
+        if (lastBootstrapKey == key && bootstrapJob?.isActive == true) {
+            return
+        }
+
         lastBootstrapKey = key
 
         bootstrapJob?.cancel()

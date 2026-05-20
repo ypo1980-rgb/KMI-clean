@@ -50,6 +50,16 @@
             </intent-filter>
         </service>
 
+        <!-- ערוץ ברירת מחדל להתראות שמגיעות דרך Firebase/FCM -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="kmi_messages_channel" />
+
+        <!-- אייקון ברירת מחדל להתראות Firebase/FCM -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+
         <!-- ===== Receiver לתזכורות אימון =====
              חייב להיות exported=true כדי לקבל שידורי מערכת (BOOT_COMPLETED וכו'). -->
         <receiver
@@ -102,6 +112,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.KMI.Splash"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

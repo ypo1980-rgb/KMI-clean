@@ -53,7 +53,7 @@ object MaterialAssistantEngine {
             Log.e(TAG, "MaterialAssistantEngine failed", t)
 
             if (isEnglish) {
-                "There is a temporary issue processing the K.M.I material request."
+                "There is a temporary issue processing the K.A.M.I material request."
             } else {
                 "יש תקלה רגעית בעיבוד בקשת חומר ק.מ.י."
             }
@@ -213,7 +213,7 @@ object MaterialAssistantEngine {
             .replace("חומר", " ")
             .replace("קמי", " ")
             .replace("ק.מ.י", " ")
-            .replace("K.M.I", " ", ignoreCase = true)
+            .replace("K.A.M.I", " ", ignoreCase = true)
             .replace("yellow", " ", ignoreCase = true)
             .replace("orange", " ", ignoreCase = true)
             .replace("green", " ", ignoreCase = true)

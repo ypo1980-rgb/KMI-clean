@@ -307,6 +307,16 @@ fun CoachTraineesScreen(
     val sp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
     val role = sp.getString("user_role", "trainee").orEmpty()
 
+    val isCoachRole = remember(role) {
+        val cleanRole = role.trim().lowercase()
+        cleanRole == "coach" ||
+                cleanRole.contains("coach") ||
+                cleanRole.contains("trainer") ||
+                cleanRole.contains("instructor") ||
+                cleanRole.contains("מאמן") ||
+                cleanRole.contains("מדריך")
+    }
+
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val screenTextAlign = coachTextAlign(isEnglish)
@@ -318,19 +328,29 @@ fun CoachTraineesScreen(
 
     // מנסים קודם מה-SharedPreferences, ואם לא – מה-Firestore (users/{uid})
     LaunchedEffect(Unit) {
-        // 1. SharedPreferences – גם מפתחות רגילים וגם coach_*
+        // 1. SharedPreferences – תומך במפתחות הישנים והחדשים
         if (effectiveBranch.isBlank()) {
             effectiveBranch =
-                sp.getString("branch", null)
-                    ?: sp.getString("coach_branch", null)
+                sp.getString("active_branch", null)
+                    ?: sp.getString("activeBranch", null)
+                            ?: sp.getString("branch", null)
+                            ?: sp.getString("branchesCsv", null)
+                            ?: sp.getString("coach_branch", null)
                             ?: sp.getString("selected_branch", null)
                             ?: sp.getString("current_branch", null)
                             ?: ""
         }
+
         if (effectiveGroupKey.isBlank()) {
             effectiveGroupKey =
-                sp.getString("groupKey", null)
-                    ?: sp.getString("coach_groupKey", null)
+                sp.getString("active_group", null)
+                    ?: sp.getString("activeGroup", null)
+                            ?: sp.getString("primaryGroup", null)
+                            ?: sp.getString("groupKey", null)
+                            ?: sp.getString("group_key", null)
+                            ?: sp.getString("age_group", null)
+                            ?: sp.getString("group", null)
+                            ?: sp.getString("coach_groupKey", null)
                             ?: sp.getString("selected_groupKey", null)
                             ?: sp.getString("current_groupKey", null)
                             ?: ""
@@ -348,19 +368,38 @@ fun CoachTraineesScreen(
                         .await()
 
                     if (effectiveBranch.isBlank()) {
+                        val branchesList = snap.get("branches") as? List<*>
+                        val branchesFromList = branchesList
+                            ?.mapNotNull { it?.toString()?.trim() }
+                            ?.firstOrNull { it.isNotBlank() }
+                            .orEmpty()
+
                         effectiveBranch =
-                            snap.getString("branch")
-                                ?: snap.getString("coachBranch")
-                                        ?: ""
+                            snap.getString("activeBranch")
+                                ?: snap.getString("active_branch")
+                                        ?: snap.getString("branch")
+                                        ?: snap.getString("branchesCsv")
+                                        ?: snap.getString("coachBranch")
+                                        ?: branchesFromList
                     }
 
                     if (effectiveGroupKey.isBlank()) {
-                        // קודם שדה groupKey / coachGroupKey, ואם אין – לוקחים את הקבוצה הראשונה מרשימת groups
+                        val groupsList = snap.get("groups") as? List<*>
+                        val groupFromList = groupsList
+                            ?.mapNotNull { it?.toString()?.trim() }
+                            ?.firstOrNull { it.isNotBlank() }
+                            .orEmpty()
+
                         effectiveGroupKey =
-                            snap.getString("groupKey")
-                                ?: snap.getString("coachGroupKey")
-                                        ?: (snap.get("groups") as? List<*>)?.firstOrNull()?.toString()
-                                        ?: ""
+                            snap.getString("activeGroup")
+                                ?: snap.getString("active_group")
+                                        ?: snap.getString("primaryGroup")
+                                        ?: snap.getString("groupKey")
+                                        ?: snap.getString("group_key")
+                                        ?: snap.getString("age_group")
+                                        ?: snap.getString("group")
+                                        ?: snap.getString("coachGroupKey")
+                                        ?: groupFromList
                     }
                 } catch (_: Exception) {
                     // במקרה של שגיאה לא מפילים את האפליקציה – פשוט נשארים עם מה שיש
@@ -607,14 +646,134 @@ fun CoachTraineesScreen(
 
             val userInfoByName = mutableMapOf<String, FireUserInfo>() // nameKey -> full user info
 
+            fun String.normProfileKey(): String = this
+                .trim()
+                .replace('־', '-')
+                .replace('–', '-')
+                .replace('—', '-')
+                .replace(Regex("\\s+"), " ")
+                .lowercase(Locale("he", "IL"))
+
+            fun userDocMatchesBranchAndGroup(
+                doc: com.google.firebase.firestore.DocumentSnapshot,
+                branchCandidates: List<String>,
+                groupCandidate: String
+            ): Boolean {
+                val branchSet = branchCandidates
+                    .map { it.normProfileKey() }
+                    .filter { it.isNotBlank() }
+                    .toSet()
+
+                val docBranches = buildList {
+                    doc.getString("branch")?.let { add(it) }
+                    doc.getString("activeBranch")?.let { add(it) }
+                    doc.getString("active_branch")?.let { add(it) }
+                    doc.getString("branchesCsv")?.split(",")?.forEach { add(it) }
+                    (doc.get("branches") as? List<*>)?.forEach { item ->
+                        item?.toString()?.let { add(it) }
+                    }
+                }
+                    .map { it.normProfileKey() }
+                    .filter { it.isNotBlank() }
+
+                val groupNorm = groupCandidate.normProfileKey()
+
+                val docGroups = buildList {
+                    doc.getString("primaryGroup")?.let { add(it) }
+                    doc.getString("activeGroup")?.let { add(it) }
+                    doc.getString("active_group")?.let { add(it) }
+                    doc.getString("groupKey")?.let { add(it) }
+                    doc.getString("group_key")?.let { add(it) }
+                    doc.getString("group")?.let { add(it) }
+                    doc.getString("age_group")?.let { add(it) }
+                    (doc.get("groups") as? List<*>)?.forEach { item ->
+                        item?.toString()?.let { add(it) }
+                    }
+                }
+                    .map { it.normProfileKey() }
+                    .filter { it.isNotBlank() }
+
+                val branchMatches =
+                    branchSet.isEmpty() ||
+                            docBranches.any { docBranch ->
+                                docBranch in branchSet ||
+                                        branchSet.any { candidate ->
+                                            candidate.length >= 3 &&
+                                                    docBranch.length >= 3 &&
+                                                    (docBranch.contains(candidate) || candidate.contains(docBranch))
+                                        }
+                            }
+
+                val groupMatches =
+                    groupNorm.isBlank() ||
+                            docGroups.any { docGroup ->
+                                docGroup == groupNorm ||
+                                        docGroup.contains(groupNorm) ||
+                                        groupNorm.contains(docGroup)
+                            }
+
+                return branchMatches && groupMatches
+            }
+
             val userDocs = runCatching {
-                // מנסה להביא לפי groups+role (אצלך groups[] קיים)
-                Firebase.firestore.collection("users")
-                    .whereArrayContains("groups", groupName)
-                    .whereEqualTo("role", "trainee")
-                    .get()
-                    .await()
-                    .documents
+                val directDocs = mutableListOf<com.google.firebase.firestore.DocumentSnapshot>()
+
+                for (branchCandidate in branchKeys) {
+                    runCatching {
+                        directDocs.addAll(
+                            Firebase.firestore.collection("users")
+                                .whereArrayContains("branches", branchCandidate)
+                                .whereArrayContains("groups", groupName)
+                                .whereEqualTo("role", "trainee")
+                                .get()
+                                .await()
+                                .documents
+                        )
+                    }
+
+                    runCatching {
+                        directDocs.addAll(
+                            Firebase.firestore.collection("users")
+                                .whereEqualTo("branch", branchCandidate)
+                                .whereArrayContains("groups", groupName)
+                                .whereEqualTo("role", "trainee")
+                                .get()
+                                .await()
+                                .documents
+                        )
+                    }
+
+                    runCatching {
+                        directDocs.addAll(
+                            Firebase.firestore.collection("users")
+                                .whereEqualTo("branchesCsv", branchCandidate)
+                                .whereArrayContains("groups", groupName)
+                                .whereEqualTo("role", "trainee")
+                                .get()
+                                .await()
+                                .documents
+                        )
+                    }
+                }
+
+                val distinctDirect = directDocs.distinctBy { it.id }
+
+                if (distinctDirect.isNotEmpty()) {
+                    distinctDirect
+                } else {
+                    Firebase.firestore.collection("users")
+                        .whereEqualTo("role", "trainee")
+                        .get()
+                        .await()
+                        .documents
+                        .filter { doc ->
+                            userDocMatchesBranchAndGroup(
+                                doc = doc,
+                                branchCandidates = branchKeys,
+                                groupCandidate = groupName
+                            )
+                        }
+                }
             }.onFailure { e ->
                 Log.e("COACH_TRAINEES", "fetch users for profiles FAILED", e)
             }.getOrNull().orEmpty()
@@ -724,8 +883,9 @@ fun CoachTraineesScreen(
     }
 
 
-            // אם זה לא מאמן – עדיין רוצים טופ-בר עם אייקונים
-    if (!role.equals("coach", ignoreCase = true)) {
+    // אם זה לא מאמן – עדיין רוצים טופ-בר עם אייקונים
+    if (!isCoachRole) {
+
         Scaffold(
             topBar = {
                 val contextLang = LocalContext.current
@@ -1163,10 +1323,53 @@ fun CoachTraineesScreen(
                             Divider()
 
                             if (effectiveBranch.isBlank() || effectiveGroupKey.isBlank()) {
-                                Spacer(
+                                Text(
+                                    text = coachTr(
+                                        isEnglish,
+                                        "לא אותרו סניף או קבוצה עבור המאמן.",
+                                        "No branch or group was found for this coach."
+                                    ),
+                                    color = Color(0xFFB91C1C),
+                                    textAlign = screenTextAlign,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(8.dp)
+                                        .padding(16.dp)
+                                )
+                            } else if (isProfilesLoading && !didFinishInitialProfilesLoad) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(18.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    LinearProgressIndicator(
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Text(
+                                        text = coachTr(
+                                            isEnglish,
+                                            "טוען מתאמנים מהשרת...",
+                                            "Loading trainees from the server..."
+                                        ),
+                                        color = Color(0xFF0369A1),
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            } else if (uiProfiles.isEmpty()) {
+                                Text(
+                                    text = coachTr(
+                                        isEnglish,
+                                        "לא נמצאו מתאמנים פעילים לסניף ולקבוצה שנבחרו.",
+                                        "No active trainees were found for the selected branch and group."
+                                    ),
+                                    color = Color(0xFF64748B),
+                                    textAlign = screenTextAlign,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
                                 )
                             } else if (uiProfiles.isNotEmpty()) {
                                 LazyColumn(

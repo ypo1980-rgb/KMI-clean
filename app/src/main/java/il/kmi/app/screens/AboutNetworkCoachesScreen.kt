@@ -100,7 +100,7 @@ private fun fallbackCoach(
     nameHe: String,
     nameEn: String = nameHe,
     roleHe: String = "מאמן ברשת ק.מ.י",
-    roleEn: String = "K.M.I Network Coach",
+    roleEn: String = "K.A.M.I Network Coach",
     rankHe: String = "דרגה תעודכן בהמשך",
     rankEn: String = "Rank will be updated",
     experienceHe: String = "ותק מקצועי יעודכן בהמשך",
@@ -110,7 +110,7 @@ private fun fallbackCoach(
     certificationsHe: List<String> = listOf("הסמכות יעודכנו בהמשך"),
     certificationsEn: List<String> = listOf("Certifications will be updated"),
     branchesHe: List<String> = listOf("רשת ק.מ.י"),
-    branchesEn: List<String> = listOf("K.M.I Network"),
+    branchesEn: List<String> = listOf("K.A.M.I Network"),
     descriptionHe: String = "מידע מקצועי על המאמן יעודכן בהמשך דרך Firestore.",
     descriptionEn: String = "Professional coach information will be updated later through Firestore."
 ): NetworkCoachInfo {
@@ -153,7 +153,7 @@ private val fallbackNetworkCoaches = listOf(
         certificationsHe = listOf("ראש השיטה", "הכשרת מדריכים", "פיתוח מקצועי"),
         certificationsEn = listOf("Head of the Method", "Instructor Training", "Professional Development"),
         descriptionHe = "ראש שיטת ק.מ.י ומוביל מקצועי ברשת.",
-        descriptionEn = "Head of the K.M.I method and professional leader of the network."
+        descriptionEn = "Head of the K.A.M.I method and professional leader of the network."
     ),
     fallbackCoach(
         id = "itzik_biton",
@@ -281,7 +281,7 @@ private fun KmiDatabaseRepository.KmiNetworkCoach.toNetworkCoachInfo(): NetworkC
         certificationsHe = certificationsHe.ifEmpty { listOf("הסמכות יעודכנו בהמשך") },
         certificationsEn = certificationsEn.ifEmpty { listOf("Certifications will be updated") },
         branchesHe = branchesHe.ifEmpty { listOf("רשת ק.מ.י") },
-        branchesEn = branchesEn.ifEmpty { listOf("K.M.I Network") },
+        branchesEn = branchesEn.ifEmpty { listOf("K.A.M.I Network") },
         descriptionHe = descriptionHe,
         descriptionEn = descriptionEn
     )

@@ -1,7 +1,11 @@
 package il.kmi.app.navigation
 
+import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
@@ -28,6 +32,53 @@ fun NavGraphBuilder.aboutNavGraph(
 
     // ---- פורום ----
     composable(Route.Forum.route) {
+        val ctx = LocalContext.current
+
+        LaunchedEffect(Unit) {
+            val forumPushSp = ctx.applicationContext.getSharedPreferences(
+                "kmi_forum_push",
+                Context.MODE_PRIVATE
+            )
+
+            val roomId = forumPushSp.getString("forum_room_id", "").orEmpty()
+            val roomName = forumPushSp.getString("forum_room_name", "").orEmpty()
+            val messageId = forumPushSp.getString("forum_message_id", "").orEmpty()
+            val branchId = forumPushSp.getString("forum_branch_id", "").orEmpty()
+            val groupKey = forumPushSp.getString("forum_group_key", "").orEmpty()
+            val senderId = forumPushSp.getString("forum_sender_id", "").orEmpty()
+            val receivedAt = forumPushSp.getLong("received_at", 0L)
+
+            val hasForumTarget =
+                roomId.isNotBlank() ||
+                        messageId.isNotBlank() ||
+                        branchId.isNotBlank() ||
+                        groupKey.isNotBlank()
+
+            if (hasForumTarget) {
+                Log.e(
+                    "KMI_FORUM_PUSH",
+                    "Route.Forum entered with push target roomId=$roomId messageId=$messageId branchId=$branchId groupKey=$groupKey"
+                )
+
+                sp.edit()
+                    .putBoolean("forum_open_from_push", true)
+                    .putString("forum_push_room_id", roomId)
+                    .putString("forum_push_room_name", roomName)
+                    .putString("forum_push_message_id", messageId)
+                    .putString("forum_push_branch_id", branchId)
+                    .putString("forum_push_group_key", groupKey)
+                    .putString("forum_push_sender_id", senderId)
+                    .putLong("forum_push_received_at", receivedAt)
+                    .apply()
+
+                // משאירים את פרטי היעד לזמן קצר ב-sp הראשי,
+                // אבל מנקים את דגל ההמתנה כדי שלא יפתח שוב בלולאה.
+                forumPushSp.edit()
+                    .putBoolean("has_pending_forum_push", false)
+                    .apply()
+            }
+        }
+
         ForumScreen(
             sp = sp,
             onBack = { nav.popBackStack() },

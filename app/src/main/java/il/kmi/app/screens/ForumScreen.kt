@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Star
@@ -67,6 +68,7 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
@@ -91,6 +93,7 @@ import androidx.compose.ui.unit.sp
 // הודעה למסך (כולל מידע אם זו הודעה שלי + מדיה)
 private data class ForumUiMessage(
     val id: String,
+    val messageId: String,
     val branch: String,
     val groupKey: String,
     val authorName: String,
@@ -98,6 +101,8 @@ private data class ForumUiMessage(
     val authorUid: String?,
     val text: String,
     val createdAt: Instant,
+    val createdAtMillis: Long,
+    val updatedAtMillis: Long?,
     val mediaUrl: String?,
     val mediaType: String?,   // "image" / "video" / null
     val isMine: Boolean
@@ -120,8 +125,25 @@ private const val FORUM_MESSAGE_RETENTION_DAYS = 90L
 private const val FORUM_MESSAGE_RETENTION_MILLIS =
     FORUM_MESSAGE_RETENTION_DAYS * 24L * 60L * 60L * 1000L
 
-private fun forumLastReadKey(branch: String): String =
-    "forum_last_read_at_${branch.trim()}"
+private fun forumLastReadKey(branch: String, groupKey: String): String =
+    "forum_last_read_at_${branch.trim()}_${groupKey.trim()}"
+
+private fun forumSafeDocId(raw: String): String {
+    return raw
+        .trim()
+        .lowercase()
+        .replace('־', '-')
+        .replace('–', '-')
+        .replace('—', '-')
+        .replace(Regex("\\s+"), "_")
+        .replace(Regex("[^a-z0-9א-ת_\\-]+"), "_")
+        .trim('_')
+        .ifBlank { "default" }
+}
+
+private fun forumRoomDocId(branch: String, groupKey: String): String {
+    return "room_${forumSafeDocId(branch)}_${forumSafeDocId(groupKey)}"
+}
 
 @Composable
 fun ForumScreen(
@@ -346,15 +368,101 @@ fun ForumScreen(
         )
     }
 
-    // סניף + קבוצה של המשתמש (הקבוצה = "חדר" הפורום)
-    val branch = remember { userSp.getString("branch", "") ?: "" }
+    // סניף + קבוצה של המשתמש — מקור אמת מחדר הפורום
+    val branch = remember {
+        val active = userSp.getString("active_branch", null)
+            ?: userSp.getString("activeBranch", null)
 
-    // groupKey – קודם מנסים key אמיתי, אם ריק ניפול ל-age_group / group
+        val raw = active?.takeIf { it.isNotBlank() }
+            ?: userSp.getString("branch", null)
+            ?: userSp.getString("branchesCsv", null)
+            ?: ""
+
+        raw
+            .split(",", "•", "|")
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() }
+            ?: ""
+    }
+
+    // groupKey – קודם key אמיתי, אחרת age_group/group
     val groupKey = remember {
         val direct = userSp.getString("groupKey", null)
+            ?: userSp.getString("group_key", null)
+
         direct?.takeIf { it.isNotBlank() }
             ?: userSp.getString("age_group", null)?.takeIf { it.isNotBlank() }
             ?: userSp.getString("group", "")!!.ifBlank { "" }
+    }
+
+    val forumRoomId = remember(branch, groupKey) {
+        forumRoomDocId(branch, groupKey)
+    }
+
+    val openFromPushInitial = remember {
+        sp.getBoolean("forum_open_from_push", false)
+    }
+
+    var pendingPushRoomId by rememberSaveable {
+        mutableStateOf(
+            if (openFromPushInitial) {
+                sp.getString("forum_push_room_id", "").orEmpty()
+            } else {
+                ""
+            }
+        )
+    }
+
+    var pendingPushMessageId by rememberSaveable {
+        mutableStateOf(
+            if (openFromPushInitial) {
+                sp.getString("forum_push_message_id", "").orEmpty()
+            } else {
+                ""
+            }
+        )
+    }
+
+    var pendingPushHandled by rememberSaveable {
+        mutableStateOf(!openFromPushInitial)
+    }
+
+    LaunchedEffect(openFromPushInitial, pendingPushRoomId, pendingPushMessageId, forumRoomId) {
+        if (!openFromPushInitial) return@LaunchedEffect
+
+        android.util.Log.e(
+            "KMI_FORUM_PUSH",
+            "ForumScreen opened from push targetRoomId=$pendingPushRoomId currentRoomId=$forumRoomId targetMessageId=$pendingPushMessageId"
+        )
+
+        if (pendingPushRoomId.isNotBlank() && pendingPushRoomId != forumRoomId) {
+            android.util.Log.e(
+                "KMI_FORUM_PUSH",
+                "ForumScreen push room differs from current user room. targetRoomId=$pendingPushRoomId currentRoomId=$forumRoomId"
+            )
+        }
+    }
+
+    LaunchedEffect(openFromPushInitial, pendingPushMessageId) {
+        if (openFromPushInitial && pendingPushMessageId.isBlank()) {
+            android.util.Log.e(
+                "KMI_FORUM_PUSH",
+                "ForumScreen opened from push without messageId - clearing pending flag after opening forum"
+            )
+
+            pendingPushHandled = true
+
+            sp.edit()
+                .putBoolean("forum_open_from_push", false)
+                .remove("forum_push_message_id")
+                .remove("forum_push_room_id")
+                .remove("forum_push_room_name")
+                .remove("forum_push_branch_id")
+                .remove("forum_push_group_key")
+                .remove("forum_push_sender_id")
+                .remove("forum_push_received_at")
+                .apply()
+        }
     }
 
     // 👇 שם המשתמש – מנסה כמה מפתחות מהרישום
@@ -366,15 +474,15 @@ fun ForumScreen(
     }
     val email = remember { userSp.getString("email", "") ?: "" }
 
-    LaunchedEffect(branch) {
-        if (branch.isNotBlank()) {
+    LaunchedEffect(branch, groupKey) {
+        if (branch.isNotBlank() && groupKey.isNotBlank()) {
             userSp.edit()
-                .putLong(forumLastReadKey(branch), System.currentTimeMillis())
+                .putLong(forumLastReadKey(branch, groupKey), System.currentTimeMillis())
                 .apply()
 
             android.util.Log.e(
                 "KMI_FORUM_UNREAD",
-                "last forum read updated branch=$branch"
+                "last forum read updated branch=$branch groupKey=$groupKey room=$forumRoomId"
             )
         }
     }
@@ -402,11 +510,15 @@ fun ForumScreen(
     // תרגיל שנבחר מהחיפוש (הדיאלוג למטה)
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // אנונימי אם צריך
+    // במסך אמת לא מתחברים אנונימית.
+    // הפורום צריך לעבוד עם משתמש Firebase אמיתי מהכניסה לאפליקציה.
     LaunchedEffect(Unit) {
         val auth = FirebaseAuth.getInstance()
         if (auth.currentUser == null) {
-            auth.signInAnonymously()
+            android.util.Log.e(
+                "KMI_FORUM_AUTH",
+                "Forum opened without Firebase user. Messages will not be sent until login is ready."
+            )
         }
     }
 
@@ -419,6 +531,8 @@ fun ForumScreen(
         } else {
             val registration = db.collection("branches")
                 .document(branch)
+                .collection("forumRooms")
+                .document(forumRoomId)
                 .collection("messages")
                 .orderBy("createdAt", Query.Direction.DESCENDING)
                 .limit(200)
@@ -427,7 +541,7 @@ fun ForumScreen(
                     if (error != null) {
                         android.util.Log.e(
                             "KMI_FORUM",
-                            "Failed listening to forum messages branch=$branch groupKey=$groupKey",
+                            "Failed listening to forum messages branch=$branch groupKey=$groupKey room=$forumRoomId",
                             error
                         )
                         return@addSnapshotListener
@@ -457,6 +571,7 @@ fun ForumScreen(
 
                             ForumUiMessage(
                                 id = doc.id,
+                                messageId = doc.getString("messageId") ?: doc.id,
                                 branch = doc.getString("branch") ?: branch,
                                 groupKey = doc.getString("groupKey") ?: groupKey,
                                 authorName = authorNameDoc,
@@ -464,6 +579,9 @@ fun ForumScreen(
                                 authorUid = authorUidDoc,
                                 text = doc.getString("text") ?: "",
                                 createdAt = instant,
+                                createdAtMillis = doc.getLong("createdAtMillis")
+                                    ?: instant.toEpochMilliseconds(),
+                                updatedAtMillis = doc.getLong("updatedAtMillis"),
                                 mediaUrl = doc.getString("mediaUrl"),
                                 mediaType = doc.getString("mediaType"),
                                 isMine = (authorUidDoc != null && authorUidDoc == currentUid)
@@ -474,7 +592,47 @@ fun ForumScreen(
                     messages = uiList
 
                     scope.launch {
-                        if (uiList.isNotEmpty()) {
+                        if (
+                            !pendingPushHandled &&
+                            pendingPushMessageId.isNotBlank() &&
+                            uiList.isNotEmpty()
+                        ) {
+                            val targetIndex = uiList.indexOfFirst { msg ->
+                                msg.id == pendingPushMessageId ||
+                                        msg.messageId == pendingPushMessageId
+                            }
+
+                            if (targetIndex >= 0) {
+                                android.util.Log.e(
+                                    "KMI_FORUM_PUSH",
+                                    "scrolling to pushed forum message index=$targetIndex messageId=$pendingPushMessageId"
+                                )
+
+                                listState.animateScrollToItem(targetIndex)
+                                pendingPushHandled = true
+
+                                sp.edit()
+                                    .putBoolean("forum_open_from_push", false)
+                                    .remove("forum_push_message_id")
+                                    .remove("forum_push_room_id")
+                                    .remove("forum_push_room_name")
+                                    .remove("forum_push_branch_id")
+                                    .remove("forum_push_group_key")
+                                    .remove("forum_push_sender_id")
+                                    .remove("forum_push_received_at")
+                                    .apply()
+
+                                pendingPushMessageId = ""
+                                pendingPushRoomId = ""
+                            } else {
+                                android.util.Log.e(
+                                    "KMI_FORUM_PUSH",
+                                    "pushed forum message not found yet messageId=$pendingPushMessageId messages=${uiList.size}"
+                                )
+
+                                listState.animateScrollToItem(0)
+                            }
+                        } else if (uiList.isNotEmpty()) {
                             listState.animateScrollToItem(0)
                         }
                     }
@@ -491,8 +649,8 @@ fun ForumScreen(
     // מסך אמת: אין שימוש ב-DemoTrainees.
     // חשוב: משתמשים יכולים לשמור סניף ב-branch / branches / branchesCsv,
     // וגם עם סוגי מקפים שונים. לכן לא מספיק whereEqualTo("branch", branch).
-    LaunchedEffect(branch, fullName, email) {
-        if (branch.isBlank()) {
+    LaunchedEffect(branch, groupKey, fullName, email) {
+        if (branch.isBlank() || groupKey.isBlank()) {
             participantsByUsers = emptyList()
             return@LaunchedEffect
         }
@@ -592,7 +750,71 @@ fun ForumScreen(
             out.addAll(splitTokensNorm(getString("activeBranch")))
             out.addAll(splitTokensNorm(getString("active_branch")))
 
-            return out.filter { it.isNotBlank() }.distinct()
+            return out
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
+        fun expandForumGroupAliases(raw: String): List<String> {
+            val n = raw.normForum()
+
+            return buildList {
+                add(n)
+                addAll(splitTokensNorm(n))
+
+                if (n.contains("נוער") && n.contains("בוגרים")) {
+                    add("נוער")
+                    add("בוגרים")
+                    add("נוער ובוגרים")
+                    add("נוער + בוגרים")
+                }
+
+                if (n.contains("children", ignoreCase = true)) add("ילדים")
+                if (n.contains("kids", ignoreCase = true)) add("ילדים")
+                if (n.contains("youth", ignoreCase = true)) add("נוער")
+                if (n.contains("adults", ignoreCase = true)) add("בוגרים")
+                if (n.contains("adult", ignoreCase = true)) add("בוגרים")
+            }
+                .map { it.normForum() }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
+        fun DocumentSnapshot.groupTokensNorm(): List<String> {
+            val groupsList = (get("groups") as? List<*>)
+                ?.mapNotNull { it?.toString()?.trim() }
+                ?.flatMap { expandForumGroupAliases(it) }
+                .orEmpty()
+
+            return buildList {
+                addAll(groupsList)
+                addAll(splitTokensNorm(getString("primaryGroup")).flatMap { expandForumGroupAliases(it) })
+                addAll(splitTokensNorm(getString("groupKey")).flatMap { expandForumGroupAliases(it) })
+                addAll(splitTokensNorm(getString("group_key")).flatMap { expandForumGroupAliases(it) })
+                addAll(splitTokensNorm(getString("group")).flatMap { expandForumGroupAliases(it) })
+                addAll(splitTokensNorm(getString("groupName")).flatMap { expandForumGroupAliases(it) })
+                addAll(splitTokensNorm(getString("groupsCsv")).flatMap { expandForumGroupAliases(it) })
+                addAll(splitTokensNorm(getString("groupCsv")).flatMap { expandForumGroupAliases(it) })
+                addAll(splitTokensNorm(getString("age_group")).flatMap { expandForumGroupAliases(it) })
+            }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
+        fun matchesForumGroup(tokens: List<String>, candidates: Set<String>): Boolean {
+            if (candidates.isEmpty()) return true
+
+            // אם למשתמש אין שדה קבוצה בכלל, לא נכניס אותו לחדר קבוצה ספציפי.
+            if (tokens.isEmpty()) return false
+
+            return tokens.any { tok ->
+                tok in candidates ||
+                        candidates.any { cand ->
+                            cand.length >= 2 &&
+                                    tok.length >= 2 &&
+                                    (tok.contains(cand) || cand.contains(tok))
+                        }
+            }
         }
 
         fun matchesBranch(tokens: List<String>, candidates: Set<String>): Boolean {
@@ -671,9 +893,23 @@ fun ForumScreen(
             .filter { it.isNotBlank() }
             .distinct()
 
+        val groupCandidates = expandForumGroupAliases(groupKey)
+            .flatMap { g ->
+                listOf(
+                    g,
+                    g.replace("-", "–"),
+                    g.replace("–", "-"),
+                    g.replace(" + ", " ו"),
+                    g.replace(" ו", " + ")
+                )
+            }
+            .map { it.normForum() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
         android.util.Log.e(
             "KMI_FORUM_USERS",
-            "loading participants branch=$branch candidates=$branchCandidates"
+            "loading participants branch=$branch groupKey=$groupKey branchCandidates=$branchCandidates groupCandidates=$groupCandidates"
         )
 
         scope.launch {
@@ -715,8 +951,11 @@ fun ForumScreen(
 
                     val candNorm = branchCandidates.map { it.normForum() }.toSet()
 
+                    val groupNorm = groupCandidates.toSet()
+
                     docs = all.filter { doc ->
-                        matchesBranch(doc.branchTokensNorm(), candNorm)
+                        matchesBranch(doc.branchTokensNorm(), candNorm) &&
+                                matchesForumGroup(doc.groupTokensNorm(), groupNorm)
                     }.distinctBy { it.id }
 
                     android.util.Log.w(
@@ -752,10 +991,13 @@ fun ForumScreen(
                     }
                 }
 
+                val groupNorm = groupCandidates.toSet()
+
                 val realParticipants = docs
                     .asSequence()
                     .filter { it.isAllowedForumRole() }
                     .filter { it.userNameOrNull()?.isNotBlank() == true }
+                    .filter { matchesForumGroup(it.groupTokensNorm(), groupNorm) }
                     .groupBy { it.participantUniqueKey() }
                     .values
                     .mapNotNull { samePersonDocs ->
@@ -788,7 +1030,7 @@ fun ForumScreen(
 
                 android.util.Log.e(
                     "KMI_FORUM_USERS",
-                    "Forum participants loaded from Firestore count=${realParticipants.size} branch=$branch names=${realParticipants.map { it.name }}"
+                    "Forum participants loaded from Firestore count=${realParticipants.size} branch=$branch groupKey=$groupKey room=$forumRoomId names=${realParticipants.map { it.name }}"
                 )
             } catch (e: Exception) {
                 android.util.Log.e(
@@ -820,15 +1062,63 @@ fun ForumScreen(
         }
     }
 
+    val currentFirebaseUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+
+    val isCurrentUserForumParticipant = remember(
+        participantsByUsers,
+        currentFirebaseUid,
+        email,
+        fullName,
+        isManagerOverride
+    ) {
+        if (isManagerOverride) {
+            true
+        } else {
+            participantsByUsers.any { p ->
+                p.isMe ||
+                        (currentFirebaseUid.isNotBlank() && p.id == currentFirebaseUid) ||
+                        (email.isNotBlank() && p.id.equals(email, ignoreCase = true)) ||
+                        (fullName.isNotBlank() && p.name.trim() == fullName.trim())
+            }
+        }
+    }
+
     // ---------- שליחת/עדכון הודעה ----------
     suspend fun sendMessageInternal() {
         try {
             val text = (if (editingMessage != null) editText else input).trim()
             val auth = FirebaseAuth.getInstance()
-            val currentUid = auth.currentUser?.uid
+            val currentUser = auth.currentUser
+            val currentUid = currentUser?.uid
 
             if (text.isEmpty() && attachedUri == null) return
             if (branch.isBlank() || groupKey.isBlank()) return
+
+            if (currentUser == null || currentUid.isNullOrBlank()) {
+                Toast.makeText(
+                    ctx,
+                    forumTr(
+                        isEnglish,
+                        "לא ניתן לשלוח הודעה לפני התחברות משתמש.",
+                        "You must be signed in before sending a message."
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+
+            if (!isCurrentUserForumParticipant) {
+                Toast.makeText(
+                    ctx,
+                    forumTr(
+                        isEnglish,
+                        "אין הרשאה לשלוח הודעות בחדר הקבוצה הזה.",
+                        "You do not have permission to send messages in this group room."
+                    ),
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
 
             // העלאת מדיה (אם יש)
             var mediaUrl: String? = null
@@ -836,10 +1126,17 @@ fun ForumScreen(
 
             if (attachedUri != null && mediaType != null) {
                 val path =
-                    "forum_media/$branch/$groupKey/${currentUid ?: "anon"}/${System.currentTimeMillis()}"
+                    "forum_media/${forumSafeDocId(branch)}/${forumSafeDocId(groupKey)}/$currentUid/${System.currentTimeMillis()}"
                 val ref = storage.reference.child(path)
                 ref.putFile(attachedUri!!).await()
                 mediaUrl = ref.downloadUrl.await().toString()
+            }
+
+            val messagePreview = when {
+                text.isNotBlank() -> text.take(120)
+                mediaType == "image" -> forumTr(isEnglish, "תמונה חדשה", "New image")
+                mediaType == "video" -> forumTr(isEnglish, "סרטון חדש", "New video")
+                else -> forumTr(isEnglish, "הודעה חדשה", "New message")
             }
 
             // דאטה בסיסי להודעה
@@ -849,20 +1146,55 @@ fun ForumScreen(
                 .ifBlank { email }
                 .ifBlank { forumTr(isEnglish, "משתתף", "Participant") }
 
+            // מבטיח שחדר הפורום קיים כמסמך אמת בשרת
+            val roomRef = db.collection("branches")
+                .document(branch)
+                .collection("forumRooms")
+                .document(forumRoomId)
+
+            roomRef.set(
+                mapOf(
+                    "roomId" to forumRoomId,
+                    "branch" to branch,
+                    "groupKey" to groupKey,
+                    "participantCount" to participantsByUsers.size,
+                    "participantIds" to participantsByUsers.map { it.id }.take(200),
+                    "participantNames" to participantsByUsers.map { it.name }.take(200),
+                    "participantSource" to "users_by_branch_and_group",
+                    "pushEnabled" to true,
+                    "pushTarget" to "forum_room_participants",
+                    "updatedAt" to FieldValue.serverTimestamp(),
+                    "updatedAtMillis" to System.currentTimeMillis(),
+                    "lastMessagePreview" to messagePreview,
+                    "lastMessageAuthorUid" to currentUid,
+                    "lastMessageAuthorName" to safeAuthorName,
+                    "source" to "android_forum"
+                ),
+                SetOptions.merge()
+            ).await()
+
             val expiresAtDate = Date(
                 System.currentTimeMillis() + FORUM_MESSAGE_RETENTION_MILLIS
             )
 
             val baseData = mutableMapOf<String, Any?>(
+                "roomId" to forumRoomId,
                 "branch" to branch,
                 "groupKey" to groupKey,
                 "authorName" to safeAuthorName,
                 "authorEmail" to email,
                 "authorUid" to currentUid,
+                "authorIsManager" to isManagerOverride,
                 "text" to text,
+                "messagePreview" to messagePreview,
+                "hasMedia" to (mediaUrl != null && mediaType != null),
+                "mediaType" to mediaType,
                 "expiresAt" to com.google.firebase.Timestamp(expiresAtDate),
                 "retentionDays" to FORUM_MESSAGE_RETENTION_DAYS,
-                "isPinned" to false
+                "isPinned" to false,
+                "pushStatus" to "pending",
+                "pushCreatedBy" to "android_forum",
+                "source" to "android_forum"
             )
 
             if (mediaUrl != null && mediaType != null) {
@@ -872,29 +1204,95 @@ fun ForumScreen(
 
             if (editingMessage == null) {
                 // הודעה חדשה — מוגדרת למחיקה אוטומטית אחרי 90 יום דרך Firestore TTL
-                baseData["createdAt"] = FieldValue.serverTimestamp()
-
-                db.collection("branches")
+                val nowMillis = System.currentTimeMillis()
+                val messageRef = db.collection("branches")
                     .document(branch)
+                    .collection("forumRooms")
+                    .document(forumRoomId)
                     .collection("messages")
-                    .add(baseData.filterValues { it != null })
+                    .document()
+
+                baseData["messageId"] = messageRef.id
+                baseData["createdAt"] = FieldValue.serverTimestamp()
+                baseData["createdAtMillis"] = nowMillis
+                baseData["updatedAtMillis"] = nowMillis
+
+                messageRef
+                    .set(baseData.filterValues { it != null }, SetOptions.merge())
                     .await()
+
+                roomRef.set(
+                    mapOf(
+                        "lastMessageId" to messageRef.id,
+                        "lastMessagePreview" to messagePreview,
+                        "lastMessageAuthorUid" to currentUid,
+                        "lastMessageAuthorName" to safeAuthorName,
+                        "lastMessageAt" to FieldValue.serverTimestamp(),
+                        "lastMessageAtMillis" to nowMillis,
+                        "lastMessageHasMedia" to (mediaUrl != null && mediaType != null),
+                        "lastMessageMediaType" to mediaType,
+                        "pendingPushMessageId" to messageRef.id,
+                        "pendingPushAuthorUid" to currentUid,
+                        "pendingPushPreview" to messagePreview,
+                        "pendingPushAt" to FieldValue.serverTimestamp(),
+                        "pendingPushAtMillis" to nowMillis,
+                        "updatedAt" to FieldValue.serverTimestamp(),
+                        "updatedAtMillis" to nowMillis
+                    ),
+                    SetOptions.merge()
+                ).await()
             } else {
+                val msg = editingMessage ?: return
+                val canEditThisMessage = msg.isMine || isManagerOverride
+
+                if (!canEditThisMessage) {
+                    Toast.makeText(
+                        ctx,
+                        forumTr(
+                            isEnglish,
+                            "אין הרשאה לערוך הודעה זו.",
+                            "You do not have permission to edit this message."
+                        ),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return
+                }
+
+                val nowMillis = System.currentTimeMillis()
+
                 // עדכון הודעה קיימת — לא מאריכים את expiresAt בעריכה
                 baseData.remove("expiresAt")
                 baseData.remove("retentionDays")
                 baseData.remove("isPinned")
+                baseData["messageId"] = msg.messageId
                 baseData["updatedAt"] = FieldValue.serverTimestamp()
+                baseData["updatedAtMillis"] = nowMillis
+                baseData["edited"] = true
 
                 db.collection("branches")
                     .document(branch)
+                    .collection("forumRooms")
+                    .document(forumRoomId)
                     .collection("messages")
-                    .document(editingMessage!!.id)
+                    .document(msg.id)
                     .set(
                         baseData.filterValues { it != null },
-                        com.google.firebase.firestore.SetOptions.merge()
+                        SetOptions.merge()
                     )
                     .await()
+
+                roomRef.set(
+                    mapOf(
+                        "lastMessagePreview" to messagePreview,
+                        "lastMessageAuthorUid" to currentUid,
+                        "lastMessageAuthorName" to safeAuthorName,
+                        "lastMessageEditedAt" to FieldValue.serverTimestamp(),
+                        "lastMessageEditedAtMillis" to nowMillis,
+                        "updatedAt" to FieldValue.serverTimestamp(),
+                        "updatedAtMillis" to nowMillis
+                    ),
+                    SetOptions.merge()
+                ).await()
             }
 
             // ניקוי מצב אחרי שליחה / עדכון
@@ -1176,30 +1574,7 @@ fun ForumScreen(
 
                 // ===== רשימת משתתפים בפורום =====
                 // קודם כל – לפי users בסניף; אם אין, נופל לשמות מתוך ההודעות
-                val participants = if (participantsByUsers.isNotEmpty()) {
-                    participantsByUsers
-                } else {
-                    messages
-                        .groupBy { it.authorUid ?: it.authorEmail.ifBlank { it.authorName } }
-                        .mapNotNull { (_, msgs) ->
-                            val sample = msgs.firstOrNull() ?: return@mapNotNull null
-                            val displayName =
-                                sample.authorName
-                                    .ifBlank { sample.authorEmail }
-                                    .ifBlank { forumTr(isEnglish, "משתתף", "Participant") }
-
-                            val id = sample.authorUid
-                                ?: sample.authorEmail.ifBlank { sample.authorName.ifBlank { displayName } }
-
-                            ForumParticipantUi(
-                                id = id,
-                                name = displayName,
-                                isMe = sample.isMine
-                            )
-                        }
-                        .distinctBy { it.id }
-                        .sortedBy { it.name }
-                }
+                val participants = participantsByUsers
 
                 var showParticipantsDialog by remember { mutableStateOf(false) }
 
@@ -1220,6 +1595,34 @@ fun ForumScreen(
                                 isEnglish,
                                 "משתתפים בפורום (${participants.size})",
                                 "Forum participants (${participants.size})"
+                            ),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = participantsText,
+                            fontWeight = FontWeight.Medium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 9.dp, horizontal = 12.dp)
+                        )
+                    }
+                }
+
+                if (participants.isEmpty()) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        tonalElevation = 0.dp,
+                        shadowElevation = if (isDarkMode) 0.dp else 3.dp,
+                        color = participantsColor,
+                        border = BorderStroke(1.dp, forumHeaderBorder)
+                    ) {
+                        Text(
+                            text = forumTr(
+                                isEnglish,
+                                "אין משתתפים רשומים בקבוצה הזו עדיין",
+                                "No registered participants in this group yet"
                             ),
                             style = MaterialTheme.typography.labelMedium,
                             color = participantsText,
@@ -1291,6 +1694,17 @@ fun ForumScreen(
                     reverseLayout = true,
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    if (messages.isEmpty()) {
+                        item(key = "empty_forum_room") {
+                            EmptyForumRoomCard(
+                                branch = branch,
+                                groupKey = groupKey,
+                                isDarkMode = isDarkMode,
+                                isEnglish = isEnglish
+                            )
+                        }
+                    }
+
                     items(
                         items = messages,
                         key = { it.id }
@@ -1455,7 +1869,9 @@ fun ForumScreen(
                                             },
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            if (msg.isMine) {
+                                            val canModifyMessage = msg.isMine || isManagerOverride
+
+                                            if (canModifyMessage) {
                                                 IconButton(
                                                     onClick = {
                                                         editingMessage = msg
@@ -1475,12 +1891,41 @@ fun ForumScreen(
                                                 Spacer(Modifier.width(2.dp))
                                                 IconButton(
                                                     onClick = {
+                                                        if (!canModifyMessage) return@IconButton
+
                                                         scope.launch {
+                                                            val roomIdForMessage = msg.groupKey
+                                                                .takeIf { it.isNotBlank() }
+                                                                ?.let { forumRoomDocId(msg.branch, it) }
+                                                                ?: forumRoomId
+
                                                             db.collection("branches")
                                                                 .document(msg.branch)
+                                                                .collection("forumRooms")
+                                                                .document(roomIdForMessage)
                                                                 .collection("messages")
                                                                 .document(msg.id)
                                                                 .delete()
+                                                                .await()
+
+                                                            val deleteAtMillis = System.currentTimeMillis()
+
+                                                            db.collection("branches")
+                                                                .document(msg.branch)
+                                                                .collection("forumRooms")
+                                                                .document(roomIdForMessage)
+                                                                .set(
+                                                                    mapOf(
+                                                                        "updatedAt" to FieldValue.serverTimestamp(),
+                                                                        "updatedAtMillis" to deleteAtMillis,
+                                                                        "lastModerationAction" to "message_deleted",
+                                                                        "lastModerationByUid" to FirebaseAuth.getInstance().currentUser?.uid.orEmpty(),
+                                                                        "lastDeletedMessageId" to msg.messageId,
+                                                                        "lastDeletedAt" to FieldValue.serverTimestamp(),
+                                                                        "lastDeletedAtMillis" to deleteAtMillis
+                                                                    ),
+                                                                    SetOptions.merge()
+                                                                )
                                                                 .await()
                                                         }
                                                     },
@@ -1646,7 +2091,13 @@ fun ForumScreen(
 
                                         if (currentText.isBlank()) {
                                             Text(
-                                                text = if (editingMessage != null) {
+                                                text = if (!isCurrentUserForumParticipant) {
+                                                    forumTr(
+                                                        isEnglish,
+                                                        "אין הרשאה לשלוח בחדר זה",
+                                                        "No permission to send in this room"
+                                                    )
+                                                } else if (editingMessage != null) {
                                                     forumTr(isEnglish, "עריכת הודעה...", "Editing message...")
                                                 } else {
                                                     forumTr(isEnglish, "הודעה", "Message")
@@ -1683,7 +2134,10 @@ fun ForumScreen(
                         }
                     }
 
-                    val canSend = (if (editingMessage != null) editText else input).trim().isNotEmpty() || attachedUri != null
+                    val canSendContent =
+                        (if (editingMessage != null) editText else input).trim().isNotEmpty() || attachedUri != null
+
+                    val canSend = canSendContent && isCurrentUserForumParticipant
 
                     Surface(
                         onClick = {
@@ -1800,6 +2254,109 @@ fun ForumScreen(
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyForumRoomCard(
+    branch: String,
+    groupKey: String,
+    isDarkMode: Boolean,
+    isEnglish: Boolean
+) {
+    val align = forumTextAlign(isEnglish)
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 18.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = if (isDarkMode) {
+            Color(0xFF202C33).copy(alpha = 0.92f)
+        } else {
+            Color.White.copy(alpha = 0.96f)
+        },
+        border = BorderStroke(
+            1.dp,
+            if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD6E4F4)
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = if (isDarkMode) 0.dp else 4.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            if (isDarkMode) Color.White.copy(alpha = 0.04f) else Color(0xFFEAF7FF),
+                            if (isDarkMode) Color.Transparent else Color.White
+                        )
+                    )
+                )
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = if (isDarkMode) Color.White.copy(alpha = 0.08f) else Color(0xFFE0F2FE),
+                border = BorderStroke(
+                    1.dp,
+                    if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFBAE6FD)
+                )
+            ) {
+                Box(
+                    modifier = Modifier.size(50.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = null,
+                        tint = if (isDarkMode) Color(0xFFBFDBFE) else Color(0xFF0284C7),
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+            }
+
+            Text(
+                text = forumTr(
+                    isEnglish,
+                    "אין עדיין הודעות בחדר הזה",
+                    "No messages in this room yet"
+                ),
+                color = if (isDarkMode) Color(0xFFE9EDEF) else Color(0xFF0F172A),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Text(
+                text = forumTr(
+                    isEnglish,
+                    "הפורום מחובר לשרת. הודעות שתשלחו כאן יישמרו בחדר הקבוצה ויופיעו לכל המשתתפים המורשים.",
+                    "This forum is connected to the server. Messages sent here will be saved in the group room and shown to authorized participants."
+                ),
+                color = if (isDarkMode) Color(0xFFBFC8CD) else Color(0xFF475569),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = align,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Text(
+                text = forumTr(
+                    isEnglish,
+                    "סניף: ${branch.ifBlank { "—" }}  •  קבוצה: ${groupKey.ifBlank { "—" }}",
+                    "Branch: ${branch.ifBlank { "—" }}  •  Group: ${groupKey.ifBlank { "—" }}"
+                ),
+                color = if (isDarkMode) Color(0xFF93C5FD) else Color(0xFF2563EB),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = align,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

@@ -35,6 +35,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
@@ -48,6 +49,7 @@ import il.kmi.app.domain.Explanations
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.screens.parseSearchKey
 import android.app.Activity
+import androidx.compose.ui.unit.sp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -110,6 +112,31 @@ fun AttendanceScreen(
             ?: effectiveBranchRaw.trim()
     }
 
+    fun String.nameKey(): String = this
+        .trim()
+        .replace('־', '-')   // maqaf
+        .replace('–', '-')   // en-dash
+        .replace('—', '-')   // em-dash
+        .replace(Regex("\\s+"), " ")
+        .replace(Regex("""[."'\u05F3\u05F4,;:()\[\]{}]"""), "")
+        .lowercase()
+
+    fun String.isDemoOrPlaceholderTrainee(): Boolean {
+        val clean = trim()
+        if (clean.isBlank()) return true
+
+        val key = clean.nameKey()
+
+        return key == "מתאמן" ||
+                key.startsWith("מתאמן ") ||
+                key.startsWith("מתאמן_") ||
+                key == "demo" ||
+                key.startsWith("demo ") ||
+                key.startsWith("test trainee") ||
+                key == "trainee" ||
+                key.startsWith("trainee ")
+    }
+
     // ===== טעינה אוטומטית של מתאמנים מה־users לפי סניף + קבוצה =====
     var bootstrapKey by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -129,10 +156,11 @@ fun AttendanceScreen(
         val key = "$branchBase|$groupBase"
         if (bootstrapKey == key) return@LaunchedEffect
 
-        val hasOnlyPlaceholder =
-            state.members.size == 1 && state.members.first().displayName.trim().startsWith("מתאמן")
+        val hasRealServerMembers = state.members.any {
+            !it.displayName.isDemoOrPlaceholderTrainee()
+        }
 
-        if (state.members.isNotEmpty() && !hasOnlyPlaceholder) {
+        if (hasRealServerMembers) {
             bootstrapKey = key
             return@LaunchedEffect
         }
@@ -223,18 +251,13 @@ fun AttendanceScreen(
 
     // ===== סטטיסטיקת נוכחות לשיעור הנוכחי =====
 
-    fun String.nameKey(): String = this
-        .trim()
-        .replace('־', '-')   // maqaf
-        .replace('–', '-')   // en-dash
-        .replace('—', '-')   // em-dash
-        .replace(Regex("\\s+"), " ")
-        .replace(Regex("""[."'\u05F3\u05F4,;:()\\[\\]{}]"""), "") // גרש/גרשיים/פיסוק נפוץ
-        .lowercase()
-
     val displayMembers = remember(state.members) {
-        state.members.distinctBy { it.displayName.nameKey() }
+        state.members
+            .filterNot { it.displayName.isDemoOrPlaceholderTrainee() }
+            .distinctBy { it.displayName.nameKey() }
     }
+
+    val hasRealMembers = displayMembers.isNotEmpty()
 
     val totalMembers = displayMembers.size
     val presentCount = displayMembers.count { statusById[it.id] == AttendanceStatus.PRESENT }
@@ -350,6 +373,16 @@ fun AttendanceScreen(
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = screenTextAlign
                     )
+                }
+
+                if (!hasRealMembers) {
+                    item {
+                        EmptyAttendanceMembersCard(
+                            branch = selectedBranch,
+                            groupKey = effectiveGroupRaw,
+                            isEnglish = isEnglish
+                        )
+                    }
                 }
 
                 items(displayMembers, key = { it.id }) { m ->
@@ -522,13 +555,20 @@ fun AttendanceScreen(
                         }
 
                         Button(
-                            onClick = { vm.saveTodayReport() },
+                            onClick = {
+                                if (hasRealMembers) {
+                                    vm.saveTodayReport()
+                                }
+                            },
+                            enabled = hasRealMembers,
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                             shape = RoundedCornerShape(20.dp),
                             contentPadding = compactPadding,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF16A34A),
-                                contentColor = Color.White
+                                contentColor = Color.White,
+                                disabledContainerColor = Color(0xFF475569),
+                                disabledContentColor = Color(0xFFCBD5E1)
                             )
                         ) {
                             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -544,13 +584,24 @@ fun AttendanceScreen(
                         }
 
                         Button(
-                            onClick = { shareReport(state) },
+                            onClick = {
+                                if (hasRealMembers) {
+                                    shareReport(
+                                        state.copy(
+                                            members = displayMembers
+                                        )
+                                    )
+                                }
+                            },
+                            enabled = hasRealMembers,
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                             shape = RoundedCornerShape(20.dp),
                             contentPadding = compactPadding,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF0EA5E9),
-                                contentColor = Color.White
+                                contentColor = Color.White,
+                                disabledContainerColor = Color(0xFF475569),
+                                disabledContentColor = Color(0xFFCBD5E1)
                             )
                         ) {
                             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -758,6 +809,104 @@ fun AttendanceScreen(
                     )
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun EmptyAttendanceMembersCard(
+    branch: String,
+    groupKey: String,
+    isEnglish: Boolean
+) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+    val direction = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+        tonalElevation = 0.dp
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.08f),
+                                Color(0xFF1D4ED8).copy(alpha = 0.18f)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = Color(0xFF38BDF8),
+                    modifier = Modifier.size(32.dp)
+                )
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = horizontal,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = tr(
+                            "אין מתאמנים אמיתיים בקבוצה הזו עדיין",
+                            "No real trainees in this group yet"
+                        ),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall.merge(
+                            TextStyle(textDirection = direction)
+                        ),
+                        textAlign = align,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = tr(
+                            "המסך מחובר לשרת. אם קיימים משתמשים רשומים בסניף ובקבוצה, הם ייטענו אוטומטית. אפשר גם להוסיף מתאמן ידנית עם כפתור הפלוס.",
+                            "This screen is connected to the server. Registered users in this branch and group will load automatically. You can also add a trainee manually using the plus button."
+                        ),
+                        color = Color(0xFFBFDBFE),
+                        style = MaterialTheme.typography.bodySmall.merge(
+                            TextStyle(textDirection = direction)
+                        ),
+                        textAlign = align,
+                        lineHeight = 17.dp.value.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = tr(
+                            "סניף: ${branch.ifBlank { "—" }} · קבוצה: ${groupKey.ifBlank { "—" }}",
+                            "Branch: ${branch.ifBlank { "—" }} · Group: ${groupKey.ifBlank { "—" }}"
+                        ),
+                        color = Color(0xFFE0F2FE),
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelSmall.merge(
+                            TextStyle(textDirection = direction)
+                        ),
+                        textAlign = align,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         }
     }
 }

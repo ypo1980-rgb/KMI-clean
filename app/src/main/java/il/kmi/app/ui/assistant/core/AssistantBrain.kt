@@ -35,7 +35,7 @@ object AssistantBrain {
 
             AssistantIntent.UNKNOWN ->
                 if (isEnglish) {
-                    "I’m not sure what you are asking. Try asking about an exercise, K.M.I material, or training."
+                    "I’m not sure what you are asking. Try asking about an exercise, K.A.M.I material, or training."
                 } else {
                     "לא בטוח למה התכוונת. נסה לשאול על תרגיל, חומר ק.מ.י או אימון."
                 }

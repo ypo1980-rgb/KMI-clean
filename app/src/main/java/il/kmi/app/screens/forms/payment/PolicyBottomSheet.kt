@@ -45,7 +45,7 @@ fun PolicyBottomSheet(
         """
 Cancellation and Refund Policy
 
-Below is the cancellation and refund policy of K.M.I – Israeli Krav Magen Association, founded by Eli Avikzer.
+Below is the cancellation and refund policy of K.A.M.I – Israeli Krav Magen Association, founded by Eli Avikzer.
 
 Since the payment you are about to make is for association membership fees, once the payment is approved the transaction cannot be cancelled and no refund will be provided.
 

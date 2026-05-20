@@ -27,6 +27,28 @@ object FcmTokenManager {
         refreshTokenForUserDocId(uid)
     }
 
+    fun saveProvidedTokenForCurrentUser(token: String) {
+        val cleanToken = token.trim()
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+
+        if (uid.isNullOrBlank()) {
+            Log.w(TAG, "saveProvidedTokenForCurrentUser: no currentUser, skipping")
+            return
+        }
+
+        if (cleanToken.isBlank()) {
+            Log.w(TAG, "saveProvidedTokenForCurrentUser: blank token, skipping")
+            return
+        }
+
+        Log.e(
+            TAG,
+            "saveProvidedTokenForCurrentUser: saving provided token for uid=$uid tokenPrefix=${cleanToken.take(18)}..."
+        )
+
+        saveTokenToFirestore(uid, cleanToken)
+    }
+
     fun refreshTokenForUserDocId(userDocId: String) {
         val cleanUserDocId = userDocId.trim()
 
@@ -58,23 +80,34 @@ object FcmTokenManager {
         val db = FirebaseFirestore.getInstance()
         val userDoc = db.collection("users").document(userDocId)
 
+        val now = Timestamp.now()
+
         val data = mapOf(
             "uid" to userDocId,
+
+            // תאימות אחורה / שליחה מהירה לטוקן האחרון
             "fcmToken" to token,
-            "fcmTokenUpdatedAt" to Timestamp.now()
+            "fcmTokenUpdatedAt" to now,
+
+            // מבנה מרובה טוקנים עבור Cloud Functions
+            "fcmTokens.$token" to mapOf(
+                "token" to token,
+                "platform" to "android",
+                "updatedAt" to now
+            )
         )
 
         userDoc.set(data, SetOptions.merge())
             .addOnSuccessListener {
                 Log.e(
                     TAG,
-                    "saveTokenToFirestore: fcmToken saved for userDocId=$userDocId"
+                    "saveTokenToFirestore: fcmToken + fcmTokens saved for userDocId=$userDocId tokenPrefix=${token.take(18)}..."
                 )
             }
             .addOnFailureListener { e ->
                 Log.e(
                     TAG,
-                    "saveTokenToFirestore: failed to save fcmToken for userDocId=$userDocId",
+                    "saveTokenToFirestore: failed to save fcmToken/fcmTokens for userDocId=$userDocId",
                     e
                 )
             }

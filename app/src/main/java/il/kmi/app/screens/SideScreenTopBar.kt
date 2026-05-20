@@ -200,7 +200,7 @@ fun BottomActionsBarEdgeToEdge(
     }
 
     val tShareSubject = if (isEnglish) {
-        "K.M.I – Krav Magen Israeli"
+        "K.A.M.I – Krav Magen Israeli"
     } else {
         "ק.מ.י – קרב מגן ישראלי"
     }
