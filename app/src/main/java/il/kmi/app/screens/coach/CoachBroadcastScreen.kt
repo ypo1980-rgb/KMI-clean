@@ -31,14 +31,14 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import java.util.Date
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.tasks.await
-import il.kmi.app.privacy.DemoPrivacy
-import il.kmi.app.privacy.DemoTrainees
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import android.app.Activity
@@ -67,6 +67,8 @@ fun persistCoachBroadcast(
     // 👇 נסה להביא שם מאמן אם שמור בפרופיל (אם אין — נשאיר null)
     val coachName = auth.currentUser?.displayName
 
+    val expiresAtMillis = System.currentTimeMillis() + 30L * 24L * 60L * 60L * 1000L
+
     val data = hashMapOf(
         "authorUid" to currentUid,
         "region" to region,
@@ -82,13 +84,34 @@ fun persistCoachBroadcast(
         "coachName" to coachName,
 
         "targetUids" to targetUids,
-        "createdAt" to FieldValue.serverTimestamp()
+        "createdAt" to FieldValue.serverTimestamp(),
+
+        // ✅ TTL: Firestore ימחק את ההודעה אוטומטית אחרי 30 יום
+        "expiresAt" to Timestamp(Date(expiresAtMillis))
+    )
+
+    android.util.Log.e(
+        "KMI_COACH_BROADCAST",
+        "persist start authorUid=$currentUid region=$region branch=$branch targetUids=$targetUids message=$message"
     )
 
     db.collection("coachBroadcasts")
         .add(data)
-        .addOnSuccessListener { onResult(true, null) }
-        .addOnFailureListener { e -> onResult(false, e) }
+        .addOnSuccessListener { docRef ->
+            android.util.Log.e(
+                "KMI_COACH_BROADCAST",
+                "persist SUCCESS docId=${docRef.id} targetUids=$targetUids"
+            )
+            onResult(true, null)
+        }
+        .addOnFailureListener { e ->
+            android.util.Log.e(
+                "KMI_COACH_BROADCAST",
+                "persist FAILED targetUids=$targetUids",
+                e
+            )
+            onResult(false, e)
+        }
 }
 
 // ייצוג נמען אחד ברשימת הקבוצה
@@ -106,14 +129,24 @@ fun CoachBroadcastScreen(
     defaultRegion: String?,
     defaultBranch: String?,
     onBack: () -> Unit,
+    onHome: () -> Unit,
 
-    // ✅ פעולות פלטפורמה (Android/iOS/desktop)
+    // ✅ פעולות פלטפורמה
     onOpenSms: (numbers: List<String>, message: String) -> Unit = { _, _ -> },
     onShareText: (message: String) -> Unit = {},
-    // 👈 עכשיו גם מקבל רשימת UIDs של נמענים שנבחרו
+
+    // ✅ מסך אמת: ברירת מחדל שומרת בפועל ל-Firestore
     onPersistBroadcast: (region: String, branch: String, message: String, targetUids: List<String>) -> Unit =
-        { _, _, _, _ -> }
+        { r, b, m, u ->
+            persistCoachBroadcast(
+                region = r,
+                branch = b,
+                message = m,
+                targetUids = u
+            )
+        }
 ) {
+
     var region by remember { mutableStateOf(defaultRegion.orEmpty()) }
     var branch by remember { mutableStateOf(defaultBranch.orEmpty()) }
     var message by remember { mutableStateOf("") }
@@ -208,6 +241,7 @@ fun CoachBroadcastScreen(
                 val q = db.collection("users")
                     .whereEqualTo("region", regionNorm)
                     .whereArrayContains("branches", cand)
+                    .whereEqualTo("role", "trainee")
                     .whereEqualTo("isActive", true)
 
                 val test = runCatching { q.limit(1).get().await() }.getOrNull()
@@ -219,6 +253,7 @@ fun CoachBroadcastScreen(
                 val q = db.collection("users")
                     .whereEqualTo("region", regionNorm)
                     .whereEqualTo("branchesCsv", cand)
+                    .whereEqualTo("role", "trainee")
                     .whereEqualTo("isActive", true)
 
                 val test = runCatching { q.limit(1).get().await() }.getOrNull()
@@ -230,6 +265,7 @@ fun CoachBroadcastScreen(
                 val q = db.collection("users")
                     .whereEqualTo("region", regionNorm)
                     .whereEqualTo("branch", cand)
+                    .whereEqualTo("role", "trainee")
                     .whereEqualTo("isActive", true)
 
                 val test = runCatching { q.limit(1).get().await() }.getOrNull()
@@ -240,6 +276,7 @@ fun CoachBroadcastScreen(
             return db.collection("users")
                 .whereEqualTo("region", regionNorm)
                 .whereArrayContains("branches", branchCandidates.first())
+                .whereEqualTo("role", "trainee")
                 .whereEqualTo("isActive", true)
         }
 
@@ -249,24 +286,9 @@ fun CoachBroadcastScreen(
         }
     }
 
-    val uiRecipients = remember(recipients, region, branch) {
-        if (!DemoPrivacy.ENABLED) {
-            recipients
-        } else {
-            recipients.mapIndexed { index, r ->
-                val demo = DemoTrainees.trainees.getOrNull(index)
-                r.copy(
-                    name = demo?.name ?: "מתאמן ${index + 1}",
-                    phone = buildString {
-                        append("אזור: ")
-                        append(region.ifBlank { "—" })
-                        append(" • סניף: ")
-                        append(branch.ifBlank { "—" })
-                    }
-                )
-            }
-        }
-    }
+    // ✅ מסך אמת: אין DemoPrivacy ואין DemoTrainees.
+    // הרשימה המוצגת היא הרשימה האמיתית שנשלפה מ-Firestore.
+    val uiRecipients = recipients
 
     // נמענים שנבחרו (גם טלפונים וגם UIDs)
     val selectedRecipients = recipients.filter { it.selected }
@@ -275,13 +297,45 @@ fun CoachBroadcastScreen(
 
     val allSelected = recipients.isNotEmpty() && recipients.all { it.selected }
 
-    // שמירת השידור עם ה־UIDs שנבחרו (ל־Firestore / Cloud Function)
+    val sendButtonText = when {
+        selectedNumbers.isEmpty() -> "בחר מתאמנים לשליחה"
+        allSelected -> "שליחת הודעה לכל המתאמנים"
+        selectedNumbers.size == 1 -> "שליחת הודעה למתאמן שנבחר"
+        else -> "שליחת הודעה ל-${selectedNumbers.size} מתאמנים"
+    }
+
+    // שמירת השידור עם ה־UIDs שנבחרו ל-Firestore
     fun saveBroadcast() {
-        onPersistBroadcast(
-            region.trim(),
-            branch.trim(),
-            message.trim(),
-            selectedUids
+        val cleanRegion = region.trim()
+        val cleanBranch = branch.trim()
+        val cleanMessage = message.trim()
+
+        android.util.Log.e(
+            "KMI_COACH_BROADCAST",
+            "saveBroadcast clicked selected=${selectedRecipients.size} uids=$selectedUids names=${selectedRecipients.map { it.name }}"
+        )
+
+        // ✅ שמירה ודאית מתוך המסך עצמו.
+        // כך גם אם הניווט מעביר onPersistBroadcast ריק/ישן, עדיין יווצר מסמך ב-coachBroadcasts.
+        persistCoachBroadcast(
+            region = cleanRegion,
+            branch = cleanBranch,
+            message = cleanMessage,
+            targetUids = selectedUids,
+            onResult = { ok, error ->
+                if (ok) {
+                    android.util.Log.e(
+                        "KMI_COACH_BROADCAST",
+                        "saveBroadcast callback SUCCESS selected=${selectedRecipients.size} uids=$selectedUids"
+                    )
+                } else {
+                    android.util.Log.e(
+                        "KMI_COACH_BROADCAST",
+                        "saveBroadcast callback FAILED selected=${selectedRecipients.size} uids=$selectedUids",
+                        error
+                    )
+                }
+            }
         )
     }
 
@@ -316,9 +370,11 @@ fun CoachBroadcastScreen(
 
             il.kmi.app.ui.KmiTopBar(
                 title = "שידור הודעה לקבוצה",
+                onHome = onHome,
                 onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
                 showRoleStatus = false,
                 lockSearch = true,
+                lockHome = false,
                 showBottomActions = true,
                 currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
                 onToggleLanguage = {
@@ -569,12 +625,12 @@ fun CoachBroadcastScreen(
                                 selectedNumbers.isEmpty() -> {
                                     snackbarHostState.showSnackbar("לא נבחרו נמענים – סמן לפחות מתאמן אחד")
                                 }
-                                DemoPrivacy.ENABLED -> {
-                                    snackbarHostState.showSnackbar(
-                                        "מצב דמו פעיל – לא נשלחה הודעת SMS אמיתית"
-                                    )
-                                }
                                 else -> {
+                                    android.util.Log.e(
+                                        "KMI_COACH_BROADCAST",
+                                        "send button confirmed message='${message.trim()}' selectedNumbers=$selectedNumbers selectedUids=$selectedUids"
+                                    )
+
                                     saveBroadcast()
                                     onOpenSms(selectedNumbers, message)
                                     snackbarHostState.showSnackbar(
@@ -587,8 +643,8 @@ fun CoachBroadcastScreen(
                     enabled = message.isNotBlank() && selectedNumbers.isNotEmpty(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        .heightIn(min = 58.dp),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
                     colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF0EA5E9),
                         contentColor = Color.White,
@@ -602,13 +658,20 @@ fun CoachBroadcastScreen(
                     border = BorderStroke(1.dp, Color(0xFF67E8F9))
                 ) {
                     Text(
-                        text = "שליחת הודעה לכל המתאמנים המסומנים",
+                        text = sendButtonText,
                         color = Color(0xFFE0F2FE),
                         style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                        letterSpacing = 0.5.sp
+                        letterSpacing = 0.3.sp,
+                        maxLines = 2,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
+
+                Spacer(Modifier.height(84.dp))
             }
         }
     }

@@ -82,8 +82,8 @@ class BillingRepository(
     private val productIds = listOf(
         SubscriptionProducts.REGULAR_MONTHLY,
         SubscriptionProducts.REGULAR_YEARLY,
-        SubscriptionProducts.MEMBER_MONTHLY,
-        SubscriptionProducts.MEMBER_YEARLY
+      //  SubscriptionProducts.MEMBER_MONTHLY,
+      //  SubscriptionProducts.MEMBER_YEARLY
     )
 
     private val cachedProductDetails = linkedMapOf<String, ProductDetails>()

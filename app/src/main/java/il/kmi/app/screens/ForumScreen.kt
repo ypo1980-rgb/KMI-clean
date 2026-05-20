@@ -63,6 +63,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
@@ -486,83 +488,314 @@ fun ForumScreen(
     }
 
     // ================== משתתפים בפורום — משתמשים אמיתיים מ-Firestore ==================
-    // מסך אמת: אין שימוש ב-DemoTrainees. המשתתפים נטענים לפי סניף המשתמש.
-    DisposableEffect(branch, fullName, email) {
+    // מסך אמת: אין שימוש ב-DemoTrainees.
+    // חשוב: משתמשים יכולים לשמור סניף ב-branch / branches / branchesCsv,
+    // וגם עם סוגי מקפים שונים. לכן לא מספיק whereEqualTo("branch", branch).
+    LaunchedEffect(branch, fullName, email) {
         if (branch.isBlank()) {
             participantsByUsers = emptyList()
-            onDispose { }
-        } else {
-            val currentUid = FirebaseAuth.getInstance().currentUser?.uid
-            val currentEmail = email.trim()
+            return@LaunchedEffect
+        }
 
-            val registration = db.collection("users")
-                .whereEqualTo("branch", branch)
-                .addSnapshotListener { snap, error ->
-                    if (error != null) {
-                        android.util.Log.e(
-                            "KMI_FORUM_USERS",
-                            "Failed loading real forum participants for branch=$branch",
-                            error
-                        )
-                        participantsByUsers = emptyList()
-                        return@addSnapshotListener
+        val currentUid = FirebaseAuth.getInstance().currentUser?.uid
+        val currentEmail = email.trim()
+        val currentName = fullName.trim()
+
+        fun String.normForum(): String {
+            val t = trim()
+            val sb = StringBuilder(t.length)
+            var lastWasWs = false
+
+            for (ch0 in t) {
+                val ch = when (ch0) {
+                    '-', '–', '—', '־' -> '-'
+                    else -> ch0
+                }
+
+                val ws = ch.isWhitespace()
+                if (ws) {
+                    if (!lastWasWs) sb.append(' ')
+                } else {
+                    sb.append(ch)
+                }
+                lastWasWs = ws
+            }
+
+            return sb.toString().trim()
+        }
+
+        fun String.swapDash(to: Char): String = buildString(length) {
+            for (ch in this@swapDash) {
+                append(
+                    when (ch) {
+                        '-', '–', '—', '־' -> to
+                        else -> ch
+                    }
+                )
+            }
+        }
+
+        fun splitTokensNorm(raw: String?): List<String> {
+            if (raw.isNullOrBlank()) return emptyList()
+
+            return raw
+                .replace(" • ", ",")
+                .replace("|", ",")
+                .replace("\n", ",")
+                .split(',', ';', '；')
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .map { it.normForum() }
+        }
+
+        fun DocumentSnapshot.userNameOrNull(): String? {
+            val full =
+                getString("fullName")
+                    ?: getString("name")
+                    ?: getString("displayName")
+                    ?: getString("email")
+
+            return full?.trim()?.takeIf { it.isNotBlank() }
+        }
+
+        fun DocumentSnapshot.roleText(): String {
+            return (getString("role")
+                ?: getString("userType")
+                ?: getString("type")
+                ?: "")
+                .trim()
+                .lowercase()
+        }
+
+        fun DocumentSnapshot.isAllowedForumRole(): Boolean {
+            val role = roleText()
+
+            return role.isBlank() ||
+                    role.contains("trainee") ||
+                    role.contains("coach") ||
+                    role.contains("trainer") ||
+                    role.contains("instructor") ||
+                    role.contains("מתאמן") ||
+                    role.contains("מאמן")
+        }
+
+        fun DocumentSnapshot.branchTokensNorm(): List<String> {
+            val out = mutableListOf<String>()
+
+            val branchesList = (get("branches") as? List<*>)
+                ?.mapNotNull { it?.toString()?.trim() }
+                .orEmpty()
+
+            out.addAll(branchesList.map { it.normForum() })
+            out.addAll(splitTokensNorm(getString("branchesCsv")))
+            out.addAll(splitTokensNorm(getString("branch")))
+            out.addAll(splitTokensNorm(getString("activeBranch")))
+            out.addAll(splitTokensNorm(getString("active_branch")))
+
+            return out.filter { it.isNotBlank() }.distinct()
+        }
+
+        fun matchesBranch(tokens: List<String>, candidates: Set<String>): Boolean {
+            if (tokens.isEmpty() || candidates.isEmpty()) return false
+
+            return tokens.any { tok ->
+                tok in candidates ||
+                        candidates.any { cand ->
+                            cand.length >= 4 &&
+                                    tok.length >= 4 &&
+                                    (tok.contains(cand) || cand.contains(tok))
+                        }
+            }
+        }
+
+        suspend fun fetchUsersFor(branchValue: String): List<DocumentSnapshot> {
+            val col = db.collection("users")
+            val out = mutableListOf<DocumentSnapshot>()
+
+            runCatching {
+                out.addAll(
+                    col.whereArrayContains("branches", branchValue)
+                        .get()
+                        .await()
+                        .documents
+                )
+            }
+
+            runCatching {
+                out.addAll(
+                    col.whereEqualTo("branchesCsv", branchValue)
+                        .get()
+                        .await()
+                        .documents
+                )
+            }
+
+            runCatching {
+                out.addAll(
+                    col.whereEqualTo("branch", branchValue)
+                        .get()
+                        .await()
+                        .documents
+                )
+            }
+
+            runCatching {
+                out.addAll(
+                    col.whereEqualTo("activeBranch", branchValue)
+                        .get()
+                        .await()
+                        .documents
+                )
+            }
+
+            runCatching {
+                out.addAll(
+                    col.whereEqualTo("active_branch", branchValue)
+                        .get()
+                        .await()
+                        .documents
+                )
+            }
+
+            return out
+        }
+
+        val branchCandidates = listOf(
+            branch,
+            branch.swapDash('-'),
+            branch.swapDash('–'),
+            branch.swapDash('—'),
+            branch.swapDash('־'),
+            branch.replace("  ", " ")
+        ).map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        android.util.Log.e(
+            "KMI_FORUM_USERS",
+            "loading participants branch=$branch candidates=$branchCandidates"
+        )
+
+        scope.launch {
+            try {
+                var docs = branchCandidates
+                    .flatMap { cand -> fetchUsersFor(cand) }
+                    .distinctBy { it.id }
+
+                if (docs.isEmpty()) {
+                    android.util.Log.w(
+                        "KMI_FORUM_USERS",
+                        "direct query returned 0 -> fallback all users and filter client-side"
+                    )
+
+                    val all = mutableListOf<DocumentSnapshot>()
+                    val col = db.collection("users")
+
+                    var last: DocumentSnapshot? = null
+
+                    while (true) {
+                        var q = col
+                            .orderBy(FieldPath.documentId())
+                            .limit(1000)
+
+                        if (last != null) {
+                            q = q.startAfter(last!!)
+                        }
+
+                        val snap = q.get().await()
+                        val page = snap.documents
+
+                        if (page.isEmpty()) break
+
+                        all.addAll(page)
+                        last = page.last()
+
+                        if (all.size >= 5000) break
                     }
 
-                    val realParticipants = snap?.documents
-                        ?.mapNotNull { doc ->
-                            val role = doc.getString("role").orEmpty().trim().lowercase()
+                    val candNorm = branchCandidates.map { it.normForum() }.toSet()
 
-                            // מציגים בפורום בעיקר מתאמנים ומאמנים.
-                            // אם אין role במסמך, לא נפסול כדי לא להעלים משתמשים קיימים ישנים.
-                            val isAllowedRole =
-                                role.isBlank() ||
-                                        role.contains("trainee") ||
-                                        role.contains("coach") ||
-                                        role.contains("מתאמן") ||
-                                        role.contains("מאמן")
+                    docs = all.filter { doc ->
+                        matchesBranch(doc.branchTokensNorm(), candNorm)
+                    }.distinctBy { it.id }
 
-                            if (!isAllowedRole) return@mapNotNull null
-
-                            val docName =
-                                doc.getString("fullName")
-                                    ?: doc.getString("name")
-                                    ?: doc.getString("displayName")
-                                    ?: doc.getString("email")
-                                    ?: ""
-
-                            val cleanName = docName.trim()
-                            if (cleanName.isBlank()) return@mapNotNull null
-
-                            val docEmail = doc.getString("email").orEmpty().trim()
-                            val docUid =
-                                doc.getString("uid")
-                                    ?: doc.getString("authUid")
-                                    ?: doc.id
-
-                            ForumParticipantUi(
-                                id = docUid.ifBlank { doc.id },
-                                name = cleanName,
-                                isMe = (
-                                        (currentUid != null && docUid == currentUid) ||
-                                                (currentEmail.isNotBlank() && docEmail == currentEmail) ||
-                                                cleanName == fullName.trim()
-                                        )
-                            )
-                        }
-                        ?.distinctBy { it.id }
-                        ?.sortedBy { it.name }
-                        ?: emptyList()
-
-                    participantsByUsers = realParticipants
-
-                    android.util.Log.e(
+                    android.util.Log.w(
                         "KMI_FORUM_USERS",
-                        "Forum participants loaded from Firestore count=${realParticipants.size} branch=$branch"
+                        "fallback matched docs=${docs.size} from all=${all.size}"
                     )
                 }
 
-            onDispose {
-                registration.remove()
+                fun normalizeParticipantName(value: String): String {
+                    return value
+                        .trim()
+                        .lowercase()
+                        .replace("‏", "")
+                        .replace("יובל פולק", "יובל פולק")
+                        .replace(Regex("\\s+"), " ")
+                }
+
+                fun DocumentSnapshot.participantUniqueKey(): String {
+                    val docUid = getString("uid")
+                        ?: getString("authUid")
+                        ?: ""
+
+                    val docEmail = getString("email").orEmpty().trim().lowercase()
+                    val docPhone = getString("phone").orEmpty().trim()
+                    val docName = userNameOrNull().orEmpty()
+
+                    return when {
+                        docUid.isNotBlank() -> "uid:${docUid.trim()}"
+                        docEmail.isNotBlank() -> "email:$docEmail"
+                        docPhone.isNotBlank() -> "phone:$docPhone"
+                        docName.isNotBlank() -> "name:${normalizeParticipantName(docName)}"
+                        else -> "doc:${id}"
+                    }
+                }
+
+                val realParticipants = docs
+                    .asSequence()
+                    .filter { it.isAllowedForumRole() }
+                    .filter { it.userNameOrNull()?.isNotBlank() == true }
+                    .groupBy { it.participantUniqueKey() }
+                    .values
+                    .mapNotNull { samePersonDocs ->
+                        val doc = samePersonDocs.firstOrNull() ?: return@mapNotNull null
+                        val cleanName = doc.userNameOrNull() ?: return@mapNotNull null
+
+                        val docEmail = doc.getString("email").orEmpty().trim()
+                        val docUid =
+                            doc.getString("uid")
+                                ?: doc.getString("authUid")
+                                ?: doc.id
+
+                        ForumParticipantUi(
+                            id = docUid.ifBlank { doc.id },
+                            name = cleanName,
+                            isMe = (
+                                    (currentUid != null && docUid == currentUid) ||
+                                            (currentEmail.isNotBlank() && docEmail == currentEmail) ||
+                                            (currentName.isNotBlank() && cleanName.trim() == currentName)
+                                    )
+                        )
+                    }
+                    .distinctBy {
+                        normalizeParticipantName(it.name)
+                    }
+                    .sortedBy { it.name }
+                    .toList()
+
+                participantsByUsers = realParticipants
+
+                android.util.Log.e(
+                    "KMI_FORUM_USERS",
+                    "Forum participants loaded from Firestore count=${realParticipants.size} branch=$branch names=${realParticipants.map { it.name }}"
+                )
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "KMI_FORUM_USERS",
+                    "Failed loading real forum participants for branch=$branch",
+                    e
+                )
                 participantsByUsers = emptyList()
             }
         }

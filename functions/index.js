@@ -132,99 +132,158 @@ exports.onCoachBroadcastCreated = functions.firestore
     const data = snap.data() || {};
     const broadcastId = context.params.broadcastId;
 
-    const text = (data.text || "").toString();
-    const region = data.region || "";
-    const branch = data.branch || "";
-    const groupKey = data.groupKey || "";
+    const text = (data.text || data.message || "").toString().trim();
+    const region = (data.region || "").toString();
+    const branch = (data.branch || "").toString();
+    const groupKey = (data.groupKey || "").toString();
+    const coachName = (data.coachName || data.coach_name || "המאמן").toString();
+    const authorUid = (data.authorUid || data.coachUid || "").toString();
+
+    const targetUidsRaw = Array.isArray(data.targetUids) ? data.targetUids : [];
+    const targetUids = [...new Set(
+      targetUidsRaw
+        .map((v) => (v || "").toString().trim())
+        .filter((v) => v.length > 0)
+        .filter((v) => v !== authorUid)
+    )];
 
     console.log("New coach broadcast created:", {
       broadcastId,
       region,
       branch,
       groupKey,
+      authorUid,
+      targetUidsCount: targetUids.length,
       textPreview: text.slice(0, 80),
     });
 
-    if (!groupKey) {
-      console.log("No groupKey on coach broadcast, skipping push");
+    if (!text) {
+      console.log("Coach broadcast has no text, skipping push", { broadcastId });
       return null;
     }
 
-    // ===== 1. שליפת המשתמשים בקבוצה הזו =====
-    let usersSnap;
-    try {
-      // ניסיון ראשון: לפי שם הקבוצה בשדה groups
-      usersSnap = await db
-        .collection("users")
-        .where("groups", "array-contains", groupKey)
-        .get();
-
-      // אם אין אף משתמש – ננסה לפי branches (שם סניף / סניף+קבוצה)
-      if (usersSnap.empty) {
-        console.log(
-          "No users found by groups for coach broadcast, trying branches with groupKey:",
-          groupKey
-        );
-
-        usersSnap = await db
-          .collection("users")
-          .where("branches", "array-contains", groupKey)
-          .get();
-      }
-    } catch (e) {
-      console.error("Failed to query users for coach broadcast:", e);
+    if (targetUids.length === 0) {
+      console.log("Coach broadcast has no targetUids, skipping push", { broadcastId });
       return null;
     }
 
-    if (usersSnap.empty) {
-      console.log("No users found for coach broadcast group:", groupKey);
-      return null;
-    }
+    // ===== 1. שליפת fcmToken לפי targetUids =====
+    const tokenResults = await Promise.all(
+      targetUids.map(async (uid) => {
+        try {
+          const userDoc = await db.collection("users").doc(uid).get();
 
-    const tokens = [];
-    usersSnap.forEach((doc) => {
-      const t = doc.get("fcmToken");
-      if (t) tokens.push(t);
-    });
+          if (!userDoc.exists) {
+            console.log("Target user not found", { uid });
+            return [];
+          }
+
+          const user = userDoc.data() || {};
+          const tokens = [];
+
+          const singleToken = (user.fcmToken || "").toString().trim();
+          if (singleToken) tokens.push(singleToken);
+
+          if (Array.isArray(user.fcmTokens)) {
+            user.fcmTokens.forEach((token) => {
+              const clean = (token || "").toString().trim();
+              if (clean) tokens.push(clean);
+            });
+          }
+
+          return tokens;
+        } catch (e) {
+          console.error("Failed reading target user for coach broadcast", {
+            uid,
+            error: String(e),
+          });
+          return [];
+        }
+      })
+    );
+
+    const tokens = [...new Set(tokenResults.flat())];
 
     if (tokens.length === 0) {
-      console.log("No FCM tokens for users in coach broadcast");
+      console.log("No FCM tokens found for coach broadcast targets", {
+        broadcastId,
+        targetUids,
+      });
+
+      await snap.ref.update({
+        pushStatus: "no_tokens",
+        pushCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => null);
+
       return null;
     }
 
-    // ===== 2. בניית הודעת ה-Push =====
-    const title = "הודעה חדשה מהמאמן";
-    const body = text.slice(0, 100); // מקצרים אם צריך
+    // ===== 2. בניית הודעת Push =====
+    const body = text.length > 120 ? `${text.slice(0, 120)}...` : text;
 
-    const payload = {
-      notification: {
-        title,
-        body,
-      },
-      data: {
-        type: "coach_broadcast",
-        broadcastId,
-        region,
-        branch,
-        groupKey,
-      },
-    };
-
-    // ===== 3. שליחה לכל ה-tokens =====
     try {
       const res = await admin.messaging().sendEachForMulticast({
         tokens,
-        ...payload,
+        notification: {
+          title: `הודעה חדשה מהמאמן ${coachName}`,
+          body,
+        },
+        data: {
+          type: "coach_broadcast",
+          broadcastId: broadcastId,
+          region: region,
+          branch: branch,
+          groupKey: groupKey,
+          click_action: "OPEN_HOME",
+        },
+        android: {
+          priority: "high",
+          notification: {
+            channelId: "coach_broadcasts",
+            sound: "default",
+            clickAction: "OPEN_HOME",
+          },
+        },
       });
 
-      console.log(
-        `Coach broadcast push sent to ${tokens.length} tokens. ` +
-          `success=${res.successCount}, failure=${res.failureCount}`
-      );
+      console.log("Coach broadcast push sent:", {
+        broadcastId,
+        targetUidsCount: targetUids.length,
+        tokensCount: tokens.length,
+        successCount: res.successCount,
+        failureCount: res.failureCount,
+      });
+
+      await snap.ref.update({
+        pushStatus: "sent",
+        pushSuccessCount: res.successCount,
+        pushFailureCount: res.failureCount,
+        pushSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch((e) => {
+        console.error("Failed updating push status", e);
+      });
+
+      res.responses.forEach((r, index) => {
+        if (!r.success) {
+          console.error("Coach broadcast token failed:", {
+            broadcastId,
+            tokenIndex: index,
+            errorCode: r.error && r.error.code,
+            errorMessage: r.error && r.error.message,
+          });
+        }
+      });
 
       return null;
     } catch (e) {
       console.error("Failed to send coach broadcast FCM:", e);
+
+      await snap.ref.update({
+        pushStatus: "failed",
+        pushError: String(e),
+        pushFailedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => null);
+
       return null;
     }
   });

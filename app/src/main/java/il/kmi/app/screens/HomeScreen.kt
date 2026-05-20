@@ -81,6 +81,7 @@ import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.sp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.subscription.KmiAccess
@@ -629,14 +630,35 @@ fun HomeScreen(
 
                         val reg = query.addSnapshotListener { snap, e ->
                             if (e != null) {
+                                android.util.Log.e(
+                                    "KMI_HOME_BROADCAST",
+                                    "coachBroadcast listener FAILED currentUid=$currentUid",
+                                    e
+                                )
                                 // אם יש שגיאה – לא מוחקים את ההודעה האחרונה שכבר מוצגת
                                 return@addSnapshotListener
                             }
+
+                            android.util.Log.e(
+                                "KMI_HOME_BROADCAST",
+                                "coachBroadcast snap currentUid=$currentUid size=${snap?.size() ?: -1}"
+                            )
+
                             if (snap != null && !snap.isEmpty) {
                                 val doc = snap.documents.first()
+
+                                android.util.Log.e(
+                                    "KMI_HOME_BROADCAST",
+                                    "coachBroadcast latest id=${doc.id} text=${doc.getString("text")} targetUids=${doc.get("targetUids")}"
+                                )
+
                                 lastCoachMessage = doc.getString("text")
+                                    ?: doc.getString("message")
+
                                 lastCoachFrom = doc.getString("coachName")
                                     ?: doc.getString("coach_name")
+                                            ?: "המאמן"
+
                                 lastCoachSentAt = doc.getTimestamp("createdAt")?.toDate()
                             } else {
                                 lastCoachMessage = null
@@ -1076,22 +1098,24 @@ fun HomeScreen(
                     return holidayDates.contains(d)
                 }
 
-                val nowCal = remember {
-                    java.util.Calendar.getInstance()
+                fun upcomingWindowStartMillis(): Long {
+                    return java.util.Calendar.getInstance().timeInMillis
                 }
 
-                val weekEndCal = remember {
-                    (java.util.Calendar.getInstance()).apply {
+                fun upcomingWindowEndMillis(): Long {
+                    return java.util.Calendar.getInstance().apply {
                         add(java.util.Calendar.DAY_OF_YEAR, 6)
                         set(java.util.Calendar.HOUR_OF_DAY, 23)
                         set(java.util.Calendar.MINUTE, 59)
                         set(java.util.Calendar.SECOND, 59)
                         set(java.util.Calendar.MILLISECOND, 999)
-                    }
+                    }.timeInMillis
                 }
 
-                fun isWithinCurrentWeek(cal: java.util.Calendar): Boolean {
-                    return cal.timeInMillis in nowCal.timeInMillis..weekEndCal.timeInMillis
+                fun isWithinUpcomingSevenDays(cal: java.util.Calendar): Boolean {
+                    val start = upcomingWindowStartMillis()
+                    val end = upcomingWindowEndMillis()
+                    return cal.timeInMillis in start..end
                 }
 
                 fun branchScheduleVariants(branch: String): List<String> {
@@ -1258,7 +1282,7 @@ fun HomeScreen(
                                 if (dbItems.isNotEmpty()) {
                                     val validDbItems = dbItems
                                         .map { it.copy(cal = rollForwardIfPast(it.cal, 60)) }
-                                        .filter { isWithinCurrentWeek(it.cal) }
+                                        .filter { isWithinUpcomingSevenDays(it.cal) }
 
                                     android.util.Log.e(
                                         "KMI_HOME_SCHEDULE",
@@ -1335,7 +1359,7 @@ fun HomeScreen(
 
                                 val validFallbackItems = fallbackItems
                                     .map { it.copy(cal = rollForwardIfPast(it.cal, 60)) }
-                                    .filter { isWithinCurrentWeek(it.cal) }
+                                    .filter { isWithinUpcomingSevenDays(it.cal) }
 
                                 android.util.Log.e(
                                     "KMI_HOME_SCHEDULE",
@@ -1370,20 +1394,25 @@ fun HomeScreen(
                         result
                     }
 
-                val blockedWeekTrainings = remember(currentWeekCandidates) {
-                    currentWeekCandidates.filter { isBlockedHolidayDate(it.cal) }
-                }
+                data class HomeTrainingUi(
+                    val training: TrainingData,
+                    val isCancelledByHoliday: Boolean
+                )
 
-                val upcoming: List<TrainingData> = remember(currentWeekCandidates) {
+                val upcoming: List<HomeTrainingUi> = remember(currentWeekCandidates) {
                     currentWeekCandidates
-                        .filterNot { isBlockedHolidayDate(it.cal) }
+                        .sortedBy { it.cal.timeInMillis }
                         .take(4)
+                        .map { training ->
+                            HomeTrainingUi(
+                                training = training,
+                                isCancelledByHoliday = isBlockedHolidayDate(training.cal)
+                            )
+                        }
                 }
 
-                val weekBlockedByHoliday = remember(currentWeekCandidates, blockedWeekTrainings) {
-                    currentWeekCandidates.isNotEmpty() &&
-                            blockedWeekTrainings.isNotEmpty() &&
-                            blockedWeekTrainings.size == currentWeekCandidates.size
+                val weekBlockedByHoliday = remember(upcoming) {
+                    upcoming.isNotEmpty() && upcoming.all { it.isCancelledByHoliday }
                 }
 
                 LazyColumn(
@@ -1432,21 +1461,24 @@ fun HomeScreen(
                     } else {
                         items(
                             items = upcoming,
-                            key = { training ->
+                            key = { item ->
                                 buildString {
-                                    append(training.cal.timeInMillis)
+                                    append(item.training.cal.timeInMillis)
                                     append("|")
-                                    append(training.place.orEmpty())
+                                    append(item.training.place.orEmpty())
                                     append("|")
-                                    append(training.address.orEmpty())
+                                    append(item.training.address.orEmpty())
                                     append("|")
-                                    append(training.coach.orEmpty())
+                                    append(item.training.coach.orEmpty())
+                                    append("|holiday=")
+                                    append(item.isCancelledByHoliday)
                                 }
                             }
-                        ) { training ->
+                        ) { item ->
                             TrainingCardCompact(
-                                training = training,
-                                isEnglish = isEnglish
+                                training = item.training,
+                                isEnglish = isEnglish,
+                                isCancelledByHoliday = item.isCancelledByHoliday
                             )
                         }
                         item { Spacer(Modifier.height(6.dp)) }
@@ -2404,7 +2436,8 @@ private fun buildExplanationWithStanceHighlight(
 @Composable
 private fun TrainingCardCompact(
     training: TrainingData,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    isCancelledByHoliday: Boolean = false
 ) {
     val ctx = LocalContext.current
     val haptic = rememberHapticsGlobal()
@@ -2542,13 +2575,20 @@ private fun TrainingCardCompact(
         java.text.SimpleDateFormat("EEEE", locale).format(training.cal.time)
     }
     val dateText = remember(training.cal.timeInMillis, isEnglish) {
-        java.text.SimpleDateFormat("dd/MM/yyyy", locale).format(training.cal.time)
+        java.text.SimpleDateFormat("dd/MM", locale).format(training.cal.time)
     }
     val timeText = remember(training.cal.timeInMillis, durationMin) {
         val fmt = java.text.SimpleDateFormat("HH:mm", locale)
         val start = fmt.format(training.cal.time)
         val end   = fmt.format(java.util.Date(training.cal.timeInMillis + durationMin * 60_000L))
         "$start – $end"
+    }
+    val dateTimeText = remember(dayText, dateText, timeText, isEnglish) {
+        if (isEnglish) {
+            "$dayText $dateText · $timeText"
+        } else {
+            "$dayText $dateText · $timeText"
+        }
     }
 
     @Composable
@@ -2596,7 +2636,7 @@ private fun TrainingCardCompact(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
             val branchLine = remember(training.place, training.address, isEnglish) {
                 val displaySource = training.place
@@ -2612,7 +2652,10 @@ private fun TrainingCardCompact(
 
             Text(
                 text = branchLine,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 14.sp,    // גודל הכותרת של שם המקום
+                    lineHeight = 19.sp
+                ),
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
@@ -2621,33 +2664,49 @@ private fun TrainingCardCompact(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = dayText,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    text = dateText,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-
             Text(
-                text = timeText,
-                style = MaterialTheme.typography.bodySmall,
+                text = dateTimeText,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.6.sp,
+                    lineHeight = 12.sp
+                ),
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            if (isCancelledByHoliday) {
+                Spacer(Modifier.height(4.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFFFFF7ED),
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = Color(0xFFF97316).copy(alpha = 0.35f)
+                    )
+                ) {
+                    Text(
+                        text = if (isEnglish) {
+                            "Training cancelled due to holiday"
+                        } else {
+                            "האימון מבוטל עקב חג"
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF9A3412)
+                    )
+                }
+            }
 
             Spacer(Modifier.height(4.dp))
 
@@ -2759,7 +2818,10 @@ private fun NavigationChip(
                     } else {
                         safeAddress
                     },
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 9.sp,
+                        lineHeight = 13.sp
+                    ),
                     // ✅ לא להשתמש כאן ב-onSurfaceVariant,
                     // כי במצב כהה הוא יוצא בהיר מדי על כרטיס לבן.
                     color = Color(0xFF475569),

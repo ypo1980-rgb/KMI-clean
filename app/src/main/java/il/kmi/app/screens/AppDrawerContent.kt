@@ -42,6 +42,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -481,9 +482,17 @@ fun AppDrawerContent(
                             .padding(horizontal = 4.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (leading != null || autoIcon != null) {
+                            DrawerMenuIconBubble(
+                                icon = autoIcon,
+                                content = leading
+                            )
+                            Spacer(Modifier.width(10.dp))
+                        }
+
                         Column(
                             modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.Start,
+                            horizontalAlignment = Alignment.End,
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
@@ -491,7 +500,7 @@ fun AppDrawerContent(
                                 style = titleTextStyle,
                                 maxLines = 2,
                                 softWrap = true,
-                                textAlign = TextAlign.Start,
+                                textAlign = TextAlign.Right,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -509,7 +518,7 @@ fun AppDrawerContent(
                                         lineHeight = 16.sp,
                                         fontWeight = FontWeight.SemiBold
                                     ),
-                                    textAlign = TextAlign.Start,
+                                    textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -518,14 +527,6 @@ fun AppDrawerContent(
                         if (trailing != null) {
                             Spacer(Modifier.width(8.dp))
                             trailing()
-                        }
-
-                        if (leading != null || autoIcon != null) {
-                            Spacer(Modifier.width(8.dp))
-                            DrawerMenuIconBubble(
-                                icon = autoIcon,
-                                content = leading
-                            )
                         }
                     }
 
@@ -643,9 +644,15 @@ fun AppDrawerContent(
                             .padding(horizontal = 6.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        DrawerMenuIconBubble(
+                            icon = icon
+                        )
+
+                        Spacer(Modifier.width(10.dp))
+
                         Column(
                             modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.Start,
+                            horizontalAlignment = Alignment.End,
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
@@ -654,7 +661,7 @@ fun AppDrawerContent(
                                     color = Color.White,
                                     fontWeight = FontWeight.ExtraBold
                                 ),
-                                textAlign = TextAlign.Start,
+                                textAlign = TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
@@ -668,22 +675,13 @@ fun AppDrawerContent(
                                         color = Color.White.copy(alpha = 0.82f),
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    textAlign = TextAlign.Start,
+                                    textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth(),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
-
-                        Spacer(Modifier.width(10.dp))
-
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = Color(0xFFFF8AD8),
-                            modifier = Modifier.size(20.dp)
-                        )
                     }
 
                     if (showDivider) {
@@ -837,8 +835,56 @@ fun AppDrawerContent(
                             Spacer(Modifier.height(8.dp))
 
                             Column(
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFF1E1B4B).copy(alpha = 0.92f),
+                                                Color(0xFF312E81).copy(alpha = 0.78f),
+                                                Color(0xFF1D4ED8).copy(alpha = 0.36f)
+                                            )
+                                        )
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = Color(0xFFFF8AD8).copy(alpha = 0.22f),
+                                        shape = RoundedCornerShape(24.dp)
+                                    )
+                                    .padding(vertical = 8.dp)
                             ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+
+                                    Spacer(Modifier.width(10.dp))
+
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                    ) {
+                                        Text(
+                                            text = tr("אזור מאמן", "Coach area"),
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 16.sp,
+                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                    thickness = 1.dp,
+                                    color = Color.White.copy(alpha = 0.16f)
+                                )
+
                                 if (isEnglish) {
                                     CoachLineItemEn(
                                         title = "Attendance Report",

@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -12,8 +11,10 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ktx.firestore
+import java.util.Date
 import com.google.firebase.ktx.Firebase
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
@@ -47,6 +48,14 @@ fun NavGraphBuilder.coachNavGraph(
             defaultRegion = regionDefault,
             defaultBranch = branchDefault,
             onBack = { nav.popBackStack() },
+            onHome = {
+                nav.navigate(Route.Home.route) {
+                    popUpTo(Route.Home.route) {
+                        inclusive = false
+                    }
+                    launchSingleTop = true
+                }
+            },
 
             // פתיחת אפליקציית SMS עם כל המספרים המסומנים
             onOpenSms = { numbers, message ->
@@ -100,6 +109,9 @@ fun NavGraphBuilder.coachNavGraph(
                     // נוסיף גם את המאמן עצמו לרשימת היעד, בלי כפילויות
                     val allTargets = (targetUids + uid).distinct()
 
+                    val expiresAtMillis =
+                        System.currentTimeMillis() + 30L * 24L * 60L * 60L * 1000L
+
                     val db = Firebase.firestore
                     val data = hashMapOf(
                         "region" to region,
@@ -115,7 +127,9 @@ fun NavGraphBuilder.coachNavGraph(
                         // נמענים (כולל המאמן)
                         "targetUids" to allTargets,
                         // חותמת זמן
-                        "createdAt" to FieldValue.serverTimestamp()
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        // TTL — מחיקה אוטומטית אחרי 30 יום
+                        "expiresAt" to Timestamp(Date(expiresAtMillis))
                     )
 
                     db.collection("coachBroadcasts")

@@ -1,6 +1,8 @@
 package il.kmi.app
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -16,11 +18,12 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.subscription.BillingRepository
 
-
 // Firebase
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.messaging.FirebaseMessaging
 import il.kmi.app.notifications.CoachGate
 import il.kmi.app.screens.CoachMessageGateScreen
 
@@ -57,6 +60,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         val localizedContext = languageManager.applySavedLanguage(this)
 
         ensureNotificationPermission()
+        ensureCoachBroadcastNotificationChannel()
 
         // 👇 חדש: קליטה מהתראה (גם כשהאפליקציה סגורה)
         handleCoachGateIntent(intent)
@@ -107,6 +111,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
         // Firebase אנונימי + סנכרון branchId (אנדרואיד-נטו כרגע)
         ensureAnonymousAuthAndSyncBranch(userSp)
+
+        // ✅ שמירת FCM Token למשתמש האמיתי של האפליקציה כדי ש-Cloud Function תוכל לשלוח Push
+        setupFcmTokenSync(userSp)
 
         // -------------------- UI --------------------
         setContent {
@@ -219,6 +226,281 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                 arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                 REQUEST_CODE_POST_NOTIFICATIONS
             )
+        }
+    }
+
+    private fun ensureCoachBroadcastNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
+        val channelId = "coach_broadcasts"
+        val channelName = "הודעות מאמן"
+        val channelDescription = "התראות על הודעות חדשות מהמאמן"
+
+        val channel = NotificationChannel(
+            channelId,
+            channelName,
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = channelDescription
+            enableVibration(true)
+            setShowBadge(true)
+        }
+
+        val manager = getSystemService(NotificationManager::class.java)
+        manager?.createNotificationChannel(channel)
+
+        android.util.Log.e(
+            "KMI_FCM_TOKEN",
+            "coach broadcast notification channel ensured id=$channelId"
+        )
+    }
+
+    private fun setupFcmTokenSync(userSp: SharedPreferences) {
+        val auth = FirebaseAuth.getInstance()
+        val db = FirebaseFirestore.getInstance()
+
+        fun cleanPhone(raw: String?): String {
+            return raw
+                .orEmpty()
+                .trim()
+                .replace("-", "")
+                .replace(" ", "")
+        }
+
+        fun localProfileUid(): String {
+            return listOf(
+                userSp.getString("uid", null),
+                userSp.getString("user_uid", null),
+                userSp.getString("firebase_uid", null),
+                userSp.getString("auth_uid", null)
+            )
+                .map { it.orEmpty().trim() }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+        }
+
+        fun localProfileEmail(): String {
+            return listOf(
+                userSp.getString("email", null),
+                userSp.getString("user_email", null)
+            )
+                .map { it.orEmpty().trim() }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+        }
+
+        fun localProfilePhone(): String {
+            return listOf(
+                userSp.getString("phone", null),
+                userSp.getString("phoneNumber", null),
+                userSp.getString("phoneRaw", null),
+                userSp.getString("user_phone", null)
+            )
+                .map { cleanPhone(it) }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+        }
+
+        fun saveTokenToUserDoc(
+            userDocId: String,
+            token: String,
+            reason: String
+        ) {
+            if (userDocId.isBlank()) return
+
+            db.collection("users")
+                .document(userDocId)
+                .set(
+                    mapOf(
+                        "uid" to userDocId,
+                        "fcmToken" to token,
+                        "fcmTokenUpdatedAt" to FieldValue.serverTimestamp()
+                    ),
+                    SetOptions.merge()
+                )
+                .addOnSuccessListener {
+                    android.util.Log.e(
+                        "KMI_FCM_TOKEN",
+                        "fcm token saved userDocId=$userDocId reason=$reason tokenPrefix=${token.take(18)}..."
+                    )
+                }
+                .addOnFailureListener { e ->
+                    android.util.Log.e(
+                        "KMI_FCM_TOKEN",
+                        "failed saving fcm token userDocId=$userDocId reason=$reason",
+                        e
+                    )
+                }
+        }
+
+        fun syncForCurrentProfile() {
+            FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    if (token.isNullOrBlank()) {
+                        android.util.Log.e(
+                            "KMI_FCM_TOKEN",
+                            "fcm token is blank"
+                        )
+                        return@addOnSuccessListener
+                    }
+
+                    val profileUid = localProfileUid()
+                    val profileEmail = localProfileEmail()
+                    val profilePhone = localProfilePhone()
+                    val authUid = auth.currentUser?.uid.orEmpty().trim()
+
+                    android.util.Log.e(
+                        "KMI_FCM_TOKEN",
+                        "resolve target profileUid=$profileUid email=$profileEmail phone=$profilePhone authUid=$authUid"
+                    )
+
+                    // ✅ קודם מחפשים לפי אימייל/טלפון בפרופיל העסקי.
+                    // הסיבה: לפעמים FirebaseAuth uid / uid מקומי הוא ישן או שייך למסמך אחר,
+                    // אבל email/phone מצביעים למסמך המשתמש האמיתי ב-users.
+                    if (profileEmail.isNotBlank()) {
+                        db.collection("users")
+                            .whereEqualTo("email", profileEmail)
+                            .limit(1)
+                            .get()
+                            .addOnSuccessListener { snap ->
+                                val doc = snap.documents.firstOrNull()
+
+                                if (doc != null) {
+                                    saveTokenToUserDoc(
+                                        userDocId = doc.id,
+                                        token = token,
+                                        reason = "email_match"
+                                    )
+                                } else if (profilePhone.isNotBlank()) {
+                                    db.collection("users")
+                                        .whereEqualTo("phone", profilePhone)
+                                        .limit(1)
+                                        .get()
+                                        .addOnSuccessListener { phoneSnap ->
+                                            val phoneDoc = phoneSnap.documents.firstOrNull()
+
+                                            if (phoneDoc != null) {
+                                                saveTokenToUserDoc(
+                                                    userDocId = phoneDoc.id,
+                                                    token = token,
+                                                    reason = "phone_match"
+                                                )
+                                            } else if (authUid.isNotBlank()) {
+                                                saveTokenToUserDoc(
+                                                    userDocId = authUid,
+                                                    token = token,
+                                                    reason = "fallback_auth_uid_after_email_phone"
+                                                )
+                                            } else {
+                                                android.util.Log.e(
+                                                    "KMI_FCM_TOKEN",
+                                                    "no user doc found for email=$profileEmail phone=$profilePhone and no authUid"
+                                                )
+                                            }
+                                        }
+                                        .addOnFailureListener { e ->
+                                            android.util.Log.e(
+                                                "KMI_FCM_TOKEN",
+                                                "phone lookup failed phone=$profilePhone",
+                                                e
+                                            )
+                                        }
+                                } else if (authUid.isNotBlank()) {
+                                    saveTokenToUserDoc(
+                                        userDocId = authUid,
+                                        token = token,
+                                        reason = "fallback_auth_uid_after_email"
+                                    )
+                                } else {
+                                    android.util.Log.e(
+                                        "KMI_FCM_TOKEN",
+                                        "no user doc found for email=$profileEmail and no phone/authUid"
+                                    )
+                                }
+                            }
+                            .addOnFailureListener { e ->
+                                android.util.Log.e(
+                                    "KMI_FCM_TOKEN",
+                                    "email lookup failed email=$profileEmail",
+                                    e
+                                )
+                            }
+
+                        return@addOnSuccessListener
+                    }
+
+                    // 3) אם אין email — חיפוש לפי טלפון
+                    if (profilePhone.isNotBlank()) {
+                        db.collection("users")
+                            .whereEqualTo("phone", profilePhone)
+                            .limit(1)
+                            .get()
+                            .addOnSuccessListener { snap ->
+                                val doc = snap.documents.firstOrNull()
+
+                                if (doc != null) {
+                                    saveTokenToUserDoc(
+                                        userDocId = doc.id,
+                                        token = token,
+                                        reason = "phone_match"
+                                    )
+                                } else if (authUid.isNotBlank()) {
+                                    saveTokenToUserDoc(
+                                        userDocId = authUid,
+                                        token = token,
+                                        reason = "fallback_auth_uid_after_phone"
+                                    )
+                                } else {
+                                    android.util.Log.e(
+                                        "KMI_FCM_TOKEN",
+                                        "no user doc found for phone=$profilePhone and no authUid"
+                                    )
+                                }
+                            }
+                            .addOnFailureListener { e ->
+                                android.util.Log.e(
+                                    "KMI_FCM_TOKEN",
+                                    "phone lookup failed phone=$profilePhone",
+                                    e
+                                )
+                            }
+
+                        return@addOnSuccessListener
+                    }
+
+                    // 4) אם אין email/phone — נשתמש ב-UID המקומי אם קיים.
+                    if (profileUid.isNotBlank()) {
+                        saveTokenToUserDoc(
+                            userDocId = profileUid,
+                            token = token,
+                            reason = "fallback_local_profile_uid"
+                        )
+                    } else if (authUid.isNotBlank()) {
+                        saveTokenToUserDoc(
+                            userDocId = authUid,
+                            token = token,
+                            reason = "fallback_auth_uid_only"
+                        )
+                    } else {
+                        android.util.Log.e(
+                            "KMI_FCM_TOKEN",
+                            "skip fcm token sync - no profile uid/email/phone and no Firebase auth uid"
+                        )
+                    }
+                }
+                .addOnFailureListener { e ->
+                    android.util.Log.e(
+                        "KMI_FCM_TOKEN",
+                        "failed getting fcm token",
+                        e
+                    )
+                }
+        }
+
+        syncForCurrentProfile()
+
+        auth.addAuthStateListener {
+            syncForCurrentProfile()
         }
     }
 

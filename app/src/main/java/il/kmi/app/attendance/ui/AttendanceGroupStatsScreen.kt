@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import il.kmi.app.attendance.data.AttendanceRepository
+import il.kmi.app.attendance.data.AttendanceStatus
 import il.kmi.app.ui.KmiTopBar
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
@@ -101,6 +102,9 @@ fun AttendanceGroupStatsScreen(
 
     // Accordion per month: ברירת מחדל = פתוח
     val expandedByMonth = remember { mutableStateMapOf<YearMonth, Boolean>() }
+
+    // פתיחה/סגירה של פירוט מתאמנים לכל דו"ח
+    val expandedReportDetails = remember { mutableStateMapOf<Long, Boolean>() }
 
     LaunchedEffect(reportsByMonth) {
         reportsByMonth.forEach { (ym, _) ->
@@ -292,28 +296,49 @@ fun AttendanceGroupStatsScreen(
                     if (isExpandedNow) {
                         items(monthReports, key = { it.id }) { r ->
                             val checked = selected[r.id] == true
+                            val detailsExpanded = expandedReportDetails[r.id] == true
 
-                            Row(
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                if (deleteMode) {
-                                    Checkbox(
-                                        checked = checked,
-                                        onCheckedChange = { v -> selected[r.id] = v }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    if (deleteMode) {
+                                        Checkbox(
+                                            checked = checked,
+                                            onCheckedChange = { v -> selected[r.id] = v }
+                                        )
+                                    }
+
+                                    ReportRowCard(
+                                        dateText = r.date.toString(),
+                                        total = r.totalMembers,
+                                        present = r.presentCount,
+                                        excused = r.excusedCount,
+                                        absent = r.absentCount,
+                                        pct = r.percentPresent,
+                                        isEnglish = isEnglish,
+                                        isDetailsExpanded = detailsExpanded,
+                                        onToggleDetails = {
+                                            expandedReportDetails[r.id] = !detailsExpanded
+                                        },
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
 
-                                ReportRowCard(
-                                    dateText = r.date.toString(),
-                                    total = r.totalMembers,
-                                    present = r.presentCount,
-                                    excused = r.excusedCount,
-                                    absent = r.absentCount,
-                                    pct = r.percentPresent,
-                                    isEnglish = isEnglish
-                                )
+                                if (detailsExpanded) {
+                                    ReportAttendanceDetailsCard(
+                                        repo = repo,
+                                        branch = branch,
+                                        groupKey = groupKey,
+                                        date = r.date,
+                                        isEnglish = isEnglish
+                                    )
+                                }
                             }
                         }
                     }
@@ -690,7 +715,10 @@ private fun ReportRowCard(
     excused: Int,
     absent: Int,
     pct: Int,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    isDetailsExpanded: Boolean,
+    onToggleDetails: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
@@ -701,7 +729,7 @@ private fun ReportRowCard(
     )
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         color = Color.White.copy(alpha = 0.10f),
         tonalElevation = 0.dp,
@@ -768,6 +796,180 @@ private fun ReportRowCard(
                 style = MaterialTheme.typography.bodyMedium.merge(textStyle),
                 modifier = Modifier.fillMaxWidth()
             )
+
+            OutlinedButton(
+                onClick = onToggleDetails,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
+            ) {
+                Icon(
+                    imageVector = if (isDetailsExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                    tint = Color.White
+                )
+
+                Spacer(Modifier.padding(horizontal = 4.dp))
+
+                Text(
+                    text = if (isDetailsExpanded) {
+                        tr("סגור רשימת נוכחות", "Hide attendance list")
+                    } else {
+                        tr("פתח רשימת נוכחות", "Show attendance list")
+                    },
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportAttendanceDetailsCard(
+    repo: AttendanceRepository,
+    branch: String,
+    groupKey: String,
+    date: java.time.LocalDate,
+    isEnglish: Boolean
+) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val textStyle = TextStyle(
+        textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    )
+
+    val members by repo.members(branch, groupKey).collectAsState(initial = emptyList())
+    val records by repo.attendanceForDay(branch, groupKey, date).collectAsState(initial = emptyList())
+
+    val statusByMemberId = remember(records) {
+        records.associate { it.memberId to it.status }
+    }
+
+    val presentMembers = remember(members, statusByMemberId) {
+        members.filter { statusByMemberId[it.id] == AttendanceStatus.PRESENT }
+    }
+
+    val excusedMembers = remember(members, statusByMemberId) {
+        members.filter { statusByMemberId[it.id] == AttendanceStatus.EXCUSED }
+    }
+
+    val absentMembers = remember(members, statusByMemberId) {
+        members.filter { member ->
+            val status = statusByMemberId[member.id]
+            status == AttendanceStatus.ABSENT || status == null
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = Color(0xFF020617).copy(alpha = 0.36f),
+        tonalElevation = 0.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = horizontalAlignment
+        ) {
+            Text(
+                text = tr("פירוט נוכחות בדו״ח", "Attendance details"),
+                style = MaterialTheme.typography.titleSmall.merge(textStyle),
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                textAlign = align,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            AttendanceStatusSection(
+                title = tr("הגיעו", "Present"),
+                names = presentMembers.map { it.displayName },
+                emptyText = tr("אין מתאמנים שסומנו הגיעו", "No trainees marked present"),
+                color = Color(0xFF22C55E),
+                isEnglish = isEnglish
+            )
+
+            AttendanceStatusSection(
+                title = tr("מוצדקים", "Excused"),
+                names = excusedMembers.map { it.displayName },
+                emptyText = tr("אין מתאמנים שסומנו מוצדקים", "No trainees marked excused"),
+                color = Color(0xFFF59E0B),
+                isEnglish = isEnglish
+            )
+
+            AttendanceStatusSection(
+                title = tr("לא הגיעו", "Absent"),
+                names = absentMembers.map { it.displayName },
+                emptyText = tr("אין מתאמנים שלא הגיעו", "No absent trainees"),
+                color = Color(0xFFEF4444),
+                isEnglish = isEnglish
+            )
+        }
+    }
+}
+
+@Composable
+private fun AttendanceStatusSection(
+    title: String,
+    names: List<String>,
+    emptyText: String,
+    color: Color,
+    isEnglish: Boolean
+) {
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val textStyle = TextStyle(
+        textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    )
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White.copy(alpha = 0.07f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.45f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = horizontalAlignment
+        ) {
+            Text(
+                text = "$title (${names.size})",
+                style = MaterialTheme.typography.labelLarge.merge(textStyle),
+                fontWeight = FontWeight.Black,
+                color = color,
+                textAlign = align,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (names.isEmpty()) {
+                Text(
+                    text = emptyText,
+                    style = MaterialTheme.typography.bodySmall.merge(textStyle),
+                    color = Color(0xFFCBD5E1),
+                    textAlign = align,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                names.forEach { name ->
+                    Text(
+                        text = "• $name",
+                        style = MaterialTheme.typography.bodyMedium.merge(textStyle),
+                        color = Color.White,
+                        textAlign = align,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
         }
     }
 }

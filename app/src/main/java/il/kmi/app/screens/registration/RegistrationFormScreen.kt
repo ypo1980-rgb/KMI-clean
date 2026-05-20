@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import il.kmi.app.KmiViewModel
@@ -48,6 +49,7 @@ import il.kmi.app.screens.admin.AdminAccess
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.shared.prefs.KmiPrefs
+import il.kmi.app.FcmTokenManager
 
 private const val REGISTRATION_LOG = "KMI_REGISTRATION"
 
@@ -926,82 +928,178 @@ fun RegistrationFormScreen(
         kmiPrefs.username = if (isGoogleAuth) email.trim() else username
         kmiPrefs.password = if (isGoogleAuth) "" else password
 
-        // --- שמירה ל-Firestore: מאגר המשתמשים המרכזי ---
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-        if (uid != null) {
-            // תאריך לידה בפורמט YYYY-MM-DD
+        fun persistRegistrationToFirestore(finalUid: String) {
+            if (finalUid.isBlank()) {
+                Toast.makeText(ctx, "שגיאה בזיהוי המשתמש. נסה שוב.", Toast.LENGTH_LONG).show()
+                Log.e(REGISTRATION_LOG, "persistRegistrationToFirestore failed: blank uid")
+                return
+            }
+
             val birthDate = "%04d-%02d-%02d".format(birthYear, birthMonth, birthDay)
 
-            // ✅ משתמשים באותה רשימה שכבר חושבה ונשמרה ל־SharedPreferences
             val branchesListFinal = branchesListFinalForPrefs
             val groupsListFinal = groupsListFinalForPrefs
 
             val firestoreData = hashMapOf(
-                "uid" to uid,
+                "uid" to finalUid,
                 "role" to roleFinal,
                 "fullName" to fullName,
                 "phone" to phoneFinal,
                 "phoneNumber" to phoneFinal,
                 "phoneRaw" to phone,
                 "email" to email.trim(),
+                "emailLower" to email.trim().lowercase(),
                 "authProvider" to if (isGoogleAuth) "google" else "local",
                 "region" to selectedRegion,
 
-                // ✅ סניפים — רשימה + CSV + פעיל
                 "branches" to branchesListFinal,
                 "branchesCsv" to branchesFinal,
                 "activeBranch" to activeBranchFinal,
+                "branch" to activeBranchFinal,
 
-                // ✅ קבוצות — רשימה + CSV + פעיל
                 "groups" to groupsListFinal,
                 "groupsCsv" to groupsCsv,
                 "primaryGroup" to primaryGroup,
                 "activeGroup" to activeGroupFinal,
+                "group" to activeGroupFinal,
+                "age_group" to activeGroupFinal,
 
                 "birthDate" to birthDate,
                 "gender" to gender,
                 "belt" to beltFinal,
                 "currentBelt" to beltFinal,
 
-// ✅ דגלים ישנים — נשארים לתאימות
                 "profileCompleted" to true,
                 "registrationComplete" to true,
                 "profileCompletedAt" to System.currentTimeMillis(),
 
-// ✅ דגל חדש וקשיח: רק מי שסיים את טופס הרישום החדש יקבל אותו
                 "registrationFormCompleted" to true,
                 "registrationSchemaVersion" to 2,
                 "registrationCompletedBy" to "registration_form_v2",
 
                 "subscribeSms" to subscribeSms,
                 "isActive" to true,
+                "archived" to false,
                 "createdAt" to System.currentTimeMillis(),
                 "updatedAt" to System.currentTimeMillis()
             )
 
             FirebaseFirestore.getInstance()
                 .collection("users")
-                .document(uid)
+                .document(finalUid)
                 .set(firestoreData, SetOptions.merge())
+                .addOnSuccessListener {
+                    Log.e(
+                        REGISTRATION_LOG,
+                        "firestore set users/$finalUid SUCCESS role=$roleFinal belt=$beltFinal phoneLen=${phoneFinal.length}"
+                    )
 
+                    sp.edit()
+                        .putString("uid", finalUid)
+                        .putString("profile_completed_uid", finalUid)
+                        .apply()
+
+                    userSp.edit()
+                        .putString("uid", finalUid)
+                        .putString("profile_completed_uid", finalUid)
+                        .apply()
+
+                    FcmTokenManager.refreshTokenForUserDocId(finalUid)
+
+                    Toast.makeText(ctx, "הרישום נשמר בהצלחה ✅", Toast.LENGTH_SHORT).show()
+
+                    if (roleFinal == "coach") {
+                        val code = "%06d".format(java.security.SecureRandom().nextInt(1_000_000))
+                        coachCode = code
+                        sp.edit().putString("coach_code", code).apply()
+                        userSp.edit().putString("coach_code", code).apply()
+                        showCodeDialog = true
+                    } else {
+                        finishRegistrationFlow()
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e(
+                        REGISTRATION_LOG,
+                        "firestore set users/$finalUid FAILED",
+                        e
+                    )
+                    Toast.makeText(ctx, "שמירת הרישום נכשלה", Toast.LENGTH_LONG).show()
+                }
+        }
+
+        val auth = FirebaseAuth.getInstance()
+        val cleanEmail = email.trim()
+        val cleanPassword = password.trim()
+
+        if (!startAtProfile && !isGoogleAuth) {
             Log.e(
                 REGISTRATION_LOG,
-                "firestore set users/$uid profileCompleted=true registrationComplete=true " +
-                        "registrationFormCompleted=true schema=2 role=$roleFinal belt=$beltFinal phoneLen=${phoneFinal.length}"
+                "creating FirebaseAuth user for new local registration email=$cleanEmail role=$roleFinal"
             )
+
+            auth.signOut()
+
+            auth.createUserWithEmailAndPassword(cleanEmail, cleanPassword)
+                .addOnSuccessListener { result ->
+                    val newUid = result.user?.uid.orEmpty()
+
+                    Log.e(
+                        REGISTRATION_LOG,
+                        "createUserWithEmailAndPassword SUCCESS newUid=$newUid email=$cleanEmail"
+                    )
+
+                    persistRegistrationToFirestore(newUid)
+                }
+                .addOnFailureListener { e ->
+                    if (e is FirebaseAuthUserCollisionException) {
+                        Log.e(
+                            REGISTRATION_LOG,
+                            "email already exists, signing in existing FirebaseAuth user email=$cleanEmail"
+                        )
+
+                        auth.signInWithEmailAndPassword(cleanEmail, cleanPassword)
+                            .addOnSuccessListener { result ->
+                                val existingUid = result.user?.uid.orEmpty()
+
+                                Log.e(
+                                    REGISTRATION_LOG,
+                                    "signInWithEmailAndPassword SUCCESS existingUid=$existingUid email=$cleanEmail"
+                                )
+
+                                persistRegistrationToFirestore(existingUid)
+                            }
+                            .addOnFailureListener { signInError ->
+                                Log.e(
+                                    REGISTRATION_LOG,
+                                    "signInWithEmailAndPassword FAILED email=$cleanEmail",
+                                    signInError
+                                )
+                                Toast.makeText(
+                                    ctx,
+                                    "המייל כבר קיים אך הסיסמה אינה תואמת",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                    } else {
+                        Log.e(
+                            REGISTRATION_LOG,
+                            "createUserWithEmailAndPassword FAILED email=$cleanEmail",
+                            e
+                        )
+                        Toast.makeText(
+                            ctx,
+                            "יצירת משתמש חדש נכשלה: ${e.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+
+            return
         }
 
-        Toast.makeText(ctx, "הרישום נשמר בהצלחה ✅", Toast.LENGTH_SHORT).show()
-
-        if (roleFinal == "coach") {
-            val code = "%06d".format(java.security.SecureRandom().nextInt(1_000_000))
-            coachCode = code
-            sp.edit().putString("coach_code", code).apply()
-            userSp.edit().putString("coach_code", code).apply()
-            showCodeDialog = true
-        } else {
-            finishRegistrationFlow()
-        }
+        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        persistRegistrationToFirestore(uid)
     }
 
     // ====== UI ======

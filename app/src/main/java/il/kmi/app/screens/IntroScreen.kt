@@ -725,7 +725,10 @@ fun IntroScreen(
                             onContinue()
                         },
                         enabled = !isGoogleLoading,
-                        modifier = Modifier.heightIn(min = 34.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 34.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = if (isEnglish) {
@@ -735,9 +738,11 @@ fun IntroScreen(
                             },
                             color = Color.White.copy(alpha = 0.88f),
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 18.sp,
+                            fontSize = if (isEnglish) 13.sp else 15.sp,
                             textAlign = TextAlign.Center,
-                            maxLines = 2
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }

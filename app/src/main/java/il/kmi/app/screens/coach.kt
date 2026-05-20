@@ -27,6 +27,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -35,6 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,10 +64,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
-import il.kmi.app.privacy.DemoPrivacy
-import il.kmi.app.privacy.DemoTrainees
 import android.app.Activity
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -80,6 +83,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
+import androidx.compose.material3.rememberDatePickerState
 
 //=========================================================================
 
@@ -109,7 +113,15 @@ data class TraineeProfile(
     val attendancePct: Int = 0,
     val branch: String = "",
     val groupKey: String = "",
+
+    // ✅ מזהה מסמך אמיתי ב-Firestore: users/{userDocId}
+    // כל שמירה של תאריכים / הערות תתבצע לפיו ולא לפי שם.
+    val userDocId: String = "",
+
     val beltAwardDates: Map<String, String> = emptyMap(),
+
+    // ✅ הערות מאמן — נשמרות בשרת תחת users/{docId}.coachNotes
+    val coachNotes: String = "",
 
     // ✅ שדות נוספים למילוי ע"י המאמן ונשמרים בשרת: תאריך + תיאור
     val seminarDates: Map<String, CoachDateEntry> = emptyMap(),
@@ -225,6 +237,23 @@ private fun coachDateSectionAccent(title: String): Color {
         "הסמכות" -> Color(0xFF0891B2)
         else -> Color(0xFF6D56B8)
     }
+}
+
+private fun coachDateToMillis(dateText: String): Long? {
+    return runCatching {
+        val date = LocalDate.parse(dateText.trim())
+        date
+            .atStartOfDay(ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+    }.getOrNull()
+}
+
+private fun coachMillisToDateText(millis: Long): String {
+    return Instant.ofEpochMilli(millis)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+        .toString()
 }
 
 private fun buildGroupStats(profiles: List<TraineeProfile>, filtered: List<TraineeProfile>): GroupStatsUi {
@@ -565,10 +594,12 @@ fun CoachTraineesScreen(
             }
 
             data class FireUserInfo(
+                val userDocId: String,
                 val age: Int,
                 val beltHeb: String,
                 val seniority: String,
                 val beltAwardDates: Map<String, String>,
+                val coachNotes: String,
                 val seminarDates: Map<String, CoachDateEntry>,
                 val campDates: Map<String, CoachDateEntry>,
                 val certificationDates: Map<String, CoachDateEntry>
@@ -636,15 +667,18 @@ fun CoachTraineesScreen(
                 }
 
                 val beltAwardDates = readStringMap("beltAwardDates")
+                val coachNotes = doc.getString("coachNotes").orEmpty()
                 val seminarDates = readCoachEntryMap("seminarDates")
                 val campDates = readCoachEntryMap("campDates")
                 val certificationDates = readCoachEntryMap("certificationDates")
 
                 userInfoByName[n] = FireUserInfo(
+                    userDocId = doc.id,
                     age = age,
                     beltHeb = beltHeb(beltRaw),
                     seniority = seniority,
                     beltAwardDates = beltAwardDates,
+                    coachNotes = coachNotes,
                     seminarDates = seminarDates,
                     campDates = campDates,
                     certificationDates = certificationDates
@@ -659,10 +693,12 @@ fun CoachTraineesScreen(
 
                 val key = m.displayName.normKey()
                 val info = userInfoByName[key]
+                val userDocId = info?.userDocId.orEmpty()
                 val age = info?.age ?: 0
                 val belt = info?.beltHeb.orEmpty()
                 val seniority = info?.seniority.orEmpty()
                 val beltAwardDates = info?.beltAwardDates ?: emptyMap()
+                val coachNotes = info?.coachNotes.orEmpty()
                 val seminarDates = info?.seminarDates ?: emptyMap()
                 val campDates = info?.campDates ?: emptyMap()
                 val certificationDates = info?.certificationDates ?: emptyMap()
@@ -676,7 +712,9 @@ fun CoachTraineesScreen(
                     attendancePct = pct,
                     branch = branchDbKey,
                     groupKey = groupName,
+                    userDocId = userDocId,
                     beltAwardDates = beltAwardDates,
+                    coachNotes = coachNotes,
                     seminarDates = seminarDates,
                     campDates = campDates,
                     certificationDates = certificationDates
@@ -737,23 +775,7 @@ fun CoachTraineesScreen(
     }
 
     val uiProfiles = remember(traineeProfiles) {
-        if (!DemoPrivacy.ENABLED) {
-            traineeProfiles
-        } else {
-            traineeProfiles.mapIndexed { index, trainee ->
-                val demo = DemoTrainees.trainees.getOrNull(index)
-
-                trainee.copy(
-                    fullName = demo?.name ?: coachTr(isEnglish, "מתאמן ${index + 1}", "Trainee ${index + 1}"),
-                    belt = demo?.belt?.let { if (isEnglish) it.en else it.heb } ?: trainee.belt,
-                    seniority = demo?.yearsTraining?.let {
-                        coachTr(isEnglish, "$it שנים", "$it years")
-                    } ?: trainee.seniority,
-                    age = demo?.age ?: trainee.age,
-                    attendancePct = demo?.attendancePercent ?: trainee.attendancePct
-                )
-            }
-        }
+        traineeProfiles
     }
 
     // בחירה נוכחית
@@ -780,45 +802,119 @@ fun CoachTraineesScreen(
 
     val screenScope = rememberCoroutineScope()
 
+    suspend fun resolveUserDocIdForSelected(
+        selectedProfile: TraineeProfile
+    ): String {
+        val directDocId = selectedProfile.userDocId.trim()
+        if (directDocId.isNotBlank()) return directDocId
+
+        fun String.normSaveKey(): String = this
+            .trim()
+            .replace('־', '-')
+            .replace('–', '-')
+            .replace('—', '-')
+            .replace(Regex("\\s+"), " ")
+            .lowercase(Locale("he", "IL"))
+
+        val targetName = selectedProfile.fullName.normSaveKey()
+        val targetBranch = selectedProfile.branch.normSaveKey()
+        val targetGroup = selectedProfile.groupKey.normSaveKey()
+
+        Log.e(
+            "COACH_TRAINEES_SAVE",
+            "resolveUserDocId fallback name=${selectedProfile.fullName} branch=${selectedProfile.branch} group=${selectedProfile.groupKey}"
+        )
+
+        val docs = Firebase.firestore.collection("users")
+            .whereEqualTo("role", "trainee")
+            .get()
+            .await()
+            .documents
+
+        val matched = docs.firstOrNull { doc ->
+            val docName = (
+                    doc.getString("fullName")
+                        ?: doc.getString("name")
+                        ?: doc.getString("displayName")
+                        ?: ""
+                    ).normSaveKey()
+
+            val docGroups = (doc.get("groups") as? List<*>)
+                ?.mapNotNull { it?.toString()?.normSaveKey() }
+                .orEmpty()
+
+            val docBranches = buildList {
+                doc.getString("branch")?.let { add(it.normSaveKey()) }
+                doc.getString("branchesCsv")?.split(",")?.forEach { add(it.normSaveKey()) }
+                (doc.get("branches") as? List<*>)?.forEach { item ->
+                    item?.toString()?.let { add(it.normSaveKey()) }
+                }
+            }
+
+            val nameMatches = docName == targetName
+            val groupMatches = targetGroup.isBlank() || targetGroup in docGroups
+            val branchMatches = targetBranch.isBlank() || docBranches.any { branch ->
+                branch == targetBranch ||
+                        branch.contains(targetBranch) ||
+                        targetBranch.contains(branch)
+            }
+
+            nameMatches && groupMatches && branchMatches
+        } ?: docs.firstOrNull { doc ->
+            val docName = (
+                    doc.getString("fullName")
+                        ?: doc.getString("name")
+                        ?: doc.getString("displayName")
+                        ?: ""
+                    ).normSaveKey()
+
+            docName == targetName
+        }
+
+        val resolvedDocId = matched?.id.orEmpty()
+
+        Log.e(
+            "COACH_TRAINEES_SAVE",
+            "resolveUserDocId result name=${selectedProfile.fullName} resolvedDocId=$resolvedDocId"
+        )
+
+        if (resolvedDocId.isBlank()) {
+            error("Missing userDocId for trainee: ${selectedProfile.fullName}")
+        }
+
+        return resolvedDocId
+    }
+
     suspend fun saveBeltAwardDatesForSelected(
         selectedProfile: TraineeProfile,
         dates: Map<String, String>
     ) {
+        val userDocId = resolveUserDocIdForSelected(selectedProfile)
+
+        Log.e(
+            "COACH_TRAINEES_SAVE",
+            "saveBeltAwardDates userDocId=$userDocId name=${selectedProfile.fullName} dates=$dates"
+        )
+
         val cleanedDates = dates
             .mapValues { it.value.trim() }
             .filterValues { it.isNotBlank() }
 
         if (cleanedDates.isEmpty()) return
 
-        val userDocs = Firebase.firestore.collection("users")
-            .whereEqualTo("role", "trainee")
-            .whereIn(
-                "fullName",
-                listOf(selectedProfile.fullName, selectedProfile.fullName.trim())
-            )
-            .get()
+        val updates = cleanedDates.entries.associate { (beltName, dateValue) ->
+            "beltAwardDates.$beltName" to dateValue
+        }
+
+        Firebase.firestore.collection("users")
+            .document(userDocId)
+            .update(updates)
             .await()
 
-        val targetDoc = userDocs.documents.firstOrNull()
-            ?: userDocs.documents.firstOrNull { doc ->
-                val n1 = doc.getString("fullName")?.trim()
-                val n2 = doc.getString("name")?.trim()
-                val n3 = doc.getString("displayName")?.trim()
-                n1 == selectedProfile.fullName.trim() ||
-                        n2 == selectedProfile.fullName.trim() ||
-                        n3 == selectedProfile.fullName.trim()
-            }
-
-        if (targetDoc != null) {
-            val updates = cleanedDates.entries.associate { (beltName, dateValue) ->
-                "beltAwardDates.$beltName" to dateValue
-            }
-
-            Firebase.firestore.collection("users")
-                .document(targetDoc.id)
-                .update(updates)
-                .await()
-        }
+        Log.e(
+            "COACH_TRAINEES_SAVE",
+            "saveBeltAwardDates SUCCESS userDocId=$userDocId updates=$updates"
+        )
     }
 
     suspend fun saveCoachDateSectionForSelected(
@@ -826,6 +922,8 @@ fun CoachTraineesScreen(
         firestoreFieldName: String,
         entries: Map<String, CoachDateEntry>
     ) {
+        val userDocId = resolveUserDocIdForSelected(selectedProfile)
+
         val cleanedEntries = entries
             .mapValues { (_, value) ->
                 mapOf(
@@ -840,35 +938,33 @@ fun CoachTraineesScreen(
 
         if (cleanedEntries.isEmpty()) return
 
-        val userDocs = Firebase.firestore.collection("users")
-            .whereEqualTo("role", "trainee")
-            .whereIn(
-                "fullName",
-                listOf(selectedProfile.fullName, selectedProfile.fullName.trim())
-            )
-            .get()
-            .await()
-
-        val targetDoc = userDocs.documents.firstOrNull()
-            ?: userDocs.documents.firstOrNull { doc ->
-                val n1 = doc.getString("fullName")?.trim()
-                val n2 = doc.getString("name")?.trim()
-                val n3 = doc.getString("displayName")?.trim()
-                n1 == selectedProfile.fullName.trim() ||
-                        n2 == selectedProfile.fullName.trim() ||
-                        n3 == selectedProfile.fullName.trim()
-            }
-
-        if (targetDoc != null) {
-            val updates = cleanedEntries.entries.associate { (itemName, value) ->
-                "$firestoreFieldName.$itemName" to value
-            }
-
-            Firebase.firestore.collection("users")
-                .document(targetDoc.id)
-                .update(updates)
-                .await()
+        val updates = cleanedEntries.entries.associate { (itemName, value) ->
+            "$firestoreFieldName.$itemName" to value
         }
+
+        Firebase.firestore.collection("users")
+            .document(userDocId)
+            .update(updates)
+            .await()
+    }
+
+    suspend fun saveCoachNotesForSelected(
+        selectedProfile: TraineeProfile,
+        note: String
+    ) {
+        val userDocId = resolveUserDocIdForSelected(selectedProfile)
+
+        val cleanNote = note.trim()
+
+        Firebase.firestore.collection("users")
+            .document(userDocId)
+            .update(
+                mapOf(
+                    "coachNotes" to cleanNote,
+                    "coachNotesUpdatedAtMillis" to System.currentTimeMillis()
+                )
+            )
+            .await()
     }
 
     LaunchedEffect(uiProfiles) {
@@ -881,6 +977,10 @@ fun CoachTraineesScreen(
         uiProfiles.forEach { trainee ->
             if (beltAwardDatesState[trainee.id] == null) {
                 beltAwardDatesState[trainee.id] = trainee.beltAwardDates
+            }
+
+            if (coachNotes[trainee.id] == null) {
+                coachNotes[trainee.id] = trainee.coachNotes
             }
 
             if (seminarDatesState[trainee.id] == null) {
@@ -1318,22 +1418,123 @@ fun CoachTraineesScreen(
                                                         }
 
                                                         if (isExpanded) {
-                                                            OutlinedTextField(
-                                                                value = currentDate,
-                                                                onValueChange = { newValue ->
-                                                                    val current = beltAwardDatesState[selected.id]
-                                                                        .orEmpty()
-                                                                        .toMutableMap()
+                                                            var showBeltDatePicker by remember(selected.id, beltName) {
+                                                                mutableStateOf(false)
+                                                            }
 
-                                                                    current[beltName] = newValue
-                                                                    beltAwardDatesState[selected.id] = current
-                                                                },
-                                                                label = { Text(coachTr(isEnglish, "תאריך קבלה", "Award date")) },
-                                                                placeholder = { Text("YYYY-MM-DD") },
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                singleLine = true,
-                                                                shape = RoundedCornerShape(16.dp)
+                                                            val datePickerState = rememberDatePickerState(
+                                                                initialSelectedDateMillis = coachDateToMillis(currentDate)
+                                                                    ?: System.currentTimeMillis()
                                                             )
+
+                                                            Surface(
+                                                                onClick = {
+                                                                    showBeltDatePicker = true
+                                                                },
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                shape = RoundedCornerShape(16.dp),
+                                                                color = Color(0xFFF8FAFC),
+                                                                border = BorderStroke(
+                                                                    1.dp,
+                                                                    beltAccent.copy(alpha = 0.75f)
+                                                                ),
+                                                                shadowElevation = 2.dp
+                                                            ) {
+                                                                Column(
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                                    horizontalAlignment = coachHorizontalAlignment(isEnglish)
+                                                                ) {
+                                                                    Text(
+                                                                        text = coachTr(isEnglish, "תאריך קבלה", "Award date"),
+                                                                        style = MaterialTheme.typography.labelMedium,
+                                                                        color = beltAccent,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        textAlign = coachTextAlign(isEnglish),
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    )
+
+                                                                    Text(
+                                                                        text = currentDate.ifBlank {
+                                                                            coachTr(
+                                                                                isEnglish,
+                                                                                "בחר תאריך מלוח השנה",
+                                                                                "Choose a date from calendar"
+                                                                            )
+                                                                        },
+                                                                        style = MaterialTheme.typography.titleMedium,
+                                                                        color = if (currentDate.isBlank()) {
+                                                                            Color(0xFF64748B)
+                                                                        } else {
+                                                                            Color(0xFF0F172A)
+                                                                        },
+                                                                        fontWeight = FontWeight.ExtraBold,
+                                                                        textAlign = coachTextAlign(isEnglish),
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            if (showBeltDatePicker) {
+                                                                DatePickerDialog(
+                                                                    onDismissRequest = {
+                                                                        showBeltDatePicker = false
+                                                                    },
+                                                                    confirmButton = {
+                                                                        TextButton(
+                                                                            onClick = {
+                                                                                val selectedMillis =
+                                                                                    datePickerState.selectedDateMillis
+
+                                                                                if (selectedMillis != null) {
+                                                                                    val newDate =
+                                                                                        coachMillisToDateText(selectedMillis)
+
+                                                                                    val current = beltAwardDatesState[selected.id]
+                                                                                        .orEmpty()
+                                                                                        .toMutableMap()
+
+                                                                                    current[beltName] = newDate
+                                                                                    beltAwardDatesState[selected.id] = current
+                                                                                }
+
+                                                                                showBeltDatePicker = false
+                                                                            }
+                                                                        ) {
+                                                                            Text(coachTr(isEnglish, "אישור", "OK"))
+                                                                        }
+                                                                    },
+                                                                    dismissButton = {
+                                                                        TextButton(
+                                                                            onClick = {
+                                                                                showBeltDatePicker = false
+                                                                            }
+                                                                        ) {
+                                                                            Text(coachTr(isEnglish, "ביטול", "Cancel"))
+                                                                        }
+                                                                    }
+                                                                ) {
+                                                                    DatePicker(
+                                                                        state = datePickerState,
+                                                                        title = {
+                                                                            Text(
+                                                                                text = coachTr(
+                                                                                    isEnglish,
+                                                                                    "בחר תאריך קבלת חגורה",
+                                                                                    "Choose belt award date"
+                                                                                ),
+                                                                                modifier = Modifier.padding(
+                                                                                    start = 24.dp,
+                                                                                    end = 24.dp,
+                                                                                    top = 16.dp
+                                                                                )
+                                                                            )
+                                                                        }
+                                                                    )
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -1366,8 +1567,18 @@ fun CoachTraineesScreen(
                                                                 )
                                                             }.onSuccess {
                                                                 beltDatesSaveMessage = coachTr(isEnglish, "תאריכי החגורות נשמרו", "Belt dates saved")
-                                                            }.onFailure {
-                                                                beltDatesSaveMessage = coachTr(isEnglish, "שמירת תאריכי החגורות נכשלה", "Failed to save belt dates")
+                                                            }.onFailure { error ->
+                                                                Log.e(
+                                                                    "COACH_TRAINEES_SAVE",
+                                                                    "saveBeltAwardDates FAILED name=${selectedProfile.fullName}",
+                                                                    error
+                                                                )
+
+                                                                beltDatesSaveMessage = coachTr(
+                                                                    isEnglish,
+                                                                    "שמירת תאריכי החגורות נכשלה",
+                                                                    "Failed to save belt dates"
+                                                                )
                                                             }
 
                                                             isSavingBeltDates = false
@@ -1484,13 +1695,130 @@ fun CoachTraineesScreen(
                                         onSave = ::saveCoachDateSectionForSelected
                                     )
 
+                                    var isSavingCoachNotes by remember(selected.id) {
+                                        mutableStateOf(false)
+                                    }
+
+                                    var coachNotesSaveMessage by remember(selected.id) {
+                                        mutableStateOf<String?>(null)
+                                    }
+
                                     OutlinedTextField(
                                         value = coachNotes[selected.id] ?: "",
-                                        onValueChange = { coachNotes[selected.id] = it },
-                                        label = { Text(coachTr(isEnglish, "הערות מאמן", "Coach notes")) },
+                                        onValueChange = {
+                                            coachNotes[selected.id] = it
+                                            coachNotesSaveMessage = null
+                                        },
+                                        label = {
+                                            Text(coachTr(isEnglish, "הערות מאמן", "Coach notes"))
+                                        },
+                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                            textAlign = screenTextAlign
+                                        ),
                                         modifier = Modifier.fillMaxWidth(),
-                                        minLines = 3
+                                        minLines = 3,
+                                        shape = RoundedCornerShape(16.dp)
                                     )
+
+                                    Surface(
+                                        onClick = {
+                                            val selectedProfile = selected
+                                            if (selectedProfile != null && !isSavingCoachNotes) {
+                                                val noteToSave = coachNotes[selectedProfile.id].orEmpty()
+
+                                                screenScope.launch {
+                                                    isSavingCoachNotes = true
+                                                    coachNotesSaveMessage = null
+
+                                                    runCatching {
+                                                        saveCoachNotesForSelected(
+                                                            selectedProfile = selectedProfile,
+                                                            note = noteToSave
+                                                        )
+                                                    }.onSuccess {
+                                                        coachNotesSaveMessage = coachTr(
+                                                            isEnglish,
+                                                            "הערות המאמן נשמרו",
+                                                            "Coach notes saved"
+                                                        )
+                                                    }.onFailure {
+                                                        coachNotesSaveMessage = coachTr(
+                                                            isEnglish,
+                                                            "שמירת הערות המאמן נכשלה",
+                                                            "Failed to save coach notes"
+                                                        )
+                                                    }
+
+                                                    isSavingCoachNotes = false
+                                                }
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = Color.Transparent,
+                                        shadowElevation = 6.dp,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(
+                                                    brush = Brush.horizontalGradient(
+                                                        colors = listOf(
+                                                            Color(0xFF0F766E),
+                                                            Color(0xFF0891B2),
+                                                            Color(0xFF2563EB)
+                                                        )
+                                                    ),
+                                                    shape = RoundedCornerShape(18.dp)
+                                                )
+                                                .padding(vertical = 14.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = if (isSavingCoachNotes) {
+                                                    coachTr(isEnglish, "שומר...", "Saving...")
+                                                } else {
+                                                    coachTr(isEnglish, "שמור הערות מאמן", "Save coach notes")
+                                                },
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+
+                                    coachNotesSaveMessage?.let { msg ->
+                                        Surface(
+                                            color = if (
+                                                msg.contains("נשמרו") ||
+                                                msg.contains("saved", ignoreCase = true)
+                                            ) {
+                                                Color(0xFFDCFCE7)
+                                            } else {
+                                                Color(0xFFFEE2E2)
+                                            },
+                                            shape = RoundedCornerShape(14.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = msg,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (
+                                                    msg.contains("נשמרו") ||
+                                                    msg.contains("saved", ignoreCase = true)
+                                                ) {
+                                                    Color(0xFF166534)
+                                                } else {
+                                                    Color(0xFF991B1B)
+                                                },
+                                                textAlign = screenTextAlign,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

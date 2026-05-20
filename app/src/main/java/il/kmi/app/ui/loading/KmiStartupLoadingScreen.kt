@@ -204,33 +204,33 @@ fun KmiStartupLoadingScreen(
                 )
         )
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top
-            ) {
-            Spacer(modifier = Modifier.height(18.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
 
             Box(
                 contentAlignment = Alignment.TopCenter,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .height(128.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .width(392.dp)
-                        .height(248.dp)
+                        .width(300.dp)
+                        .height(124.dp)
                         .scale(pulseScale)
                         .alpha(glowAlpha)
-                        .clip(RoundedCornerShape(34.dp))
+                        .clip(RoundedCornerShape(28.dp))
                         .background(
                             brush = Brush.verticalGradient(
                                 colors = listOf(
-                                    accent.copy(alpha = 0.30f),
-                                    accent.copy(alpha = 0.12f),
+                                    accent.copy(alpha = 0.28f),
+                                    accent.copy(alpha = 0.10f),
                                     Color.Transparent
                                 )
                             )
@@ -239,12 +239,12 @@ fun KmiStartupLoadingScreen(
 
                 Surface(
                     modifier = Modifier
-                        .width(320.dp)
-                        .height(185.dp),
-                    shape = RoundedCornerShape(30.dp),
+                        .width(260.dp)
+                        .height(118.dp),
+                    shape = RoundedCornerShape(24.dp),
                     color = Color(0xFF0F1A26),
                     tonalElevation = 8.dp,
-                    shadowElevation = 10.dp
+                    shadowElevation = 8.dp
                 ) {
                     BoxWithConstraints(
                         modifier = Modifier.fillMaxSize()
@@ -258,7 +258,7 @@ fun KmiStartupLoadingScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()
-                                .width(56.dp)
+                                .width(46.dp)
                                 .offset(x = scanX)
                                 .background(
                                     brush = Brush.horizontalGradient(
@@ -276,7 +276,7 @@ fun KmiStartupLoadingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = if (isEnglish) "Krav Magen Israeli" else "קרב מגן ישראלי",
@@ -286,7 +286,7 @@ fun KmiStartupLoadingScreen(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = if (isEnglish) {
@@ -294,16 +294,16 @@ fun KmiStartupLoadingScreen(
                 } else {
                     "מאתחל סביבת אימון מתקדמת"
                 },
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = textSecondary,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(22.dp),
                 color = cardBg,
                 tonalElevation = 6.dp,
                 shadowElevation = 8.dp
@@ -311,7 +311,7 @@ fun KmiStartupLoadingScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 18.dp)
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -363,7 +363,7 @@ fun KmiStartupLoadingScreen(
                         trackColor = Color.White.copy(alpha = 0.10f)
                     )
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     LoadingChecklist(
                         stages = stages,
@@ -377,19 +377,19 @@ fun KmiStartupLoadingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-                Text(
-                    text = if (isEnglish) {
-                        "Please wait a few seconds..."
-                    } else {
-                        "אנא המתן מספר שניות..."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = textSecondary,
-                    textAlign = TextAlign.Center
-                )
-            }
+            Text(
+                text = if (isEnglish) {
+                    "Please wait a few seconds..."
+                } else {
+                    "אנא המתן מספר שניות..."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = textSecondary,
+                textAlign = TextAlign.Center
+            )
+        }
 
         TextButton(
             onClick = onFinished,
@@ -469,7 +469,7 @@ private fun LoadingChecklist(
     accent: Color
 ) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         stages.forEachIndexed { index, stage ->
