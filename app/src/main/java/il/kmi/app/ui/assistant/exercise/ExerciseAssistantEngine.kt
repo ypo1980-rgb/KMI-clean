@@ -1,6 +1,5 @@
 package il.kmi.app.ui.assistant.exercise
 
-import android.util.Log
 import il.kmi.app.ui.assistant.search.ExerciseSearchService
 import il.kmi.shared.domain.Belt
 
@@ -15,7 +14,8 @@ object ExerciseAssistantEngine {
             // 1️⃣ נסה מנוע הסברים החכם
             val explain = AssistantExerciseExplanationKnowledge.answer(
                 question = question,
-                preferredBelt = preferredBelt
+                preferredBelt = preferredBelt,
+                isEnglish = isEnglish
             )
 
             if (explain != null) {
@@ -36,11 +36,7 @@ object ExerciseAssistantEngine {
             )
 
             if (!bestExplanation.isNullOrBlank()) {
-                return if (isEnglish) {
-                    bestExplanation
-                } else {
-                    "$bestExplanation\n\nהאם אני יכול לעזור לך בעוד משהו?"
-                }
+                return bestExplanation
             }
 
             // 4️⃣ אם אין הסבר, החזר רשימת תרגילים
@@ -64,9 +60,7 @@ object ExerciseAssistantEngine {
                 "לא מצאתי תרגיל מתאים לשאלה."
             }
 
-        } catch (t: Throwable) {
-            Log.e("KMI-EXERCISE-AI", "ExerciseAssistantEngine failed", t)
-
+        } catch (_: Throwable) {
             return if (isEnglish) {
                 "There was a problem processing the exercise request."
             } else {

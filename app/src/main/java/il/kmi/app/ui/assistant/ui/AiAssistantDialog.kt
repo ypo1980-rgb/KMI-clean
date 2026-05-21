@@ -10,7 +10,6 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.util.Log
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -1008,10 +1007,6 @@ fun AiAssistantDialog(
         TrainingsAssistantEngine.init(spUser)
     }
 
-    val unansweredPrefs = remember {
-        ctx.getSharedPreferences("kmi_ai_unanswered", Context.MODE_PRIVATE)
-    }
-
     // ✅ מצב עוזר נבחר + שמירה לבחירה האחרונה
     val assistantModePrefs = remember {
         ctx.getSharedPreferences("kmi_ai_mode", Context.MODE_PRIVATE)
@@ -1066,7 +1061,7 @@ fun AiAssistantDialog(
                                 "• תרגיל / חיפוש לפי חגורה\n" +
                                 "• רשימת תרגילים לפי חגורה/נושא",
                     en =
-                        "K.A.M.I material mode is active.\n" +
+                        "KAMI material mode is active.\n" +
                                 "You can ask for:\n" +
                                 "• A topic (for example: \"Outside defenses\")\n" +
                                 "• A sub-topic\n" +
@@ -1075,21 +1070,6 @@ fun AiAssistantDialog(
                 )
             }
         }
-    }
-
-    val inputPlaceholder = remember(assistantMode, isEnglish) {
-        when (assistantMode) {
-            null -> tr("אנא בחר נושא להמשך", "Please choose a topic to continue")
-            AssistantMode.EXERCISE -> tr("אמור שם תרגיל", "Type or say an exercise name")
-            AssistantMode.TRAININGS -> tr("שאל משהו על אימונים", "Ask or say something about trainings")
-            AssistantMode.KMI_MATERIAL -> tr("חפש או אמור נושא / תרגיל", "Search or say a topic / exercise")
-        }
-    }
-
-    fun logUnlikeQuestion(question: String, answer: String) {
-        val key = "q_${System.currentTimeMillis()}"
-        val value = "Q: ${question.trim()}\nA: ${answer.trim()}"
-        unansweredPrefs.edit().putString(key, value).apply()
     }
 
     var input by remember { mutableStateOf("") }
@@ -1152,7 +1132,6 @@ fun AiAssistantDialog(
     // זה מונע מצב שבו לא קראו init() מוקדם מספיק / Activity אחר / תזמון.
     LaunchedEffect(Unit) {
         runCatching { KmiTtsManager.init(ctx.applicationContext) }
-            .onFailure { Log.e("KMI_TTS", "KmiTtsManager.init() failed", it) }
     }
 
     // ✅ =========================================================
@@ -1163,10 +1142,9 @@ fun AiAssistantDialog(
     var isSpeaking by remember { mutableStateOf(false) }
     var pendingStartStt by remember { mutableStateOf(false) }
     var currentListeningSessionId by remember { mutableStateOf(0L) }
-    var continuousListening by remember { mutableStateOf(false) }
 
 // מאפשר שיחה קולית רציפה כמו ChatGPT
-    var autoVoiceConversation by remember { mutableStateOf(true) }
+    val autoVoiceConversation = true
 
     val dynamicInputPlaceholder = remember(assistantMode, isEnglish, isListening, isSpeaking) {
         when {
@@ -1254,20 +1232,16 @@ fun AiAssistantDialog(
             delay(fallbackMs)
 
             if (isSpeaking) {
-                Log.w("KMI_TTS", "speakBest fallback timeout after ${fallbackMs}ms -> clearing speaking UI only")
                 isSpeaking = false
                 // בכוונה לא נוגעים ב-TTS ולא מפעילים STT מכאן
             }
         }
-
-        Log.d("KMI_TTS", "AiAssistantDialog speakBest() len=${ttsText.length}")
 
         runCatching { KmiTtsManager.speak(ttsText) }
             .onFailure {
                 speakJob?.cancel()
                 isSpeaking = false
                 KmiTtsManager.setOnSpeechCompletedListener(null)
-                Log.e("KMI_TTS", "KmiTtsManager.speak() failed", it)
             }
     }
 
@@ -1382,7 +1356,6 @@ fun AiAssistantDialog(
 
             override fun onError(error: Int) {
                 isListening = false
-                Log.e("KMI_STT", "SpeechRecognizer error=$error")
 
                 val message = when (error) {
                     SpeechRecognizer.ERROR_AUDIO ->
@@ -1411,8 +1384,6 @@ fun AiAssistantDialog(
                     else ->
                         tr("זיהוי הדיבור נכשל", "Speech recognition failed")
                 }
-
-                Log.e("KMI_STT", "SpeechRecognizer error=$error message=$message")
 
                 speechStatusMessage = message.takeIf { it.isNotBlank() }
 
@@ -1452,7 +1423,6 @@ fun AiAssistantDialog(
         runCatching {
             speechRecognizer?.startListening(intent)
         }.onFailure {
-            Log.e("KMI_STT", "startListening failed", it)
             isListening = false
             Toast.makeText(
                 ctx,
@@ -1498,18 +1468,34 @@ fun AiAssistantDialog(
 
     fun saveAiFeedback(question: String, answer: String?) {
         try {
-            val uid = FirebaseAuth.getInstance().currentUser?.uid
+            val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+            val now = System.currentTimeMillis()
             val db = Firebase.firestore
+
+            val cleanQuestion = question.trim()
+            val cleanAnswer = answer.orEmpty().trim()
+
             val data = hashMapOf(
-                "question" to question,
-                "answer" to (answer ?: ""),
+                "question" to cleanQuestion,
+                "answer" to cleanAnswer,
                 "like" to false,
+                "feedbackType" to "unlike",
+                "assistantMode" to (assistantMode?.name ?: "UNKNOWN"),
+                "source" to "android_ai_assistant",
                 "userUid" to uid,
-                "createdAt" to Timestamp.now()
+                "createdAt" to Timestamp.now(),
+                "createdAtMillis" to now
             )
+
             db.collection("aiFeedback").add(data)
-        } catch (t: Throwable) {
-            Log.e("KMI_AI_FEEDBACK", "Failed to save feedback", t)
+            db.collection("assistantFeedback").add(
+                data + mapOf(
+                    "type" to "unlike",
+                    "status" to "open"
+                )
+            )
+        } catch (_: Throwable) {
+            // Feedback failure should not interrupt the assistant flow.
         }
     }
 
@@ -1642,8 +1628,7 @@ fun AiAssistantDialog(
                     )
                 }
             }
-        } catch (t: Throwable) {
-            Log.e("KMI-AI", "sendQuestion failed", t)
+        } catch (_: Throwable) {
             tr(
                 "יש תקלה רגעית בעיבוד הבקשה. נסה שוב בעוד רגע.",
                 "There is a temporary issue processing the request. Please try again in a moment."
@@ -1793,7 +1778,6 @@ fun AiAssistantDialog(
                         onBack = null,
                     // ✅ בית במסך הזה = סגירת הדיאלוג וחזרה למסך שמאחוריו
                         onHome = {
-                            Log.e("KMI_DRAWER", "AI_HOME clicked")
                             stopListeningHard()
                             stopSpeaking()
                             onDismiss()
@@ -1801,11 +1785,9 @@ fun AiAssistantDialog(
                         },
 
                         onSearch = {
-                            Log.e("KMI_AI_SEARCH", "AI search opened")
+                            // Search is handled by KmiTopBar.
                         },
                         onPickSearchResult = { key ->
-                            Log.e("KMI_AI_SEARCH", "AI picked search result key=$key")
-
                             val parts = when {
                                 "|" in key -> key.split("|", limit = 3)
                                 "::" in key -> key.split("::", limit = 3)
@@ -1826,16 +1808,12 @@ fun AiAssistantDialog(
                             }
                         },
                         onOpenDrawer = {
-                            Log.e("KMI_DRAWER", "AI_TOPBAR menu clicked")
-
                             stopListeningHard()
                             stopSpeaking()
 
                             if (onOpenDrawer != null) {
-                                Log.e("KMI_DRAWER", "AI_TOPBAR using local onOpenDrawer")
                                 onOpenDrawer.invoke()
                             } else {
-                                Log.e("KMI_DRAWER", "AI_TOPBAR using DrawerBridge fallback")
                                 DrawerBridge.open()
                             }
                         },
@@ -1880,7 +1858,12 @@ fun AiAssistantDialog(
                                             AssistantMode.KMI_MATERIAL -> Icons.Filled.MenuBook
                                             null -> Icons.Filled.AutoAwesome
                                         },
-                                        contentDescription = null,
+                                        contentDescription = when (assistantMode) {
+                                            AssistantMode.EXERCISE -> tr("מצב מידע על תרגיל", "Exercise information mode")
+                                            AssistantMode.TRAININGS -> tr("מצב מידע על אימונים", "Training information mode")
+                                            AssistantMode.KMI_MATERIAL -> tr("מצב חומר ק.מ.י", "KAMI material mode")
+                                            null -> tr("בחירת מצב עוזר", "Assistant mode selection")
+                                        },
                                         tint = Color.White
                                     )
                                 }
@@ -1893,7 +1876,7 @@ fun AiAssistantDialog(
                                     null -> tr("בחר מצב כדי להתחיל", "Choose a mode to begin")
                                     AssistantMode.EXERCISE -> tr("מצב: מידע / הסבר על תרגיל", "Mode: Exercise info / explanation")
                                     AssistantMode.TRAININGS -> tr("מצב: מידע על אימונים", "Mode: Training information")
-                                    AssistantMode.KMI_MATERIAL -> tr("מצב: חומר ק.מ.י", "Mode: K.A.M.I material")
+                                    AssistantMode.KMI_MATERIAL -> tr("מצב: חומר ק.מ.י", "Mode: KAMI material")
                                 },
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.titleSmall,
@@ -1931,6 +1914,7 @@ fun AiAssistantDialog(
                                 title: String,
                                 selected: Boolean,
                                 icon: ImageVector,
+                                iconDescription: String,
                                 onClick: () -> Unit
                             ) {
                                 val shape = RoundedCornerShape(18.dp)
@@ -1978,7 +1962,7 @@ fun AiAssistantDialog(
                                                     ) {
                                                         Icon(
                                                             imageVector = icon,
-                                                            contentDescription = null,
+                                                            contentDescription = iconDescription,
                                                             tint = if (selected) Color.White else Color(0xFF7B61FF)
                                                         )
                                                     }
@@ -2009,7 +1993,7 @@ fun AiAssistantDialog(
                                                     ) {
                                                         Icon(
                                                             imageVector = icon,
-                                                            contentDescription = null,
+                                                            contentDescription = iconDescription,
                                                             tint = if (selected) Color.White else Color(0xFF7B61FF)
                                                         )
                                                     }
@@ -2023,6 +2007,7 @@ fun AiAssistantDialog(
                             ModeButton(
                                 title = tr("מידע על תרגיל", "Exercise information"),
                                 icon = Icons.Filled.FitnessCenter,
+                                iconDescription = tr("מידע על תרגיל", "Exercise information"),
                                 selected = assistantMode == AssistantMode.EXERCISE,
                                 onClick = {
                                     setAssistantMode(AssistantMode.EXERCISE)
@@ -2040,6 +2025,7 @@ fun AiAssistantDialog(
                             ModeButton(
                                 title = tr("מידע על אימונים", "Training information"),
                                 icon = Icons.Filled.RecordVoiceOver,
+                                iconDescription = tr("מידע על אימונים", "Training information"),
                                 selected = assistantMode == AssistantMode.TRAININGS,
                                 onClick = {
                                     setAssistantMode(AssistantMode.TRAININGS)
@@ -2055,8 +2041,9 @@ fun AiAssistantDialog(
                             )
 
                             ModeButton(
-                                title = tr("חומר ק.מ.י", "K.A.M.I material"),
+                                title = tr("חומר ק.מ.י", "KAMI material"),
                                 icon = Icons.Filled.MenuBook,
+                                iconDescription = tr("חומר ק.מ.י", "KAMI material"),
                                 selected = assistantMode == AssistantMode.KMI_MATERIAL,
                                 onClick = {
                                     setAssistantMode(AssistantMode.KMI_MATERIAL)
@@ -2065,7 +2052,7 @@ fun AiAssistantDialog(
                                     speak(
                                         tr(
                                             "מעולה. מצב חומר ק.מ.י פעיל. תגיד נושא או שם תרגיל ואני אחפש לך במאגר.",
-                                            "Great. K.A.M.I material mode is active. Say a topic or exercise name and I will search it in the database."
+                                            "Great. KAMI material mode is active. Say a topic or exercise name and I will search it in the database."
                                         )
                                     )
                                 }
@@ -2095,7 +2082,7 @@ fun AiAssistantDialog(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    contentAlignment = Alignment.TopEnd
+                                    contentAlignment = if (isEnglish) Alignment.TopStart else Alignment.TopEnd
                                 ) {
                                     Text(
                                         text = emptyStateText,
@@ -2179,13 +2166,14 @@ fun AiAssistantDialog(
 
                                                     Row(
                                                         modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.End,
+                                                        horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
                                                         Text(
                                                             text = tr("יובל חושב", "Yuval is thinking"),
                                                             fontSize = 11.sp,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            textAlign = textAlignPrimary
                                                         )
 
                                                         Spacer(Modifier.width(6.dp))
@@ -2216,15 +2204,21 @@ fun AiAssistantDialog(
                                                 if (answerIndex >= 0) {
                                                     Row(
                                                         modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.Start,
+                                                        horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
                                                         IconButton(
-                                                            onClick = { setFeedback(answerIndex, Feedback.UNLIKE) }
+                                                            onClick = {
+                                                                setFeedback(answerIndex, Feedback.UNLIKE)
+                                                                saveAiFeedback(
+                                                                    question = feedbackQuestionText,
+                                                                    answer = answerText
+                                                                )
+                                                            }
                                                         ) {
                                                             Icon(
                                                                 imageVector = Icons.Filled.ThumbDown,
-                                                                contentDescription = "Unlike",
+                                                                contentDescription = tr("לא אהבתי את התשובה", "Dislike answer"),
                                                                 tint = when (answerFeedback) {
                                                                     Feedback.UNLIKE -> Color(0xFFEF4444)
                                                                     else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -2237,7 +2231,7 @@ fun AiAssistantDialog(
                                                         ) {
                                                             Icon(
                                                                 imageVector = Icons.Filled.ThumbUp,
-                                                                contentDescription = "Like",
+                                                                contentDescription = tr("אהבתי את התשובה", "Like answer"),
                                                                 tint = when (answerFeedback) {
                                                                     Feedback.LIKE -> Color(0xFF22C55E)
                                                                     else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -2245,18 +2239,7 @@ fun AiAssistantDialog(
                                                             )
                                                         }
 
-                                                        if (answerFeedback == Feedback.UNLIKE &&
-                                                            feedbackQuestionText.isNotBlank() &&
-                                                            answerText.isNotBlank()
-                                                        ) {
-                                                            LaunchedEffect(feedbackQuestionText, answerText) {
-                                                                logUnlikeQuestion(
-                                                                    question = feedbackQuestionText,
-                                                                    answer = answerText
-                                                                )
-                                                                saveAiFeedback(feedbackQuestionText, answerText)
-                                                            }
-                                                        }
+                                                        // Feedback is saved directly from the Unlike button click.
                                                     }
                                                 }
                                             }
@@ -2289,7 +2272,7 @@ fun AiAssistantDialog(
 
                                                         Icon(
                                                             imageVector = Icons.Filled.KeyboardArrowDown,
-                                                            contentDescription = null,
+                                                            contentDescription = tr("יש עוד תוכן לקריאה", "More content available"),
                                                             tint = MaterialTheme.colorScheme.primary,
                                                             modifier = Modifier.size(16.dp)
                                                         )
@@ -2361,14 +2344,18 @@ fun AiAssistantDialog(
                                                         Row(
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
-                                                                .padding(end = 4.dp, bottom = 4.dp),
-                                                            horizontalArrangement = Arrangement.End,
+                                                                .padding(
+                                                                    start = if (isEnglish) 4.dp else 0.dp,
+                                                                    end = if (isEnglish) 0.dp else 4.dp,
+                                                                    bottom = 4.dp
+                                                                ),
+                                                            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
                                                             IconButton(onClick = { setFeedback(index, Feedback.LIKE) }) {
                                                                 Icon(
                                                                     imageVector = Icons.Filled.ThumbUp,
-                                                                    contentDescription = "Like",
+                                                                    contentDescription = tr("אהבתי את התשובה", "Like answer"),
                                                                     tint = when (msg.feedback) {
                                                                         Feedback.LIKE -> Color(0xFF22C55E)
                                                                         else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -2388,17 +2375,13 @@ fun AiAssistantDialog(
                                                                         ?: ""
 
                                                                     if (questionText.isNotBlank()) {
-                                                                        logUnlikeQuestion(
-                                                                            question = questionText,
-                                                                            answer = msg.text
-                                                                        )
                                                                         saveAiFeedback(questionText, msg.text)
                                                                     }
                                                                 }
                                                             ) {
                                                                 Icon(
                                                                     imageVector = Icons.Filled.ThumbDown,
-                                                                    contentDescription = "Unlike",
+                                                                    contentDescription = tr("לא אהבתי את התשובה", "Dislike answer"),
                                                                     tint = when (msg.feedback) {
                                                                         Feedback.UNLIKE -> Color(0xFFEF4444)
                                                                         else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -2429,13 +2412,14 @@ fun AiAssistantDialog(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(top = 6.dp),
-                                            horizontalArrangement = Arrangement.End,
+                                            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
                                                 text = tr("יובל חושב", "Yuval is thinking"),
                                                 fontSize = 12.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                textAlign = textAlignPrimary
                                             )
 
                                             Spacer(Modifier.width(6.dp))
@@ -2513,14 +2497,14 @@ fun AiAssistantDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.End,
+                        horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = tr("מדבר…", "Speaking…"),
                             color = MaterialTheme.colorScheme.primary,
                             fontSize = 12.sp,
-                            textAlign = TextAlign.End
+                            textAlign = textAlignPrimary
                         )
 
                         Spacer(Modifier.width(10.dp))
@@ -2612,7 +2596,9 @@ fun AiAssistantDialog(
                         ) {
                             Text(
                                 text = liveAssistantStatus,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
                                 color = when {
                                     speechStatusMessage != null -> MaterialTheme.colorScheme.error
                                     isListening -> MaterialTheme.colorScheme.primary
@@ -2700,7 +2686,11 @@ fun AiAssistantDialog(
                                             isListening -> Icons.Filled.Mic
                                             else -> Icons.Filled.Mic
                                         },
-                                        contentDescription = null,
+                                        contentDescription = when {
+                                            isSpeaking -> tr("עצור דיבור", "Stop speaking")
+                                            isListening -> tr("המיקרופון מאזין", "Microphone is listening")
+                                            else -> tr("הפעל מיקרופון", "Start microphone")
+                                        },
                                         tint = when {
                                             isSpeaking -> Color(0xFFE53935)
                                             isListening -> MaterialTheme.colorScheme.primary
@@ -2731,24 +2721,30 @@ fun AiAssistantDialog(
                                     },
                                 maxLines = 2,
                                 singleLine = false,
-                            placeholder = {
-                                Text(
-                                    text = dynamicInputPlaceholder,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
-                                )
-                            },
-                            textStyle = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
+                                placeholder = {
+                                    Text(
+                                        text = dynamicInputPlaceholder,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                                        textAlign = textAlignPrimary,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                },
+                                textStyle = MaterialTheme.typography.bodySmall.copy(
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = textAlignPrimary
+                                ),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(
-                                onSend = {
-                                    stopListeningHard()
-                                    hideKeyboardHard()
-                                    requestHideKeyboard = true
-                                    sendQuestion(input)
-                                }
-                            ),
+                                keyboardActions = KeyboardActions(
+                                    onSend = {
+                                        val cleanInput = input.trim()
+                                        if (cleanInput.isBlank()) return@KeyboardActions
+
+                                        stopListeningHard()
+                                        hideKeyboardHard()
+                                        requestHideKeyboard = true
+                                        sendQuestion(cleanInput)
+                                    }
+                                ),
                             shape = RoundedCornerShape(24.dp),
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color.White.copy(alpha = 0.64f),
@@ -2764,15 +2760,18 @@ fun AiAssistantDialog(
 
                                 IconButton(
                                     onClick = {
+                                        val cleanInput = input.trim()
+                                        if (cleanInput.isBlank()) return@IconButton
+
                                         stopListeningHard()
                                         requestHideKeyboard = true
-                                        sendQuestion(input)
+                                        sendQuestion(cleanInput)
                                     },
-                                    enabled = assistantMode != null && input.isNotBlank()
+                                    enabled = assistantMode != null && input.trim().isNotBlank()
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Send,
-                                        contentDescription = null,
+                                        contentDescription = tr("שלח שאלה", "Send question"),
                                         tint = if (assistantMode != null && input.isNotBlank())
                                             MaterialTheme.colorScheme.primary
                                         else

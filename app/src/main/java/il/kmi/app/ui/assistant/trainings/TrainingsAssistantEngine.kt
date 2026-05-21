@@ -1,7 +1,6 @@
 package il.kmi.app.ui.assistant.trainings
 
 import android.content.SharedPreferences
-import android.util.Log
 
 object TrainingsAssistantEngine {
 
@@ -28,7 +27,8 @@ object TrainingsAssistantEngine {
             } else {
                 val answer = AssistantTrainingKnowledge.generateAnswer(
                     question = question,
-                    memory = mem
+                    memory = mem,
+                    isEnglish = isEnglish
                 )
 
                 AssistantTrainingKnowledge.updateMemoryFromAnswer(
@@ -39,9 +39,7 @@ object TrainingsAssistantEngine {
 
                 answer
             }
-        } catch (t: Throwable) {
-            Log.e("KMI-TRAININGS-AI", "TrainingsAssistantEngine failed", t)
-
+        } catch (_: Throwable) {
             if (isEnglish) {
                 "There was a temporary issue retrieving training information."
             } else {

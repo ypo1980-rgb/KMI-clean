@@ -43,10 +43,18 @@ class AssistantMemory(
     }
 
     fun saveLastExercise(exercise: String, belt: String? = null) {
-        prefs.edit()
-            .putString(KEY_LAST_EXERCISE, exercise.trim())
-            .putString(KEY_LAST_BELT, belt)
-            .apply()
+        prefs.edit().apply {
+            putString(KEY_LAST_EXERCISE, exercise.trim())
+
+            val cleanBelt = belt?.trim().orEmpty()
+            if (cleanBelt.isNotBlank()) {
+                putString(KEY_LAST_BELT, cleanBelt)
+            } else {
+                remove(KEY_LAST_BELT)
+            }
+
+            apply()
+        }
     }
 
     fun getLastBelt(): String? {
@@ -66,6 +74,7 @@ class AssistantMemory(
             .remove(KEY_LAST_QUESTION)
             .remove(KEY_LAST_ANSWER)
             .remove(KEY_LAST_TOPIC)
+            .remove(KEY_LAST_BELT)
             .remove(KEY_LAST_EXERCISE)
             .apply()
     }

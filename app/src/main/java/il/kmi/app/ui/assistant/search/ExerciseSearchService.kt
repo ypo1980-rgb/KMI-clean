@@ -1,6 +1,5 @@
 package il.kmi.app.ui.assistant.search
 
-import android.util.Log
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.domain.Explanations
 import il.kmi.app.search.asSharedRepo
@@ -30,7 +29,6 @@ object ExerciseSearchService {
                             belt = beltEnum?.toShared()
                         )
                     }.getOrElse {
-                        Log.e("KMI-AI", "KmiSearch failed for query=$query", it)
                         emptyList()
                     }
                 }
@@ -42,7 +40,6 @@ object ExerciseSearchService {
                     ).joinToString("|")
                 }
         } catch (t: Throwable) {
-            Log.e("KMI-AI", "KmiSearch failed", t)
             emptyList()
         }
     }
@@ -95,11 +92,16 @@ object ExerciseSearchService {
             "תחפש לי",
             "תראה לי",
             "explain",
+            "explain please",
+            "give me an explanation",
             "what is",
             "how to do",
             "how do i do",
+            "how do you do",
+            "how to perform",
             "show me",
-            "find"
+            "find",
+            "search for"
         )
 
         val variants = mutableListOf<String>()
@@ -150,7 +152,11 @@ object ExerciseSearchService {
             )
 
             if (isEnglish) {
-                "• $displayName ($topicTitle – ${appBelt.name.lowercase()} belt)"
+                val beltName = appBelt.name
+                    .lowercase()
+                    .replaceFirstChar { it.uppercase() }
+
+                "• $displayName ($topicTitle – $beltName belt)"
             } else {
                 "• $displayName (${topicTitle} – חגורה ${appBelt.heb})"
             }
@@ -172,7 +178,7 @@ object ExerciseSearchService {
 
             val explanation = findExplanationForHit(appBelt, rawItem)
 
-            if (!explanation.startsWith("אין כרגע")) {
+            if (explanation.isNotBlank()) {
 
                 val display = displayNameForHit(
                     rawItem = rawItem,
@@ -242,6 +248,6 @@ object ExerciseSearchService {
             }
         }
 
-        return "אין כרגע הסבר מפורט לתרגיל הזה במאגר."
+        return ""
     }
 }

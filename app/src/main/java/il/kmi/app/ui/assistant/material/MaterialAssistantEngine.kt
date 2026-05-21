@@ -1,13 +1,10 @@
 package il.kmi.app.ui.assistant.material
 
-import android.util.Log
 import il.kmi.app.domain.ContentRepo
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 
 object MaterialAssistantEngine {
-
-    private const val TAG = "KMI_MATERIAL_AI"
 
     fun answer(
         question: String,
@@ -49,11 +46,9 @@ object MaterialAssistantEngine {
                 topicTitle = requestedTopic,
                 isEnglish = isEnglish
             )
-        } catch (t: Throwable) {
-            Log.e(TAG, "MaterialAssistantEngine failed", t)
-
+        } catch (_: Throwable) {
             if (isEnglish) {
-                "There is a temporary issue processing the K.A.M.I material request."
+                "There is a temporary issue processing the KAMI material request."
             } else {
                 "יש תקלה רגעית בעיבוד בקשת חומר ק.מ.י."
             }
@@ -163,13 +158,12 @@ object MaterialAssistantEngine {
             "עבודת קרקע" to listOf(
                 "קרקע",
                 "עבודת קרקע",
-                "groundwork",
-                "ground work"
-            ),
-            "עבודת קרקע" to listOf(
-                "עבודת קרקע",
                 "הכנה לקרקע",
-                "groundwork preparation"
+                "groundwork",
+                "ground work",
+                "groundwork preparation",
+                "ground fighting",
+                "ground techniques"
             )
         )
 
@@ -210,10 +204,22 @@ object MaterialAssistantEngine {
             .replace("תרגילים של", " ")
             .replace("תרגילי", " ")
             .replace("תרגילים", " ")
+            .replace("show me", " ", ignoreCase = true)
+            .replace("give me", " ", ignoreCase = true)
+            .replace("list of", " ", ignoreCase = true)
+            .replace("exercise list", " ", ignoreCase = true)
+            .replace("exercises of", " ", ignoreCase = true)
+            .replace("exercises", " ", ignoreCase = true)
+            .replace("topic", " ", ignoreCase = true)
+            .replace("material", " ", ignoreCase = true)
             .replace("חומר", " ")
             .replace("קמי", " ")
             .replace("ק.מ.י", " ")
+            .replace("ק מ י", " ")
+            .replace("KAMI", " ", ignoreCase = true)
             .replace("K.A.M.I", " ", ignoreCase = true)
+            .replace("K.M.I", " ", ignoreCase = true)
+            .replace("K M I", " ", ignoreCase = true)
             .replace("yellow", " ", ignoreCase = true)
             .replace("orange", " ", ignoreCase = true)
             .replace("green", " ", ignoreCase = true)
@@ -239,6 +245,13 @@ object MaterialAssistantEngine {
     private fun normalizeText(text: String): String {
         return text
             .lowercase()
+            .replace("ק.מ.י", "קמי")
+            .replace("ק מ י", "קמי")
+            .replace("k.a.m.i", "kami")
+            .replace("k.m.i", "kami")
+            .replace("k m i", "kami")
+            .replace("k a m i", "kami")
+            .replace("kmi", "kami")
             .replace("־", "-")
             .replace("–", "-")
             .replace("-", " ")
@@ -258,7 +271,7 @@ object MaterialAssistantEngine {
 
     private fun buildMissingBeltAnswer(isEnglish: Boolean): String {
         return if (isEnglish) {
-            "Which belt should I search in?\n\nFor example:\n• Green belt defenses\n• Yellow belt kicks\n• Blue belt releases"
+            "Which belt should I search in?\n\nFor example:\n• Green belt defenses\n• Yellow belt kicks\n• Blue belt releases\n• KAMI material in blue belt"
         } else {
             "באיזו חגורה לחפש?\n\nלדוגמה:\n• הגנות בחגורה ירוקה\n• בעיטות בחגורה צהובה\n• שחרורים בחגורה כחולה"
         }
@@ -275,7 +288,7 @@ object MaterialAssistantEngine {
 
         if (topics.isEmpty()) {
             return if (isEnglish) {
-                "I couldn't find topics for ${belt.name.lowercase()} belt."
+                "I couldn't find topics for ${beltDisplayEn(belt)}."
             } else {
                 "לא מצאתי נושאים עבור ${beltDisplayHe(belt)}."
             }
@@ -283,7 +296,7 @@ object MaterialAssistantEngine {
 
         return buildString {
             if (isEnglish) {
-                appendLine("Topics in ${belt.name.lowercase()} belt:")
+                appendLine("Topics in ${beltDisplayEn(belt)}:")
             } else {
                 appendLine("הנושאים ב${beltDisplayHe(belt)}:")
             }
@@ -297,7 +310,7 @@ object MaterialAssistantEngine {
             appendLine()
 
             if (isEnglish) {
-                append("You can ask for a specific topic, for example: ${belt.name.lowercase()} belt defenses.")
+                append("You can ask for a specific topic, for example: ${beltDisplayEn(belt)} defenses.")
             } else {
                 append("אפשר לבקש נושא מסוים, למשל: הגנות ב${beltDisplayHe(belt)}.")
             }
@@ -361,7 +374,7 @@ object MaterialAssistantEngine {
 
         return buildString {
             if (isEnglish) {
-                appendLine("I found \"$topicTitle\" in ${belt.name.lowercase()} belt:")
+                appendLine("I found \"$topicTitle\" in ${beltDisplayEn(belt)}:")
             } else {
                 appendLine("מצאתי את הנושא \"$topicTitle\" ב${beltDisplayHe(belt)}:")
             }
@@ -388,7 +401,7 @@ object MaterialAssistantEngine {
     ): String {
         if (items.isEmpty()) {
             return if (isEnglish) {
-                "I found the topic \"$topicTitle\" in ${belt.name.lowercase()} belt, but I couldn't find exercises under it."
+                "I found the topic \"$topicTitle\" in ${beltDisplayEn(belt)}, but I couldn't find exercises under it."
             } else {
                 "מצאתי את הנושא \"$topicTitle\" ב${beltDisplayHe(belt)}, אבל לא מצאתי תחתיו תרגילים."
             }
@@ -396,7 +409,7 @@ object MaterialAssistantEngine {
 
         return buildString {
             if (isEnglish) {
-                appendLine("Exercises in \"$topicTitle\" for ${belt.name.lowercase()} belt:")
+                appendLine("Exercises in \"$topicTitle\" for ${beltDisplayEn(belt)}:")
             } else {
                 appendLine("התרגילים בנושא \"$topicTitle\" ב${beltDisplayHe(belt)}:")
             }
@@ -417,7 +430,7 @@ object MaterialAssistantEngine {
     ): String {
         return buildString {
             if (isEnglish) {
-                appendLine("I found sub-topics for \"$topicTitle\" in ${belt.name.lowercase()} belt:")
+                appendLine("I found sub-topics for \"$topicTitle\" in ${beltDisplayEn(belt)}:")
             } else {
                 appendLine("מצאתי תתי־נושאים עבור \"$topicTitle\" ב${beltDisplayHe(belt)}:")
             }
@@ -428,6 +441,14 @@ object MaterialAssistantEngine {
                 appendLine("${index + 1}. $subTopic")
             }
         }.trim()
+    }
+
+    private fun beltDisplayEn(belt: Belt): String {
+        val name = belt.name
+            .lowercase()
+            .replaceFirstChar { it.uppercase() }
+
+        return "$name belt"
     }
 
     private fun beltDisplayHe(belt: Belt): String {

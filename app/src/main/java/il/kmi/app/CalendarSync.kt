@@ -14,6 +14,8 @@ import androidx.core.content.ContextCompat
 import java.util.Calendar
 import java.util.TimeZone
 import il.kmi.app.training.TrainingCatalog.addressFor
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
 // בדיקת הרשאות קריאה/כתיבה ליומן
 fun hasCalendarPermission(ctx: Context): Boolean =
@@ -25,14 +27,16 @@ fun hasCalendarPermission(ctx: Context): Boolean =
  * אנחנו יוצרים/מעדכנים שלושה אירועים שבועיים (SU/MO/TU) עם RRULE, ומסמנים אותם בתיאור עם TAG ייחודי.
  */
 object KmiCalendarSync {
-    private const val TAG_MARK = "[KMI_SYNC]"   // מזהה הייחוס שלנו בתיאור האירוע
-    private const val TAG_MARK_SELECTED = "[KMI_SYNC_SELECTED]"
-    // ↓↓↓ חדש: אותו שם כמו במסך הכניסה
-    private const val PREFS_NAME = "kmi_prefs"
+    private const val TAG_MARK = "[KMI_SYNC]"   // מזהה פנימי לאירועי סנכרון. לא מוצג למשתמש.
+    private const val TAG_MARK_SELECTED = "[KMI_SYNC_SELECTED]" // מזהה פנימי לאירועי יומן שנבחר.
     // כותרות ואורכים
     private const val TITLE_SOKOLOV = "אימון ק.מ.י – מתנ\"ס סוקולוב"
     private const val TITLE_OFEK    = "אימון ק.מ.י – מרכז אופק"
     private const val DURATION_MIN  = 90
+
+    private fun tr(context: Context, he: String, en: String): String {
+        return if (AppLanguageManager(context).getCurrentLanguage() == AppLanguage.ENGLISH) en else he
+    }
 
     data class DeviceCalendar(
         val id: Long,
@@ -252,13 +256,21 @@ object KmiCalendarSync {
     fun upsertAll(context: Context) {
         // הרשאות?
         if (!hasCalendarPermission(context)) {
-            Toast.makeText(context, "אין הרשאה ליומן", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                tr(context, "אין הרשאה ליומן", "No calendar permission"),
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
 
         val calId = pickWritableCalendarId(context)
         if (calId == null) {
-            Toast.makeText(context, "לא נמצא יומן לעריכה", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                tr(context, "לא נמצא יומן לעריכה", "No writable calendar was found"),
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
 
@@ -275,12 +287,20 @@ object KmiCalendarSync {
 
     fun upsertAllToSelectedCalendar(context: Context, selectedCalendarId: Long): Boolean {
         if (!hasCalendarPermission(context)) {
-            Toast.makeText(context, "אין הרשאה ליומן", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                tr(context, "אין הרשאה ליומן", "No calendar permission"),
+                Toast.LENGTH_LONG
+            ).show()
             return false
         }
         val valid = listWritableCalendars(context).any { it.id == selectedCalendarId }
         if (!valid) {
-            Toast.makeText(context, "היומן שנבחר אינו זמין לכתיבה", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                tr(context, "היומן שנבחר אינו זמין לכתיבה", "The selected calendar is not writable"),
+                Toast.LENGTH_LONG
+            ).show()
             return false
         }
         upsertAllToCalendar(
@@ -292,36 +312,16 @@ object KmiCalendarSync {
         return true
     }
 
-    private fun logAvailableCalendars(context: Context) {
-        val cr = context.contentResolver
-        val proj = arrayOf(
-            Calendars._ID,
-            Calendars.CALENDAR_DISPLAY_NAME,
-            Calendars.ACCOUNT_NAME,
-            Calendars.ACCOUNT_TYPE,
-            Calendars.VISIBLE,
-            Calendars.SYNC_EVENTS
-        )
-        cr.query(Calendars.CONTENT_URI, proj, null, null, null)?.use { c ->
-            while (c.moveToNext()) {
-                val id   = c.getLong(0)
-                val name = c.getString(1)
-                val acc  = c.getString(2)
-                val type = c.getString(3)
-                val vis  = c.getInt(4)
-                val sync = c.getInt(5)
-                android.util.Log.d(
-                    "KMI_CAL",
-                    "cal id=$id, name=$name, account=$acc, type=$type, visible=$vis, sync=$sync"
-                )
-            }
-        }
-    }
+
 
     /** מוחק מהיומן את כל האירועים שסונכרנו ע"י האפליקציה (בטוח לפי CUSTOM_APP_*). */
     fun removeAll(context: Context) {
         if (!hasCalendarPermission(context)) {
-            Toast.makeText(context, "אין הרשאה למחיקה מהיומן", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                tr(context, "אין הרשאה למחיקה מהיומן", "No permission to delete calendar events"),
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
         val cr = context.contentResolver
@@ -336,12 +336,20 @@ object KmiCalendarSync {
                 cr.delete(uri, null, null)
             }
         }
-        Toast.makeText(context, "האימונים הוסרו מהיומן", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            context,
+            tr(context, "האימונים הוסרו מהיומן", "Training events were removed from the calendar"),
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     fun removeSelectedCalendarEvents(context: Context) {
         if (!hasCalendarPermission(context)) {
-            Toast.makeText(context, "אין הרשאה למחיקה מהיומן", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                context,
+                tr(context, "אין הרשאה למחיקה מהיומן", "No permission to delete calendar events"),
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
         val cr = context.contentResolver

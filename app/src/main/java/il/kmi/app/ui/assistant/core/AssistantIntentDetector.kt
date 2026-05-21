@@ -6,8 +6,14 @@ object AssistantIntentDetector {
         return text
             .lowercase()
             .replace("ק.מ.י", "קמי")
-            .replace("k.m.i", "kmi")
-            .replace("  ", " ")
+            .replace("ק מ י", "קמי")
+            .replace("k.a.m.i", "kami")
+            .replace("k.a.m.i.", "kami")
+            .replace("k.m.i", "kami")
+            .replace("k m i", "kami")
+            .replace("k a m i", "kami")
+            .replace("kmi", "kami")
+            .replace(Regex("\\s+"), " ")
             .trim()
     }
 
@@ -25,8 +31,13 @@ object AssistantIntentDetector {
         if ("training" in q) score += 3
         if ("trainings" in q) score += 3
         if ("workout" in q) score += 3
+        if ("class" in q) score += 2
+        if ("classes" in q) score += 2
+        if ("schedule" in q) score += 3
         if ("next training" in q) score += 4
+        if ("next workout" in q) score += 4
         if ("upcoming training" in q) score += 4
+        if ("upcoming trainings" in q) score += 4
         if ("training day" in q) score += 4
         if ("which day" in q) score += 2
 
@@ -49,6 +60,7 @@ object AssistantIntentDetector {
         if ("topic" in q) score += 3
         if ("topics" in q) score += 3
         if ("sub topic" in q || "sub-topic" in q) score += 4
+        if ("kami" in q) score += 2
         if ("kmi" in q) score += 2
         if ("external defenses" in q) score += 4
         if ("releases" in q) score += 3
@@ -74,12 +86,16 @@ object AssistantIntentDetector {
         if ("exercise" in q) score += 4
         if ("exercises" in q) score += 4
         if ("explain" in q) score += 3
+        if ("explanation" in q) score += 3
+        if ("technique" in q) score += 3
         if ("kick" in q) score += 4
         if ("kicks" in q) score += 4
         if ("punch" in q) score += 3
+        if ("strike" in q) score += 3
         if ("defense" in q) score += 2
         if ("how to do" in q) score += 4
         if ("how do i do" in q) score += 4
+        if ("how do you do" in q) score += 4
 
         return score
     }
@@ -101,9 +117,29 @@ object AssistantIntentDetector {
 
         if (topCount > 1) {
             return when {
-                "הסבר" in q || "explain" in q -> AssistantIntent.EXERCISE
-                "חומר" in q || "topic" in q || "material" in q -> AssistantIntent.MATERIAL
-                "אימון" in q || "training" in q || "workout" in q -> AssistantIntent.TRAININGS
+                "הסבר" in q ||
+                        "explain" in q ||
+                        "explanation" in q ||
+                        "איך עושים" in q ||
+                        "how to do" in q ||
+                        "how do i do" in q ||
+                        "technique" in q -> AssistantIntent.EXERCISE
+
+                "חומר" in q ||
+                        "נושא" in q ||
+                        "topic" in q ||
+                        "topics" in q ||
+                        "material" in q ||
+                        "kami" in q -> AssistantIntent.MATERIAL
+
+                "אימון" in q ||
+                        "אימונים" in q ||
+                        "training" in q ||
+                        "trainings" in q ||
+                        "workout" in q ||
+                        "schedule" in q ||
+                        "class" in q -> AssistantIntent.TRAININGS
+
                 else -> best.intent
             }
         }

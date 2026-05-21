@@ -1,6 +1,5 @@
 package il.kmi.app.ui.assistant.exercise
 
-import android.util.Log
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.domain.Explanations
 import il.kmi.app.search.asSharedRepo
@@ -16,8 +15,6 @@ import java.util.Locale
  * תופס ניסוחים שונים, מחלץ שם תרגיל, ומחזיר הסבר מתוך Explanations.
  */
 object AssistantExerciseExplanationKnowledge {
-
-    private const val TAG = "KMI_EXPLAIN"
 
     // ─────────────────────────────────────────────────────────────
     // 1) טריגרים לשאלות הסבר
@@ -39,7 +36,15 @@ object AssistantExerciseExplanationKnowledge {
 
         "מה זה", "מהו", "מה היא", "מה פירוש", "מה המשמעות",
         "תן דוגמה", "תני דוגמה", "דוגמה", "דוגמא",
-        "טיפים", "דגשים", "מה חשוב", "מה לשים לב"
+        "טיפים", "דגשים", "מה חשוב", "מה לשים לב",
+
+        "explain", "explain please", "explain to me",
+        "give me an explanation", "give explanation",
+        "how to do", "how do i do", "how do you do",
+        "how to perform", "how do i perform",
+        "what is", "what does it mean",
+        "step by step", "guide me",
+        "tips", "key points", "what is important"
     )
 
     // ✅ רמזים שמדובר בתרגיל גם בלי המילה "תרגיל"
@@ -49,7 +54,12 @@ object AssistantExerciseExplanationKnowledge {
         "בעיטה", "אגרוף",
         "הגנה", "חניקה",
         "הטלה", "בריח",
-        "שחרור", "אחיזה"
+        "שחרור", "אחיזה",
+
+        "exercise", "technique",
+        "kick", "punch", "strike",
+        "defense", "choke", "throw",
+        "lock", "release", "grab"
     )
 
     // מילים מיותרות בסוף שם התרגיל
@@ -58,7 +68,11 @@ object AssistantExerciseExplanationKnowledge {
         "בבקשה", "תודה",
         "תן", "תני",
         "הסבר", "פירוט",
-        "שלב", "איך", "מה"
+        "שלב", "איך", "מה",
+
+        "please", "thanks", "thank you",
+        "explain", "explanation",
+        "step", "how", "what"
     )
 
     // ─────────────────────────────────────────────────────────────
@@ -67,18 +81,21 @@ object AssistantExerciseExplanationKnowledge {
     data class ExplainRequest(
         val rawQuestion: String,
         val exerciseName: String,
-        val belt: Belt?
+        val belt: Belt?,
+        val isEnglish: Boolean = false
     )
 
     fun answer(
         question: String,
         preferredBelt: Belt? = null,
-        lastExerciseFromMemory: String? = null
+        lastExerciseFromMemory: String? = null,
+        isEnglish: Boolean = false
     ): String? {
         val req = tryParse(
             question = question,
             preferredBelt = preferredBelt,
-            lastExerciseFromMemory = lastExerciseFromMemory
+            lastExerciseFromMemory = lastExerciseFromMemory,
+            isEnglish = isEnglish
         ) ?: return null
 
         return answer(req)
@@ -96,9 +113,14 @@ object AssistantExerciseExplanationKnowledge {
         )
 
         if (direct != null) {
-            val (beltFound, expRaw) = direct
+            val (_, expRaw) = direct
             val cleaned = expRaw.substringAfter("::", expRaw).trim()
-            return "ההסבר לתרגיל \"${req.exerciseName}\":\n\n$cleaned\n\nהאם אני יכול לעזור לך בעוד משהו?"
+
+            return if (req.isEnglish) {
+                "Explanation for \"${req.exerciseName}\":\n\n$cleaned"
+            } else {
+                "ההסבר לתרגיל \"${req.exerciseName}\":\n\n$cleaned"
+            }
         }
 
         // 2) fallback – חיפוש חכם ומיפוי ה-hit לשם מפתח שמתאים ל-Explanations
@@ -108,7 +130,6 @@ object AssistantExerciseExplanationKnowledge {
             val rawItem = best.item ?: return null
 
             val displayKey = canonToExplanationKey(rawItem)
-            Log.d(TAG, "Explain fallback hit: belt=$hitBelt rawItem='$rawItem' -> key='$displayKey'")
 
             val exp = findExplanationAcrossBelts(
                 primaryBelt = hitBelt,
@@ -118,11 +139,15 @@ object AssistantExerciseExplanationKnowledge {
 
             if (!exp.isNullOrBlank() && !looksLikeNoData(exp)) {
                 val cleaned = exp.substringAfter("::", exp).trim()
-                return "ההסבר לתרגיל \"$displayKey\":\n\n$cleaned\n\nהאם אני יכול לעזור לך בעוד משהו?"
+
+                return if (req.isEnglish) {
+                    "Explanation for \"$displayKey\":\n\n$cleaned"
+                } else {
+                    "ההסבר לתרגיל \"$displayKey\":\n\n$cleaned"
+                }
             }
         }
 
-        Log.d(TAG, "No explanation found. belt=${req.belt} name='${req.exerciseName}' q='${req.rawQuestion}'")
         return null
     }
 
@@ -176,10 +201,8 @@ object AssistantExerciseExplanationKnowledge {
         for (c in candidates) {
             val v = tryGet(primaryBelt, c)
             if (v != null) {
-                Log.d(TAG, "Explain direct: belt=$primaryBelt key='$c' ✔")
                 return primaryBelt to v
             }
-            Log.d(TAG, "Explain direct miss: belt=$primaryBelt key='$c'")
         }
 
         if (!allowAllBelts) return null
@@ -194,12 +217,10 @@ object AssistantExerciseExplanationKnowledge {
             for (c in candidates) {
                 val v = tryGet(b, c)
                 if (v != null) {
-                    Log.d(TAG, "Explain found in other belt: belt=$b key='$c' ✔")
                     return b to v
                 }
             }
         }
-
         return null
     }
 
@@ -229,7 +250,8 @@ object AssistantExerciseExplanationKnowledge {
     fun tryParse(
         question: String,
         preferredBelt: Belt? = null,
-        lastExerciseFromMemory: String? = null
+        lastExerciseFromMemory: String? = null,
+        isEnglish: Boolean = false
     ): ExplainRequest? {
         val norm = normalize(question)
 
@@ -250,7 +272,8 @@ object AssistantExerciseExplanationKnowledge {
         return ExplainRequest(
             rawQuestion = question,
             exerciseName = name,
-            belt = preferredBelt
+            belt = preferredBelt,
+            isEnglish = isEnglish
         )
     }
 
@@ -278,6 +301,15 @@ object AssistantExerciseExplanationKnowledge {
             afterToken(norm, "טכניקת"),
             afterToken(norm, "הסבר על"),
             afterToken(norm, "הסבר ל"),
+
+            afterToken(norm, "exercise"),
+            afterToken(norm, "technique"),
+            afterToken(norm, "explain"),
+            afterToken(norm, "explanation for"),
+            afterToken(norm, "how to do"),
+            afterToken(norm, "how do i do"),
+            afterToken(norm, "how to perform"),
+
             afterColon(original)
         ).map { cleanName(it) }
             .filter { it.isNotBlank() }
