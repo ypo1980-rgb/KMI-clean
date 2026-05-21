@@ -88,7 +88,7 @@ private fun BeltPill(
         ) {
             Image(
                 painter = painterResource(id = beltDrawableRes(belt)),
-                contentDescription = "חגורה ${belt.heb}",
+                contentDescription = null,
                 modifier = Modifier.size(22.dp),
                 contentScale = ContentScale.Fit
             )
@@ -787,14 +787,14 @@ fun MaterialsScreen(
                     }
                 }
 
-                val dialogTitle = if (isEnglish) {
-                    itemTitleForUi(t, canonical, AppLanguage.ENGLISH)
-                } else {
-                    canonical
-                }
+                val dialogTitle = itemTitleForUi(
+                    topic = t,
+                    rawItem = canonical,
+                    lang = currentLang
+                )
 
                 val dialogBeltLabel = if (isEnglish) {
-                    "(${b.name.lowercase().replaceFirstChar { it.uppercase() }} belt)"
+                    "(${b.en} belt)"
                 } else {
                     "(${b.heb})"
                 }
@@ -854,60 +854,66 @@ fun MaterialsScreen(
                 }
             }
 
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    Row(
+            CompositionLocalProvider(
+                LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
+                ) {
+                    val beltRes: Int = when (belt) {
+                        Belt.WHITE  -> R.drawable.belt_white
+                        Belt.YELLOW -> R.drawable.belt_yellow
+                        Belt.ORANGE -> R.drawable.belt_orange
+                        Belt.GREEN  -> R.drawable.belt_green
+                        Belt.BLUE   -> R.drawable.belt_blue
+                        Belt.BROWN  -> R.drawable.belt_brown
+                        Belt.BLACK  -> R.drawable.belt_black
+                    }
+
+                    Text(
+                        text = header,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = Color(0xFF334155),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Spacer(Modifier.width(10.dp))
+
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        val beltRes: Int = when (belt) {
-                            Belt.WHITE  -> R.drawable.belt_white
-                            Belt.YELLOW -> R.drawable.belt_yellow
-                            Belt.ORANGE -> R.drawable.belt_orange
-                            Belt.GREEN  -> R.drawable.belt_green
-                            Belt.BLUE   -> R.drawable.belt_blue
-                            Belt.BROWN  -> R.drawable.belt_brown
-                            Belt.BLACK  -> R.drawable.belt_black
-                        }
-
-                        Text(
-                            text = header,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Right,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = Color(0xFF334155),
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Spacer(Modifier.width(10.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .background(
-                                    color = Color.White.copy(alpha = 0.70f),
-                                    shape = CircleShape
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = belt.color.copy(alpha = 0.18f),
-                                    shape = CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                painter = painterResource(id = beltRes),
-                                contentDescription = "חגורה ${belt.heb}",
-                                modifier = Modifier.size(32.dp),
-                                contentScale = ContentScale.Fit
+                            .size(42.dp)
+                            .background(
+                                color = Color.White.copy(alpha = 0.70f),
+                                shape = CircleShape
                             )
-                        }
+                            .border(
+                                width = 1.dp,
+                                color = belt.color.copy(alpha = 0.18f),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = beltRes),
+                            contentDescription = if (isEnglish) {
+                                "${belt.en} belt"
+                            } else {
+                                "חגורה ${belt.heb}"
+                            },
+                            modifier = Modifier.size(32.dp),
+                            contentScale = ContentScale.Fit
+                        )
                     }
                 }
+            }
 
                 Divider(
                     color = belt.color.copy(alpha = 0.14f),
@@ -1160,6 +1166,9 @@ private fun PremiumExerciseNoteDialog(
     onSave: () -> Unit,
     onDelete: (() -> Unit)? = null
 ) {
+    val noteTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val noteHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color.Transparent,
@@ -1191,13 +1200,13 @@ private fun PremiumExerciseNoteDialog(
                             )
                         )
                         .padding(horizontal = 20.dp, vertical = 20.dp),
-                    horizontalAlignment = Alignment.End,
+                    horizontalAlignment = noteHorizontalAlignment,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
                         text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Right,
+                        textAlign = noteTextAlign,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Black,
                         color = Color(0xFF1F2937)
@@ -1210,7 +1219,7 @@ private fun PremiumExerciseNoteDialog(
                             "כתוב הערה אישית שתישמר לתרגיל הזה"
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Right,
+                        textAlign = noteTextAlign,
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF64748B)
@@ -1235,7 +1244,7 @@ private fun PremiumExerciseNoteDialog(
                             minLines = 4,
                             maxLines = 7,
                             textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                textAlign = TextAlign.Right,
+                                textAlign = noteTextAlign,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF111827)
                             ),
@@ -1243,7 +1252,7 @@ private fun PremiumExerciseNoteDialog(
                                 Text(
                                     text = if (isEnglish) "Write a free note" else "הקלד הערה חופשית",
                                     modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Right,
+                                    textAlign = noteTextAlign,
                                     color = Color(0xFF94A3B8),
                                     fontWeight = FontWeight.SemiBold
                                 )

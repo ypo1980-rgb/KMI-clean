@@ -55,8 +55,18 @@ import java.util.Locale
 private data class CalendarTrainingItem(
     val branch: String,
     val group: String,
-    val timeText: String
-)
+    val timeText: String,
+    val branchEn: String = "",
+    val groupEn: String = ""
+) {
+    fun displayBranch(isEnglish: Boolean): String {
+        return if (isEnglish && branchEn.isNotBlank()) branchEn else branch
+    }
+
+    fun displayGroup(isEnglish: Boolean): String {
+        return if (isEnglish && groupEn.isNotBlank()) groupEn else group
+    }
+}
 
 /* -------------------------------------------------------------------------- */
 /*                              Debug banner                                  */
@@ -623,8 +633,8 @@ fun MonthlyCalendarScreen(
                             ) {
                                 Text(
                                     text = tr(
-                                        "לא נמצאו אימונים להצגה. יש להשלים אזור, סניף וקבוצה בפרופיל.",
-                                        "No trainings found. Please complete region, branch, and group in your profile."
+                                        "לא נמצאו אימונים להצגה עבור האזור, הסניף והקבוצה שנבחרו בפרופיל.",
+                                        "No trainings were found for the region, branch, and group selected in your profile."
                                     ),
                                     color = Color.White,
                                     style = MaterialTheme.typography.bodyMedium,
@@ -758,9 +768,12 @@ fun MonthlyCalendarScreen(
                                                         val rows = selectedTrainingItems
                                                             .sortedBy { it.timeText }
                                                             .joinToString("\n") { item ->
+                                                                val branchLabel = item.displayBranch(isEnglish)
+                                                                val groupLabel = item.displayGroup(isEnglish)
+
                                                                 tr(
-                                                                    "• ${item.timeText} · ${item.branch} · ${item.group}",
-                                                                    "• ${item.timeText} · ${item.branch} · ${item.group}"
+                                                                    "• ${item.timeText} · $branchLabel · $groupLabel",
+                                                                    "• ${item.timeText} · $branchLabel · $groupLabel"
                                                                 )
                                                             }
 
@@ -818,9 +831,9 @@ fun MonthlyCalendarScreen(
                                             ) {
                                                 Text(
                                                     text = if (hasSummaryForSelectedDate) {
-                                                        tr("קריאת סיכום", "Read summary")
+                                                        tr("קריאת סיכום", "Read training summary")
                                                     } else {
-                                                        tr("הוספת סיכום", "Add summary")
+                                                        tr("הוספת סיכום", "Add training summary")
                                                     },
                                                     fontWeight = FontWeight.ExtraBold
                                                 )
@@ -923,7 +936,9 @@ private fun buildMonthlyTrainingItemsFromDatabase(
                         CalendarTrainingItem(
                             branch = dbBranch.nameHe.ifBlank { branch },
                             group = trainingDay.groupHe.ifBlank { group },
-                            timeText = trainingDay.startTime
+                            timeText = trainingDay.startTime,
+                            branchEn = dbBranch.nameEn.ifBlank { branch },
+                            groupEn = trainingDay.groupEn.ifBlank { group }
                         )
                     )
             }

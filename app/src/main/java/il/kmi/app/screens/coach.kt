@@ -1459,37 +1459,48 @@ fun CoachTraineesScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    horizontalAlignment = screenHorizontalAlignment
                                 ) {
-                            Text(
-                                text = selected.fullName,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = Color(0xFF212121)
-                            )
-                            Divider()
+                                    Text(
+                                        text = selected.fullName,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = Color(0xFF212121),
+                                        textAlign = screenTextAlign,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Divider()
+
                                     LabeledField(
-                                        coachTr(isEnglish, "גיל", "Age"),
-                                        if (selected.age > 0) "${selected.age}" else "—"
+                                        label = coachTr(isEnglish, "גיל", "Age"),
+                                        value = if (selected.age > 0) "${selected.age}" else "—",
+                                        isEnglish = isEnglish
                                     )
                                     LabeledField(
-                                        coachTr(isEnglish, "ותק", "Seniority"),
-                                        selected.seniority.ifBlank { "—" }
+                                        label = coachTr(isEnglish, "ותק", "Seniority"),
+                                        value = selected.seniority.ifBlank { "—" },
+                                        isEnglish = isEnglish
                                     )
                                     LabeledField(
-                                        coachTr(isEnglish, "דרגה", "Rank"),
-                                        coachBeltNameForUi(selected.belt.ifBlank { "—" }, isEnglish)
+                                        label = coachTr(isEnglish, "דרגה", "Rank"),
+                                        value = coachBeltNameForUi(selected.belt.ifBlank { "—" }, isEnglish),
+                                        isEnglish = isEnglish
                                     )
                                     LabeledField(
-                                        coachTr(isEnglish, "סניף", "Branch"),
-                                        selected.branch.ifBlank { "—" }
+                                        label = coachTr(isEnglish, "סניף", "Branch"),
+                                        value = selected.branch.ifBlank { "—" },
+                                        isEnglish = isEnglish
                                     )
                                     LabeledField(
-                                        coachTr(isEnglish, "קבוצה", "Group"),
-                                        selected.groupKey.ifBlank { "—" }
+                                        label = coachTr(isEnglish, "קבוצה", "Group"),
+                                        value = selected.groupKey.ifBlank { "—" },
+                                        isEnglish = isEnglish
                                     )
                                     LabeledField(
-                                        coachTr(isEnglish, "אחוז נוכחות (60 ימים אחרונים)", "Attendance rate — last 60 days"),
-                                        if (selected.attendancePct > 0) "${selected.attendancePct}%" else "—"
+                                        label = coachTr(isEnglish, "אחוז נוכחות (60 ימים אחרונים)", "Attendance rate — last 60 days"),
+                                        value = if (selected.attendancePct > 0) "${selected.attendancePct}%" else "—",
+                                        isEnglish = isEnglish
                                     )
 
                                     Divider()
@@ -2271,7 +2282,9 @@ private fun CoachDateSectionCard(
                                         text = coachDateItemNameForUi(itemName, isEnglish),
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF1F2937)
+                                        color = Color(0xFF1F2937),
+                                        textAlign = coachTextAlign(isEnglish),
+                                        modifier = Modifier.fillMaxWidth()
                                     )
 
                                     Text(
@@ -2297,7 +2310,9 @@ private fun CoachDateSectionCard(
                                             else -> coachTr(isEnglish, "אין מידע", "No information")
                                         },
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (hasContent) Color(0xFF0F766E) else Color(0xFF94A3B8)
+                                        color = if (hasContent) Color(0xFF0F766E) else Color(0xFF94A3B8),
+                                        textAlign = coachTextAlign(isEnglish),
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                 }
 
@@ -2336,6 +2351,9 @@ private fun CoachDateSectionCard(
                                     placeholder = { Text("YYYY-MM-DD") },
                                     modifier = Modifier.fillMaxWidth(),
                                     singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                        textAlign = coachTextAlign(isEnglish)
+                                    ),
                                     shape = RoundedCornerShape(16.dp)
                                 )
 
@@ -2357,11 +2375,16 @@ private fun CoachDateSectionCard(
                                                 isEnglish,
                                                 "לדוגמה: השתלמות מדריכים / מחנה קיץ / הסמכת עוזר מדריך",
                                                 "Example: instructor seminar / summer camp / assistant instructor certification"
-                                            )
+                                            ),
+                                            textAlign = coachTextAlign(isEnglish),
+                                            modifier = Modifier.fillMaxWidth()
                                         )
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                     minLines = 2,
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                        textAlign = coachTextAlign(isEnglish)
+                                    ),
                                     shape = RoundedCornerShape(16.dp)
                                 )
                             }
@@ -2463,7 +2486,10 @@ private fun CoachDateSectionCard(
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
                             color = if (msg.contains("נשמרו") || msg.contains("saved", ignoreCase = true)) Color(0xFF166534) else Color(0xFF991B1B),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                            textAlign = coachTextAlign(isEnglish),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
                         )
                     }
                 }
@@ -2472,21 +2498,33 @@ private fun CoachDateSectionCard(
     }
 
 @Composable
-private fun LabeledField(label: String, value: String) {
+private fun LabeledField(
+    label: String,
+    value: String,
+    isEnglish: Boolean
+) {
+    val textAlign = coachTextAlign(isEnglish)
+    val horizontalAlignment = coachHorizontalAlignment(isEnglish)
+
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalAlignment = horizontalAlignment
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF607D8B)
+            color = Color(0xFF607D8B),
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth()
         )
         Text(
             text = value.ifBlank { "—" },
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF263238)
+            color = Color(0xFF263238),
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -2587,7 +2625,6 @@ private fun CoachGroupStatsPremiumScreen(
             .map { it.attendancePct.coerceIn(0, 100) }
             .filter { it > 0 }
             .sorted()
-            .ifEmpty { listOf(35, 48, 52, 61, 70, 76, 81, 88) }
     }
 
     Box(

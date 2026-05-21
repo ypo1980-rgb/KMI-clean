@@ -133,33 +133,41 @@ fun DrawerMenuCard(
 // ─────────────────────────────────────────────
 private data class DemoVideo(
     val id: String,
-    val title: String,
+    val titleHe: String,
+    val titleEn: String,
     val url: String,
     val source: String = "YouTube"
 )
 
+private fun DemoVideo.titleFor(isEnglish: Boolean): String =
+    if (isEnglish) titleEn else titleHe
+
 private val DEMO_VIDEOS = listOf(
     DemoVideo(
         id = "yt_byPfByvdjQE",
-        title = "הגנה פנימית נגד בעיטה ישרה",
+        titleHe = "הגנה פנימית נגד בעיטה ישרה",
+        titleEn = "Inside defense against a straight kick",
         url = "https://www.youtube.com/watch?v=byPfByvdjQE",
         source = "YouTube"
     ),
     DemoVideo(
         id = "yt_v3wY85y1b7U",
-        title = "הגנה כנגד שיסוף",
+        titleHe = "הגנה כנגד שיסוף",
+        titleEn = "Defense against a slash attack",
         url = "https://www.youtube.com/shorts/v3wY85y1b7U",
         source = "YouTube"
     ),
     DemoVideo(
         id = "yt_psnF4X9g0L0",
-        title = "הגנה כנגד מקל – צד מת",
+        titleHe = "הגנה כנגד מקל – צד מת",
+        titleEn = "Defense against a stick attack – dead side",
         url = "https://www.youtube.com/shorts/psnF4X9g0L0",
         source = "YouTube"
     ),
     DemoVideo(
         id = "yt_YXzJxtIeSRU",
-        title = "מספר תוקפים",
+        titleHe = "מספר תוקפים",
+        titleEn = "Multiple attackers",
         url = "https://www.youtube.com/shorts/YXzJxtIeSRU",
         source = "YouTube"
     )
@@ -414,7 +422,6 @@ fun AppDrawerContent(
     // 📄💳 טפסים ותשלומים
     var showFormsPaymentsDialog by rememberSaveable { mutableStateOf(false) }
     var showFormsListDialog by rememberSaveable { mutableStateOf(false) }
-    var showMembershipPaymentDialog by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(authUid) {
         if (authUid.isNullOrBlank()) {
@@ -819,11 +826,11 @@ fun AppDrawerContent(
                                 onClick = onClose,
                                 modifier = Modifier.size(40.dp)
                             ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = null,
-                            tint = Color.White
-                        )
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = tr("סגור תפריט", "Close menu"),
+                                    tint = Color.White
+                                )
                     }
                 }
 
@@ -1124,7 +1131,7 @@ fun AppDrawerContent(
                         if (isEnglish) {
                             DrawerLineItemEn(
                                 title = "About the Method",
-                                subtitle = "K.A.M.I",
+                                subtitle = "KAMI",
                                 onClick = {
                                     onClose()
                                     onOpenAboutMethod()
@@ -1133,7 +1140,7 @@ fun AppDrawerContent(
                         } else {
                             DrawerLineItemHe(
                                 title = "אודות השיטה",
-                                subtitle = "K.A.M.I",
+                                subtitle = "KAMI",
                                 onClick = {
                                     onClose()
                                     onOpenAboutMethod()
@@ -1394,13 +1401,13 @@ fun AppDrawerContent(
                         }
 
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "© K.A.M.I",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFB8C4DA),
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                        Text(
+                            text = "© KAMI",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFB8C4DA),
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     Spacer(Modifier.height(8.dp))
                 } // end Column
             } // end AnimatedVisibility
@@ -1520,6 +1527,7 @@ fun AppDrawerContent(
                         enabled: Boolean,
                         onClick: () -> Unit = {}
                     ) {
+                        val cardTextAlign = if (isEnglish) TextAlign.Start else TextAlign.End
                         Surface(
                             onClick = {
                                 if (enabled) onClick()
@@ -1546,7 +1554,9 @@ fun AppDrawerContent(
                                     text = title,
                                     color = if (enabled) Color.White else Color.White.copy(alpha = 0.72f),
                                     fontWeight = FontWeight.ExtraBold,
-                                    style = MaterialTheme.typography.titleMedium
+                                    style = MaterialTheme.typography.titleMedium,
+                                    textAlign = cardTextAlign,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
@@ -1556,7 +1566,9 @@ fun AppDrawerContent(
                                     } else {
                                         Color.White.copy(alpha = 0.55f)
                                     },
-                                    style = MaterialTheme.typography.bodySmall
+                                    style = MaterialTheme.typography.bodySmall,
+                                    textAlign = cardTextAlign,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
@@ -1612,118 +1624,10 @@ fun AppDrawerContent(
                                         onClose()
                                     }
                                 )
-
-                                FormCard(
-                                    title = tr("הצהרת בריאות", "Health Declaration"),
-                                    subtitle = tr(
-                                        "טופס יוצג כאן בהמשך",
-                                        "This form will be added here soon"
-                                    ),
-                                    enabled = false
-                                )
-
-                                FormCard(
-                                    title = tr("אישור הורים", "Parental Consent"),
-                                    subtitle = tr(
-                                        "טופס יוצג כאן בהמשך",
-                                        "This form will be added here soon"
-                                    ),
-                                    enabled = false
-                                )
-
-                                FormCard(
-                                    title = tr("כתב ויתור", "Waiver Form"),
-                                    subtitle = tr(
-                                        "טופס יוצג כאן בהמשך",
-                                        "This form will be added here soon"
-                                    ),
-                                    enabled = false
-                                )
-
-                                FormCard(
-                                    title = tr("טופס חידוש חברות", "Membership Renewal Form"),
-                                    subtitle = tr(
-                                        "טופס יוצג כאן בהמשך",
-                                        "This form will be added here soon"
-                                    ),
-                                    enabled = false
-                                )
                             }
                         },
                         confirmButton = {
                             TextButton(onClick = { showFormsListDialog = false }) {
-                                Text(tr("סגור", "Close"), color = Color.White)
-                            }
-                        },
-                        containerColor = Color(0xFF0E1630),
-                        titleContentColor = Color.White,
-                        textContentColor = Color.White
-                    )
-                }
-
-                // ─────────────────────────────────────────────
-                // 💳 דיאלוג: רישום דמי חבר
-                // ─────────────────────────────────────────────
-                if (showMembershipPaymentDialog) {
-                    AlertDialog(
-                        onDismissRequest = { showMembershipPaymentDialog = false },
-                        title = {
-                            Text(
-                                text = tr("רישום דמי חבר", "Membership Fee Registration"),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        },
-                        text = {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Text(
-                                    text = tr(
-                                        "כאן נבנה את שלב הרישום והתשלום לדמי החבר.",
-                                        "Here we will build the membership registration and payment flow."
-                                    ),
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = Color.White.copy(alpha = 0.08f),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(14.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = tr("השלב הבא", "Next step"),
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = tr(
-                                                "נוסיף כאן טופס פרטים + כפתור המשך לתשלום.",
-                                                "We will add a details form here + a continue-to-payment button."
-                                            ),
-                                            color = Color.White.copy(alpha = 0.80f),
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                        confirmButton = {
-                            TextButton(onClick = { showMembershipPaymentDialog = false }) {
                                 Text(tr("סגור", "Close"), color = Color.White)
                             }
                         },
@@ -1740,12 +1644,16 @@ fun AppDrawerContent(
                 val ctx = LocalContext.current
                 var query by rememberSaveable { mutableStateOf("") }
 
-                val filtered = remember(query) {
+                val filtered = remember(query, isEnglish) {
                     val q = query.trim()
-                    if (q.isBlank()) DEMO_VIDEOS
-                    else DEMO_VIDEOS.filter {
-                        it.title.contains(q, ignoreCase = true) ||
-                                it.source.contains(q, ignoreCase = true)
+                    if (q.isBlank()) {
+                        DEMO_VIDEOS
+                    } else {
+                        DEMO_VIDEOS.filter {
+                            it.titleHe.contains(q, ignoreCase = true) ||
+                                    it.titleEn.contains(q, ignoreCase = true) ||
+                                    it.source.contains(q, ignoreCase = true)
+                        }
                     }
                 }
 
@@ -1831,7 +1739,7 @@ fun AppDrawerContent(
 
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = v.title,
+                                                    text = v.titleFor(isEnglish),
                                                     color = Color.White,
                                                     fontWeight = FontWeight.ExtraBold,
                                                     maxLines = 2,

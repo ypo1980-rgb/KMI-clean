@@ -68,6 +68,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
@@ -413,7 +414,7 @@ fun MembershipPaymentScreen(
     val readPolicyText = if (isEnglish) "Read Full Policy" else "קרא מדיניות מלאה"
     val payerSameToggleText = if (isEnglish) "Payer is the same as trainee" else "המשלם זהה לפרטי החניך"
 
-    val branchOptions = remember {
+    val branchOptions = remember(isEnglish) {
         il.kmi.app.training.TrainingCatalog.allVisibleBranches() +
                 listOf(if (isEnglish) MISSING_BRANCH_EN else MISSING_BRANCH_HE)
     }
@@ -457,7 +458,6 @@ fun MembershipPaymentScreen(
 
     var policyAccepted by rememberSaveable { mutableStateOf(false) }
     var branchExpanded by remember { mutableStateOf(false) }
-    var showPolicySheet by rememberSaveable { mutableStateOf(false) }
 
     val missingBranchValue = if (isEnglish) MISSING_BRANCH_EN else MISSING_BRANCH_HE
     val shouldShowOtherBranch = traineeBranch == missingBranchValue
@@ -553,6 +553,7 @@ fun MembershipPaymentScreen(
                     } else {
                         "דמי חבר לעמותה • 150 ₪"
                     },
+                    isEnglish = isEnglish,
                     onClose = onClose
                 )
 
@@ -563,20 +564,23 @@ fun MembershipPaymentScreen(
 
                 SectionCard(
                     title = traineeTitle,
-                    icon = Icons.Default.AccountCircle
+                    icon = Icons.Default.AccountCircle,
+                    isEnglish = isEnglish
                 ) {
                     FormTextField(
                         value = traineeFirstName,
                         onValueChange = { traineeFirstName = it },
                         label = if (isEnglish) "First Name" else "שם פרטי",
-                        leadingIcon = Icons.Default.AccountCircle
+                        leadingIcon = Icons.Default.AccountCircle,
+                        isEnglish = isEnglish
                     )
 
                     FormTextField(
                         value = traineeLastName,
                         onValueChange = { traineeLastName = it },
                         label = if (isEnglish) "Last Name" else "שם משפחה",
-                        leadingIcon = Icons.Default.AccountCircle
+                        leadingIcon = Icons.Default.AccountCircle,
+                        isEnglish = isEnglish
                     )
 
                     FormTextField(
@@ -584,7 +588,8 @@ fun MembershipPaymentScreen(
                         onValueChange = { traineeIdNumber = it },
                         label = if (isEnglish) "ID Number" else "מספר ת.ז.",
                         keyboardType = KeyboardType.Number,
-                        leadingIcon = Icons.Default.Badge
+                        leadingIcon = Icons.Default.Badge,
+                        isEnglish = isEnglish
                     )
 
                     FormTextField(
@@ -592,7 +597,8 @@ fun MembershipPaymentScreen(
                         onValueChange = { traineeBirthDate = it },
                         label = if (isEnglish) "Birth Date" else "תאריך לידה",
                         placeholder = "DD/MM/YYYY",
-                        leadingIcon = Icons.Default.Event
+                        leadingIcon = Icons.Default.Event,
+                        isEnglish = isEnglish
                     )
 
                     FormTextField(
@@ -600,7 +606,8 @@ fun MembershipPaymentScreen(
                         onValueChange = { traineeEmail = it },
                         label = if (isEnglish) "Email" else "כתובת דוא\"ל",
                         keyboardType = KeyboardType.Email,
-                        leadingIcon = Icons.Default.MarkEmailRead
+                        leadingIcon = Icons.Default.MarkEmailRead,
+                        isEnglish = isEnglish
                     )
 
                     FormTextField(
@@ -608,7 +615,8 @@ fun MembershipPaymentScreen(
                         onValueChange = { traineePhone = it },
                         label = if (isEnglish) "Mobile Phone" else "מספר טלפון נייד",
                         keyboardType = KeyboardType.Phone,
-                        leadingIcon = Icons.Default.LocalPhone
+                        leadingIcon = Icons.Default.LocalPhone,
+                        isEnglish = isEnglish
                     )
 
                     ExposedDropdownMenuBox(
@@ -642,6 +650,9 @@ fun MembershipPaymentScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .menuAnchor(),
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                            ),
                             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                                 focusedContainerColor = Color(0xFF24365E),
                                 unfocusedContainerColor = Color(0xFF24365E),
@@ -677,7 +688,13 @@ fun MembershipPaymentScreen(
                         ) {
                             branchOptions.forEach { option ->
                                 DropdownMenuItem(
-                                    text = { Text(option) },
+                                    text = {
+                                        Text(
+                                            text = option,
+                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    },
                                     onClick = {
                                         traineeBranch = option
                                         if (option != missingBranchValue) {
@@ -699,14 +716,16 @@ fun MembershipPaymentScreen(
                             } else {
                                 "שם סניף נוסף אם חסר ברשימה"
                             },
-                            leadingIcon = Icons.Default.Domain
+                            leadingIcon = Icons.Default.Domain,
+                            isEnglish = isEnglish
                         )
                     }
                 }
 
                 SectionCard(
                     title = payerTitle,
-                    icon = Icons.Default.Receipt
+                    icon = Icons.Default.Receipt,
+                    isEnglish = isEnglish
                 ) {
                     Surface(
                         shape = RoundedCornerShape(18.dp),
@@ -740,6 +759,7 @@ fun MembershipPaymentScreen(
                                 text = payerSameToggleText,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = Color.White,
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(horizontal = 12.dp)
@@ -761,7 +781,8 @@ fun MembershipPaymentScreen(
                         onValueChange = { if (!payerSameAsTrainee) payerFirstName = it },
                         label = if (isEnglish) "First Name" else "שם פרטי",
                         enabled = !payerSameAsTrainee,
-                        leadingIcon = Icons.Default.Person
+                        leadingIcon = Icons.Default.Person,
+                        isEnglish = isEnglish
                     )
 
                     FormTextField(
@@ -769,7 +790,8 @@ fun MembershipPaymentScreen(
                         onValueChange = { if (!payerSameAsTrainee) payerLastName = it },
                         label = if (isEnglish) "Last Name" else "שם משפחה",
                         enabled = !payerSameAsTrainee,
-                        leadingIcon = Icons.Default.Person
+                        leadingIcon = Icons.Default.Person,
+                        isEnglish = isEnglish
                     )
 
                     FormTextField(
@@ -778,7 +800,8 @@ fun MembershipPaymentScreen(
                         label = if (isEnglish) "Email Address" else "כתובת דוא\"ל",
                         keyboardType = KeyboardType.Email,
                         enabled = !payerSameAsTrainee,
-                        leadingIcon = Icons.Default.Email
+                        leadingIcon = Icons.Default.Email,
+                        isEnglish = isEnglish
                     )
 
                     FormTextField(
@@ -787,29 +810,34 @@ fun MembershipPaymentScreen(
                         label = if (isEnglish) "Phone Number" else "מספר טלפון",
                         keyboardType = KeyboardType.Phone,
                         enabled = !payerSameAsTrainee,
-                        leadingIcon = Icons.Default.PhoneIphone
+                        leadingIcon = Icons.Default.PhoneIphone,
+                        isEnglish = isEnglish
                     )
                 }
 
                 SectionCard(
                     title = productTitle,
-                    icon = Icons.Default.Wallet
+                    icon = Icons.Default.Wallet,
+                    isEnglish = isEnglish
                 ) {
                     ProductPriceRow(
                         label = if (isEnglish) "Product" else "מוצר",
-                        value = if (isEnglish) "Association Membership Fee" else "דמי חבר לעמותה"
+                        value = if (isEnglish) "Association Membership Fee" else "דמי חבר לעמותה",
+                        isEnglish = isEnglish
                     )
 
                     ProductPriceRow(
                         label = if (isEnglish) "Price" else "מחיר",
                         value = if (isEnglish) "₪150.00" else "150.00 ₪",
-                        emphasize = true
+                        emphasize = true,
+                        isEnglish = isEnglish
                     )
                 }
 
                 SectionCard(
                     title = policyTitle,
-                    icon = Icons.Default.Description
+                    icon = Icons.Default.Description,
+                    isEnglish = isEnglish
                 ) {
                     Surface(
                         shape = RoundedCornerShape(16.dp),
@@ -823,12 +851,15 @@ fun MembershipPaymentScreen(
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.90f),
-                            modifier = Modifier.padding(14.dp)
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp)
                         )
                     }
 
                     TextButton(
-                        onClick = { showPolicySheet = true },
+                        onClick = onReadFullPolicy,
                         colors = ButtonDefaults.textButtonColors(
                             contentColor = MaterialTheme.colorScheme.primary
                         )
@@ -858,6 +889,7 @@ fun MembershipPaymentScreen(
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.92f),
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(start = 4.dp)
@@ -916,8 +948,11 @@ fun MembershipPaymentScreen(
 private fun PremiumPaymentHeader(
     title: String,
     subtitle: String,
+    isEnglish: Boolean,
     onClose: () -> Unit
 ) {
+    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
@@ -934,17 +969,22 @@ private fun PremiumPaymentHeader(
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalAlignment = horizontalAlignment
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White
+                    color = Color.White,
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.78f)
+                    color = Color.White.copy(alpha = 0.78f),
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
@@ -957,7 +997,7 @@ private fun PremiumPaymentHeader(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
+                        contentDescription = if (isEnglish) "Close" else "סגור",
                         tint = Color.White
                     )
                 }
@@ -971,6 +1011,9 @@ private fun ProductHeroCard(
     isEnglish: Boolean,
     amountText: String
 ) {
+    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+
     val compactAmount = amountText
         .replace(".00", "")
         .replace("150 ₪", "₪150")
@@ -987,7 +1030,8 @@ private fun ProductHeroCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = horizontalAlignment
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1031,6 +1075,7 @@ private fun ProductHeroCard(
                 style = MaterialTheme.typography.titleLarge,
                 color = Color.White,
                 modifier = Modifier.fillMaxWidth(),
+                textAlign = textAlign,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
             )
@@ -1044,6 +1089,7 @@ private fun ProductHeroCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.82f),
                 modifier = Modifier.fillMaxWidth(),
+                textAlign = textAlign,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1055,8 +1101,10 @@ private fun ProductHeroCard(
 private fun SectionCard(
     title: String,
     icon: ImageVector,
+    isEnglish: Boolean,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
@@ -1099,6 +1147,7 @@ private fun SectionCard(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White,
+                    textAlign = textAlign,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -1120,8 +1169,10 @@ private fun FormTextField(
     leadingIcon: ImageVector,
     enabled: Boolean = true,
     keyboardType: KeyboardType = KeyboardType.Text,
-    placeholder: String = ""
+    placeholder: String = "",
+    isEnglish: Boolean
 ) {
+    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -1151,6 +1202,9 @@ private fun FormTextField(
             }
         },
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        textStyle = MaterialTheme.typography.bodyLarge.copy(
+            textAlign = textAlign
+        ),
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
             focusedContainerColor = Color(0xFF24365E),
             unfocusedContainerColor = Color(0xFF24365E),
@@ -1181,8 +1235,12 @@ private fun FormTextField(
 private fun ProductPriceRow(
     label: String,
     value: String,
-    emphasize: Boolean = false
+    emphasize: Boolean = false,
+    isEnglish: Boolean
 ) {
+    val labelAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val valueAlign = if (isEnglish) TextAlign.Right else TextAlign.Left
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -1191,6 +1249,7 @@ private fun ProductPriceRow(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
             color = Color.White.copy(alpha = 0.76f),
+            textAlign = labelAlign,
             modifier = Modifier.weight(1f)
         )
 
@@ -1205,7 +1264,8 @@ private fun ProductPriceRow(
                 Color(0xFF9B7BFF)
             } else {
                 Color.White
-            }
+            },
+            textAlign = valueAlign
         )
     }
 }

@@ -55,12 +55,77 @@ import il.kmi.shared.localization.AppLanguageManager
 
 //==================================================================
 
-private const val TAG_DEPRECATED = "KMI_DEPRECATED_FILE"
+private fun topicsTr(isEnglish: Boolean, he: String, en: String): String =
+    if (isEnglish) en else he
 
-@Composable
-private fun DeprecatedFileMarker() {
-    LaunchedEffect(Unit) {
-        Log.e(TAG_DEPRECATED, "⚠️ DEPRECATED FILE LOADED: ${"TopicsScreen.kt"} (should be deleted)")
+private fun topicsTextAlign(isEnglish: Boolean): TextAlign =
+    if (isEnglish) TextAlign.Left else TextAlign.Right
+
+private fun topicsHorizontalAlignment(isEnglish: Boolean): Alignment.Horizontal =
+    if (isEnglish) Alignment.Start else Alignment.End
+
+private fun topicsBeltNameForUi(
+    belt: Belt,
+    isEnglish: Boolean
+): String {
+    return if (isEnglish) {
+        belt.en.ifBlank { belt.name.lowercase().replaceFirstChar { it.uppercase() } }
+    } else {
+        belt.heb
+    }
+}
+
+private fun topicsBeltTitleForUi(
+    belt: Belt,
+    isEnglish: Boolean
+): String {
+    val raw = topicsBeltNameForUi(belt, isEnglish).trim()
+
+    return if (isEnglish) {
+        raw
+            .removeSuffix(" Belt")
+            .removeSuffix(" belt")
+            .trim()
+            .ifBlank { raw }
+    } else {
+        if (raw.contains("חגורה")) raw else "חגורה $raw"
+    }
+}
+
+private fun topicTitleForUi(
+    raw: String,
+    isEnglish: Boolean
+): String {
+    val clean = raw
+        .replace(Regex("\\s*\\n\\s*"), " ")
+        .replace(Regex("\\s{2,}"), " ")
+        .trim()
+
+    return if (isEnglish) {
+        il.kmi.shared.domain.content.ExerciseTitlesEn.getOrSame(clean)
+    } else {
+        clean
+    }
+}
+
+private fun topicCountsText(
+    isEnglish: Boolean,
+    hasRealSubs: Boolean,
+    subTopicCount: Int,
+    itemCount: Int
+): String {
+    return if (hasRealSubs) {
+        topicsTr(
+            isEnglish,
+            "$subTopicCount תתי נושאים  •  $itemCount תרגילים",
+            "$subTopicCount sub-topics  •  $itemCount exercises"
+        )
+    } else {
+        topicsTr(
+            isEnglish,
+            "$itemCount תרגילים",
+            "$itemCount exercises"
+        )
     }
 }
 
@@ -168,13 +233,14 @@ private fun buildExplanationWithStanceHighlight(
 private fun findExplanationForHit(
     belt: Belt,
     rawItem: String,
-    topic: String
+    topic: String,
+    isEnglish: Boolean
 ): String {
     val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
 
     fun String.clean(): String = this
-        .replace('–', '-')    // en dash
-        .replace('־', '-')    // maqaf
+        .replace('–', '-')
+        .replace('־', '-')
         .replace("  ", " ")
         .trim()
 
@@ -198,7 +264,11 @@ private fun findExplanationForHit(
         }
     }
 
-    return "אין כרגע הסבר לתרגיל הזה."
+    return topicsTr(
+        isEnglish,
+        "אין כרגע הסבר לתרגיל הזה.",
+        "There is currently no explanation for this exercise."
+    )
 }
 
 private fun findSubTopicTitleForItem(belt: Belt, topic: String, item: String): String? {
@@ -254,12 +324,17 @@ private fun SectionCard(
     titleInsetFromRight: Dp = 16.dp,
     footerBottomPadding: Dp = 14.dp,
     borderWidth: Dp = 0.5.dp,
+    isEnglish: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val cardShape = RoundedCornerShape(24.dp)
 
-    val outline = remember(container) {
-        if (container.luminance() > 0.6f) Color(0x803A3A3A) else Color.White.copy(alpha = 0.85f)
+    val outline = remember(container, borderColor) {
+        if (container.luminance() > 0.6f) {
+            borderColor.copy(alpha = 0.55f)
+        } else {
+            Color.White.copy(alpha = 0.85f)
+        }
     }
 
     val shadow = if (container.alpha <= 0.01f) 0.dp else 1.dp
@@ -282,21 +357,30 @@ private fun SectionCard(
         ) {
             if (!title.isNullOrBlank()) {
                 Spacer(Modifier.height(headerTopPadding))
+
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = titleInsetFromRight),
-                    textAlign = TextAlign.Right
+                        .padding(
+                            start = if (isEnglish) titleInsetFromRight else 0.dp,
+                            end = if (isEnglish) 0.dp else titleInsetFromRight
+                        ),
+                    textAlign = topicsTextAlign(isEnglish)
                 )
+
                 Spacer(Modifier.height(headerBottomSpacing))
                 Divider(thickness = 1.dp, color = outline.copy(alpha = 0.35f))
                 Spacer(Modifier.height(6.dp))
             }
 
-            Column(Modifier.fillMaxWidth(), content = content)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = topicsHorizontalAlignment(isEnglish),
+                content = content
+            )
 
             Spacer(Modifier.height(footerBottomPadding))
         }
@@ -346,9 +430,16 @@ fun TopicsScreen(
     // ✅ חשוב: בלי default כדי שלא “יתקע” אם שכחת להעביר מה-NavGraph
     onPracticeByTopics: (PracticeByTopicsSelection) -> Unit
 ) {
+    val ctx = LocalContext.current
+    val langManagerScreen = remember(ctx) { AppLanguageManager(ctx) }
+    val isEnglish = langManagerScreen.getCurrentLanguage() == AppLanguage.ENGLISH
+
+    val screenTextAlign = topicsTextAlign(isEnglish)
+    val screenHorizontalAlignment = topicsHorizontalAlignment(isEnglish)
+
     val belt = vm.selectedBelt.collectAsState().value ?: Belt.WHITE
 
-    // ✅ לעולם לא עובדים עם WHITE במסך הזה
+// ✅ לעולם לא עובדים עם WHITE במסך הזה
     val effectiveBelt: Belt = belt.takeUnless { it == Belt.WHITE } ?: Belt.GREEN
 
     val topicTitles: List<String> = remember(effectiveBelt) {
@@ -396,17 +487,8 @@ fun TopicsScreen(
         }
     }
 
-    val beltLabel = remember(effectiveBelt) {
-        if (effectiveBelt.heb.contains("חגורה")) effectiveBelt.heb else "חגורה ${effectiveBelt.heb}"
-    }
-
     val onBeltColor = if (effectiveBelt.color.luminance() < 0.5f) Color.White else Color.Black
-    val bottomButtonColors = ButtonDefaults.buttonColors(
-        containerColor = Color(0xFFE0E0E0),
-        contentColor = Color.Black
-    )
     val bottomButtonShape = RoundedCornerShape(24.dp)
-    val ctx = LocalContext.current
     val userSp = remember { ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE) }
 
     // 👇 מצב גישה לפי ניסיון/מנוי + עקיפת מנהל (מתעדכן בזמן אמת)
@@ -510,10 +592,7 @@ fun TopicsScreen(
         var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
         var showAssistant by rememberSaveable { mutableStateOf(false) }
 
-        // ✅ השאר רק אחד (Saveable)
-        var fabMenuOpen by rememberSaveable { mutableStateOf(false) }
-
-        // ✅ חדש: דיאלוג תרגול (3 אפשרויות)
+        // ✅ דיאלוג תרגול (3 אפשרויות)
         var showPracticeMenu by rememberSaveable { mutableStateOf(false) }
 
         // ✅ NEW: דיאלוג עוזר קולי (כפתור צף "עוזר קולי")
@@ -570,7 +649,7 @@ fun TopicsScreen(
                 val langManager = remember { AppLanguageManager(contextLang) }
 
                 il.kmi.app.ui.KmiTopBar(
-                    title = effectiveBelt.heb,
+                    title = topicsBeltTitleForUi(effectiveBelt, isEnglish),
                     onHome = onOpenHome,
                     centerTitle = true,
                     showTopHome = false,
@@ -600,12 +679,16 @@ fun TopicsScreen(
             pickedKey?.let { key ->
                 val (hitBelt, hitTopic, hitItem) = parseSearchKey(key)
 
-                val displayName = ExerciseTitleFormatter.displayName(hitItem)
-                val explanation = remember(hitBelt, hitItem) {
+                val displayName = topicTitleForUi(
+                    ExerciseTitleFormatter.displayName(hitItem).ifBlank { hitItem },
+                    isEnglish
+                )
+                val explanation = remember(hitBelt, hitItem, isEnglish) {
                     findExplanationForHit(
                         belt = hitBelt,
                         rawItem = hitItem,
-                        topic = hitTopic
+                        topic = hitTopic,
+                        isEnglish = isEnglish
                     )
                 }
 
@@ -628,50 +711,66 @@ fun TopicsScreen(
                     onDismissRequest = { pickedKey = null },
                     title = {
                         Box(modifier = Modifier.fillMaxWidth()) {
+                            val starAlignment = if (isEnglish) Alignment.CenterEnd else Alignment.CenterStart
+                            val textAlignment = if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
+
                             IconButton(
                                 onClick = {
                                     clickSound()
                                     haptic(true)
                                     toggleFavorite(hitItem)
                                 },
-                                modifier = Modifier.align(androidx.compose.ui.AbsoluteAlignment.CenterLeft)
+                                modifier = Modifier.align(starAlignment)
                             ) {
                                 if (favorites.contains(hitItem)) {
                                     Icon(
                                         imageVector = Icons.Filled.Star,
-                                        contentDescription = "הסר ממועדפים",
+                                        contentDescription = topicsTr(
+                                            isEnglish,
+                                            "הסר ממועדפים",
+                                            "Remove from favorites"
+                                        ),
                                         tint = Color(0xFFFFC107)
                                     )
                                 } else {
                                     Icon(
                                         imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = "הוסף למועדפים"
+                                        contentDescription = topicsTr(
+                                            isEnglish,
+                                            "הוסף למועדפים",
+                                            "Add to favorites"
+                                        )
                                     )
                                 }
                             }
 
                             Column(
                                 modifier = Modifier
-                                    .align(androidx.compose.ui.AbsoluteAlignment.CenterRight)
-                                    .fillMaxWidth(),
-                                horizontalAlignment = Alignment.End
+                                    .align(textAlignment)
+                                    .fillMaxWidth()
+                                    .padding(
+                                        start = if (isEnglish) 0.dp else 48.dp,
+                                        end = if (isEnglish) 48.dp else 0.dp
+                                    ),
+                                horizontalAlignment = screenHorizontalAlignment
                             ) {
                                 Text(
                                     text = displayName,
                                     style = MaterialTheme.typography.titleSmall,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = screenTextAlign,
                                     modifier = Modifier.fillMaxWidth(),
                                     fontWeight = FontWeight.Bold
                                 )
+
                                 Text(
-                                    text = "(${hitBelt.heb})",
+                                    text = "(${topicsBeltTitleForUi(hitBelt, isEnglish)})",
                                     style = MaterialTheme.typography.labelSmall,
-                                    textAlign = TextAlign.Right,
+                                    textAlign = screenTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
-                    },
+                            },
                     text = {
                         val stanceColor = MaterialTheme.colorScheme.primary
                         val annotated = remember(explanation, stanceColor) {
@@ -684,7 +783,7 @@ fun TopicsScreen(
                         Text(
                             text = annotated,
                             style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Right,
+                            textAlign = screenTextAlign,
                             color = Color.Black
                         )
                     },
@@ -696,7 +795,7 @@ fun TopicsScreen(
                                 pickedKey = null
                             }
                         ) {
-                            Text("סגור")
+                            Text(topicsTr(isEnglish, "סגור", "Close"))
                         }
                     }
                 )
@@ -722,7 +821,7 @@ fun TopicsScreen(
                         modifier = Modifier
                             .padding(top = 0.dp, start = 8.dp, end = 8.dp, bottom = 8.dp)
                             .fillMaxSize(),
-                        horizontalAlignment = Alignment.End
+                        horizontalAlignment = screenHorizontalAlignment
                     ) {
 
                         // 🔹 פס תקופת ניסיון – ריבוע כחול
@@ -737,7 +836,11 @@ fun TopicsScreen(
                                 shadowElevation = 8.dp
                             ) {
                                 Text(
-                                    text = "נשארו $trialDaysLeft ימים לניסיון החינמי 🎯",
+                                    text = topicsTr(
+                                        isEnglish,
+                                        "נשארו $trialDaysLeft ימים לניסיון החינמי 🎯",
+                                        "$trialDaysLeft days left in your free trial 🎯"
+                                    ),
                                     color = Color.White,
                                     style = MaterialTheme.typography.titleMedium,
                                     textAlign = TextAlign.Center,
@@ -755,20 +858,23 @@ fun TopicsScreen(
                                 .weight(1f, fill = true)
                                 .verticalScroll(contentScroll)
                                 .fillMaxWidth(),
-                            horizontalAlignment = Alignment.End
+                            horizontalAlignment = screenHorizontalAlignment
                         ) {
-
-                            val buttonSpacing = 10.dp
 
                             // === מסגרת עליונה: נושאים ===
                             SectionCard(
-                                title = "נושאים",
+                                title = topicsTr(isEnglish, "נושאים", "Topics"),
                                 modifier = Modifier.fillMaxWidth(),
-                                container = MaterialTheme.colorScheme.surface
+                                container = MaterialTheme.colorScheme.surface,
+                                isEnglish = isEnglish
                             ) {
                                 if (!canUseTraining) {
                                     Text(
-                                        text = "תקופת הניסיון הסתיימה.\nכדי להמשיך להשתמש בתכני האימונים יש לרכוש מנוי.",
+                                        text = topicsTr(
+                                            isEnglish,
+                                            "תקופת הניסיון הסתיימה.\nכדי להמשיך להשתמש בתכני האימונים יש לרכוש מנוי.",
+                                            "The trial period has ended.\nTo continue using the training content, please purchase a subscription."
+                                        ),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = Color(0xFFB71C1C),
                                         textAlign = TextAlign.Center,
@@ -778,7 +884,11 @@ fun TopicsScreen(
                                     )
                                 } else if (topicTitles.isEmpty()) {
                                     Text(
-                                        text = "אין נושאים להצגה לחגורה זו",
+                                        text = topicsTr(
+                                            isEnglish,
+                                            "אין נושאים להצגה לחגורה זו",
+                                            "No topics available for this belt"
+                                        ),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = Color.DarkGray,
                                         textAlign = TextAlign.Center,
@@ -787,11 +897,9 @@ fun TopicsScreen(
                                 } else {
                                     topicTitles.forEachIndexed { idx: Int, title: String ->
 
-                                        val displayTitle by remember(title) {
+                                        val displayTitle by remember(title, isEnglish) {
                                             mutableStateOf(
-                                                title.replace(Regex("\\s*\\n\\s*"), " ")
-                                                    .replace(Regex("\\s{2,}"), " ")
-                                                    .trim()
+                                                topicTitleForUi(title, isEnglish)
                                             )
                                         }
 
@@ -864,15 +972,16 @@ fun TopicsScreen(
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                     modifier = Modifier.fillMaxWidth(),
-                                                    textAlign = TextAlign.Right
+                                                    textAlign = screenTextAlign
                                                 )
                                                 Spacer(Modifier.height(6.dp))
-                                                val counts = if (hasRealSubs) {
-                                                    "${realSubsCount} תתי נושאים  •  ${itemCount} תרגילים"
-                                                } else {
-                                                    "${itemCount} תרגילים"
-                                                }
-                                                Text(
+                                            val counts = topicCountsText(
+                                                isEnglish = isEnglish,
+                                                hasRealSubs = hasRealSubs,
+                                                subTopicCount = realSubsCount,
+                                                itemCount = itemCount
+                                            )
+                                            Text(
                                                     text = counts,
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = onBeltColor.copy(alpha = 0.90f),
@@ -916,79 +1025,141 @@ fun TopicsScreen(
 } // ✅ סוף TopicsScreen
 
     // ✅ SpeedDialRow חייב להיות ברמת קובץ (לא בתוך TopicsScreen)
-@Composable
-private fun SpeedDialRow(
-    text: String,
-    icon: ImageVector,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-    height: Dp = 52.dp,
-    labelWidth: Dp = 170.dp,
-    iconButtonSize: Dp = 52.dp,
-    iconSize: Dp = 22.dp,
-    gap: Dp = 10.dp
-) {
-    val alphaDisabled = 0.45f
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()         // ✅ חשוב: נמדד לפי רוחב ה-Column הקבוע
-            .height(height),
-        horizontalArrangement = Arrangement.End, // ✅ מצמיד את כל התוכן לאותו קו ימין
-        verticalAlignment = Alignment.CenterVertically
+    @Composable
+    private fun SpeedDialRow(
+        text: String,
+        icon: ImageVector,
+        enabled: Boolean = true,
+        isEnglish: Boolean = false,
+        onClick: () -> Unit,
+        height: Dp = 52.dp,
+        labelWidth: Dp = 170.dp,
+        iconButtonSize: Dp = 52.dp,
+        iconSize: Dp = 22.dp,
+        gap: Dp = 10.dp
     ) {
-        // LABEL
-        Surface(
-            shape = RoundedCornerShape(999.dp),
-            color = Color.White.copy(alpha = if (enabled) 0.92f else 0.80f),
-            shadowElevation = 6.dp,
-            border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)),
+        val alphaDisabled = 0.45f
+
+        Row(
             modifier = Modifier
-                .width(labelWidth)
-                .height(height)
-                .clickable(enabled = enabled, onClick = onClick)
+                .fillMaxWidth()
+                .height(height),
+            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
+            if (isEnglish) {
+                SpeedDialIconButton(
+                    icon = icon,
                     text = text,
-                    color = Color(0xFF0B1220).copy(alpha = if (enabled) 1f else alphaDisabled),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
+                    enabled = enabled,
+                    iconButtonSize = iconButtonSize,
+                    iconSize = iconSize,
+                    onClick = onClick
+                )
+
+                Spacer(Modifier.width(gap))
+
+                SpeedDialLabel(
+                    text = text,
+                    enabled = enabled,
+                    alphaDisabled = alphaDisabled,
+                    labelWidth = labelWidth,
+                    height = height,
+                    onClick = onClick
+                )
+            } else {
+                SpeedDialLabel(
+                    text = text,
+                    enabled = enabled,
+                    alphaDisabled = alphaDisabled,
+                    labelWidth = labelWidth,
+                    height = height,
+                    onClick = onClick
+                )
+
+                Spacer(Modifier.width(gap))
+
+                SpeedDialIconButton(
+                    icon = icon,
+                    text = text,
+                    enabled = enabled,
+                    iconButtonSize = iconButtonSize,
+                    iconSize = iconSize,
+                    onClick = onClick
                 )
             }
         }
+    }
 
-        Spacer(Modifier.width(gap))
-
-        // ICON
-        Surface(
-            shape = CircleShape,
-            color = Color.White.copy(alpha = if (enabled) 0.92f else 0.80f),
-            shadowElevation = 8.dp,
-            border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)),
-            modifier = Modifier.size(iconButtonSize)
+@Composable
+private fun SpeedDialLabel(
+    text: String,
+    enabled: Boolean,
+    alphaDisabled: Float,
+    labelWidth: Dp,
+    height: Dp,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = Color.White.copy(alpha = if (enabled) 0.92f else 0.80f),
+        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)),
+        modifier = Modifier
+            .width(labelWidth)
+            .height(height)
+            .clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center
         ) {
-            IconButton(
-                enabled = enabled,
-                onClick = onClick,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = text,
-                    modifier = Modifier.size(iconSize),
-                    tint = if (enabled) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
-                )
-            }
+            Text(
+                text = text,
+                color = Color(0xFF0B1220).copy(alpha = if (enabled) 1f else alphaDisabled),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun SpeedDialIconButton(
+    icon: ImageVector,
+    text: String,
+    enabled: Boolean,
+    iconButtonSize: Dp,
+    iconSize: Dp,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = CircleShape,
+        color = Color.White.copy(alpha = if (enabled) 0.92f else 0.80f),
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.06f)),
+        modifier = Modifier.size(iconButtonSize)
+    ) {
+        IconButton(
+            enabled = enabled,
+            onClick = onClick,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text,
+                modifier = Modifier.size(iconSize),
+                tint = if (enabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                }
+            )
         }
     }
 }

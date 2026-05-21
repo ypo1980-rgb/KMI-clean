@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
@@ -39,12 +40,39 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.ext.color
 import kotlinx.coroutines.tasks.await
 import java.util.Calendar
-import il.kmi.app.privacy.DemoPrivacy
-import il.kmi.app.privacy.DemoTrainees
 import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+
+private fun adminTr(isEnglish: Boolean, he: String, en: String): String =
+    if (isEnglish) en else he
+
+private fun adminTextAlign(isEnglish: Boolean): androidx.compose.ui.text.style.TextAlign =
+    if (isEnglish) androidx.compose.ui.text.style.TextAlign.Left else androidx.compose.ui.text.style.TextAlign.Right
+
+private fun adminGenderLabel(raw: String?, isEnglish: Boolean): String {
+    val clean = raw.orEmpty().trim().lowercase()
+
+    return when {
+        clean.startsWith("m") || clean == "male" || clean == "זכר" ->
+            adminTr(isEnglish, "זכר", "Male")
+
+        clean.startsWith("f") || clean == "female" || clean == "נקבה" ->
+            adminTr(isEnglish, "נקבה", "Female")
+
+        else -> adminTr(isEnglish, "לא ידוע", "Unknown")
+    }
+}
+
+private fun adminAgeBucketLabel(bucket: String, isEnglish: Boolean): String {
+    return when (bucket) {
+        "לא ידוע" -> adminTr(isEnglish, "לא ידוע", "Unknown")
+        else -> bucket
+    }
+}
+
+private fun Int?.orEmptyCount(): Int = this ?: 0
 
 // ======================================================
 //  מודל נתוני משתמש למנהל – ממולא מ-Firestore
@@ -129,28 +157,31 @@ data class AdminUserRecord(
  * קודם לפי uid, אם אין אז לפי מייל, אם אין אז לפי טלפון, ואם אין – לפי שם.
  */
 // קודם מייל, אחר כך טלפון, ורק אם אין – uid / שם
-private fun traineeRankDisplayName(rawId: String?): String {
+private fun traineeRankDisplayName(
+    rawId: String?,
+    isEnglish: Boolean = false
+): String {
     return when (rawId?.trim().orEmpty()) {
-        "white" -> "לבנה"
-        "yellow" -> "צהובה"
-        "orange" -> "כתומה"
-        "green" -> "ירוקה"
-        "blue" -> "כחולה"
-        "brown" -> "חומה"
+        "white" -> adminTr(isEnglish, "לבנה", "White")
+        "yellow" -> adminTr(isEnglish, "צהובה", "Yellow")
+        "orange" -> adminTr(isEnglish, "כתומה", "Orange")
+        "green" -> adminTr(isEnglish, "ירוקה", "Green")
+        "blue" -> adminTr(isEnglish, "כחולה", "Blue")
+        "brown" -> adminTr(isEnglish, "חומה", "Brown")
 
         "black",
         "שחורה",
-        "שחורה דאן 1" -> "שחורה דאן 1"
+        "שחורה דאן 1" -> adminTr(isEnglish, "שחורה דאן 1", "Black Dan 1")
 
-        "black_dan_2" -> "שחורה דאן 2"
-        "black_dan_3" -> "שחורה דאן 3"
-        "black_dan_4" -> "שחורה דאן 4"
-        "black_dan_5" -> "שחורה דאן 5"
-        "black_dan_6" -> "שחורה דאן 6"
-        "black_dan_7" -> "שחורה דאן 7"
-        "black_dan_8" -> "שחורה דאן 8"
-        "black_dan_9" -> "שחורה דאן 9"
-        "black_dan_10" -> "שחורה דאן 10"
+        "black_dan_2" -> adminTr(isEnglish, "שחורה דאן 2", "Black Dan 2")
+        "black_dan_3" -> adminTr(isEnglish, "שחורה דאן 3", "Black Dan 3")
+        "black_dan_4" -> adminTr(isEnglish, "שחורה דאן 4", "Black Dan 4")
+        "black_dan_5" -> adminTr(isEnglish, "שחורה דאן 5", "Black Dan 5")
+        "black_dan_6" -> adminTr(isEnglish, "שחורה דאן 6", "Black Dan 6")
+        "black_dan_7" -> adminTr(isEnglish, "שחורה דאן 7", "Black Dan 7")
+        "black_dan_8" -> adminTr(isEnglish, "שחורה דאן 8", "Black Dan 8")
+        "black_dan_9" -> adminTr(isEnglish, "שחורה דאן 9", "Black Dan 9")
+        "black_dan_10" -> adminTr(isEnglish, "שחורה דאן 10", "Black Dan 10")
 
         else -> ""
     }
@@ -188,6 +219,41 @@ private fun traineeRankColor(rawId: String?): Color {
         rawId?.startsWith("black_dan_") == true -> Belt.BLACK.color
         rawId == "black" || rawId == "שחורה" || rawId == "שחורה דאן 1" -> Belt.BLACK.color
         else -> Belt.fromId(rawId.orEmpty())?.color ?: Color(0xFF6B7280)
+    }
+}
+
+private fun traineeRankOrderedIds(): List<String> {
+    return listOf(
+        "",
+        "white",
+        "yellow",
+        "orange",
+        "green",
+        "blue",
+        "brown",
+        "black",
+        "black_dan_2",
+        "black_dan_3",
+        "black_dan_4",
+        "black_dan_5",
+        "black_dan_6",
+        "black_dan_7",
+        "black_dan_8",
+        "black_dan_9",
+        "black_dan_10"
+    )
+}
+
+private fun traineeRankLabelFromOrderedId(
+    rawId: String,
+    isEnglish: Boolean
+): String {
+    return if (rawId.isBlank()) {
+        adminTr(isEnglish, "ללא חגורה", "No belt")
+    } else {
+        traineeRankDisplayName(rawId, isEnglish).ifBlank {
+            adminTr(isEnglish, "ללא חגורה", "No belt")
+        }
     }
 }
 
@@ -255,7 +321,7 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         stringOrNull("fullName", "name", "displayName", "userName", "username", "full_name")
             ?: stringOrNull("email")
             ?: stringOrNull("phone", "phoneNumber")
-            ?: "ללא שם (${id.take(6)})"
+            ?: id.take(6).let { "Unknown user ($it)" }
 
     // --- תאריך לידה: קודם מנסים שדות נפרדים, ואם אין – מפענחים birthDate ---
     var birthYear  = intOrNull("birthYear")
@@ -318,6 +384,11 @@ fun AdminUsersScreen(
     onBack: () -> Unit
 ) {
     Log.d("KMI_ADMIN", "AdminUsersScreen composed ✅")
+
+    val contextLang = LocalContext.current
+    val langManager = remember { AppLanguageManager(contextLang) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val screenTextAlign = adminTextAlign(isEnglish)
     val gradient = remember {
         Brush.verticalGradient(
             listOf(
@@ -334,22 +405,6 @@ fun AdminUsersScreen(
     var errorMsg by remember { mutableStateOf<String?>(null) }
 // 👇 שאלות שסומנו UNLIKE בעוזר הקולי
     var unlikeQuestions by remember { mutableStateOf<List<AdminUserRecord.AssistantQuestionRecord>>(emptyList()) }
-// --- שאלות מסומנות UNLIKE מה-AI ---
-    var aiFeedback by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
-
-    LaunchedEffect(Unit) {
-        try {
-            val snap = Firebase.firestore
-                .collection("aiFeedback")
-                .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                .get()
-                .await()
-
-            aiFeedback = snap.documents.map { it.data ?: emptyMap() }
-        } catch (t: Throwable) {
-            Log.e("KMI_ADMIN", "Failed to load AI feedback", t)
-        }
-    }
 
     LaunchedEffect(Unit) {
         // לוג קטן כדי לראות איזה UID מחובר בפועל
@@ -389,9 +444,18 @@ fun AdminUsersScreen(
             Log.d("KMI_ADMIN", "users after dedupe = ${users.size}")
 
         } catch (t: Throwable) {
-            val rawErr = t.message ?: "שגיאה בטעינת המשתמשים"
+            val rawErr = t.message ?: adminTr(
+                isEnglish,
+                "שגיאה בטעינת המשתמשים",
+                "Error loading users"
+            )
+
             errorMsg = if (rawErr.contains("PERMISSION_DENIED")) {
-                "אין לך הרשאה לצפות ברשימת המשתמשים. בדוק את הגדרות ההרשאות או פנה למנהל המערכת."
+                adminTr(
+                    isEnglish,
+                    "אין לך הרשאה לצפות ברשימת המשתמשים. בדוק את הגדרות ההרשאות או פנה למנהל המערכת.",
+                    "You do not have permission to view the users list. Check the permission settings or contact the system administrator."
+                )
             } else rawErr
 
             Log.e("KMI_ADMIN", "loading users failed", t)
@@ -440,33 +504,41 @@ fun AdminUsersScreen(
             .distinct()
             .sorted()
     }
-val allBelts = remember(users) {
-users
-.mapNotNull { user ->
-traineeRankDisplayName(user.currentBeltId).ifBlank { null }
-}
-.distinct()
-.sortedBy { label ->
-val id = users.firstOrNull {
-traineeRankDisplayName(it.currentBeltId) == label
-}?.currentBeltId
+    val allBelts = remember(users, isEnglish) {
+        users
+            .mapNotNull { user ->
+                traineeRankDisplayName(user.currentBeltId, isEnglish).ifBlank { null }
+            }
+            .distinct()
+            .sortedBy { label ->
+                val id = users.firstOrNull {
+                    traineeRankDisplayName(it.currentBeltId, isEnglish) == label
+                }?.currentBeltId
 
-traineeRankSortIndex(id)
-}
-}
+                traineeRankSortIndex(id)
+            }
+    }
     val allAgeBuckets = remember(users) {
         users.map { it.ageBucket }.distinct().sortedBy { it }
     }
 
-    val filteredUsers = remember(users, genderFilter, regionFilter, beltFilter, ageBucketFilter) {
+    val filteredUsers = remember(users, genderFilter, regionFilter, beltFilter, ageBucketFilter, isEnglish) {
         users.filter { u ->
+            val genderClean = (u.gender ?: "").trim().lowercase()
+
             val gOk = genderFilter == null ||
-                    (genderFilter == "male" && (u.gender ?: "").lowercase().startsWith("m")) ||
-                    (genderFilter == "female" && (u.gender ?: "").lowercase().startsWith("f"))
+                    (genderFilter == "male" &&
+                            (genderClean.startsWith("m") || genderClean == "זכר")) ||
+                    (genderFilter == "female" &&
+                            (genderClean.startsWith("f") || genderClean == "נקבה"))
+
             val rOk = regionFilter == null || u.region == regionFilter
-val bOk = beltFilter == null ||
-traineeRankDisplayName(u.currentBeltId) == beltFilter
+
+            val bOk = beltFilter == null ||
+                    traineeRankDisplayName(u.currentBeltId, isEnglish) == beltFilter
+
             val aOk = ageBucketFilter == null || u.ageBucket == ageBucketFilter
+
             gOk && rOk && bOk && aOk
         }
     }
@@ -475,45 +547,11 @@ traineeRankDisplayName(u.currentBeltId) == beltFilter
     val traineeUsers = remember(filteredUsers) { filteredUsers.filter { !it.isCoach } }
 
     val traineeUiUsers = remember(traineeUsers) {
-        if (!DemoPrivacy.ENABLED) {
-            traineeUsers
-        } else {
-            traineeUsers.mapIndexed { index, user ->
-                val demo = DemoTrainees.trainees.getOrNull(index)
-
-                user.copy(
-                    fullName = demo?.name ?: "מתאמן ${index + 1}",
-                    birthYear = demo?.age?.let {
-                        Calendar.getInstance().get(Calendar.YEAR) - it
-                    } ?: user.birthYear,
-                    currentBeltId = demo?.belt?.id ?: user.currentBeltId,
-                    branch = demo?.branch ?: user.branch,
-                    groups = listOf(
-                        "וותק: ${demo?.yearsTraining ?: ((index % 6) + 1)} שנים"
-                    ),
-                    phone = null,
-                    email = null
-                )
-            }
-        }
+        traineeUsers
     }
 
     val coachUiUsers = remember(coachUsers) {
-        if (!DemoPrivacy.ENABLED) {
-            coachUsers
-        } else {
-            coachUsers.mapIndexed { index, user ->
-                user.copy(
-                    fullName = "מאמן ${index + 1}",
-                    birthYear = user.birthYear ?: (Calendar.getInstance().get(Calendar.YEAR) - (32 + index)),
-                    currentBeltId = user.currentBeltId ?: Belt.BLACK.id,
-                    branch = user.branch ?: listOf("אופק", "סוקולוב", "נתניה").getOrElse(index % 3) { "אופק" },
-                    groups = listOf("קבוצת בוגרים"),
-                    phone = null,
-                    email = null
-                )
-            }
-        }
+        coachUsers
     }
 
     // -------- סטטיסטיקות כלליות --------
@@ -524,37 +562,22 @@ traineeRankDisplayName(u.currentBeltId) == beltFilter
     val regionCounts = users.groupBy { it.region ?: "לא ידוע" }
         .mapValues { it.value.size }
 
-val beltCountsRaw = users.groupBy { user ->
-traineeRankDisplayName(user.currentBeltId).ifBlank { "ללא חגורה" }
-}.mapValues { it.value.size }
+    val beltCountsRaw = users.groupBy { user ->
+        user.currentBeltId?.trim().orEmpty()
+    }.mapValues { it.value.size }
 
-// רשימה מסודרת: קודם "ללא חגורה", אח"כ חגורות רגילות ודאן 1–10
-val beltCountsOrdered: List<Pair<String, Int>> = buildList {
-add("ללא חגורה" to (beltCountsRaw["ללא חגורה"] ?: 0))
+    val beltCountsOrdered: List<Triple<String, Int, Color>> = traineeRankOrderedIds().map { rawId ->
+        val label = traineeRankLabelFromOrderedId(rawId, isEnglish)
+        val count = if (rawId.isBlank()) {
+            beltCountsRaw[""].orEmptyCount() +
+                    users.count { it.currentBeltId.isNullOrBlank() }
+        } else {
+            beltCountsRaw[rawId] ?: 0
+        }
 
-val orderedLabels = listOf(
-"לבנה",
-"צהובה",
-"כתומה",
-"ירוקה",
-"כחולה",
-"חומה",
-"שחורה דאן 1",
-"שחורה דאן 2",
-"שחורה דאן 3",
-"שחורה דאן 4",
-"שחורה דאן 5",
-"שחורה דאן 6",
-"שחורה דאן 7",
-"שחורה דאן 8",
-"שחורה דאן 9",
-"שחורה דאן 10"
-)
+        Triple(label, count, traineeRankColor(rawId))
+    }
 
-orderedLabels.forEach { label ->
-add(label to (beltCountsRaw[label] ?: 0))
-}
-}
 
     val avgAge = users.mapNotNull { it.age }.takeIf { it.isNotEmpty() }?.average()
 
@@ -562,11 +585,9 @@ add(label to (beltCountsRaw[label] ?: 0))
 
     Scaffold(
         topBar = {
-            val contextLang = LocalContext.current
-            val langManager = remember { AppLanguageManager(contextLang) }
 
             KmiTopBar(
-                title = "ניהול משתמשים",
+                title = adminTr(isEnglish, "ניהול משתמשים", "User management"),
                 onHome = onBack,        // NavGraph מההורה callback לפי הביתה
                 showTopHome = false,    // למנוע אייקון בית
                 lockSearch = true,
@@ -607,19 +628,23 @@ add(label to (beltCountsRaw[label] ?: 0))
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     StatCard(
-                        title = "סה\"כ משתמשים",
+                        title = adminTr(isEnglish, "סה\"כ משתמשים", "Total users"),
                         value = if (loading) "…" else totalUsers.toString(),
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        title = "מס' סניפים",
+                        title = adminTr(isEnglish, "מס' סניפים", "Branches"),
                         value = if (loading) "…" else regionCounts.keys.size.toString(),
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        title = "גיל ממוצע",
-                        value = if (loading) "…"
-                        else avgAge?.let { String.format("%.1f", it) } ?: "לא ידוע",
+                        title = adminTr(isEnglish, "גיל ממוצע", "Avg. age"),
+                        value = if (loading) {
+                            "…"
+                        } else {
+                            avgAge?.let { String.format("%.1f", it) }
+                                ?: adminTr(isEnglish, "לא ידוע", "Unknown")
+                        },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -635,16 +660,16 @@ add(label to (beltCountsRaw[label] ?: 0))
 
                 // ---------- גרף קטן – לפי מין ----------
                 MiniBarChartCard(
-                    title = "חלוקה לפי מין",
+                    title = adminTr(isEnglish, "חלוקה לפי מין", "Gender distribution"),
                     data = listOf(
-                        "זכר" to (genderCounts["male"] ?: genderCounts["m"] ?: 0),
-                        "נקבה" to (genderCounts["female"] ?: genderCounts["f"] ?: 0),
-                        "לא ידוע" to (genderCounts["unknown"] ?: 0)
+                        adminTr(isEnglish, "זכר", "Male") to (genderCounts["male"] ?: genderCounts["m"] ?: 0),
+                        adminTr(isEnglish, "נקבה", "Female") to (genderCounts["female"] ?: genderCounts["f"] ?: 0),
+                        adminTr(isEnglish, "לא ידוע", "Unknown") to (genderCounts["unknown"] ?: 0)
                     ),
                     accent = Color(0xFF38BDF8)
                 )
 
-                // ---------- חלוקה לפי חגורה – פילולים צבעוניים עם גלילה אופקית ----------
+                // ---------- Belt distribution ----------
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -659,10 +684,12 @@ add(label to (beltCountsRaw[label] ?: 0))
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "חלוקה לפי חגורה",
+                            text = adminTr(isEnglish, "חלוקה לפי חגורה", "Belt distribution"),
                             style = MaterialTheme.typography.titleMedium,
                             color = Color(0xFFE5E7EB),
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = screenTextAlign,
+                            modifier = Modifier.fillMaxWidth()
                         )
 
                         Row(
@@ -672,37 +699,16 @@ add(label to (beltCountsRaw[label] ?: 0))
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-beltCountsOrdered.forEach { (label, value) ->
-val circleColor = when (label) {
-"לבנה" -> Belt.WHITE.color
-"צהובה" -> Belt.YELLOW.color
-"כתומה" -> Belt.ORANGE.color
-"ירוקה" -> Belt.GREEN.color
-"כחולה" -> Belt.BLUE.color
-"חומה" -> Belt.BROWN.color
-"שחורה דאן 1",
-"שחורה דאן 2",
-"שחורה דאן 3",
-"שחורה דאן 4",
-"שחורה דאן 5",
-"שחורה דאן 6",
-"שחורה דאן 7",
-"שחורה דאן 8",
-"שחורה דאן 9",
-"שחורה דאן 10" -> Belt.BLACK.color
-else -> Color(0xFF6B7280)
-}
-
-Column(
+                            beltCountsOrdered.forEach { (label, value, circleColor) ->
+                                Column(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(4.dp),
                                     modifier = Modifier.padding(vertical = 4.dp)
                                 ) {
-                                    // "פיל" בגובה ורוחב קבועים לכל החגורות
                                     Box(
                                         modifier = Modifier
-                                            .width(66.dp)      // היה 44.dp
-                                            .height(39.dp)     // היה 26.dp
+                                            .width(66.dp)
+                                            .height(39.dp)
                                             .clip(RoundedCornerShape(20.dp))
                                             .background(circleColor)
                                     )
@@ -712,10 +718,12 @@ Column(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color(0xFFE5E7EB)
                                     )
+
                                     Text(
                                         text = label,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF9CA3AF)
+                                        color = Color(0xFF9CA3AF),
+                                        maxLines = 1
                                     )
                                 }
                             }
@@ -725,6 +733,8 @@ Column(
 
                 // ---------- פילטרים ----------
                 FilterRow(
+                    isEnglish = isEnglish,
+                    textAlign = screenTextAlign,
                     genderFilter = genderFilter,
                     onGenderChange = { genderFilter = it },
                     regionFilter = regionFilter,
@@ -752,24 +762,38 @@ Column(
                             .padding(12.dp)
                     ) {
                         Text(
-                            text = "משתמשים – מתאמנים (${traineeUiUsers.size})",
+                            text = adminTr(
+                                isEnglish,
+                                "משתמשים – מתאמנים (${traineeUiUsers.size})",
+                                "Users – trainees (${traineeUiUsers.size})"
+                            ),
                             style = MaterialTheme.typography.titleMedium,
                             color = Color(0xFFE2E8F0),
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            textAlign = screenTextAlign,
+                            modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(Modifier.height(8.dp))
 
                         if (loading) {
                             Text(
-                                text = "טוען משתמשים…",
+                                text = adminTr(isEnglish, "טוען משתמשים…", "Loading users…"),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF9CA3AF)
+                                color = Color(0xFF9CA3AF),
+                                textAlign = screenTextAlign,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         } else if (traineeUiUsers.isEmpty()) {
                             Text(
-                                text = "אין מתאמנים מתאימים לפילטרים.",
+                                text = adminTr(
+                                    isEnglish,
+                                    "אין מתאמנים מתאימים לפילטרים.",
+                                    "No trainees match the selected filters."
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF9CA3AF)
+                                color = Color(0xFF9CA3AF),
+                                textAlign = screenTextAlign,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         } else {
                             Column(
@@ -777,7 +801,10 @@ Column(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 traineeUiUsers.forEach { user ->
-                                    UserRowCard(user = user)
+                                    UserRowCard(
+                                        user = user,
+                                        isEnglish = isEnglish
+                                    )
                                 }
                             }
                         }
@@ -800,24 +827,38 @@ Column(
                             .padding(12.dp)
                     ) {
                         Text(
-                            text = "משתמשים – מאמנים (${coachUiUsers.size})",
+                            text = adminTr(
+                                isEnglish,
+                                "משתמשים – מאמנים (${coachUiUsers.size})",
+                                "Users – coaches (${coachUiUsers.size})"
+                            ),
                             style = MaterialTheme.typography.titleMedium,
                             color = Color(0xFFE2E8F0),
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            textAlign = screenTextAlign,
+                            modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(Modifier.height(8.dp))
 
                         if (loading) {
                             Text(
-                                text = "טוען משתמשים…",
+                                text = adminTr(isEnglish, "טוען משתמשים…", "Loading users…"),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF9CA3AF)
+                                color = Color(0xFF9CA3AF),
+                                textAlign = screenTextAlign,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         } else if (coachUiUsers.isEmpty()) {
                             Text(
-                                text = "אין מאמנים מתאימים לפילטרים.",
+                                text = adminTr(
+                                    isEnglish,
+                                    "אין מאמנים מתאימים לפילטרים.",
+                                    "No coaches match the selected filters."
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF9CA3AF)
+                                color = Color(0xFF9CA3AF),
+                                textAlign = screenTextAlign,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         } else {
                             Column(
@@ -825,7 +866,10 @@ Column(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 coachUiUsers.forEach { user ->
-                                    UserRowCard(user = user)
+                                    UserRowCard(
+                                        user = user,
+                                        isEnglish = isEnglish
+                                    )
                                 }
                             }
                         }
@@ -851,14 +895,22 @@ Column(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "שאלות לסקירה (UNLIKE)",
+                                text = adminTr(
+                                    isEnglish,
+                                    "שאלות לסקירה (UNLIKE)",
+                                    "Questions for review (UNLIKE)"
+                                ),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color(0xFFE5E7EB),
                                 fontWeight = FontWeight.Bold
                             )
 
                             Text(
-                                text = "רשימת שאלות שהעוזר לא ענה עליהן טוב – לסקירה ולשיפור מאגר התכנים.",
+                                text = adminTr(
+                                    isEnglish,
+                                    "רשימת שאלות שהעוזר לא ענה עליהן טוב – לסקירה ולשיפור מאגר התכנים.",
+                                    "Questions where the assistant response was marked as not helpful — for review and content improvement."
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF9CA3AF)
                             )
@@ -1037,6 +1089,8 @@ private fun MiniBarChartCard(
 
 @Composable
 private fun FilterRow(
+    isEnglish: Boolean,
+    textAlign: androidx.compose.ui.text.style.TextAlign,
     genderFilter: String?,
     onGenderChange: (String?) -> Unit,
     regionFilter: String?,
@@ -1054,10 +1108,12 @@ private fun FilterRow(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
-            text = "פילטרים",
+            text = adminTr(isEnglish, "פילטרים", "Filters"),
             style = MaterialTheme.typography.titleSmall,
             color = Color(0xFFE5E7EB),
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth()
         )
 
         // מין
@@ -1077,19 +1133,19 @@ private fun FilterRow(
             FilterChip(
                 selected = genderFilter == null,
                 onClick = { onGenderChange(null) },
-                label = { Text("הכל") },
+                label = { Text(adminTr(isEnglish, "הכל", "All")) },
                 colors = chipColors
             )
             FilterChip(
                 selected = genderFilter == "male",
                 onClick = { onGenderChange("male") },
-                label = { Text("זכר") },
+                label = { Text(adminTr(isEnglish, "זכר", "Male")) },
                 colors = chipColors
             )
             FilterChip(
                 selected = genderFilter == "female",
                 onClick = { onGenderChange("female") },
-                label = { Text("נקבה") },
+                label = { Text(adminTr(isEnglish, "נקבה", "Female")) },
                 colors = chipColors
             )
         }
@@ -1111,7 +1167,7 @@ private fun FilterRow(
             FilterChip(
                 selected = regionFilter == null,
                 onClick = { onRegionChange(null) },
-                label = { Text("כל האזורים") },
+                label = { Text(adminTr(isEnglish, "כל האזורים", "All regions")) },
                 colors = chipColors
             )
             regions.forEach { region ->
@@ -1141,7 +1197,7 @@ private fun FilterRow(
             FilterChip(
                 selected = beltFilter == null,
                 onClick = { onBeltChange(null) },
-                label = { Text("כל החגורות") },
+                label = { Text(adminTr(isEnglish, "כל החגורות", "All belts")) },
                 colors = chipColors
             )
             belts.forEach { belt ->
@@ -1171,14 +1227,14 @@ private fun FilterRow(
             FilterChip(
                 selected = ageBucketFilter == null,
                 onClick = { onAgeBucketChange(null) },
-                label = { Text("כל הגילים") },
+                label = { Text(adminTr(isEnglish, "כל הגילאים", "All ages")) },
                 colors = chipColors
             )
             ageBuckets.forEach { bucket ->
                 FilterChip(
                     selected = ageBucketFilter == bucket,
                     onClick = { onAgeBucketChange(bucket) },
-                    label = { Text(bucket) },
+                    label = { Text(adminAgeBucketLabel(bucket, isEnglish)) },
                     colors = chipColors
                 )
             }
@@ -1188,11 +1244,24 @@ private fun FilterRow(
 
 @Composable
 private fun UserRowCard(
-    user: AdminUserRecord
+    user: AdminUserRecord,
+    isEnglish: Boolean
 ) {
-    val beltText = traineeRankDisplayName(user.currentBeltId).ifBlank { "ללא חגורה" }
+    val beltText = traineeRankDisplayName(user.currentBeltId, isEnglish).ifBlank {
+        adminTr(isEnglish, "ללא חגורה", "No belt")
+    }
+
     val beltColor = traineeRankColor(user.currentBeltId)
-    val roleLabel = if (user.isCoach) "מאמן" else "מתאמן"
+
+    val roleLabel = if (user.isCoach) {
+        adminTr(isEnglish, "מאמן", "Coach")
+    } else {
+        adminTr(isEnglish, "מתאמן", "Trainee")
+    }
+
+    val textAlign = adminTextAlign(isEnglish)
+    val contentAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val rowArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1208,95 +1277,170 @@ private fun UserRowCard(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(beltColor)
-            )
-
-            Spacer(Modifier.width(10.dp))
-
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            listOf(
-                                beltColor.copy(alpha = 0.95f),
-                                beltColor.copy(alpha = 0.75f),
-                                Color(0xFF0F172A)
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = user.fullName
-                        .split(" ")
-                        .take(2)
-                        .joinToString("") { it.firstOrNull()?.toString() ?: "" },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+            if (isEnglish) {
+                UserBeltAccent(beltColor)
+                Spacer(Modifier.width(10.dp))
+                UserAvatar(user = user, beltColor = beltColor)
+                Spacer(Modifier.width(10.dp))
             }
-
-            Spacer(Modifier.width(10.dp))
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+                horizontalAlignment = contentAlignment
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = rowArrangement,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = user.fullName,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color(0xFFE5E7EB),
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(
-                                if (user.isCoach) Color(0xFF7C3AED).copy(alpha = 0.18f)
-                                else Color(0xFF0EA5E9).copy(alpha = 0.18f)
-                            )
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
+                    if (isEnglish) {
                         Text(
-                            text = roleLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (user.isCoach) Color(0xFFC4B5FD) else Color(0xFFBAE6FD),
-                            fontWeight = FontWeight.Bold
+                            text = user.fullName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFFE5E7EB),
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Left,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        UserRoleBadge(
+                            label = roleLabel,
+                            isCoach = user.isCoach
+                        )
+                    } else {
+                        UserRoleBadge(
+                            label = roleLabel,
+                            isCoach = user.isCoach
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Text(
+                            text = user.fullName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFFE5E7EB),
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Right,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
 
-val ageText = user.age?.toString() ?: "לא ידוע"
-val regionBranch =
-listOfNotNull(user.region, user.branch).joinToString(" · ").ifBlank { "—" }
+                val ageText = user.age?.toString() ?: adminTr(isEnglish, "לא ידוע", "Unknown")
+                val regionBranch =
+                    listOfNotNull(user.region, user.branch).joinToString(" · ").ifBlank { "—" }
 
                 Text(
-                    text = "$beltText  •  גיל: $ageText  •  $regionBranch",
+                    text = adminTr(
+                        isEnglish,
+                        "$beltText  •  גיל: $ageText  •  $regionBranch",
+                        "$beltText  •  Age: $ageText  •  $regionBranch"
+                    ),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF9CA3AF)
+                    color = Color(0xFF9CA3AF),
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                val groups = user.groups.joinToString(", ").ifBlank { "ללא קבוצות" }
+                val groups = user.groups.joinToString(", ").ifBlank {
+                    adminTr(isEnglish, "ללא קבוצות", "No groups")
+                }
+
                 Text(
-                    text = "קבוצות: $groups",
+                    text = adminTr(
+                        isEnglish,
+                        "קבוצות: $groups",
+                        "Groups: $groups"
+                    ),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF6B7280)
+                    color = Color(0xFF6B7280),
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
+
+            if (!isEnglish) {
+                Spacer(Modifier.width(10.dp))
+                UserAvatar(user = user, beltColor = beltColor)
+                Spacer(Modifier.width(10.dp))
+                UserBeltAccent(beltColor)
+            }
         }
+    }
+}
+
+@Composable
+private fun UserBeltAccent(
+    beltColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .width(4.dp)
+            .height(54.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(beltColor)
+    )
+}
+
+@Composable
+private fun UserAvatar(
+    user: AdminUserRecord,
+    beltColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(
+                Brush.radialGradient(
+                    listOf(
+                        beltColor.copy(alpha = 0.95f),
+                        beltColor.copy(alpha = 0.75f),
+                        Color(0xFF0F172A)
+                    )
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = user.fullName
+                .split(" ")
+                .take(2)
+                .joinToString("") { it.firstOrNull()?.toString() ?: "" },
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun UserRoleBadge(
+    label: String,
+    isCoach: Boolean
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(
+                if (isCoach) Color(0xFF7C3AED).copy(alpha = 0.18f)
+                else Color(0xFF0EA5E9).copy(alpha = 0.18f)
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isCoach) Color(0xFFC4B5FD) else Color(0xFFBAE6FD),
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
     }
 }

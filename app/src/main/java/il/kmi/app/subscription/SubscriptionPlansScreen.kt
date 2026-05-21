@@ -98,15 +98,21 @@ fun SubscriptionPlansScreen(
     LaunchedEffect(Unit) { repo.startConnection() }
     val state by repo.state.collectAsState()
 
-    val monthlyPriceText = remember(state, monthlyProductId) {
+    val monthlyStorePrice = remember(state, monthlyProductId) {
         repo.getPriceForProduct(monthlyProductId)
-            ?: if (isEnglish) "Price will appear soon" else "המחיר יופיע בקרוב"
     }
 
-    val yearlyPriceText = remember(state, yearlyProductId) {
+    val yearlyStorePrice = remember(state, yearlyProductId) {
         repo.getPriceForProduct(yearlyProductId)
-            ?: if (isEnglish) "Price will appear soon" else "המחיר יופיע בקרוב"
     }
+
+    val monthlyPriceText = monthlyStorePrice
+        ?: if (isEnglish) "Price will appear soon" else "המחיר יופיע בקרוב"
+
+    val yearlyPriceText = yearlyStorePrice
+        ?: if (isEnglish) "Price will appear soon" else "המחיר יופיע בקרוב"
+
+    val isBillingReady = state.connected && state.productsLoaded && state.error == null
 
     Scaffold(
         topBar = {
@@ -119,6 +125,18 @@ fun SubscriptionPlansScreen(
                 showBottomActions = true,
                 lockSearch = true,
                 centerTitle = true,
+                currentLang = if (isEnglish) "en" else "he",
+                onToggleLanguage = {
+                    val newLang =
+                        if (langManager.getCurrentLanguage() == il.kmi.shared.localization.AppLanguage.HEBREW) {
+                            il.kmi.shared.localization.AppLanguage.ENGLISH
+                        } else {
+                            il.kmi.shared.localization.AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLang)
+                    (ctx as? Activity)?.recreate()
+                },
                 extraActions = { }
             )
         }
@@ -153,7 +171,7 @@ fun SubscriptionPlansScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-                if (!state.connected || !state.productsLoaded || state.error != null) {
+                if (!state.productsLoaded || state.error != null) {
                     Card(
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
@@ -162,10 +180,18 @@ fun SubscriptionPlansScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = if (isEnglish) {
-                                "Billing status: connected=${state.connected}, productsLoaded=${state.productsLoaded}\n${state.error.orEmpty()}"
+                            text = if (state.error != null) {
+                                if (isEnglish) {
+                                    "Purchases are temporarily unavailable. Please try again later."
+                                } else {
+                                    "הרכישות אינן זמינות כרגע. נסה שוב מאוחר יותר."
+                                }
                             } else {
-                                "סטטוס רכישה: מחובר=${state.connected}, מוצרים נטענו=${state.productsLoaded}\n${state.error.orEmpty()}"
+                                if (isEnglish) {
+                                    "Loading subscription prices from Google Play..."
+                                } else {
+                                    "טוען מחירי מנויים מ־Google Play..."
+                                }
                             },
                             color = Color(0xFF9A3412),
                             style = MaterialTheme.typography.bodySmall,
@@ -180,7 +206,12 @@ fun SubscriptionPlansScreen(
                     Spacer(Modifier.height(12.dp))
                 }
 
-                TariffCard()
+                TariffCard(
+                    isAssociationMember = isAssociationMember,
+                    monthlyPriceText = monthlyPriceText,
+                    yearlyPriceText = yearlyPriceText
+                )
+
                 if (!isAssociationMember) {
                     Spacer(Modifier.height(14.dp))
 
@@ -206,10 +237,14 @@ fun SubscriptionPlansScreen(
                             "מנוי חודשי מתחדש\n(גישה מלאה לכל התכנים)"
                         }
                     },
-                    priceLine = if (isEnglish) {
-                        "$monthlyPriceText / month"
+                    priceLine = if (monthlyStorePrice != null) {
+                        if (isEnglish) {
+                            "$monthlyStorePrice / month"
+                        } else {
+                            "$monthlyStorePrice / חודש"
+                        }
                     } else {
-                        "$monthlyPriceText / חודשי"
+                        monthlyPriceText
                     },
                     points = listOf(
                         if (isEnglish) "Full access to all app content" else "גישה מלאה לכל התכנים באפליקציה",
@@ -217,11 +252,17 @@ fun SubscriptionPlansScreen(
                         if (isAssociationMember) {
                             if (isEnglish) "Includes discounted member pricing" else "כולל מחיר מוזל לחבר עמותה"
                         } else {
-                            if (isEnglish) "Can be canceled anytime under store policy" else "ניתן לבטל בכל עת בהתאם למדיניות החנות"
+                            if (isEnglish) "Can be canceled anytime under Google Play policy" else "ניתן לבטל בכל עת בהתאם למדיניות Google Play"
                         }
                     ),
                     containerColor = Color(0xFF0EA5E9),
                     showTrialBadge = false,
+                    buyEnabled = isBillingReady,
+                    buyText = if (isBillingReady) {
+                        if (isEnglish) "Secure purchase" else "רכישה מאובטחת"
+                    } else {
+                        if (isEnglish) "Loading price..." else "טוען מחיר..."
+                    },
                     onBuy = {
                         if (activity != null && state.connected) {
                             val launched = repo.launchPurchase(activity, monthlyProductId)
@@ -268,10 +309,14 @@ fun SubscriptionPlansScreen(
                             "מנוי שנתי\n(גישה מלאה לכל התכנים)"
                         }
                     },
-                    priceLine = if (isEnglish) {
-                        "$yearlyPriceText / year"
+                    priceLine = if (yearlyStorePrice != null) {
+                        if (isEnglish) {
+                            "$yearlyStorePrice / year"
+                        } else {
+                            "$yearlyStorePrice / שנה"
+                        }
                     } else {
-                        "$yearlyPriceText / שנתי"
+                        yearlyPriceText
                     },
                     points = listOf(
                         if (isEnglish) "One yearly payment" else "תשלום חד־שנתי אחד",
@@ -283,6 +328,12 @@ fun SubscriptionPlansScreen(
                         }
                     ),
                     containerColor = Color(0xFFFFA000),
+                    buyEnabled = isBillingReady,
+                    buyText = if (isBillingReady) {
+                        if (isEnglish) "Secure purchase" else "רכישה מאובטחת"
+                    } else {
+                        if (isEnglish) "Loading price..." else "טוען מחיר..."
+                    },
                     onBuy = {
                         if (activity != null && state.connected) {
                             val launched = repo.launchPurchase(activity, yearlyProductId)
@@ -331,15 +382,23 @@ fun SubscriptionPlansScreen(
 }
 
 @Composable
-private fun TariffCard() {
+private fun TariffCard(
+    isAssociationMember: Boolean,
+    monthlyPriceText: String,
+    yearlyPriceText: String
+) {
     val ctx = LocalContext.current
     val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() ==
             il.kmi.shared.localization.AppLanguage.ENGLISH
-    val layoutDirection = if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
-    else androidx.compose.ui.unit.LayoutDirection.Rtl
+
+    val layoutDirection = if (isEnglish) {
+        androidx.compose.ui.unit.LayoutDirection.Ltr
+    } else {
+        androidx.compose.ui.unit.LayoutDirection.Rtl
+    }
+
     val horizontalAlign = if (isEnglish) Alignment.Start else Alignment.End
-    val yearlySaving = 250 - 200
 
     ElevatedCard(
         shape = RoundedCornerShape(24.dp),
@@ -368,9 +427,9 @@ private fun TariffCard() {
 
                 Text(
                     text = if (isEnglish) {
-                        "Price comparison between regular users and K.A.M.I. association members"
+                        "Prices are loaded directly from Google Play according to your subscription eligibility."
                     } else {
-                        "השוואת מחירים בין משתמש רגיל לבין חבר עמותת ק.מ.י"
+                        "המחירים נטענים ישירות מ־Google Play בהתאם לזכאות המנוי שלך."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White.copy(alpha = 0.78f),
@@ -394,7 +453,11 @@ private fun TariffCard() {
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         PremiumTariffRow(
-                            label = if (isEnglish) "User type" else "סוג משתמש",
+                            label = if (isAssociationMember) {
+                                if (isEnglish) "KAMI member plan" else "מסלול חבר עמותת ק.מ.י"
+                            } else {
+                                if (isEnglish) "Regular user plan" else "מסלול משתמש רגיל"
+                            },
                             monthly = if (isEnglish) "Monthly" else "חודשי",
                             yearly = if (isEnglish) "Yearly" else "שנתי",
                             isHeader = true
@@ -403,17 +466,9 @@ private fun TariffCard() {
                         PremiumTariffDivider()
 
                         PremiumTariffRow(
-                            label = if (isEnglish) "Regular user" else "משתמש רגיל",
-                            monthly = "₪25",
-                            yearly = "₪250"
-                        )
-
-                        PremiumTariffDivider()
-
-                        PremiumTariffRow(
-                            label = if (isEnglish) "K.A.M.I. member" else "חבר עמותת ק.מ.י",
-                            monthly = "₪20",
-                            yearly = "₪200",
+                            label = if (isEnglish) "Current price" else "מחיר נוכחי",
+                            monthly = monthlyPriceText,
+                            yearly = yearlyPriceText,
                             highlight = true
                         )
                     }
@@ -426,37 +481,28 @@ private fun TariffCard() {
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(
+                    Text(
+                        text = if (isAssociationMember) {
+                            if (isEnglish) {
+                                "Association member pricing is active for this account."
+                            } else {
+                                "מחיר חבר עמותה פעיל עבור החשבון הזה."
+                            }
+                        } else {
+                            if (isEnglish) {
+                                "Association members may receive discounted pricing after membership verification."
+                            } else {
+                                "חברי עמותה יכולים לקבל מחיר מוזל לאחר אימות סטטוס החברות."
+                            }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = if (isEnglish) {
-                                "K.A.M.I. members save ₪$yearlySaving per year"
-                            } else {
-                                "חבר עמותת ק.מ.י חוסך ₪$yearlySaving בשנה"
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF86EFAC),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Text(
-                            text = if (isEnglish) {
-                                "Member pricing will be applied after membership verification."
-                            } else {
-                                "הנחת חבר עמותה תינתן לאחר אימות סטטוס החברות."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                    )
                 }
             }
         }
@@ -564,7 +610,7 @@ private fun JoinAssociationCard(
             ) {
                 Text(
                     text = if (isEnglish) {
-                        "Join the K.A.M.I. association"
+                        "Join the KAMI association"
                     } else {
                         "הצטרפות לעמותת ק.מ.י"
                     },
@@ -596,9 +642,9 @@ private fun JoinAssociationCard(
                 ) {
                     Text(
                         text = if (isEnglish) {
-                            "Association members get discounted pricing: ₪20 / month • ₪200 / year"
+                            "Association members may receive discounted pricing after membership verification."
                         } else {
-                            "חבר עמותה נהנה ממחיר מוזל: ₪20 לחודש / ₪200 לשנה"
+                            "חברי עמותה יכולים לקבל מחיר מוזל לאחר אימות סטטוס החברות."
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
@@ -635,6 +681,8 @@ private fun PlanCard(
     points: List<String>,
     containerColor: Color,
     showTrialBadge: Boolean = false,
+    buyEnabled: Boolean = true,
+    buyText: String,
     onBuy: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -753,10 +801,13 @@ private fun PlanCard(
 
                 Button(
                     onClick = onBuy,
+                    enabled = buyEnabled,
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White,
-                        contentColor = containerColor
+                        contentColor = containerColor,
+                        disabledContainerColor = Color.White.copy(alpha = 0.55f),
+                        disabledContentColor = containerColor.copy(alpha = 0.70f)
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -770,7 +821,7 @@ private fun PlanCard(
                         Icon(Icons.Filled.Lock, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = if (isEnglish) "Secure purchase" else "רכישה מאובטחת",
+                            text = buyText,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

@@ -580,7 +580,7 @@ fun RegistrationLandingScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Text(
-                                        text = if (isEnglish) "Welcome to KMI" else "ברוכים הבאים ל־KMI",
+                                        text = if (isEnglish) "Welcome to K.A.M.I" else "ברוכים הבאים ל־K.A.M.I",
                                         style = MaterialTheme.typography.headlineSmall,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = Color.White,

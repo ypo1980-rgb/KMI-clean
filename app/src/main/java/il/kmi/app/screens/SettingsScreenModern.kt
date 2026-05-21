@@ -75,15 +75,36 @@ import androidx.compose.foundation.isSystemInDarkTheme
 typealias StatsVm = AppStatsVm
 
 /* ===== Helpers לשיתוף/דירוג/משוב ===== */
-private fun openEmailFeedback(ctx: android.content.Context, to: String, subject: String, body: String = "") {
+private fun openEmailFeedback(
+    ctx: android.content.Context,
+    to: String,
+    subject: String,
+    body: String = "",
+    isEnglish: Boolean = false
+) {
     val intent = Intent(Intent.ACTION_SENDTO).apply {
         data = Uri.parse("mailto:")
         putExtra(Intent.EXTRA_EMAIL, arrayOf(to))
         putExtra(Intent.EXTRA_SUBJECT, subject)
         putExtra(Intent.EXTRA_TEXT, body)
     }
-    try { ctx.startActivity(Intent.createChooser(intent, "שלח משוב")) }
-    catch (_: Exception) { android.widget.Toast.makeText(ctx, "לא נמצאה אפליקציית דוא״ל", android.widget.Toast.LENGTH_SHORT).show() }
+
+    val chooserTitle = if (isEnglish) "Send feedback" else "שלח משוב"
+    val errorText = if (isEnglish) {
+        "No email app was found"
+    } else {
+        "לא נמצאה אפליקציית דוא״ל"
+    }
+
+    try {
+        ctx.startActivity(Intent.createChooser(intent, chooserTitle))
+    } catch (_: Exception) {
+        android.widget.Toast.makeText(
+            ctx,
+            errorText,
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
 }
 
 private fun openStorePage(ctx: android.content.Context) {
@@ -93,12 +114,27 @@ private fun openStorePage(ctx: android.content.Context) {
     try { ctx.startActivity(market) } catch (_: ActivityNotFoundException) { ctx.startActivity(web) }
 }
 
-private fun shareApp(ctx: android.content.Context, text: String = "הורידו את KMI – ק.מ.י") {
+private fun shareApp(
+    ctx: android.content.Context,
+    isEnglish: Boolean = false
+) {
+    val text = if (isEnglish) {
+        "Download K.A.M.I – Israeli Krav Magen"
+    } else {
+        "הורידו את K.A.M.I – ק.מ.י"
+    }
+
+    val chooserTitle = if (isEnglish) "Share with" else "שתף באמצעות"
+
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, text)
     }
-    ctx.startActivity(Intent.createChooser(send, "שתף באמצעות").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+
+    ctx.startActivity(
+        Intent.createChooser(send, chooserTitle)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    )
 }
 
 private fun clearAppCache(ctx: android.content.Context): Boolean {
@@ -275,7 +311,10 @@ fun SettingsScreenModern(
 
                 android.widget.Toast.makeText(
                     appCtx,
-                    "כדי לקבל תרגיל יומי בדיוק בשעה שבחרת, אשר הרשאת התראות ושעונים במסך הבא",
+                    tr(
+                        "כדי לקבל תרגיל יומי בדיוק בשעה שבחרת, אשר הרשאת התראות ושעונים במסך הבא",
+                        "To receive the daily exercise exactly at the selected time, approve notifications and alarms on the next screen"
+                    ),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
 
@@ -293,7 +332,10 @@ fun SettingsScreenModern(
 
             android.widget.Toast.makeText(
                 appCtx,
-                "התראה יומית נקבעה לשעה %02d:%02d".format(safeHour, safeMinute),
+                tr(
+                    "התראה יומית נקבעה לשעה %02d:%02d".format(safeHour, safeMinute),
+                    "Daily reminder was set for %02d:%02d".format(safeHour, safeMinute)
+                ),
                 android.widget.Toast.LENGTH_SHORT
             ).show()
         } else {
@@ -301,7 +343,10 @@ fun SettingsScreenModern(
 
             android.widget.Toast.makeText(
                 appCtx,
-                "התראת התרגיל היומי בוטלה",
+                tr(
+                    "התראת התרגיל היומי בוטלה",
+                    "Daily exercise reminder was disabled"
+                ),
                 android.widget.Toast.LENGTH_SHORT
             ).show()
         }
@@ -1965,7 +2010,7 @@ fun SettingsScreenModern(
                 Text(
                     text = pkgVer,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Right,
+                    textAlign = textAlignPrimary,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -1987,10 +2032,11 @@ fun SettingsScreenModern(
                                 appendLine(tr("אנדרואיד: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})", "Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})"))
                             }
                             openEmailFeedback(
-                                ctx,
+                                ctx = ctx,
                                 to = "support@kmi.example",
                                 subject = tr("משוב על האפליקציה", "App feedback"),
-                                body = body
+                                body = body,
+                                isEnglish = isEnglish
                             )
                             h(true)
                         },
@@ -2006,9 +2052,14 @@ fun SettingsScreenModern(
                 Spacer(Modifier.height(8.dp))
 
                 OutlinedButton(
-                    onClick = { shareApp(ctx); h(true) },
+                    onClick = {
+                        shareApp(ctx, isEnglish = isEnglish)
+                        h(true)
+                    },
                     modifier = Modifier.fillMaxWidth().height(44.dp)
-                ) { Text(tr("שתף את האפליקציה", "Share the app")) }
+                ) {
+                    Text(tr("שתף את האפליקציה", "Share the app"))
+                }
             }
 
             // --- מרווח לפני כפתורי פעולה ---

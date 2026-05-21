@@ -364,7 +364,7 @@ fun SummaryScreen(
 
     val scroll = rememberScrollState()
     val focusManager = LocalFocusManager.current
-    val notesSp = remember { ctx.getSharedPreferences("kmi_notes", android.content.Context.MODE_PRIVATE) }
+    val notesSp = remember { ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
 
     val favorites: Set<String> by FavoritesStore
         .favoritesFlow
@@ -373,16 +373,40 @@ fun SummaryScreen(
     var showProgress by rememberSaveable { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
 
-    fun noteKeyFor(raw: String): String = "note_${belt.id}_${cleanItem("", raw)}"
-
-    fun loadNote(raw: String): String =
-        notesSp.getString(noteKeyFor(raw), "")?.trim().orEmpty()
-
-    fun saveNote(raw: String, value: String) {
-        notesSp.edit().putString(noteKeyFor(raw), value.trim()).apply()
+    fun noteSuffixFor(topicTitle: String): String {
+        val cleanTopic = topicTitle.trim().ifBlank { "כללי" }
+        return if (
+            topic.isNotBlank() &&
+            !subTopicFilter.isNullOrBlank() &&
+            norm(cleanTopic) == norm(topic)
+        ) {
+            "${topic.trim()}__${subTopicFilter.trim()}"
+        } else {
+            cleanTopic
+        }
     }
 
-    fun hasNote(raw: String): Boolean = loadNote(raw).isNotBlank()
+    fun noteKeyFor(topicTitle: String, itemId: String): String {
+        return "note_${belt.id}_${noteSuffixFor(topicTitle)}_${cleanItem(topicTitle, itemId)}"
+    }
+
+    fun loadNote(topicTitle: String, itemId: String): String =
+        notesSp.getString(noteKeyFor(topicTitle, itemId), "")?.trim().orEmpty()
+
+    fun saveNote(topicTitle: String, itemId: String, value: String) {
+        val key = noteKeyFor(topicTitle, itemId)
+        with(notesSp.edit()) {
+            if (value.isBlank()) {
+                remove(key)
+            } else {
+                putString(key, value.trim())
+            }
+            apply()
+        }
+    }
+
+    fun hasNote(topicTitle: String, itemId: String): Boolean =
+        loadNote(topicTitle, itemId).isNotBlank()
 
     // ✅ במקום scope.launch מתוך onClick (שמייצר את השגיאה), עושים את זה כאן
     LaunchedEffect(showProgress) {
@@ -518,6 +542,7 @@ fun SummaryScreen(
     // === חיפוש/הסבר ===
     var explainFromSearch: Triple<Belt, String, String>? by rememberSaveable { mutableStateOf(null) }
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteEditorTopic by rememberSaveable { mutableStateOf<String?>(null) }
     var noteDraft by rememberSaveable { mutableStateOf("") }
 
     val handlePickFromTopBar: (String) -> Unit = { key ->
@@ -750,13 +775,13 @@ fun SummaryScreen(
 
             val cleanFavId = cleanItem(t, canonical)
             val isFav = favorites.contains(cleanFavId)
-            val noteText = loadNote(cleanFavId)
+            val noteText = loadNote(t, cleanFavId)
 
-            val dialogTitle = if (isEnglish) {
-                exerciseDisplayNameForUi(t, canonical, true)
-            } else {
-                canonical
-            }
+            val dialogTitle = exerciseDisplayNameForUi(
+                topicTitle = t,
+                rawItem = canonical,
+                isEnglish = isEnglish
+            )
 
             val dialogBeltLabel = if (isEnglish) {
                 when (b) {
@@ -785,8 +810,9 @@ fun SummaryScreen(
                     focusManager.clearFocus()
                 },
                 onEditNote = {
+                    noteEditorTopic = t
                     noteEditorFor = cleanFavId
-                    noteDraft = loadNote(cleanFavId)
+                    noteDraft = loadNote(t, cleanFavId)
                 },
                 onToggleFavorite = {
                     FavoritesStore.toggle(cleanFavId)
@@ -795,8 +821,13 @@ fun SummaryScreen(
         }
 
         noteEditorFor?.let { item ->
+            val noteTopic = noteEditorTopic ?: topic.ifBlank { "כללי" }
+
             AlertDialog(
-                onDismissRequest = { noteEditorFor = null },
+                onDismissRequest = {
+                    noteEditorFor = null
+                    noteEditorTopic = null
+                },
                 title = {
                     Text(
                         text = tr("עריכת הערה", "Edit note"),
@@ -830,14 +861,18 @@ fun SummaryScreen(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            saveNote(item, noteDraft)
+                            saveNote(noteTopic, item, noteDraft)
                             noteEditorFor = null
+                            noteEditorTopic = null
                         }
                     ) { Text(tr("שמור", "Save")) }
                 },
                 dismissButton = {
                     TextButton(
-                        onClick = { noteEditorFor = null }
+                        onClick = {
+                            noteEditorFor = null
+                            noteEditorTopic = null
+                        }
                     ) { Text(tr("ביטול", "Cancel")) }
                 }
             )
@@ -1031,8 +1066,8 @@ fun SummaryScreen(
                         ) {
                             Text(
                                 text = tr(
-                                    "לא נמצאו פריטים להצגה.\nבדוק שהחגורה/נושא קיימים ב-ContentRepo.",
-                                    "No items were found to display.\nCheck that the belt/topic exists in ContentRepo."
+                                    "לא נמצאו פריטים להצגה עבור החגורה או הנושא שנבחרו.",
+                                    "No items were found for the selected belt or topic."
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1119,7 +1154,7 @@ fun SummaryScreen(
                                         Text(
                                             text = tr("אין פריטים בנושא הזה.", "No items in this topic."),
                                             style = MaterialTheme.typography.bodyMedium,
-                                            textAlign = TextAlign.Right,
+                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                             modifier = Modifier.fillMaxWidth(),
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1136,7 +1171,7 @@ fun SummaryScreen(
 
                                             val cleanFavId = cleanItem(topicTitle, canonicalId)
                                             val isFav = favorites.contains(cleanFavId)
-                                            val itemHasNote = hasNote(cleanFavId)
+                                            val itemHasNote = hasNote(topicTitle, cleanFavId)
 
                                             Row(
                                                 modifier = Modifier
@@ -1325,8 +1360,9 @@ fun SummaryScreen(
                                                             },
                                                             onClick = {
                                                                 menuExpanded = false
+                                                                noteEditorTopic = topicTitle
                                                                 noteEditorFor = cleanFavId
-                                                                noteDraft = loadNote(cleanFavId)
+                                                                noteDraft = loadNote(topicTitle, cleanFavId)
                                                             }
                                                         )
                                                     }
@@ -1360,16 +1396,25 @@ private fun createSummaryPdf(
     var page = document.startPage(pageInfo)
     var canvas = page.canvas
 
+    val pageWidth = 595f
+    val leftX = 45f
+    val rightX = 550f
+    val textX = if (isEnglish) leftX else rightX
+
     val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         textSize = 14f
-        textAlign = android.graphics.Paint.Align.RIGHT
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
         color = android.graphics.Color.BLACK
     }
 
     var y = 50f
     canvas.drawText(
         if (isEnglish) "Summary report - ${belt.id.replaceFirstChar { it.uppercase() }}" else "דו״ח סיכום – ${belt.heb}",
-        550f,
+        textX,
         y,
         paint
     )
@@ -1379,7 +1424,7 @@ private fun createSummaryPdf(
         paint.color = android.graphics.Color.BLACK
         paint.textSize = 16f
         val topicLabel = if (isEnglish) topicDisplayName(topicTitle, true) else topicTitle
-        canvas.drawText(if (isEnglish) "Topic: $topicLabel" else "נושא: $topicTitle", 550f, y, paint)
+        canvas.drawText(if (isEnglish) "Topic: $topicLabel" else "נושא: $topicTitle", textX, y, paint)
         y += 22f
 
         paint.textSize = 13.5f
@@ -1390,7 +1435,7 @@ private fun createSummaryPdf(
             // ✅ אותו מפתח בדיוק כמו ב-SummaryScreen
             val state = masteredMap[topicTitle to canonicalId] ?: MarkState.NONE
 
-            val circleX = 60f
+            val circleX = if (isEnglish) pageWidth - 60f else 60f
             val circleY = y - 7f
 
             val circleColor = when (state) {
@@ -1417,9 +1462,13 @@ private fun createSummaryPdf(
             canvas.drawCircle(circleX, circleY, 8f, circlePaint)
 
             paint.color = android.graphics.Color.BLACK
-            paint.textAlign = android.graphics.Paint.Align.RIGHT
+            paint.textAlign = if (isEnglish) {
+                android.graphics.Paint.Align.LEFT
+            } else {
+                android.graphics.Paint.Align.RIGHT
+            }
             val display = exerciseDisplayNameForUi(topicTitle, itemRaw, isEnglish)
-            canvas.drawText(display, 530f, y, paint)
+            canvas.drawText(display, textX, y, paint)
 
             val markPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                 color = markTextColor

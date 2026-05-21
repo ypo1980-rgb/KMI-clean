@@ -588,8 +588,15 @@ fun RandomPracticeScreen(
         }
 
     // ✅ לתצוגה קיימת: Strings
+    // עברית מציגה את שם התרגיל המקורי.
+    // אנגלית מציגה תרגום דרך ExerciseTitlesEn ומשמשת גם ל־TTS.
     fun uiTitleFor(item: il.kmi.shared.practice.PracticeItem): String {
-        return item.displayTitle
+        val display = item.displayTitle.trim()
+        return if (isEnglish) {
+            ExerciseTitlesEn.getOrSame(display)
+        } else {
+            display
+        }
     }
 
     val weightedItems: List<String> = remember(weightedPracticeItems, isEnglish) {
@@ -842,13 +849,15 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                 isRunning = false          // לא מתחילים טיימר עדיין
                 showDurationDialog = false
 
-                // 🔊 קודם LETSGO, ואז מתחיל הטיימר והתרגיל הראשון מוקרא
+                // 🔊 קודם LETSGO, ואז מתחיל הטיימר והתרגיל הראשון מוקרא אם הקול לא מושתק
                 playLetsGo {
                     if (isExiting) return@playLetsGo
                     isRunning = true
                     if (currentIndex in weightedItems.indices) {
                         weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
-                            speak(uiTitleFor(currentItem))
+                            if (!isMuted) {
+                                speak(uiTitleFor(currentItem))
+                            }
                         }
                         lastSpokenIndex = currentIndex
                     }
@@ -874,7 +883,9 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
 
             if (currentIndex != lastSpokenIndex && currentIndex in weightedItems.indices) {
                 weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
-                    speak(uiTitleFor(currentItem))
+                    if (!isMuted) {
+                        speak(uiTitleFor(currentItem))
+                    }
                 }
                 lastSpokenIndex = currentIndex
             }
@@ -1006,15 +1017,13 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(if (isEnglish) "No exercises are available for this topic" else "אין תרגילים זמינים לנושא זה")
-
-                        Spacer(Modifier.height(10.dp))
-
-                        // ✅ דיבאג: עוזר לנו לוודא ש־topicFilter לא הגיע בטעות כחגורה/טקסט אחר
                         Text(
-                            text = "debug: beltId=${belt.id} | belt=${if (isEnglish) belt.en else belt.heb} | topicFilter='${topicFilter ?: ""}'",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = if (isEnglish) {
+                                "No exercises are available for this topic"
+                            } else {
+                                "אין תרגילים זמינים לנושא זה"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
@@ -1390,27 +1399,28 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
             }
 
             showHelp -> {
-                val item = weightedItems.getOrNull(currentIndex)
+                val currentHelpItem = weightedPracticeItems.getOrNull(currentIndex)
+                val rawItemForHelp = currentHelpItem?.displayTitle?.trim().orEmpty()
 
-                val explanation = remember(belt, item, isEnglish) {
-                    if (item.isNullOrBlank()) {
+                val explanation = remember(belt, rawItemForHelp, isEnglish) {
+                    if (rawItemForHelp.isBlank()) {
                         if (isEnglish) "No exercise selected to display." else "לא נבחר תרגיל להצגה."
                     } else {
                         findExplanationForPractice(
                             belt = belt,
-                            rawItem = item,
+                            rawItem = rawItemForHelp,
                             isEnglish = isEnglish
                         )
                     }
                 }
 
-                val safeItem = item.orEmpty()
+                val safeItem = rawItemForHelp
 
-                val safeItemTitleUi = remember(safeItem, isEnglish) {
+                val safeItemTitleUi = remember(currentHelpItem, safeItem, isEnglish) {
                     if (safeItem.isBlank()) {
                         if (isEnglish) "Exercise" else "תרגיל"
                     } else {
-                        searchTitleForUi(safeItem)
+                        currentHelpItem?.let { uiTitleFor(it) } ?: searchTitleForUi(safeItem)
                     }
                 }
 
@@ -1421,8 +1431,10 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
 
                 val isFav = safeItem.isNotBlank() && favorites.contains(favId)
 
-                val noteTopic = remember(topicFilter) {
-                    topicFilter?.takeIf { it.isNotBlank() } ?: "general"
+                val noteTopic = remember(currentHelpItem, topicFilter) {
+                    currentHelpItem?.topicTitle?.trim()?.takeIf { it.isNotBlank() }
+                        ?: topicFilter?.takeIf { it.isNotBlank() }
+                        ?: "general"
                 }
                 val noteKey = remember(belt, noteTopic, favId) {
                     "note_${belt.id}_${noteTopic.trim()}_${favId}"
@@ -1831,12 +1843,16 @@ private fun DurationPickerDialog(
             // ===== מתגים עם תיאור משנה =====
             SettingRow(
                 title = if (isEnglish) "Mid-time alert" else "התראה באמצע הזמן",
-                subtitle = if (isEnglish) "Beep + voice announcement at halfway point" else "צפצוף + הודעה קולית בחצי הזמן",                checked = playHalf,
+                subtitle = if (isEnglish) "Beep + voice announcement at halfway point" else "צפצוף + הודעה קולית בחצי הזמן",
+                checked = playHalf,
+                isEnglish = isEnglish,
                 onCheckedChange = { playHalf = it }
             )
             SettingRow(
                 title = if (isEnglish) "Sound in the last 10 seconds" else "צליל ב־10 השניות האחרונות",
-                subtitle = if (isEnglish) "Short beep every second until the end" else "צפצוף קצר כל שנייה עד לסיום",                checked = playCountdown,
+                subtitle = if (isEnglish) "Short beep every second until the end" else "צפצוף קצר כל שנייה עד לסיום",
+                checked = playCountdown,
+                isEnglish = isEnglish,
                 onCheckedChange = { playCountdown = it }
             )
 
@@ -2258,8 +2274,12 @@ private fun SettingRow(
     title: String,
     subtitle: String,
     checked: Boolean,
+    isEnglish: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val rowTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val rowHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -2276,16 +2296,27 @@ private fun SettingRow(
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalAlignment = rowHorizontalAlignment
             ) {
-                Text(title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
                 Text(
-                    subtitle,
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    textAlign = rowTextAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    ),
+                    textAlign = rowTextAlign,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
+
+            Spacer(Modifier.width(12.dp))
+
             Switch(checked = checked, onCheckedChange = onCheckedChange, thumbContent = {
                 if (checked) {
                     Box(

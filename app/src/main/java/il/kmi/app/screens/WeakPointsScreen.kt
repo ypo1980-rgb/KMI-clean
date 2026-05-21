@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Report
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,6 +24,21 @@ import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
+private fun weakTr(
+    isEnglish: Boolean,
+    he: String,
+    en: String
+): String = if (isEnglish) en else he
+
+private fun weakTextAlign(isEnglish: Boolean): TextAlign =
+    if (isEnglish) TextAlign.Start else TextAlign.Right
+
+private fun weakHorizontalAlignment(isEnglish: Boolean): Alignment.Horizontal =
+    if (isEnglish) Alignment.Start else Alignment.End
+
+private fun weakRowArrangement(isEnglish: Boolean): Arrangement.Horizontal =
+    if (isEnglish) Arrangement.Start else Arrangement.End
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeakPointsScreen(
@@ -31,9 +47,11 @@ fun WeakPointsScreen(
     onOpenSearch: (() -> Unit)? = null,
 ) {
     val ctx = LocalContext.current
-    val langManager = remember { AppLanguageManager(ctx) }
+    val langManager = remember(ctx) { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    fun tr(he: String, en: String): String =
+        weakTr(isEnglish, he, en)
 
     val backgroundBrush = Brush.verticalGradient(
         listOf(
@@ -55,7 +73,14 @@ fun WeakPointsScreen(
                 showRoleStatus = false,
                 centerTitle = true,
                 alignTitleEnd = false,
-                extraActions = { },
+                extraActions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = tr("הגדרות", "Settings")
+                        )
+                    }
+                },
                 currentLang = if (isEnglish) "en" else "he",
                 onToggleLanguage = {
                     val newLang =
@@ -81,42 +106,18 @@ fun WeakPointsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
 
-        // ⚠️ אזהרה
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = Color(0xFFFFF3E0),
-                border = BorderStroke(1.dp, Color(0xFFFFB74D)),
-                tonalElevation = 2.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Filled.Report,
-                        contentDescription = null,
-                        tint = Color(0xFFF57C00)
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = if (isEnglish) {
-                            "Striking weak points has a high potential for severe harm. Do not use except in a real emergency.\n" +
-                                    "Training without the supervision of a certified coach and proper safety equipment is strictly forbidden.\n" +
-                                    "Incorrect practice may result in serious injury or even death."
-                        } else {
-                            "לפגיעה בנקודות התורפה יש פוטנציאל נזק גבוה. אין לבצע אלא במצב חירום.\n" +
-                                    "חל איסור מוחלט לתרגל ללא פיקוח מאמן מוסמך וציוד בטיחות מתאים.\n" +
-                                    "תרגול שגוי עלול להסתיים בפציעה ואף במוות."
-                        },
-                        color = Color(0xFF4E342E),
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
+            // ⚠️ אזהרה
+            SafetyWarningCard(
+                isEnglish = isEnglish,
+                text = tr(
+                    "לפגיעה בנקודות התורפה יש פוטנציאל נזק גבוה. אין לבצע אלא במצב חירום.\n" +
+                            "חל איסור מוחלט לתרגל ללא פיקוח מאמן מוסמך וציוד בטיחות מתאים.\n" +
+                            "תרגול שגוי עלול להסתיים בפציעה ואף במוות.",
+                    "Striking weak points has a high potential for severe harm. Do not use except in a real emergency.\n" +
+                            "Training without the supervision of a certified coach and proper safety equipment is strictly forbidden.\n" +
+                            "Incorrect practice may result in serious injury or even death."
+                )
+            )
 
             // כותרת קטנה
             Text(
@@ -487,9 +488,58 @@ private fun SectionTitle(
         text = text,
         color = Color.White,
         fontWeight = FontWeight.ExtraBold,
-        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+        textAlign = weakTextAlign(isEnglish),
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+@Composable
+private fun SafetyWarningCard(
+    isEnglish: Boolean,
+    text: String
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFFFFF3E0),
+        border = BorderStroke(1.dp, Color(0xFFFFB74D)),
+        tonalElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = weakRowArrangement(isEnglish)
+        ) {
+            if (isEnglish) {
+                Icon(
+                    imageVector = Icons.Filled.Report,
+                    contentDescription = null,
+                    tint = Color(0xFFF57C00)
+                )
+
+                Spacer(Modifier.width(10.dp))
+            }
+
+            Text(
+                text = text,
+                color = Color(0xFF4E342E),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = weakTextAlign(isEnglish),
+                modifier = Modifier.weight(1f)
+            )
+
+            if (!isEnglish) {
+                Spacer(Modifier.width(10.dp))
+
+                Icon(
+                    imageVector = Icons.Filled.Report,
+                    contentDescription = null,
+                    tint = Color(0xFFF57C00)
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -509,19 +559,19 @@ private fun InfoCard(
                 .fillMaxWidth()
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
-            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+            horizontalAlignment = weakHorizontalAlignment(isEnglish)
         ) {
             Text(
                 title,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
-                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                textAlign = weakTextAlign(isEnglish),
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
                 text = body,
                 color = Color(0xFFE5E7EB),
-                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                textAlign = weakTextAlign(isEnglish),
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -546,26 +596,26 @@ private fun WeakPointRow(
                 .fillMaxWidth()
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
-            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+            horizontalAlignment = weakHorizontalAlignment(isEnglish)
         ) {
             Text(
                 text = place,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
-                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                textAlign = weakTextAlign(isEnglish),
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
                 text = bodyPart,
                 color = Color(0xFFBFDBFE),
                 fontWeight = FontWeight.SemiBold,
-                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                textAlign = weakTextAlign(isEnglish),
                 modifier = Modifier.fillMaxWidth()
             )
             Text(
                 text = effect,
                 color = Color(0xFFE5E7EB),
-                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                textAlign = weakTextAlign(isEnglish),
                 modifier = Modifier.fillMaxWidth()
             )
         }
