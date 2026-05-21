@@ -22,10 +22,6 @@ import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.openBeltPdf
 import android.content.SharedPreferences
-import android.util.Log
-import il.kmi.app.search.asSharedRepo
-import il.kmi.app.search.toShared
-import il.kmi.shared.search.KmiSearch
 import il.kmi.app.ui.KmiLightTheme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -461,32 +457,6 @@ fun TopicsScreen(
         }
     }
 
-    LaunchedEffect(effectiveBelt) {
-        val sharedRepo = ContentRepo.asSharedRepo()
-        val hits = KmiSearch.search(
-            repo = sharedRepo,
-            query = "הגנה",
-            belt = effectiveBelt.toShared()
-        )
-        Log.d(
-            "KMI-SEARCH",
-            if (hits.isEmpty()) "no results"
-            else hits.joinToString(" | ") { h ->
-                val where = h.item ?: "(topic)"
-                "${h.belt.name}/${h.topic}/$where"
-            }
-        )
-    }
-
-    LaunchedEffect(Unit) {
-        try {
-            val dump = il.kmi.app.search.KmiSearchBridge.debugDumpRepo()
-            android.util.Log.d("KMI-DEBUG", "repoDump: $dump")
-        } catch (t: Throwable) {
-            android.util.Log.e("KMI-DEBUG", "repoDump failed", t)
-        }
-    }
-
     val onBeltColor = if (effectiveBelt.color.luminance() < 0.5f) Color.White else Color.Black
     val bottomButtonShape = RoundedCornerShape(24.dp)
     val userSp = remember { ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE) }
@@ -523,14 +493,6 @@ fun TopicsScreen(
         if (cur == null || cur != effectiveBelt) {
             vm.setSelectedBelt(effectiveBelt)
         }
-    }
-
-    // עוזר לדיבוג אם צריך
-    LaunchedEffect(canUseTraining, canUseExtras, isManagerOverride) {
-        android.util.Log.d(
-            "KMI-ACCESS",
-            "canUseTraining=$canUseTraining canUseExtras=$canUseExtras isManagerOverride=$isManagerOverride"
-        )
     }
 
     // ===== ROLE (ללא vm.selectedRole) =====

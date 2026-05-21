@@ -6,7 +6,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -27,28 +26,19 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
         val cleanToken = token.trim()
 
         if (cleanToken.isBlank()) {
-            Log.w(TAG, "onNewToken: blank token, skipping")
             return
         }
-
-        Log.e(
-            TAG,
-            "onNewToken: received new token tokenPrefix=${cleanToken.take(18)}..."
-        )
 
         // חשוב: שומרים את הטוקן שקיבלנו מ-Firebase ישירות,
         // ולא מבקשים שוב token חדש מ-FirebaseMessaging.
         try {
             FcmTokenManager.saveProvidedTokenForCurrentUser(cleanToken)
-        } catch (e: Exception) {
-            Log.e(TAG, "onNewToken: failed to save provided token", e)
+        } catch (_: Exception) {
         }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-
-        Log.d(TAG, "onMessageReceived from=${message.from}, data=${message.data}")
 
         val data = message.data
         val type = data["type"] ?: ""
@@ -75,7 +65,6 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         if (title.isBlank() && body.isBlank()) {
-            Log.d(TAG, "Empty FCM message (no title/body), skipping notification")
             return
         }
 
@@ -175,18 +164,8 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
             with(NotificationManagerCompat.from(context)) {
                 notify(requestCode, builder.build())
             }
-        } catch (e: SecurityException) {
-            Log.e(
-                TAG,
-                "showNotification: missing notification permission, cannot show notification",
-                e
-            )
-        } catch (e: Exception) {
-            Log.e(
-                TAG,
-                "showNotification: failed to show notification",
-                e
-            )
+        } catch (_: SecurityException) {
+        } catch (_: Exception) {
         }
     }
 
@@ -200,10 +179,10 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
 
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "KMI Messages",
+                "KAMI Messages",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "התראות על הודעות מאמן והודעות פורום באפליקציית ק.מ.י"
+                description = "התראות על הודעות מאמן והודעות פורום באפליקציית KAMI / ק.מ.י"
             }
 
             manager.createNotificationChannel(channel)
@@ -211,7 +190,6 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     companion object {
-        private const val TAG = "KmiFirebaseMsgService"
         const val CHANNEL_ID = "kmi_messages_channel"
     }
 }

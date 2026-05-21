@@ -4,7 +4,6 @@ package il.kmi.app.screens.drawer
 
 import android.content.Intent
 import android.net.Uri
-import android.util.Log
 import android.widget.Toast
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.BorderStroke
@@ -73,7 +72,6 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.WorkspacePremium
 import il.kmi.shared.localization.AppLanguage
-import il.kmi.shared.localization.AppLanguageManager
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -206,19 +204,6 @@ fun AppDrawerContent(
 ) {
     val contextLang = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    // ✅ לוג אבחון:
-    // אם האפליקציה באנגלית אבל כאן isEnglish=false,
-    // הבעיה לא ב-Drawer אלא ב-MainApp / החלפת השפה.
-    LaunchedEffect(isEnglish) {
-        val storedLanguage =
-            AppLanguageManager(contextLang).getCurrentLanguage()
-
-        Log.e(
-            "KMI_LANG",
-            "DRAWER_BUILD receivedIsEnglish=$isEnglish storedLanguage=$storedLanguage"
-        )
-    }
 
     // ✅ ה-Drawer לא מחליט לבד מה השפה.
     // הוא מקבל isEnglish ישירות מ-MainApp.
@@ -383,11 +368,6 @@ fun AppDrawerContent(
                     .limit(FORUM_UNREAD_LIMIT)
                     .addSnapshotListener { snap, error ->
                         if (error != null) {
-                            Log.e(
-                                "KMI_FORUM_UNREAD",
-                                "Failed listening unread forum messages branch=$drawerBranch",
-                                error
-                            )
                             forumUnreadCount = 0
                             return@addSnapshotListener
                         }
@@ -400,11 +380,6 @@ fun AppDrawerContent(
                                 authorUid.isNullOrBlank() || authorUid != currentUid
                             }
                             ?: 0
-
-                        Log.e(
-                            "KMI_FORUM_UNREAD",
-                            "unread=$forumUnreadCount branch=$drawerBranch lastRead=$lastReadMillis"
-                        )
                     }
 
                 onDispose {
@@ -426,17 +401,12 @@ fun AppDrawerContent(
     LaunchedEffect(authUid) {
         if (authUid.isNullOrBlank()) {
             resolvedIsAdmin = null
-            Log.d("KMI_ADMIN", "Drawer check skipped: uid=null (waiting for auth)")
             return@LaunchedEffect
         }
 
-        Log.d("KMI_ADMIN", "Drawer check: uid=$authUid")
-
         val isAdm = runCatching { AdminAccess.isCurrentUserAdmin() }
-            .onFailure { Log.e("KMI_ADMIN", "Admin check failed", it) }
             .getOrDefault(false)
 
-        Log.d("KMI_ADMIN", "Drawer check: isAdmin=$isAdm")
         resolvedIsAdmin = isAdm
     }
 
@@ -1273,11 +1243,6 @@ fun AppDrawerContent(
                                 onClick = {
                                     val newLang = AppLanguage.HEBREW
 
-                                    Log.e(
-                                        "KMI_LANG",
-                                        "DRAWER_LANGUAGE_CLICK fromIsEnglish=$isEnglish request=$newLang"
-                                    )
-
                                     // ✅ רק MainApp שומר ומעדכן את ה-State.
                                     // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
                                     onLanguageChanged(newLang)
@@ -1307,11 +1272,6 @@ fun AppDrawerContent(
                                 title = "שפה / Language",
                                 onClick = {
                                     val newLang = AppLanguage.ENGLISH
-
-                                    Log.e(
-                                        "KMI_LANG",
-                                        "DRAWER_LANGUAGE_CLICK fromIsEnglish=$isEnglish request=$newLang"
-                                    )
 
                                     // ✅ רק MainApp שומר ומעדכן את ה-State.
                                     // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.

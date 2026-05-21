@@ -1,6 +1,5 @@
 package il.kmi.app.exercises
 
-import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -75,15 +74,6 @@ fun TopicRepoExercisesScreen(
     val ctx = LocalContext.current
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-    android.util.Log.e("DEF_DEBUG", "ENTER SCREEN belt=${belt.id} topicId='$topicId' subTopicId='$subTopicId'")
-    println("DEF_DEBUG ENTER SCREEN belt=${belt.id} topicId='$topicId' subTopicId='$subTopicId'")
-
-    LaunchedEffect(Unit) {
-        Log.e(
-            "DEF_DEBUG",
-            "SCREEN SHOWN TopicRepoExercisesScreen belt=${belt.id} topicId='$topicId' subTopicId='$subTopicId'"
-        )
-    }
 
     // ✅ FIX: Uri.decode לא מחזיר '+' לרווח. Route.make משתמש ב-URLEncoder שמחזיר '+'
     fun decArg(s: String): String {
@@ -98,13 +88,6 @@ fun TopicRepoExercisesScreen(
     val subTopicOrNull = remember(subTopicId) {
         val decoded = decArg(subTopicId)
         decoded.takeIf { it.isNotBlank() && it != "__all__" }
-    }
-
-    LaunchedEffect(topicId, subTopicId, topic, subTopicOrNull) {
-        Log.e(
-            "DEF_DEBUG",
-            "DECODED topicId='$topicId' -> topic='$topic' | subTopicId='$subTopicId' -> sub='${subTopicOrNull ?: "null"}'"
-        )
     }
 
     // ✅ FIX: לבחור topic אמיתי ל-Repo לפי מה שנכנס מה-UI (כדי שלא יהיו unresolved)
@@ -250,15 +233,9 @@ fun TopicRepoExercisesScreen(
 
     LaunchedEffect(belt, topic, subTopicOrNull) {
         runCatching { ContentRepo.initIfNeeded() }
-            .onFailure { Log.e("DEF_DEBUG", "ContentRepo.initIfNeeded failed", it) }
 
         val uiTopic = topic.trim()
         val uiSub = subTopicOrNull?.trim()
-
-        Log.e(
-            "DEF_DEBUG",
-            "PARAMS belt=${belt.id} uiTopic='$uiTopic' uiSub='$uiSub' repoTopic='$repoTopicTitle' repoSub='$repoSubTopicOrNull'"
-        )
 
         // ✅ FIX: אם נכנסו עם topic="שחרורים" ו-sub="שחרור מחביקות" (או כל Section הורה עם subSections)
         // צריך להציג את תתי־הנושאים (חביקות גוף/צוואר/זרוע) במקום לנסות לטעון תרגילים ישר
@@ -273,11 +250,6 @@ fun TopicRepoExercisesScreen(
             if (parent != null) {
                 hardSubSections = parent.subSections
                 items = emptyList()
-
-                Log.e(
-                    "DEF_DEBUG",
-                    "HARD_RELEASES_SUBSECTIONS via topic='שחרורים' parent='${parent.title}' subSections=${parent.subSections.map { "${it.id}:${it.title}" }}"
-                )
 
                 return@LaunchedEffect
             }
@@ -294,11 +266,6 @@ fun TopicRepoExercisesScreen(
             if (parent != null) {
                 hardSubSections = parent.subSections
                 items = emptyList()
-
-                Log.e(
-                    "DEF_DEBUG",
-                    "HARD_RELEASES_SUBSECTIONS parent='${parent.title}' subSections=${parent.subSections.map { "${it.id}:${it.title}" }}"
-                )
 
                 return@LaunchedEffect
             } else {
@@ -321,14 +288,6 @@ fun TopicRepoExercisesScreen(
                 .distinct()
                 .toList()
 
-            Log.e(
-                "DEF_DEBUG",
-                "HARD_RELEASES count=${hard.size} topic='$uiTopic' sub='${uiSub ?: "null"}' normalizedTopic='${normalizeReleasesSubAlias(uiTopic)}' normalizedSub='${uiSub?.let(::normalizeReleasesSubAlias) ?: "null"}'"
-            )
-            hard.take(20).forEachIndexed { i, it ->
-                Log.e("DEF_DEBUG", "HARD[$i] = '$it'")
-            }
-
             items = hard
                 .asSequence()
                 .map { raw -> ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim() }
@@ -350,11 +309,6 @@ fun TopicRepoExercisesScreen(
                         subTopicTitle = subTitle
                     )
                 }.getOrDefault(emptyList())
-
-                Log.e(
-                    "DEF_DEBUG",
-                    "LOAD attempt=$attempt topic='$topicTitle' sub='${subTitle ?: "null"}' count=${last.size}"
-                )
 
                 if (last.isNotEmpty()) return last
                 kotlinx.coroutines.delay(150)
@@ -391,11 +345,6 @@ fun TopicRepoExercisesScreen(
             load(repoTopicTitle, repoSubTopicOrNull)
         }
 
-        Log.e("DEF_DEBUG", "RAW COUNT = ${rawList.size}")
-        rawList.take(20).forEachIndexed { i, it ->
-            Log.e("DEF_DEBUG", "RAW[$i] = '$it'")
-        }
-
         val filteredRaw = rawList
             .asSequence()
             .map { it.trim() }
@@ -410,11 +359,6 @@ fun TopicRepoExercisesScreen(
                 } else true
             }
             .toList()
-
-        Log.e("DEF_DEBUG", "filteredCount=${filteredRaw.size}")
-        filteredRaw.take(12).forEachIndexed { i, raw ->
-            Log.d("DEF_DEBUG", "FILTERED[$i]='$raw'")
-        }
 
         items = filteredRaw
             .asSequence()
@@ -467,12 +411,6 @@ fun TopicRepoExercisesScreen(
             // ✅ אם יש תתי־נושאים קשיחים (למשל "שחרור מחביקות") – מציגים אותם במקום items
             if (hardSubSections.isNotEmpty()) {
 
-                android.util.Log.e(
-                    "DEF_DEBUG",
-                    "SHOW HARD_SUB_SECTIONS belt=${belt.id} topicId='$topicId' topic='$topic' subTopicId='$subTopicId' sections=${hardSubSections.map { "${it.id}:${it.title}" }}"
-                )
-                println("DEF_DEBUG SHOW HARD_SUB_SECTIONS belt=${belt.id} topicId='$topicId' topic='$topic' subTopicId='$subTopicId' sections=${hardSubSections.map { "${it.id}:${it.title}" }}")
-
                 Text(
                     text = if (isEnglish) "Select sub-topic" else "בחר תת־נושא",
                     style = MaterialTheme.typography.titleMedium,
@@ -486,12 +424,6 @@ fun TopicRepoExercisesScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                android.util.Log.e(
-                                    "DEF_DEBUG",
-                                    "CLICK HARD_SUB topicId='$topicId' topic='$topic' subTopicId='$subTopicId' -> targetSectionId='${sec.id}' targetTitle='${sec.title}'"
-                                )
-                                println("DEF_DEBUG CLICK HARD_SUB topicId='$topicId' topic='$topic' subTopicId='$subTopicId' -> targetSectionId='${sec.id}' targetTitle='${sec.title}'")
-
                                 onOpenSubTopic(
                                     topicId,
                                     sec.id

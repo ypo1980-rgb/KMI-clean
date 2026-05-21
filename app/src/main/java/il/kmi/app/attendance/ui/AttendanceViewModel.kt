@@ -13,13 +13,11 @@ import java.time.LocalDate
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
-import android.util.Log
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 
 data class AttendanceUiState(
     val date: LocalDate = LocalDate.now(),
@@ -88,12 +86,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
     private val membersFlow: Flow<List<GroupMember>> =
         combine(_branch, _groupKey, _refreshTick) { b, g, tick -> Triple(b, g, tick) }
-            .flatMapLatest { (b, g, tick) ->
-                Log.i(
-                    "ATT_MEMBERS_FLOW",
-                    "reading members branch=$b group=$g refreshTick=$tick"
-                )
-
+            .flatMapLatest { (b, g, _) ->
                 if (b.isBlank() || g.isBlank()) {
                     flowOf(emptyList())
                 } else {
@@ -214,13 +207,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
             result.onSuccess { id ->
                 _sessionId.value = id
-            }.onFailure { t ->
-                Log.e(
-                    "ATT_SESSION",
-                    "Failed ensuring attendance session date=$d branch=$b group=$g",
-                    t
-                )
-
+            }.onFailure {
                 _events.tryEmit(
                     UiEvent.ReportSaveFailed(
                         message = "Failed opening attendance session"
@@ -245,20 +232,9 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     groupKey = g,
                     displayName = cleanName
                 )
-            }.onSuccess { memberId ->
-                Log.i(
-                    "ATT_ADD_MEMBER",
-                    "member added branch=$b group=$g memberId=$memberId name=$cleanName"
-                )
-
+            }.onSuccess {
                 _refreshTick.update { it + 1 }
-            }.onFailure { t ->
-                Log.e(
-                    "ATT_ADD_MEMBER",
-                    "Failed adding member branch=$b group=$g name=$cleanName",
-                    t
-                )
-
+            }.onFailure {
                 _events.tryEmit(
                     UiEvent.ReportSaveFailed(
                         message = "Failed adding trainee: $cleanName"
@@ -273,11 +249,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         val sid = _sessionId.value
 
         if (sid == null) {
-            Log.e(
-                "ATT_MARK",
-                "Cannot mark attendance: sessionId is null memberId=$memberId status=$status"
-            )
-
             _events.tryEmit(
                 UiEvent.ReportSaveFailed(
                     message = "Attendance session is not ready yet"
@@ -294,19 +265,8 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     status = status
                 )
             }.onSuccess {
-                Log.i(
-                    "ATT_MARK",
-                    "attendance marked sessionId=$sid memberId=$memberId status=$status"
-                )
-
                 _refreshTick.update { it + 1 }
-            }.onFailure { t ->
-                Log.e(
-                    "ATT_MARK",
-                    "Failed marking attendance sessionId=$sid memberId=$memberId status=$status",
-                    t
-                )
-
+            }.onFailure {
                 _events.tryEmit(
                     UiEvent.ReportSaveFailed(
                         message = "Failed marking attendance"
@@ -332,12 +292,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             if (result.isFailure) {
-                Log.e(
-                    "ATT_REMOVE_MEMBER",
-                    "Failed removing member branch=$b group=$g memberId=$memberId",
-                    result.exceptionOrNull()
-                )
-
                 _events.tryEmit(
                     UiEvent.ReportSaveFailed(
                         message = "Failed removing trainee"
@@ -369,19 +323,8 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     date = d
                 )
             }.onSuccess {
-                Log.i(
-                    "ATT_SAVE",
-                    "Attendance report saved date=$d branch=$b group=$g"
-                )
-
                 _events.tryEmit(UiEvent.ReportSaved(branch = b, groupKey = g))
             }.onFailure { t ->
-                Log.e(
-                    "ATT_SAVE",
-                    "Failed saving attendance report date=$d branch=$b group=$g",
-                    t
-                )
-
                 _events.tryEmit(
                     UiEvent.ReportSaveFailed(
                         message = t.message ?: t.toString()
@@ -456,8 +399,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 g0.replace("-", "–"),
                 g0.replace("–", "-"),
             ).map { it.trim() }.distinct()
-
-            Log.i("ATT_BOOT", "VM branchCandidates=$branchCandidates groupCandidates=$groupCandidates")
 
             fun DocumentSnapshot.userNameOrNull(): String? {
                 val full = getString("fullName")
@@ -638,8 +579,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 .distinctBy { it.id }
 
             if (docs.isEmpty()) {
-                Log.w("ATT_BOOT", "VM docs empty -> fallback: fetch ALL users (paged) and filter client-side")
-
                 val col = Firebase.firestore.collection("users")
                 val all = mutableListOf<DocumentSnapshot>()
 
@@ -667,8 +606,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     if (d.isCoachDoc()) return@filter false
                     matchesBranch(d.branchTokensNorm(), candNorm)
                 }.distinctBy { it.id }
-
-                Log.w("ATT_BOOT", "VM fallback matched docs=${docs.size} (from all=${all.size})")
             }
 
             val stepNotCoach = docs.filter { !it.isCoachDoc() }
@@ -682,11 +619,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 .filter { it.isNotBlank() }
                 .distinctBy { it.lowercase() }
                 .toList()
-
-            Log.i(
-                "ATT_BOOT",
-                "VM docs=${docs.size} -> notCoach=${stepNotCoach.size} -> trainee=${stepTrainee.size} -> group=${stepGroup.size} -> names=${names.size} -> $names"
-            )
 
             // ✅ מניעת כפילויות: לא מוסיפים אם כבר קיים במודל/DB (לפי displayName מנורמל)
             val existingNamesNorm = uiState.value.members
@@ -703,15 +635,8 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 .filter { it.lowercase() !in existingNamesNorm }
                 .toList()
 
-            Log.i("ATT_BOOT", "VM toAdd=${toAdd.size} skipped=${names.size - toAdd.size}")
-
             val repoBranch = _branch.value.ifBlank { b0 }.trim()
             val repoGroup = _groupKey.value.ifBlank { g0 }.trim()
-
-            Log.i(
-                "ATT_BOOT",
-                "VM writing attendance members to repoBranch=$repoBranch repoGroup=$repoGroup"
-            )
 
             toAdd.forEach { n ->
                 runCatching {
@@ -719,17 +644,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                         branch = repoBranch,
                         groupKey = repoGroup,
                         displayName = n
-                    )
-                }.onSuccess { memberId ->
-                    Log.i(
-                        "ATT_BOOT",
-                        "VM added member to attendanceGroups memberId=$memberId name=$n branch=$repoBranch group=$repoGroup"
-                    )
-                }.onFailure { t ->
-                    Log.e(
-                        "ATT_BOOT",
-                        "VM failed adding member to attendanceGroups name=$n branch=$repoBranch group=$repoGroup",
-                        t
                     )
                 }
             }

@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.util.Log
 import java.util.Locale
 
 /**
@@ -18,7 +17,6 @@ import java.util.Locale
  */
 object WakeWordManager : RecognitionListener {
 
-    private const val TAG = "WakeWordManager"
     private const val WAKE_PHRASE = "יובל שומע"
 
     private var speechRecognizer: SpeechRecognizer? = null
@@ -34,12 +32,10 @@ object WakeWordManager : RecognitionListener {
      */
     fun start(context: Context, onWake: () -> Unit) {
         if (isActive) {
-            Log.d(TAG, "WakeWord already active")
             return
         }
 
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            Log.w(TAG, "SpeechRecognizer is not available on this device")
             return
         }
 
@@ -105,9 +101,7 @@ object WakeWordManager : RecognitionListener {
         try {
             val intent = createIntent()
             recognizer.startListening(intent)
-            Log.d(TAG, "WakeWord listening started")
-        } catch (t: Throwable) {
-            Log.e(TAG, "startListeningInternal failed", t)
+        } catch (_: Throwable) {
         }
     }
 
@@ -115,13 +109,9 @@ object WakeWordManager : RecognitionListener {
     //  RecognitionListener
     // ─────────────────────
 
-    override fun onReadyForSpeech(params: Bundle?) {
-        Log.d(TAG, "onReadyForSpeech")
-    }
+    override fun onReadyForSpeech(params: Bundle?) {}
 
-    override fun onBeginningOfSpeech() {
-        Log.d(TAG, "onBeginningOfSpeech")
-    }
+    override fun onBeginningOfSpeech() {}
 
     override fun onRmsChanged(rmsdB: Float) {
         // אפשר בעתיד להשתמש ב־rmsdB בשביל אנימציות
@@ -129,12 +119,9 @@ object WakeWordManager : RecognitionListener {
 
     override fun onBufferReceived(buffer: ByteArray?) {}
 
-    override fun onEndOfSpeech() {
-        Log.d(TAG, "onEndOfSpeech")
-    }
+    override fun onEndOfSpeech() {}
 
     override fun onError(error: Int) {
-        Log.w(TAG, "onError: $error")
         // במקרים רבים כדאי לנסות שוב, אם עדיין פעיל
         if (isActive) {
             // delay קטן כדי לא להיכנס ללופ שגיאות מטורף
@@ -189,15 +176,12 @@ object WakeWordManager : RecognitionListener {
         }
 
         if (found) {
-            Log.d(TAG, "Wake phrase detected! ($normalizedList)")
             // כדיי לא לירות פעמיים:
             if (isActive) {
                 // עוצרים רגע את ההאזנה כדי שלא תתנגש עם ה-STT של העוזר עצמו
                 stop()
                 onWakeCallback?.invoke()
             }
-        } else {
-            Log.d(TAG, "Speech (no wake): $normalizedList")
         }
     }
 }

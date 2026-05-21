@@ -1,7 +1,6 @@
 package il.kmi.app.auth
 
 import android.content.Context
-import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
@@ -14,8 +13,6 @@ import il.kmi.app.R
 import kotlinx.coroutines.tasks.await
 
 object GoogleAuthManager {
-
-    private const val TAG = "KMI_GOOGLE_AUTH"
 
     data class GoogleAuthUser(
         val uid: String,
@@ -52,7 +49,6 @@ object GoogleAuthManager {
             val idToken = googleCredential.idToken
 
             if (idToken.isBlank()) {
-                Log.e(TAG, "Google ID token is blank")
                 return Result.failure(IllegalStateException("Google ID token is blank"))
             }
 
@@ -72,27 +68,18 @@ object GoogleAuthManager {
                 photoUrl = firebaseUser.photoUrl?.toString()
             )
 
-            Log.d(
-                TAG,
-                "Google login success uid=${resultUser.uid}, email=${resultUser.email}, displayName=${resultUser.displayName}"
-            )
-
             Result.success(resultUser)
         } catch (e: GetCredentialCancellationException) {
-            Log.w(TAG, "Google login cancelled by user", e)
             Result.failure(e)
         } catch (e: GetCredentialException) {
-            Log.e(TAG, "Credential Manager failed", e)
             Result.failure(e)
         } catch (e: Exception) {
-            Log.e(TAG, "Google login failed", e)
             Result.failure(e)
         }
     }
 
     fun signOut() {
         FirebaseAuth.getInstance().signOut()
-        Log.d(TAG, "Firebase signOut called")
     }
 
     fun currentUid(): String? {

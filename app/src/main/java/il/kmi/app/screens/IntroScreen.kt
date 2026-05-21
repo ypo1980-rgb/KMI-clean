@@ -32,8 +32,7 @@ import il.kmi.app.subscription.KmiAccess
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.Belt
-import android.content.SharedPreferences // ✅ ADD
-import android.util.Log // ✅ ADD
+import android.content.SharedPreferences
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -205,20 +204,10 @@ private suspend fun fetchAndPersistFullNameIfMissing(
             userSp.edit().putString("fullName", fullName).apply()
             fullName
         } else {
-            Log.w("KMI_INTRO", "Firestore user doc has no name fields. uid=$uid keys=${doc.data?.keys}")
             null
         }
-    } catch (t: Throwable) {
-        Log.e("KMI_INTRO", "Failed to fetch name from Firestore", t)
+    } catch (_: Throwable) {
         null
-    }
-}
-
-private fun dumpPrefs(tag: String, sp: SharedPreferences) {
-    val all = sp.all
-    Log.d(tag, "prefs '$sp' keys=${all.keys.sorted()}")
-    for ((k, v) in all.entries.sortedBy { it.key }) {
-        Log.d(tag, "  $k = $v")
     }
 }
 
@@ -302,7 +291,6 @@ private fun BeltBadge(
     }
 }
 
-private const val INTRO_FLOW_LOG = "KMI_INTRO_FLOW"
 private const val SUPPRESS_NEXT_DRAWER_OPEN_KEY = "kmi_suppress_next_drawer_open"
 
 @Composable
@@ -337,13 +325,6 @@ fun IntroScreen(
 
     // ✅ ADD: גם הקובץ השני כדי להבין איפה נשמר בפועל
     val legacySp = remember { ctx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
-
-    LaunchedEffect(Unit) {
-        Log.e(INTRO_FLOW_LOG, "IntroScreen ENTER instance=${System.identityHashCode(this)}")
-        Log.d("KMI_INTRO", "IntroScreen ACTIVE ✅ (if you see this, you're in the right file)")
-        dumpPrefs("KMI_INTRO_USER", userSp)
-        dumpPrefs("KMI_INTRO_LEGACY", legacySp)
-    }
 
     val alpha by animateFloatAsState(
         targetValue = if (startAnim) 1f else 0f,
@@ -452,7 +433,7 @@ fun IntroScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = if (isEnglish) "K.A.M.I" else "ק.מ.י",
+                    text = if (isEnglish) "KAMI" else "ק.מ.י",
                     fontSize = 58.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White,
@@ -535,13 +516,7 @@ fun IntroScreen(
                 ) {
                     Button(
                         onClick = {
-                            Log.e(
-                                INTRO_FLOW_LOG,
-                                "Google button CLICK loading=$isGoogleLoading locked=$googleFlowLocked"
-                            )
-
                             if (isGoogleLoading || googleFlowLocked) {
-                                Log.e(INTRO_FLOW_LOG, "Google button SKIP duplicate click")
                                 return@Button
                             }
 
@@ -550,48 +525,22 @@ fun IntroScreen(
                             googleFlowLocked = true
 
                             scope.launch {
-                                Log.e(INTRO_FLOW_LOG, "Google signIn START")
-
                                 val loginResult = GoogleAuthManager.signInWithGoogle(ctx)
 
                                 loginResult
                                     .onSuccess { googleUser ->
-                                        Log.e(
-                                            INTRO_FLOW_LOG,
-                                            "Google signIn SUCCESS uid=${googleUser.uid}, email=${googleUser.email}"
-                                        )
-
-                                        Log.d(
-                                            "KMI_GOOGLE_AUTH",
-                                            "Intro Google success uid=${googleUser.uid}, email=${googleUser.email}"
-                                        )
-
                                         val profileStatus =
                                             UserProfileCompletion.checkAndPersistProfileStatus(ctx)
-
-                                        Log.e(
-                                            INTRO_FLOW_LOG,
-                                            "Profile status complete=${profileStatus.isComplete} missing=${profileStatus.missingFields}"
-                                        )
 
                                         isGoogleLoading = false
 
                                         if (profileStatus.isComplete) {
-                                            Log.e(INTRO_FLOW_LOG, "NAV -> profileComplete/home")
-                                            Log.d("KMI_GOOGLE_AUTH", "Profile complete -> home")
                                             onProfileComplete()
                                         } else {
-                                            Log.e(INTRO_FLOW_LOG, "NAV -> profileMissing/google_profile_completion")
-                                            Log.d(
-                                                "KMI_GOOGLE_AUTH",
-                                                "Profile missing -> registration. missing=${profileStatus.missingFields}"
-                                            )
                                             onProfileMissing()
                                         }
                                     }
                                     .onFailure { error ->
-                                        Log.e(INTRO_FLOW_LOG, "Google signIn FAILURE", error)
-
                                         isGoogleLoading = false
                                         googleFlowLocked = false
 
@@ -610,7 +559,6 @@ fun IntroScreen(
                                                 }
                                             }
 
-                                        Log.e("KMI_GOOGLE_AUTH", "Intro Google login failed", error)
                                         Toast.makeText(ctx, googleError, Toast.LENGTH_SHORT).show()
                                     }
                             }
@@ -711,8 +659,6 @@ fun IntroScreen(
 
                     TextButton(
                         onClick = {
-                            Log.e(INTRO_FLOW_LOG, "regular login button CLICK -> onContinue only")
-
                             // מונע פתיחת סרגל צד בטעות בזמן המעבר למסך כניסה / רישום
                             userSp.edit()
                                 .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)

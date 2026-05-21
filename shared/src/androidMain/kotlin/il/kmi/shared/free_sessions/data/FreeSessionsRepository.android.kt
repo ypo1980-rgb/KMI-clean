@@ -57,11 +57,6 @@ private class AndroidFreeSessionsRepository(
             "משתמש"
         }
 
-        android.util.Log.d(
-            "FREE_SESSIONS_PATH",
-            "createFreeSession -> $colPath (uid=$createdByUid, name='$safeName')"
-        )
-
         val data = hashMapOf<String, Any?>(
             "id" to doc.id,
             "branch" to branch.trim(),
@@ -114,7 +109,6 @@ private class AndroidFreeSessionsRepository(
 
         val reg = q.addSnapshotListener { snap, err ->
             if (err != null) {
-                android.util.Log.e("FREE_SESSIONS", "observeUpcoming failed", err)
                 trySend(emptyList())
                 return@addSnapshotListener
             }

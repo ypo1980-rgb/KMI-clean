@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.media.MediaPlayer
 import android.os.Build
-import android.util.Log
 import kotlinx.coroutines.*
 import java.io.File
 import java.net.HttpURLConnection
@@ -99,8 +98,7 @@ actual class PlatformAudioPlayer {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                             p.playbackParams = p.playbackParams.setSpeed(safeSpeed)
                         }
-                    } catch (t: Throwable) {
-                        Log.w("KMI_TTS", "MediaPlayer failed to set speed=$safeSpeed", t)
+                    } catch (_: Throwable) {
                     }
                     p.start()
                 }
@@ -111,8 +109,7 @@ actual class PlatformAudioPlayer {
                     if (mp === p) mp = null
                 }
 
-                setOnErrorListener { p, what, extra ->
-                    Log.e("KMI_TTS", "MediaPlayer error what=$what extra=$extra")
+                setOnErrorListener { p, _, _ ->
                     runCatching { p.release() }
                     if (mp === p) mp = null
                     true
@@ -121,8 +118,7 @@ actual class PlatformAudioPlayer {
 
             mp = player
             player.prepareAsync()
-        } catch (t: Throwable) {
-            Log.e("KMI_TTS", "MediaPlayer playFile failed path=$path", t)
+        } catch (_: Throwable) {
             stop()
         }
     }

@@ -3,7 +3,6 @@ package il.kmi.app.navigation
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
-import android.util.Log
 import androidx.compose.runtime.remember
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -93,14 +92,7 @@ fun NavGraphBuilder.trainingNavGraph(
         fun shouldBlockPremiumTopic(raw: String): Boolean {
             val locked = isLockedPremiumTopic(raw)
             val hasAccess = hasPremiumAccessNow()
-            val result = locked && !hasAccess
-
-            Log.e(
-                "KMI_LOCK_TRACE",
-                "shouldBlockPremiumTopic raw='$raw' locked=$locked hasAccess=$hasAccess result=$result"
-            )
-
-            return result
+            return locked && !hasAccess
         }
 
         val isCoach = remember {
@@ -122,11 +114,6 @@ fun NavGraphBuilder.trainingNavGraph(
                 topic = topic
             )
 
-            Log.e(
-                "KMI_SUB",
-                "training openSubTopics belt=${belt.id} topic='$topic' route='$route'"
-            )
-
             nav.navigate(route) {
                 launchSingleTop = true
                 restoreState = true
@@ -139,12 +126,6 @@ fun NavGraphBuilder.trainingNavGraph(
             subTopic: String
         ) {
             vm.setSelectedBelt(belt)
-
-            Log.e(
-                "KMI_SUB",
-                "OPEN_CHOSEN_SUB_TOPIC START belt=${belt.id} topic='$topic' sub='$subTopic'"
-            )
-            println("KMI_SUB OPEN_CHOSEN_SUB_TOPIC START belt=${belt.id} topic='$topic' sub='$subTopic'")
 
             val route = runCatching {
                 if (topic == "שחרורים") {
@@ -181,33 +162,13 @@ fun NavGraphBuilder.trainingNavGraph(
                         subTopic = subTopic
                     )
                 }
-            }.onFailure { t ->
-                Log.e(
-                    "KMI_SUB",
-                    "OPEN_CHOSEN_SUB_TOPIC BUILD FAILED belt=${belt.id} topic='$topic' sub='$subTopic'",
-                    t
-                )
-                println("KMI_SUB OPEN_CHOSEN_SUB_TOPIC BUILD FAILED belt=${belt.id} topic='$topic' sub='$subTopic' error='${t.message}'")
             }.getOrNull() ?: return
-
-            Log.e(
-                "KMI_SUB",
-                "OPEN_CHOSEN_SUB_TOPIC ROUTE belt=${belt.id} topic='$topic' sub='$subTopic' route='$route'"
-            )
-            println("KMI_SUB OPEN_CHOSEN_SUB_TOPIC ROUTE belt=${belt.id} topic='$topic' sub='$subTopic' route='$route'")
 
             runCatching {
                 nav.navigate(route) {
                     launchSingleTop = true
                     restoreState = true
                 }
-            }.onFailure { t ->
-                Log.e(
-                    "KMI_SUB",
-                    "OPEN_CHOSEN_SUB_TOPIC NAVIGATE FAILED route='$route'",
-                    t
-                )
-                println("KMI_SUB OPEN_CHOSEN_SUB_TOPIC NAVIGATE FAILED route='$route' error='${t.message}'")
             }
         }
 
@@ -289,12 +250,6 @@ fun NavGraphBuilder.trainingNavGraph(
             },
 
             onOpenSubTopic = { belt, topic, subTopic ->
-                Log.e(
-                    "KMI_SUB",
-                    "BeltQuestionsByBeltScreen onOpenSubTopic belt=${belt.id} topic='$topic' sub='$subTopic'"
-                )
-                println("KMI_SUB BeltQuestionsByBeltScreen onOpenSubTopic belt=${belt.id} topic='$topic' sub='$subTopic'")
-
                 val hasAccessNow = hasPremiumAccessNow()
 
                 if (
@@ -319,11 +274,6 @@ fun NavGraphBuilder.trainingNavGraph(
                 vm.setSelectedBelt(belt)
 
                 if (shouldBlockPremiumTopic(subjectId) || isLockedPremiumDefenseRoute(subjectId)) {
-                    Log.e(
-                        "KMI_LOCK_TRACE",
-                        "BeltQ onOpenHardSubjectRoute BLOCKED -> Subscription subjectId='$subjectId'"
-                    )
-
                     nav.navigate(Route.Subscription.route) {
                         launchSingleTop = true
                         restoreState = true
@@ -332,11 +282,6 @@ fun NavGraphBuilder.trainingNavGraph(
                     val route = il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
                         belt = belt,
                         topic = subjectId
-                    )
-
-                    Log.e(
-                        "KMI_SUB",
-                        "training onOpenHardSubjectRoute belt=${belt.id} subjectId='$subjectId' route='$route'"
                     )
 
                     nav.navigate(route) {
@@ -400,8 +345,7 @@ fun NavGraphBuilder.trainingNavGraph(
                 }
             },
 
-            onPracticeByTopics = { selection: PracticeByTopicsSelection ->
-                Log.d("KMI-NAV", "PracticeByTopics selection=$selection")
+            onPracticeByTopics = { _: PracticeByTopicsSelection ->
             },
 
             onOpenSummaryScreen = { belt ->
@@ -445,7 +389,6 @@ fun NavGraphBuilder.trainingNavGraph(
 
         BeltQuestionsByTopicScreen(
             onOpenSubscription = {
-                Log.e("KMI_LOCK_TRACE", "NAV -> Route.Subscription from BeltQuestionsByTopicScreen")
                 nav.navigate(Route.Subscription.route) {
                     launchSingleTop = true
                     restoreState = true
@@ -495,27 +438,12 @@ fun NavGraphBuilder.trainingNavGraph(
                 val blockTopic = shouldBlockPremiumTopic(topic)
                 val blockSub = shouldBlockPremiumTopic(sub)
 
-                Log.e(
-                    "KMI_LOCK_TRACE",
-                    "NAV onOpenTopicWithSub belt=${belt.id} topic='$topic' sub='$sub' blockTopic=$blockTopic blockSub=$blockSub"
-                )
-
                 if (blockTopic || blockSub) {
-                    Log.e(
-                        "KMI_LOCK_TRACE",
-                        "NAV BLOCKED -> Subscription from onOpenTopicWithSub topic='$topic' sub='$sub'"
-                    )
-
                     nav.navigate(Route.Subscription.route) {
                         launchSingleTop = true
                         restoreState = true
                     }
                 } else {
-                    Log.e(
-                        "KMI_LOCK_TRACE",
-                        "NAV ALLOWED -> MaterialsSub topic='$topic' sub='$sub'"
-                    )
-
                     nav.navigate(
                         Route.MaterialsSub.make(
                             belt = belt,

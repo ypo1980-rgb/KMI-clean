@@ -1,7 +1,6 @@
 package il.kmi.app.screens
 
 import android.net.Uri
-import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -223,11 +222,6 @@ private fun loadDirectTopicItems(
         }
     }
 
-    Log.e(
-        "KMI-SubTopics",
-        "loadDirectTopicItems: belt=${belt.id}, topic='$topicTitle', candidates=$topicCandidates, direct=${direct.size}, directSame=${directSameName.size}, viaSubs=${viaSubs.size}, viaRegSame=${viaRegistrySameName.size}, viaRegSubs=${viaRegistrySubs.size}"
-    )
-
     return (
             direct +
                     directSameName +
@@ -359,11 +353,6 @@ fun SubTopicsScreen(
 
     // שולפים את תתי־הנושאים הרגילים רק אם זה לא hard flow
     val subs: List<String> = remember(belt, topicDecoded, isHardFlow) {
-        Log.e(
-            "KMI_DEFENSE_DEBUG",
-            "topic=$topicDecoded belt=${belt.id} hardFlow=$isHardFlow"
-        )
-
         if (isHardFlow) return@remember emptyList()
 
         val forcedDefenseSubs = if (belt == Belt.BLACK && topicDecoded.trim() == "הגנות") {
@@ -388,10 +377,6 @@ fun SubTopicsScreen(
                 .filter { it.isNotBlank() }
                 .distinct()
 
-            Log.d(
-                "KMI-SubTopics",
-                "fromShared+forced: belt=${belt.id}, topic='$topicDecoded', subs=${merged.size}, values=$merged"
-            )
             return@remember merged
         }
 
@@ -407,10 +392,6 @@ fun SubTopicsScreen(
             .filter { it.isNotBlank() }
             .distinct()
 
-        Log.d(
-            "KMI-SubTopics",
-            "fromRepo+forced: belt=${belt.id}, topic='$topicDecoded', subs=${merged.size}, values=$merged"
-        )
         merged
     }
 
@@ -698,7 +679,6 @@ fun SubTopicsScreen(
                 includePractice = true,
                 hasFullAccess = hasAccess,
                 onLockedItemClick = {
-                    Log.e("KMI_LOCK", "LOCK CLICKED → open subscription")
                 },
                 onWeakPoints = { },
                 onAllLists = { },

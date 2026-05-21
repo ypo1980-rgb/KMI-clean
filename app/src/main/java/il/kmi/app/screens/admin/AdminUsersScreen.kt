@@ -1,6 +1,5 @@
 package il.kmi.app.screens.admin
 
-import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -30,7 +29,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.Query
@@ -391,8 +389,6 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
 fun AdminUsersScreen(
     onBack: () -> Unit
 ) {
-    Log.d("KMI_ADMIN", "AdminUsersScreen composed ✅")
-
     val contextLang = LocalContext.current
     val langManager = remember { AppLanguageManager(contextLang) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
@@ -415,32 +411,18 @@ fun AdminUsersScreen(
     var unlikeQuestions by remember { mutableStateOf<List<AdminUserRecord.AssistantQuestionRecord>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        // לוג קטן כדי לראות איזה UID מחובר בפועל
-        val currentUid = FirebaseAuth.getInstance().currentUser?.uid
-        Log.d("KMI_ADMIN", "current uid = $currentUid")
-
         loading = true
         errorMsg = null
         try {
-            Log.d("KMI_ADMIN", "Loading users collection...")
-
             val snap = Firebase.firestore
                 .collection("users")
                 .get()
                 .await()
 
-            Log.d("KMI_ADMIN", "users snap size = ${snap.size()}")
-
             val raw = snap.documents
                 .mapNotNull { doc ->
-                    val rec = doc.toAdminUserRecord()
-                    if (rec == null) {
-                        Log.w("KMI_ADMIN", "users doc skipped id=${doc.id} keys=${doc.data?.keys}")
-                    }
-                    rec
+                    doc.toAdminUserRecord()
                 }
-
-            Log.d("KMI_ADMIN", "users parsed = ${raw.size}")
 
             users = raw
                 .groupBy { it.dedupeKey() }
@@ -448,8 +430,6 @@ fun AdminUsersScreen(
                     list.maxByOrNull { it.createdAtMillis ?: 0L } ?: list.first()
                 }
                 .sortedBy { it.fullName }
-
-            Log.d("KMI_ADMIN", "users after dedupe = ${users.size}")
 
         } catch (t: Throwable) {
             val rawErr = t.message ?: adminTr(
@@ -466,7 +446,6 @@ fun AdminUsersScreen(
                 )
             } else rawErr
 
-            Log.e("KMI_ADMIN", "loading users failed", t)
         } finally {
             loading = false
         }
@@ -494,8 +473,7 @@ fun AdminUsersScreen(
                     userUid = doc.getString("userUid")
                 )
             }
-        } catch (t: Throwable) {
-            Log.w("KMI_ADMIN", "loading assistantFeedback failed", t)
+        } catch (_: Throwable) {
             // לא מציגים שגיאה למשתמש – פשוט לא יהיו שאלות ברשימה
             unlikeQuestions = emptyList()
         }

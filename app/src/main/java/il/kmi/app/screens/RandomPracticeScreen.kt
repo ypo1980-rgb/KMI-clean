@@ -313,8 +313,6 @@ fun RandomPracticeScreen(
                 }
             }
         // ================================================================
-        android.util.Log.d("RandomPractice", "belt=${belt.id} filter='$fixedFilter' single=$isSingleTopicFilter resolved='$resolvedSingleTopic'")
-        android.util.Log.d("RandomPractice", "sharedTopics=${sharedTopicTitlesFor(belt).size}")
 
         val built = il.kmi.shared.practice.PracticeFacade.buildPracticeItems(
             request = il.kmi.shared.practice.PracticeRequest(
@@ -511,11 +509,6 @@ fun RandomPracticeScreen(
         val canonicalId = statusCanonicalFor(item)
         val topicKeys = statusTopicKeysFor(item)
 
-        android.util.Log.d(
-            "KMI_MARK_SYNC",
-            "RandomPractice save | belt=${belt.id} | topic=$statusTopic | topicKeys=$topicKeys | display=${item.displayTitle} | canonicalId=$canonicalId | value=$newStatus"
-        )
-
         // ✅ עדכון מיידי במסך התרגול
         practiceStatusMap[canonicalId] = newStatus
 
@@ -670,11 +663,6 @@ fun RandomPracticeScreen(
                     value = localValue
                 )
 
-                android.util.Log.d(
-                    "KMI_MARK_SYNC",
-                    "RandomPractice SP fallback | belt=${belt.id} | key=$key | display=${item.displayTitle} | canonicalId=$canonicalId | value=$localValue | vmIsNull=${safeVm == null}"
-                )
-
                 return localValue to "$key/SP"
             }
         }
@@ -688,43 +676,28 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
     val item = currentPracticeItem ?: return@LaunchedEffect
     val canonicalId = currentStatusCanonical ?: return@LaunchedEffect
 
-    val statusTopic = statusTopicFor(item)
-    val topicKeys = statusTopicKeysFor(item)
-
-    val (fromSources, matchedKey) = readPracticeStatusFromSources(
+    val (fromSources, _) = readPracticeStatusFromSources(
         safeVm = vm,
         item = item,
         canonicalId = canonicalId
     )
 
     practiceStatusMap[canonicalId] = fromSources
-
-    android.util.Log.d(
-        "KMI_MARK_SYNC",
-        "RandomPractice current load | belt=${belt.id} | baseTopic=$statusTopic | topicKeys=$topicKeys | matchedKey=$matchedKey | display=${item.displayTitle} | canonicalId=$canonicalId | value=$fromSources | vmIsNull=${vm == null}"
-    )
 }
 
     // ✅ טעינת כל הסימונים בתחילת התרגול / אחרי שינוי סימון.
     // חשוב: לא עושים clear למפה, כדי שלא יהיה רגע שבו העיגול חוזר לריק.
     LaunchedEffect(weightedPracticeItems, vm, marksVersion) {
         weightedPracticeItems.forEach { item ->
-            val statusTopic = statusTopicFor(item)
             val canonicalId = statusCanonicalFor(item)
-            val topicKeys = statusTopicKeysFor(item)
 
-            val (fromSources, matchedKey) = readPracticeStatusFromSources(
+            val (fromSources, _) = readPracticeStatusFromSources(
                 safeVm = vm,
                 item = item,
                 canonicalId = canonicalId
             )
 
             practiceStatusMap[canonicalId] = fromSources
-
-            android.util.Log.d(
-                "KMI_MARK_SYNC",
-                "RandomPractice load | belt=${belt.id} | baseTopic=$statusTopic | topicKeys=$topicKeys | matchedKey=$matchedKey | display=${item.displayTitle} | canonicalId=$canonicalId | value=$fromSources | vmIsNull=${vm == null}"
-            )
         }
     }
 

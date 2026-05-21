@@ -21,34 +21,19 @@ class DailyReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
 
-        android.util.Log.d("KMI_REMINDER", "DailyReminderReceiver triggered")
-
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val reminderPrefs = ReminderPrefs(prefs)
 
         val isCoach = isCoachUser(prefs)
         val isEnabled = reminderPrefs.isEnabledForRole(isCoach)
 
-        android.util.Log.d(
-            "KMI_REMINDER",
-            "Receiver state: isCoach=$isCoach isEnabled=$isEnabled"
-        )
-
         if (!isEnabled) {
-            android.util.Log.d("KMI_REMINDER", "Receiver exit: reminder disabled")
             return
         }
 
-        val userSp = context.getSharedPreferences(USER_PREFS_NAME, Context.MODE_PRIVATE)
-
-        android.util.Log.d("KMI_REMINDER", "kmi_user keys=${userSp.all}")
-        android.util.Log.d("KMI_REMINDER", "kmi_prefs keys=${prefs.all}")
-
         val registeredBelt = getRegisteredBelt(prefs, context)
-        android.util.Log.d("KMI_REMINDER", "Receiver state: registeredBelt=$registeredBelt")
 
         if (registeredBelt == null) {
-            android.util.Log.d("KMI_REMINDER", "Receiver exit: registeredBelt is null")
             return
         }
 
@@ -58,21 +43,13 @@ class DailyReminderReceiver : BroadcastReceiver() {
             lastItemKey = reminderPrefs.getLastItemKey()
         )
 
-        android.util.Log.d("KMI_REMINDER", "Receiver state: picked=$picked")
-
         if (picked == null) {
-            android.util.Log.d("KMI_REMINDER", "Receiver exit: no exercise picked")
             return
         }
 
         val explanation = Explanations.get(picked.belt, picked.item).trim()
-        android.util.Log.d(
-            "KMI_REMINDER",
-            "Receiver state: explanationBlank=${explanation.isBlank()} explanationLength=${explanation.length}"
-        )
 
         if (explanation.isBlank()) {
-            android.util.Log.d("KMI_REMINDER", "Receiver exit: explanation is blank")
             return
         }
 
@@ -151,17 +128,9 @@ class DailyReminderReceiver : BroadcastReceiver() {
                         Manifest.permission.POST_NOTIFICATIONS
                     ) == PackageManager.PERMISSION_GRANTED
 
-        android.util.Log.d(
-            "KMI_REMINDER",
-            "Receiver state: canPostNotifications=$canPostNotifications"
-        )
-
         if (canPostNotifications) {
             NotificationManagerCompat.from(context)
                 .notify(NOTIFICATION_ID_DAILY_EXERCISE, notification)
-            android.util.Log.d("KMI_REMINDER", "Notification posted")
-        } else {
-            android.util.Log.d("KMI_REMINDER", "Receiver exit: POST_NOTIFICATIONS denied")
         }
 
         DailyReminderScheduler.rescheduleNextDay(context)
@@ -172,10 +141,10 @@ class DailyReminderReceiver : BroadcastReceiver() {
 
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Daily Exercise Reminder",
+            "KAMI Daily Exercise Reminder",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "תזכורת יומית עם תרגיל מהחגורה הבאה"
+            description = "תזכורת יומית עם תרגיל KAMI לפי חגורת המשתמש"
         }
 
         val manager =
