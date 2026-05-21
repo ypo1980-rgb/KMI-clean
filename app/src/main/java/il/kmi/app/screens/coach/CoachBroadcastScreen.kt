@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
@@ -42,7 +43,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import java.util.Date
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
-import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.tasks.await
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
@@ -203,24 +203,15 @@ fun persistCoachBroadcast(
         "source" to "android_coach_broadcast"
     )
 
-    android.util.Log.e(
-        "KMI_COACH_BROADCAST",
-        "persist start broadcastId=$broadcastId authorUid=$currentUid region=$cleanRegion branch=$cleanBranch targetUids=$cleanTargetUids message=$cleanMessage"
-    )
-
     docRef
         .set(data.filterValues { it != null }, SetOptions.merge())
         .addOnSuccessListener {
-            android.util.Log.e(
-                "KMI_COACH_BROADCAST",
-                "persist SUCCESS broadcastId=$broadcastId targetUids=$cleanTargetUids"
-            )
             onResult(true, null)
         }
         .addOnFailureListener { e ->
             android.util.Log.e(
                 "KMI_COACH_BROADCAST",
-                "persist FAILED broadcastId=$broadcastId targetUids=$cleanTargetUids",
+                "persist failed",
                 e
             )
             onResult(false, e)
@@ -233,7 +224,8 @@ private data class CoachRecipient(
     val name: String,
     val phone: String,
     val email: String,
-    val selected: Boolean
+    val selected: Boolean,
+    val canReceiveSms: Boolean = phone.isNotBlank()
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -324,14 +316,8 @@ fun CoachBroadcastScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // listener כדי שנוכל להסיר כשמשנים region/branch
-    var usersListener by remember { mutableStateOf<ListenerRegistration?>(null) }
-
     // ===== טעינת חברי הקבוצה מה- Firestore לפי אזור + סניף + קבוצה =====
     LaunchedEffect(region, branch, effectiveGroupKey) {
-        usersListener?.remove()
-        usersListener = null
-
         fun String.norm(): String {
             return trim()
                 .replace('־', '-')
@@ -512,11 +498,6 @@ fun CoachBroadcastScreen(
         val groupCandidateSet = expandGroupAliases(groupNorm)
             .toSet()
 
-        android.util.Log.e(
-            "KMI_COACH_BROADCAST",
-            "loading recipients region=$regionNorm branch=$branchPrimary group=$groupNorm branchCandidates=$branchCandidateSet groupCandidates=$groupCandidateSet"
-        )
-
         fun docsToRecipients(docs: List<DocumentSnapshot>): List<CoachRecipient> {
             val currentSelectionByUid = recipients.associate { it.uid to it.selected }
             val currentSelectionByPhone = recipients.associate { it.phone to it.selected }
@@ -540,27 +521,32 @@ fun CoachBroadcastScreen(
                                 ?: ""
                             ).trim()
 
-                    if (phone.isBlank()) return@mapNotNull null
-
                     val uid = (
                             doc.getString("uid")
                                 ?: doc.getString("authUid")
                                 ?: doc.id
                             ).trim()
 
-                    val name = doc.displayNameOrPhone(phone).trim()
                     val email = doc.getString("email")
                         ?.trim()
                         .orEmpty()
 
+                    val resolvedUid = uid.ifBlank { doc.id }
+                    val name = doc.displayNameOrPhone(phone).trim()
+
+                    if (resolvedUid.isBlank() && phone.isBlank() && email.isBlank()) {
+                        return@mapNotNull null
+                    }
+
                     CoachRecipient(
-                        uid = uid.ifBlank { doc.id },
+                        uid = resolvedUid,
                         name = name,
                         phone = phone,
                         email = email,
-                        selected = currentSelectionByUid[uid]
+                        selected = currentSelectionByUid[resolvedUid]
                             ?: currentSelectionByPhone[phone]
-                            ?: true
+                            ?: true,
+                        canReceiveSms = phone.isNotBlank()
                     )
                 }
                 .groupBy { it.uid.ifBlank { it.phone } }
@@ -653,11 +639,6 @@ fun CoachBroadcastScreen(
                 if (all.size >= 3000) break
             }
 
-            android.util.Log.w(
-                "KMI_COACH_BROADCAST",
-                "recipient direct queries returned 0 -> fallback all users size=${all.size}"
-            )
-
             return all.distinctBy { it.id }
         }
 
@@ -666,15 +647,10 @@ fun CoachBroadcastScreen(
             val finalRecipients = docsToRecipients(docs)
 
             recipients = finalRecipients
-
-            android.util.Log.e(
-                "KMI_COACH_BROADCAST",
-                "recipients loaded count=${finalRecipients.size} region=$regionNorm branch=$branchPrimary group=$groupNorm names=${finalRecipients.map { it.name }}"
-            )
         } catch (e: Exception) {
             android.util.Log.e(
                 "KMI_COACH_BROADCAST",
-                "failed loading recipients region=$regionNorm branch=$branchPrimary group=$groupNorm",
+                "failed loading recipients",
                 e
             )
 
@@ -688,8 +664,15 @@ fun CoachBroadcastScreen(
 
     // נמענים שנבחרו (גם טלפונים וגם UIDs)
     val selectedRecipients = recipients.filter { it.selected }
-    val selectedNumbers = selectedRecipients.map { it.phone }
-    val selectedUids = selectedRecipients.map { it.uid }
+    val selectedNumbers = selectedRecipients
+        .map { it.phone.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+
+    val selectedUids = selectedRecipients
+        .map { it.uid.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
 
     val selectedRecipientSnapshots = selectedRecipients.map { recipient ->
         mapOf(
@@ -703,7 +686,7 @@ fun CoachBroadcastScreen(
     val allSelected = recipients.isNotEmpty() && recipients.all { it.selected }
 
     val sendButtonText = when {
-        selectedNumbers.isEmpty() -> coachBroadcastTr(
+        selectedUids.isEmpty() -> coachBroadcastTr(
             isEnglish,
             "בחר מתאמנים לשליחה",
             "Select trainees to send"
@@ -734,11 +717,6 @@ fun CoachBroadcastScreen(
         val cleanBranch = branch.trim()
         val cleanMessage = message.trim()
 
-        android.util.Log.e(
-            "KMI_COACH_BROADCAST",
-            "saveBroadcast clicked selected=${selectedRecipients.size} uids=$selectedUids names=${selectedRecipients.map { it.name }}"
-        )
-
         // ✅ שמירה ודאית מתוך המסך עצמו.
         // כך גם אם הניווט מעביר onPersistBroadcast ריק/ישן, עדיין יווצר מסמך ב-coachBroadcasts.
         persistCoachBroadcast(
@@ -750,11 +728,6 @@ fun CoachBroadcastScreen(
             onResult = { ok, error ->
                 if (ok) {
                     isSending = false
-
-                    android.util.Log.e(
-                        "KMI_COACH_BROADCAST",
-                        "saveBroadcast callback SUCCESS selected=${selectedRecipients.size} uids=$selectedUids"
-                    )
 
                     scope.launch {
                         snackbarHostState.showSnackbar(
@@ -770,7 +743,7 @@ fun CoachBroadcastScreen(
 
                     android.util.Log.e(
                         "KMI_COACH_BROADCAST",
-                        "saveBroadcast callback FAILED selected=${selectedRecipients.size} uids=$selectedUids",
+                        "saveBroadcast failed",
                         error
                     )
 
@@ -898,6 +871,9 @@ fun CoachBroadcastScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .fillMaxWidth(),
+                                textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge.copy(
+                                    textAlign = screenTextAlign
+                                ),
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                                 colors = fieldColors
                             )
@@ -907,7 +883,13 @@ fun CoachBroadcastScreen(
                             ) {
                                 branchesByRegion.keys.forEach { r ->
                                     DropdownMenuItem(
-                                        text = { Text(r) },
+                                        text = {
+                                            Text(
+                                                text = r,
+                                                textAlign = screenTextAlign,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        },
                                         onClick = {
                                             region = r
                                             branch = ""
@@ -947,7 +929,13 @@ fun CoachBroadcastScreen(
                                 ) {
                                     (branchesByRegion[region] ?: emptyList()).forEach { b ->
                                         DropdownMenuItem(
-                                            text = { Text(b) },
+                                            text = {
+                                                Text(
+                                                    text = b,
+                                                    textAlign = screenTextAlign,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            },
                                             onClick = {
                                                 branch = b
                                                 expandedBranch = false
@@ -970,6 +958,9 @@ fun CoachBroadcastScreen(
                             },
                             minLines = 3,
                             modifier = Modifier.fillMaxWidth(),
+                            textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge.copy(
+                                textAlign = screenTextAlign
+                            ),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                             colors = fieldColors
                         )
@@ -1104,7 +1095,7 @@ fun CoachBroadcastScreen(
                 if (recipients.isNotEmpty()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Start
+                        horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
                     ) {
                         OutlinedButton(
                             onClick = {
@@ -1138,7 +1129,8 @@ fun CoachBroadcastScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Color.White.copy(alpha = 0.95f))
-                            .padding(8.dp)
+                            .padding(8.dp),
+                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                     ) {
                         uiRecipients.forEach { r ->
                             val isSelected = r.selected
@@ -1163,15 +1155,24 @@ fun CoachBroadcastScreen(
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                    ) {
                                         Text(
                                             text = r.name,
-                                            color = if (isSelected) Color(0xFF0C4A6E) else Color.Black
+                                            color = if (isSelected) Color(0xFF0C4A6E) else Color.Black,
+                                            textAlign = screenTextAlign,
+                                            modifier = Modifier.fillMaxWidth()
                                         )
                                         Text(
-                                            text = r.phone,
+                                            text = r.phone.ifBlank {
+                                                coachBroadcastTr(isEnglish, "ללא מספר טלפון", "No phone number")
+                                            },
                                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                            color = if (isSelected) Color(0xFF0369A1) else Color.Gray
+                                            color = if (isSelected) Color(0xFF0369A1) else Color.Gray,
+                                            textAlign = screenTextAlign,
+                                            modifier = Modifier.fillMaxWidth()
                                         )
                                     }
                                     Checkbox(
@@ -1267,7 +1268,7 @@ fun CoachBroadcastScreen(
                                     )
                                 }
 
-                                selectedNumbers.isEmpty() -> {
+                                selectedUids.isEmpty() -> {
                                     snackbarHostState.showSnackbar(
                                         coachBroadcastTr(
                                             isEnglish,
@@ -1279,41 +1280,46 @@ fun CoachBroadcastScreen(
                                 else -> {
                                     isSending = true
 
-                                    android.util.Log.e(
-                                        "KMI_COACH_BROADCAST",
-                                        "send button confirmed message='${message.trim()}' selectedNumbers=$selectedNumbers selectedUids=$selectedUids recipients=$selectedRecipientSnapshots"
-                                    )
-
                                     val messageToSend = message
 
                                     saveBroadcast()
 
-                                    runCatching {
-                                        onOpenSms(selectedNumbers, messageToSend)
-                                    }.onSuccess {
+                                    if (selectedNumbers.isNotEmpty()) {
+                                        runCatching {
+                                            onOpenSms(selectedNumbers, messageToSend)
+                                        }.onSuccess {
+                                            message = ""
+
+                                            snackbarHostState.showSnackbar(
+                                                coachBroadcastTr(
+                                                    isEnglish,
+                                                    "נפתחה אפליקציית ההודעות עם ${selectedNumbers.size} מתאמנים",
+                                                    "The messaging app opened with ${selectedNumbers.size} trainees"
+                                                )
+                                            )
+                                        }.onFailure { e ->
+                                            android.util.Log.e(
+                                                "KMI_COACH_BROADCAST",
+                                                "failed opening SMS app",
+                                                e
+                                            )
+
+                                            snackbarHostState.showSnackbar(
+                                                coachBroadcastTr(
+                                                    isEnglish,
+                                                    "ההודעה נשמרה לעיבוד Push, אבל פתיחת אפליקציית ההודעות נכשלה.",
+                                                    "The message was saved for Push processing, but opening the messaging app failed."
+                                                )
+                                            )
+                                        }
+                                    } else {
                                         message = ""
 
                                         snackbarHostState.showSnackbar(
                                             coachBroadcastTr(
                                                 isEnglish,
-                                                "נפתחה אפליקציית ההודעות עם ${selectedNumbers.size} מתאמנים",
-                                                "The messaging app opened with ${selectedNumbers.size} trainees"
-                                            )
-                                        )
-                                    }.onFailure { e ->
-                                        isSending = false
-
-                                        android.util.Log.e(
-                                            "KMI_COACH_BROADCAST",
-                                            "failed opening SMS app",
-                                            e
-                                        )
-
-                                        snackbarHostState.showSnackbar(
-                                            coachBroadcastTr(
-                                                isEnglish,
-                                                "שמירת ההודעה בוצעה, אבל פתיחת אפליקציית ההודעות נכשלה.",
-                                                "The message was saved, but opening the messaging app failed."
+                                                "ההודעה נשמרה לעיבוד Push עבור ${selectedUids.size} נמענים",
+                                                "The message was saved for Push processing for ${selectedUids.size} recipients"
                                             )
                                         )
                                     }
@@ -1321,7 +1327,7 @@ fun CoachBroadcastScreen(
                             }
                         }
                     },
-                    enabled = !isSending && message.isNotBlank() && selectedNumbers.isNotEmpty(),
+                    enabled = !isSending && message.isNotBlank() && selectedUids.isNotEmpty(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 58.dp),

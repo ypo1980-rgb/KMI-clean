@@ -7,6 +7,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -34,16 +35,15 @@ import il.kmi.shared.localization.AppLanguageManager
 @Composable
 fun RateUsScreen(
     onClose: () -> Unit,
-    supportEmail: String = "support@kmi-app.example",
-    playStoreAppId: String = "il.kmi.app",
-    appStoreAppId: String = "0000000000"
+    supportEmail: String = "ypo1980@gmail.com",
+    playStoreAppId: String = ""
 ) {
     val ctx = LocalContext.current
     val langManager = remember { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
     val screenTitle = if (isEnglish) "Rate Us" else "דרגו אותנו"
-    val heroTitle = if (isEnglish) "Enjoying KMI?" else "אהבתם את KMI?"
+    val heroTitle = if (isEnglish) "Enjoying KAMI?" else "אהבתם את KAMI?"
     val heroSubtitle = if (isEnglish) {
         "Your rating helps us improve and grow."
     } else {
@@ -166,20 +166,6 @@ fun RateUsScreen(
                             )
                         }
 
-                        if (isIos()) {
-                            OutlinedButton(
-                                onClick = {
-                                    openAppStoreForApp(ctx, appStoreAppId)
-                                    markRated(ctx)
-                                    onClose()
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(14.dp)
-                            ) {
-                                Text(if (isEnglish) "Open in App Store" else "פתחו ב-App Store")
-                            }
-                        }
-
                         TextButton(
                             onClick = {
                                 sendFeedbackEmail(
@@ -231,25 +217,37 @@ private fun StarsRow(
 /* ------------------ Helpers ------------------ */
 
 private fun openPlayStoreForApp(ctx: Context, appId: String) {
-    val uriMarket = Uri.parse("market://details?id=$appId")
+    val resolvedAppId = appId.trim().ifBlank { ctx.packageName }
+
+    val uriMarket = Uri.parse("market://details?id=$resolvedAppId")
     val marketIntent = Intent(Intent.ACTION_VIEW, uriMarket).apply {
         addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
     }
+
     try {
         ctx.startActivity(marketIntent)
     } catch (_: ActivityNotFoundException) {
-        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$appId"))
-        ctx.startActivity(webIntent)
-    }
-}
+        val webIntent = Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://play.google.com/store/apps/details?id=$resolvedAppId")
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
 
-// פתיחת דף האפליקציה ב-App Store (ל-iOS)
-private fun openAppStoreForApp(ctx: Context, appStoreId: String) {
-    val url = "https://apps.apple.com/app/id$appStoreId"
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-    try {
-        ctx.startActivity(intent)
-    } catch (_: Exception) { /* no-op */ }
+        try {
+            ctx.startActivity(webIntent)
+        } catch (_: Exception) {
+            Toast.makeText(
+                ctx,
+                if (AppLanguageManager(ctx).getCurrentLanguage() == AppLanguage.ENGLISH) {
+                    "Unable to open the store"
+                } else {
+                    "לא ניתן לפתוח את החנות"
+                },
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 }
 
 private fun sendFeedbackEmail(ctx: Context, to: String, subject: String, body: String) {
@@ -261,6 +259,7 @@ private fun sendFeedbackEmail(ctx: Context, to: String, subject: String, body: S
         putExtra(Intent.EXTRA_SUBJECT, subject)
         putExtra(Intent.EXTRA_TEXT, body)
     }
+
     try {
         ctx.startActivity(
             Intent.createChooser(
@@ -268,7 +267,13 @@ private fun sendFeedbackEmail(ctx: Context, to: String, subject: String, body: S
                 if (isEnglish) "Send feedback" else "שליחת משוב"
             )
         )
-    } catch (_: Exception) { /* no-op */ }
+    } catch (_: Exception) {
+        Toast.makeText(
+            ctx,
+            if (isEnglish) "No email app was found" else "לא נמצאה אפליקציית דוא״ל",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
 }
 
 private fun markRated(ctx: Context) {
@@ -278,10 +283,3 @@ private fun markRated(ctx: Context) {
         .putLong("rate_last_prompt_ts", System.currentTimeMillis())
         .apply()
 }
-
-/**
- * ב־Android source set הפונקציה תחזיר false, כך שהכפתור לא יוצג.
- * ב־iOS (KMP) אפשר לממש actual שמחזיר true.
- */
-@Suppress("KotlinJniMissingFunction") // רק להבהרת הכוונה
-private fun isIos(): Boolean = false

@@ -60,9 +60,103 @@ import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+
+private suspend fun persistContactRequestToFirestore(
+    fullName: String,
+    phone: String,
+    email: String,
+    subject: String,
+    message: String
+) {
+    val authUser = FirebaseAuth.getInstance().currentUser
+    val db = FirebaseFirestore.getInstance()
+
+    val cleanFullName = fullName.trim()
+    val cleanPhone = phone.trim()
+    val cleanEmail = email.trim()
+    val cleanSubject = subject.trim()
+    val cleanMessage = message.trim()
+
+    if (cleanFullName.isBlank()) error("Missing full name")
+    if (cleanPhone.isBlank()) error("Missing phone")
+    if (cleanSubject.isBlank()) error("Missing subject")
+    if (cleanMessage.isBlank()) error("Missing message")
+
+    val nowMillis = System.currentTimeMillis()
+
+    val contactRef = db.collection("contactRequests").document()
+    val notificationRef = db.collection("appNotificationQueue").document()
+
+    val contactData = mapOf(
+        "requestId" to contactRef.id,
+        "fullName" to cleanFullName,
+        "phone" to cleanPhone,
+        "email" to cleanEmail,
+        "subject" to cleanSubject,
+        "message" to cleanMessage,
+        "userUid" to authUser?.uid.orEmpty(),
+        "userEmail" to authUser?.email.orEmpty(),
+        "status" to "open",
+        "source" to "android_contact_us",
+
+        // הכנה להתראה עתידית לנציג העמותה
+        "notifyEnabled" to true,
+        "notifyStatus" to "pending",
+        "notifyTargetType" to "association_contact_manager",
+        "notifyTargetUid" to "",
+        "notifyTargetEmail" to "",
+        "notifyTargetPhone" to "",
+        "notifyCreatedAtMillis" to nowMillis,
+
+        "createdAt" to FieldValue.serverTimestamp(),
+        "createdAtMillis" to nowMillis
+    )
+
+    val notificationData = mapOf(
+        "notificationId" to notificationRef.id,
+        "type" to "contact_request",
+        "status" to "pending",
+        "source" to "android_contact_us",
+
+        // מי אמור לקבל בעתיד — יוגדר בהמשך
+        "targetType" to "association_contact_manager",
+        "targetUid" to "",
+        "targetEmail" to "",
+        "targetPhone" to "",
+
+        // קישור לפנייה
+        "contactRequestId" to contactRef.id,
+        "relatedCollection" to "contactRequests",
+        "relatedDocumentId" to contactRef.id,
+
+        // תוכן ההתראה
+        "titleHe" to "פנייה חדשה מהאפליקציה",
+        "titleEn" to "New contact request from the app",
+        "bodyHe" to "התקבלה פנייה חדשה מאת $cleanFullName בנושא: $cleanSubject",
+        "bodyEn" to "A new contact request was received from $cleanFullName regarding: $cleanSubject",
+
+        // Snapshot קצר לצפייה מהירה
+        "fullName" to cleanFullName,
+        "phone" to cleanPhone,
+        "email" to cleanEmail,
+        "subject" to cleanSubject,
+        "messagePreview" to cleanMessage.take(180),
+        "userUid" to authUser?.uid.orEmpty(),
+        "userEmail" to authUser?.email.orEmpty(),
+
+        "createdAt" to FieldValue.serverTimestamp(),
+        "createdAtMillis" to nowMillis
+    )
+
+    val batch = db.batch()
+    batch.set(contactRef, contactData)
+    batch.set(notificationRef, notificationData)
+    batch.commit().await()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +176,7 @@ fun ContactUsScreen(
     var email by rememberSaveable { mutableStateOf("") }
     var subject by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("") }
+    var isSubmitting by rememberSaveable { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -135,12 +230,8 @@ fun ContactUsScreen(
                 if (email.isBlank() && serverEmail.isNotBlank()) {
                     email = serverEmail
                 }
-            }.onFailure { error ->
-                android.util.Log.e(
-                    "KMI_CONTACT",
-                    "Failed to load contact profile from Firestore: ${error.message}",
-                    error
-                )
+            }.onFailure {
+                // Prefill is optional. The user can still fill the form manually.
             }
         }
     }
@@ -263,7 +354,7 @@ fun ContactUsScreen(
 
                                     Text(
                                         text = if (effectiveEnglish) {
-                                            "K.A.M.I representative will contact you soon."
+                                            "KAMI representative will contact you soon."
                                         } else {
                                             "נציג מטעם ק.מ.י יחזור אליכם בהקדם."
                                         },
@@ -312,6 +403,9 @@ fun ContactUsScreen(
                                 leadingIcon = {
                                     Icon(Icons.Default.Person, contentDescription = null)
                                 },
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
+                                ),
                                 colors = contactFieldColors()
                             )
 
@@ -325,6 +419,9 @@ fun ContactUsScreen(
                                     Icon(Icons.Default.Phone, contentDescription = null)
                                 },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
+                                ),
                                 colors = contactFieldColors()
                             )
 
@@ -338,6 +435,9 @@ fun ContactUsScreen(
                                     Icon(Icons.Default.Email, contentDescription = null)
                                 },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
+                                ),
                                 colors = contactFieldColors()
                             )
 
@@ -355,6 +455,9 @@ fun ContactUsScreen(
                                 leadingIcon = {
                                     Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null)
                                 },
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
+                                ),
                                 colors = contactFieldColors()
                             )
 
@@ -369,6 +472,9 @@ fun ContactUsScreen(
                                         color = Color(0xFF52627A)
                                     )
                                 },
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
+                                ),
                                 colors = contactFieldColors()
                             )
 
@@ -376,30 +482,59 @@ fun ContactUsScreen(
 
                             Button(
                                 onClick = {
-                                    onSubmit(
-                                        fullName.trim(),
-                                        phone.trim(),
-                                        email.trim(),
-                                        subject.trim(),
-                                        message.trim()
-                                    )
+                                    if (isSubmitting) return@Button
 
                                     scope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            if (effectiveEnglish)
-                                                "Your request was sent successfully"
-                                            else
-                                                "הפנייה נשלחה בהצלחה"
-                                        )
-                                    }
+                                        isSubmitting = true
 
-                                    fullName = ""
-                                    phone = ""
-                                    email = ""
-                                    subject = ""
-                                    message = ""
+                                        val cleanFullName = fullName.trim()
+                                        val cleanPhone = phone.trim()
+                                        val cleanEmail = email.trim()
+                                        val cleanSubject = subject.trim()
+                                        val cleanMessage = message.trim()
+
+                                        runCatching {
+                                            persistContactRequestToFirestore(
+                                                fullName = cleanFullName,
+                                                phone = cleanPhone,
+                                                email = cleanEmail,
+                                                subject = cleanSubject,
+                                                message = cleanMessage
+                                            )
+                                        }.onSuccess {
+                                            onSubmit(
+                                                cleanFullName,
+                                                cleanPhone,
+                                                cleanEmail,
+                                                cleanSubject,
+                                                cleanMessage
+                                            )
+
+                                            snackbarHostState.showSnackbar(
+                                                if (effectiveEnglish)
+                                                    "Your request was sent successfully"
+                                                else
+                                                    "הפנייה נשלחה בהצלחה"
+                                            )
+
+                                            fullName = ""
+                                            phone = ""
+                                            email = ""
+                                            subject = ""
+                                            message = ""
+                                        }.onFailure {
+                                            snackbarHostState.showSnackbar(
+                                                if (effectiveEnglish)
+                                                    "Sending failed. Please try again."
+                                                else
+                                                    "שליחת הפנייה נכשלה. נסה שוב."
+                                            )
+                                        }
+
+                                        isSubmitting = false
+                                    }
                                 },
-                                enabled = isFormValid,
+                                enabled = isFormValid && !isSubmitting,
                                 modifier = Modifier.fillMaxWidth(),
                                 elevation = ButtonDefaults.buttonElevation(
                                     defaultElevation = 6.dp,
@@ -422,7 +557,11 @@ fun ContactUsScreen(
                                         contentDescription = null
                                     )
                                     Text(
-                                        text = sendText,
+                                        text = if (isSubmitting) {
+                                            if (effectiveEnglish) "Sending..." else "שולח..."
+                                        } else {
+                                            sendText
+                                        },
                                         style = MaterialTheme.typography.titleMedium,
                                         modifier = Modifier.padding(vertical = 4.dp)
                                     )

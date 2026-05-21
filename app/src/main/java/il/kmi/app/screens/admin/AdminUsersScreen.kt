@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
@@ -73,6 +74,16 @@ private fun adminAgeBucketLabel(bucket: String, isEnglish: Boolean): String {
 }
 
 private fun Int?.orEmptyCount(): Int = this ?: 0
+
+private fun adminMillisFromFirestore(value: Any?): Long? {
+    return when (value) {
+        is Long -> value
+        is Int -> value.toLong()
+        is Double -> value.toLong()
+        is Timestamp -> value.toDate().time
+        else -> null
+    }
+}
 
 // ======================================================
 //  מודל נתוני משתמש למנהל – ממולא מ-Firestore
@@ -343,12 +354,9 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
     val groupsList = (get("groups") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
 
     // createdAt יכול להיות בשם ישן או חדש
-    val createdMillis = when (val v = get("createdAtMillis") ?: get("createdAt")) {
-        is Long -> v
-        is Int -> v.toLong()
-        is Double -> v.toLong()
-        else -> null
-    }
+    val createdMillis = adminMillisFromFirestore(
+        get("createdAtMillis") ?: get("createdAt")
+    )
 
     val role = stringOrNull("role", "userType", "type")
     val isCoachFlag = boolOrNull("isCoach", "coach", "isTrainer", "trainer")
@@ -479,8 +487,9 @@ fun AdminUsersScreen(
                     id = doc.id,
                     question = qText,
                     answer = doc.getString("answer"),
-                    createdAtMillis = (doc.get("createdAt") as? Long)
-                        ?: (doc.get("ts") as? Long),
+                    createdAtMillis = adminMillisFromFirestore(
+                        doc.get("createdAt") ?: doc.get("ts")
+                    ),
                     userName = doc.getString("userName"),
                     userUid = doc.getString("userUid")
                 )
@@ -556,11 +565,22 @@ fun AdminUsersScreen(
 
     // -------- סטטיסטיקות כלליות --------
     val totalUsers = users.size
-    val genderCounts = users.groupBy { (it.gender ?: "unknown").lowercase() }
-        .mapValues { it.value.size }
+    val genderCounts = users.groupBy { user ->
+        when ((user.gender ?: "unknown").trim().lowercase()) {
+            "m", "male", "זכר" -> "male"
+            "f", "female", "נקבה" -> "female"
+            else -> "unknown"
+        }
+    }.mapValues { it.value.size }
 
     val regionCounts = users.groupBy { it.region ?: "לא ידוע" }
         .mapValues { it.value.size }
+
+    val branchCount = users
+        .mapNotNull { it.branch?.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .size
 
     val beltCountsRaw = users.groupBy { user ->
         user.currentBeltId?.trim().orEmpty()
@@ -634,7 +654,7 @@ fun AdminUsersScreen(
                     )
                     StatCard(
                         title = adminTr(isEnglish, "מס' סניפים", "Branches"),
-                        value = if (loading) "…" else regionCounts.keys.size.toString(),
+                        value = if (loading) "…" else branchCount.toString(),
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
@@ -654,7 +674,9 @@ fun AdminUsersScreen(
                     Text(
                         text = errorMsg!!,
                         color = Color(0xFFF97373),
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = screenTextAlign,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 
@@ -902,7 +924,9 @@ fun AdminUsersScreen(
                                 ),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = Color(0xFFE5E7EB),
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                textAlign = screenTextAlign,
+                                modifier = Modifier.fillMaxWidth()
                             )
 
                             Text(
@@ -912,7 +936,9 @@ fun AdminUsersScreen(
                                     "Questions where the assistant response was marked as not helpful — for review and content improvement."
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF9CA3AF)
+                                color = Color(0xFF9CA3AF),
+                                textAlign = screenTextAlign,
+                                modifier = Modifier.fillMaxWidth()
                             )
 
                             Spacer(Modifier.height(8.dp))
@@ -932,7 +958,9 @@ fun AdminUsersScreen(
                                         Text(
                                             text = "• ${fb.question}",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFFE5E7EB)
+                                            color = Color(0xFFE5E7EB),
+                                            textAlign = screenTextAlign,
+                                            modifier = Modifier.fillMaxWidth()
                                         )
 
                                         val meta = listOfNotNull(
@@ -944,7 +972,9 @@ fun AdminUsersScreen(
                                             Text(
                                                 text = meta,
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = Color(0xFF9CA3AF)
+                                                color = Color(0xFF9CA3AF),
+                                                textAlign = screenTextAlign,
+                                                modifier = Modifier.fillMaxWidth()
                                             )
                                         }
                                     }

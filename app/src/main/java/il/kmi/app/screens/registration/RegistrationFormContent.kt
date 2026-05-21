@@ -5,7 +5,6 @@
 
 package il.kmi.app.screens.registration
 
-import android.annotation.SuppressLint
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -36,13 +35,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import il.kmi.shared.domain.Belt
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.ui.ext.color
+import java.util.Calendar
 
 private data class TraineeRankOption(
     val id: String,
@@ -828,10 +825,16 @@ private fun BirthDatePicker(
     onMonthChange: (Int) -> Unit,
     onDayChange: (Int) -> Unit,
 ) {
+    val currentYear = remember {
+        Calendar.getInstance().get(Calendar.YEAR)
+    }
+
     // מציגים דו-ספרתי/ארבע-ספרתי
     var dayText by remember(day) { mutableStateOf(day.coerceIn(1, 31).toString().padStart(2, '0')) }
     var monthText by remember(month) { mutableStateOf(month.coerceIn(1, 12).toString().padStart(2, '0')) }
-    var yearText by remember(year) { mutableStateOf(year.coerceIn(1950, 2026).toString().padStart(4, '0')) }
+    var yearText by remember(year, currentYear) {
+        mutableStateOf(year.coerceIn(1950, currentYear).toString().padStart(4, '0'))
+    }
 
     // צבעים קבועים כדי שהשדות יהיו קריאים גם במצב כהה
     val shape = RoundedCornerShape(14.dp)
@@ -906,7 +909,7 @@ private fun BirthDatePicker(
                 val digits = raw.filter { it.isDigit() }.take(4)
                 yearText = digits
                 digits.toIntOrNull()?.let { v ->
-                    if (v in 1950..2026) onYearChange(v)
+                    if (v in 1950..currentYear) onYearChange(v)
                 }
             },
             label = { Text(if (isEnglish) "Year" else "שנה") },
@@ -916,155 +919,6 @@ private fun BirthDatePicker(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.weight(1.3f)
         )
-    }
-}
-
-/**
- * עטיפה ל"גלגל" אחד – עושה:
- * 1. רקע לבן ומעוגל
- * 2. שתי רצועות לבנות דקות למעלה/למטה שמוחקות את הקווים האופקיים של ה-NumberPicker
- * 3. פס בהיר באמצע שמדגיש את הבחירה
- */
-@Composable
-private fun WheelBox(
-    modifier: Modifier = Modifier,
-    content: @Composable BoxScope.() -> Unit
-) {
-    // ✅ רקע "כרטיס" עדין שמתאים גם לרקע כהה/גרדיאנט
-    val cardBg = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
-    val coverBg = cardBg // אותו צבע כדי שלא ייראו "חורים" למעלה/למטה
-
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .background(cardBg, shape = RoundedCornerShape(20.dp))
-            .padding(horizontal = 2.dp, vertical = 6.dp)
-    ) {
-        // 🔹 פס הדגשה באמצע (מאחורי המספר)
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .height(36.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(18.dp)
-                )
-        )
-
-        // 🔹 ה-NumberPicker עצמו – המספרים יופיעו מעל הפס
-        content()
-
-        // רצועה עליונה שמעלימה קווי picker
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(10.dp)
-                .background(
-                    color = coverBg,
-                    shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
-                )
-        )
-
-        // רצועה תחתונה שמעלימה קווי picker
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(10.dp)
-                .background(
-                    color = coverBg,
-                    shape = RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp)
-                )
-        )
-    }
-}
-@Composable
-private fun VerticalDivider() {
-    Box(
-        modifier = Modifier
-            .fillMaxHeight()
-            .width(1.dp)
-            .background(Color(0xFFE0E0E0))
-    )
-}
-
-@SuppressLint("SoonBlockedPrivateApi")
-private class NoDividerNumberPicker(context: android.content.Context) :
-    android.widget.NumberPicker(context) {
-
-    init {
-        try {
-            val pickerClass = android.widget.NumberPicker::class.java
-
-            // להעלים את הקו האפור
-            val dividerField = pickerClass.getDeclaredField("mSelectionDivider")
-            dividerField.isAccessible = true
-            dividerField.set(
-                this,
-                android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
-            )
-
-            val heightField = pickerClass.getDeclaredField("mSelectionDividerHeight")
-            heightField.isAccessible = true
-            heightField.setInt(this, 0)
-
-            // צבע וגודל הציור של הגלגל
-            val wheelPaintField = pickerClass.getDeclaredField("mSelectorWheelPaint")
-            wheelPaintField.isAccessible = true
-            val wheelPaint = wheelPaintField.get(this) as android.graphics.Paint
-            wheelPaint.color = android.graphics.Color.BLACK
-            wheelPaint.textSize = android.util.TypedValue.applyDimension(
-                android.util.TypedValue.COMPLEX_UNIT_SP,
-                18f,
-                resources.displayMetrics
-            )
-            wheelPaint.isFakeBoldText = true
-        } catch (_: Exception) {
-        }
-
-        descendantFocusability = FOCUS_BLOCK_DESCENDANTS
-        styleChildren()
-    }
-
-    // נוודא שכל פעם שנוסף/מוחלף View פנימי – הוא מעוצב כמו שצריך
-    override fun addView(child: android.view.View?) {
-        super.addView(child)
-        updateView(child)
-    }
-
-    override fun addView(child: android.view.View?, index: Int, params: android.view.ViewGroup.LayoutParams?) {
-        super.addView(child, index, params)
-        updateView(child)
-    }
-
-    private fun updateView(view: android.view.View?) {
-        if (view is android.widget.EditText) {
-            view.setTextColor(android.graphics.Color.BLACK)
-            view.setTextSize(
-                android.util.TypedValue.COMPLEX_UNIT_SP,
-                18f
-            )
-            view.typeface = android.graphics.Typeface.DEFAULT_BOLD
-            view.isCursorVisible = false
-            view.isFocusable = false
-            view.isFocusableInTouchMode = false
-        }
-    }
-
-    override fun setValue(value: Int) {
-        super.setValue(value)
-        styleChildren()
-    }
-
-    private fun styleChildren() {
-        post {
-            for (i in 0 until childCount) {
-                updateView(getChildAt(i))
-            }
-            invalidate()
-        }
     }
 }
 
@@ -1598,7 +1452,7 @@ private fun BeltPicker(
             value = currentBelt?.let { beltLabel(it) } ?: "",
             onValueChange = {},
             readOnly = true,
-            label = { Text(if (isEnglish) "Current K.A.M.I belt rank" else "דרגת חגורה נוכחית (ק.מ.י)", color = Color.Black) },
+            label = { Text(if (isEnglish) "Current KAMI belt rank" else "דרגת חגורה נוכחית (ק.מ.י)", color = Color.Black) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .menuAnchor()
@@ -1667,48 +1521,5 @@ private fun BeltPicker(
     }
 }
 
-// 🔹 פונקציית עזר – שמירת המשתמש ל-Firestore בקולקציה "users"
-private fun saveUserToFirestore(
-    fullName: String,
-    phone: String,
-    email: String,
-    beltId: String,
-    selectedRegion: String,
-    selectedBranches: List<String>,
-    selectedGroups: List<String>,
-    birthDay: Int,
-    birthMonth: Int,
-    birthYear: Int
-) {
-    val auth = FirebaseAuth.getInstance()
-    val uid = auth.currentUser?.uid ?: return
 
-    val db = FirebaseFirestore.getInstance()
-
-    // נבנה מחרוזת תאריך לידה בפורמט YYYY-MM-DD
-    val birthDate = if (birthDay > 0 && birthMonth > 0 && birthYear > 0) {
-        "%04d-%02d-%02d".format(birthYear, birthMonth, birthDay)
-    } else {
-        ""
-    }
-
-    val data = hashMapOf(
-        "uid" to uid,
-        "fullName" to fullName,
-        "phone" to phone,
-        "email" to email,
-        "belt" to beltId,
-        "region" to selectedRegion,
-        "branches" to selectedBranches,
-        "groups" to selectedGroups,
-        "birthDate" to birthDate,
-        "isActive" to true,
-        "createdAt" to System.currentTimeMillis(),
-        "lastLoginAt" to System.currentTimeMillis()
-    )
-
-    db.collection("users")
-        .document(uid)
-        .set(data, SetOptions.merge())
-}
 

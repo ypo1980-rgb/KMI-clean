@@ -7,7 +7,6 @@ package il.kmi.app.screens.registration
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import android.util.Patterns
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -51,8 +50,6 @@ import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.shared.prefs.KmiPrefs
 import il.kmi.app.FcmTokenManager
 
-private const val REGISTRATION_LOG = "KMI_REGISTRATION"
-
 // === רשימת מאמנים מורשים ===
 object CoachWhitelist {
     // מפה: טלפון → שם
@@ -68,7 +65,7 @@ object CoachWhitelist {
     // מפה: אימייל → שם
     val allowedEmails: Map<String, String> = mapOf(
         "ypo1980@gmail.com" to "יובל פולק",
-        "yonatanmalesa99.com" to "יוני מלסה",
+        "yonatanmalesa99@gmail.com" to "יוני מלסה",
         "avi.abeceedon@gmail.com" to "אבי אביסדון"
         // ... תוסיף כאן עד ~20
     )
@@ -387,11 +384,6 @@ fun RegistrationFormScreen(
         if (!isAdmin && !isSuperTester) {
             selectedTab = if (isWhitelistedCoach) 1 else 0
         }
-
-        Log.e(
-            REGISTRATION_LOG,
-            "role tabs gate isAdmin=$isAdmin isSuperTester=$isSuperTester isWhitelistedCoach=$isWhitelistedCoach selectedTab=$selectedTab"
-        )
     }
 
     var username by rememberSaveable {
@@ -607,12 +599,6 @@ fun RegistrationFormScreen(
     // ==== התאמות ושיחזורים מה-SP ====
     // ✅ השחזור כבר מתבצע ב־rememberSaveable דרך readSavedListFromPrefs.
     // לא מאפסים כאן selectedGroups כדי לא לדרוס groups_json / selected_groups.
-    LaunchedEffect(Unit) {
-        Log.e(
-            REGISTRATION_LOG,
-            "initial selectedBranches=${selectedBranches.toList()} selectedGroups=${selectedGroups.toList()}"
-        )
-    }
 
     LaunchedEffect(selectedRegion) {
         val branchesForRegion = branchesByRegion[selectedRegion].orEmpty()
@@ -672,11 +658,19 @@ fun RegistrationFormScreen(
         // ✅ אכיפה קשיחה רק למי שלא ADMIN ולא Super Tester
         if (!isAdmin && !isSuperTester) {
             if (isWhitelistedCoach && !isCoach) {
-                Toast.makeText(ctx, "מאמן מורשה חייב להירשם כמאמן בלבד", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    ctx,
+                    if (isEnglish) "An authorized coach must register as a coach only" else "מאמן מורשה חייב להירשם כמאמן בלבד",
+                    Toast.LENGTH_LONG
+                ).show()
                 return
             }
             if (!isWhitelistedCoach && isCoach) {
-                Toast.makeText(ctx, "הרישום כמאמן מותר רק למאמנים מורשים", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    ctx,
+                    if (isEnglish) "Coach registration is allowed only for authorized coaches" else "הרישום כמאמן מותר רק למאמנים מורשים",
+                    Toast.LENGTH_LONG
+                ).show()
                 return
             }
         }
@@ -718,7 +712,11 @@ fun RegistrationFormScreen(
 
         // ✅ דרגת חגורה חובה גם למתאמן וגם למאמן
         if (currentBeltId.isBlank()) {
-            Toast.makeText(ctx, "חובה לבחור דרגת חגורה", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                ctx,
+                if (isEnglish) "You must select a belt rank" else "חובה לבחור דרגת חגורה",
+                Toast.LENGTH_LONG
+            ).show()
             valid = false
         }
 
@@ -735,7 +733,11 @@ fun RegistrationFormScreen(
             val emailOk = CoachWhitelist.allowedEmails.containsKey(normalizedEmailLocal)
 
             if (!phoneOk && !emailOk) {
-                Toast.makeText(ctx, "הרישום כמאמן מותר רק למאמנים מורשים", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    ctx,
+                    if (isEnglish) "Coach registration is allowed only for authorized coaches" else "הרישום כמאמן מותר רק למאמנים מורשים",
+                    Toast.LENGTH_LONG
+                ).show()
                 return
             }
         }
@@ -748,6 +750,13 @@ fun RegistrationFormScreen(
             if (isCoach) "coach" else "trainee"
         } else {
             if (isWhitelistedCoach) "coach" else "trainee"
+        }
+
+        val roleLockedBy = when {
+            isAdmin -> "admin"
+            isSuperTester -> "super_tester"
+            isWhitelistedCoach -> "coach_whitelist"
+            else -> "trainee_default"
         }
 
         // ✅ מקור אמת לטלפון: ספרות בלבד.
@@ -841,6 +850,7 @@ fun RegistrationFormScreen(
             .putString("password", if (isGoogleAuth) "" else password)
             .putBoolean("subscribeSms", subscribeSms)
             .putString("user_role", roleFinal)
+            .putString("role_locked_by", roleLockedBy)
             .putString("gender", gender)
             .putString("branch_type", branchType)
             .putString("current_belt", beltFinal)
@@ -857,11 +867,6 @@ fun RegistrationFormScreen(
             .putString("birth_year", birthYear.toString())
             .commit()
 
-        Log.e(
-            REGISTRATION_LOG,
-            "saved MAIN profile_completed=true uid=$completedUid role=$roleFinal belt=$beltFinal branch=$branchesFinal group=$primaryGroup"
-        )
-
         // ✅ חגורה נשמרת גם למתאמן וגם למאמן.
 
         // userSp – אחידות
@@ -877,6 +882,7 @@ fun RegistrationFormScreen(
             putString("phone_number", phoneFinal)
             putString("email", email.trim())
             putString("user_role", roleFinal)
+            putString("role_locked_by", roleLockedBy)
             putString("region", selectedRegion)
 
             // ✅ סניפים — שומרים גם CSV וגם JSON
@@ -913,11 +919,6 @@ fun RegistrationFormScreen(
             commit()
         }
 
-        Log.e(
-            REGISTRATION_LOG,
-            "saved USER profile_completed=true uid=$completedUid role=$roleFinal belt=$beltFinal"
-        )
-
         // Persist – KMP
         kmiPrefs.fullName = fullName
         kmiPrefs.phone = phoneFinal
@@ -930,8 +931,11 @@ fun RegistrationFormScreen(
 
         fun persistRegistrationToFirestore(finalUid: String) {
             if (finalUid.isBlank()) {
-                Toast.makeText(ctx, "שגיאה בזיהוי המשתמש. נסה שוב.", Toast.LENGTH_LONG).show()
-                Log.e(REGISTRATION_LOG, "persistRegistrationToFirestore failed: blank uid")
+                Toast.makeText(
+                    ctx,
+                    if (isEnglish) "User identification failed. Please try again." else "שגיאה בזיהוי המשתמש. נסה שוב.",
+                    Toast.LENGTH_LONG
+                ).show()
                 return
             }
 
@@ -943,6 +947,7 @@ fun RegistrationFormScreen(
             val firestoreData = hashMapOf(
                 "uid" to finalUid,
                 "role" to roleFinal,
+                "roleLockedBy" to roleLockedBy,
                 "fullName" to fullName,
                 "phone" to phoneFinal,
                 "phoneNumber" to phoneFinal,
@@ -989,11 +994,6 @@ fun RegistrationFormScreen(
                 .document(finalUid)
                 .set(firestoreData, SetOptions.merge())
                 .addOnSuccessListener {
-                    Log.e(
-                        REGISTRATION_LOG,
-                        "firestore set users/$finalUid SUCCESS role=$roleFinal belt=$beltFinal phoneLen=${phoneFinal.length}"
-                    )
-
                     sp.edit()
                         .putString("uid", finalUid)
                         .putString("profile_completed_uid", finalUid)
@@ -1006,7 +1006,11 @@ fun RegistrationFormScreen(
 
                     FcmTokenManager.refreshTokenForUserDocId(finalUid)
 
-                    Toast.makeText(ctx, "הרישום נשמר בהצלחה ✅", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        ctx,
+                        if (isEnglish) "Registration saved successfully ✅" else "הרישום נשמר בהצלחה ✅",
+                        Toast.LENGTH_SHORT
+                    ).show()
 
                     if (roleFinal == "coach") {
                         val code = "%06d".format(java.security.SecureRandom().nextInt(1_000_000))
@@ -1018,13 +1022,12 @@ fun RegistrationFormScreen(
                         finishRegistrationFlow()
                     }
                 }
-                .addOnFailureListener { e ->
-                    Log.e(
-                        REGISTRATION_LOG,
-                        "firestore set users/$finalUid FAILED",
-                        e
-                    )
-                    Toast.makeText(ctx, "שמירת הרישום נכשלה", Toast.LENGTH_LONG).show()
+                .addOnFailureListener {
+                    Toast.makeText(
+                        ctx,
+                        if (isEnglish) "Saving registration failed" else "שמירת הרישום נכשלה",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
         }
 
@@ -1033,63 +1036,39 @@ fun RegistrationFormScreen(
         val cleanPassword = password.trim()
 
         if (!startAtProfile && !isGoogleAuth) {
-            Log.e(
-                REGISTRATION_LOG,
-                "creating FirebaseAuth user for new local registration email=$cleanEmail role=$roleFinal"
-            )
-
             auth.signOut()
 
             auth.createUserWithEmailAndPassword(cleanEmail, cleanPassword)
                 .addOnSuccessListener { result ->
                     val newUid = result.user?.uid.orEmpty()
-
-                    Log.e(
-                        REGISTRATION_LOG,
-                        "createUserWithEmailAndPassword SUCCESS newUid=$newUid email=$cleanEmail"
-                    )
-
                     persistRegistrationToFirestore(newUid)
                 }
                 .addOnFailureListener { e ->
                     if (e is FirebaseAuthUserCollisionException) {
-                        Log.e(
-                            REGISTRATION_LOG,
-                            "email already exists, signing in existing FirebaseAuth user email=$cleanEmail"
-                        )
-
                         auth.signInWithEmailAndPassword(cleanEmail, cleanPassword)
                             .addOnSuccessListener { result ->
                                 val existingUid = result.user?.uid.orEmpty()
-
-                                Log.e(
-                                    REGISTRATION_LOG,
-                                    "signInWithEmailAndPassword SUCCESS existingUid=$existingUid email=$cleanEmail"
-                                )
-
                                 persistRegistrationToFirestore(existingUid)
                             }
-                            .addOnFailureListener { signInError ->
-                                Log.e(
-                                    REGISTRATION_LOG,
-                                    "signInWithEmailAndPassword FAILED email=$cleanEmail",
-                                    signInError
-                                )
+                            .addOnFailureListener {
                                 Toast.makeText(
                                     ctx,
-                                    "המייל כבר קיים אך הסיסמה אינה תואמת",
+                                    if (isEnglish) {
+                                        "The email already exists, but the password does not match"
+                                    } else {
+                                        "המייל כבר קיים אך הסיסמה אינה תואמת"
+                                    },
                                     Toast.LENGTH_LONG
                                 ).show()
                             }
                     } else {
-                        Log.e(
-                            REGISTRATION_LOG,
-                            "createUserWithEmailAndPassword FAILED email=$cleanEmail",
-                            e
-                        )
                         Toast.makeText(
                             ctx,
-                            "יצירת משתמש חדש נכשלה: ${e.message}",
+                            if (isEnglish) {
+                                "Creating a new user failed. Please try again."
+                            } else {
+                                "יצירת משתמש חדש נכשלה. נסה שוב."
+                            },
                             Toast.LENGTH_LONG
                         ).show()
                     }
@@ -1160,10 +1139,6 @@ fun RegistrationFormScreen(
                     // ✅ ADMIN או Super Tester יכולים לבחור חופשי
                     if (isAdmin || isSuperTester) {
                         selectedTab = newTab
-                        Log.e(
-                            REGISTRATION_LOG,
-                            "role tab manually selected by elevated user newTab=$newTab isAdmin=$isAdmin isSuperTester=$isSuperTester"
-                        )
                         return@RegistrationTabsBilingual
                     }
 
@@ -1171,7 +1146,11 @@ fun RegistrationFormScreen(
                         // ✅ מאמן מורשה: מותר רק טאב מאמן
                         isWhitelistedCoach -> {
                             if (newTab != 1) {
-                                Toast.makeText(ctx, "מאמן מורשה נרשם רק כמאמן", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) "An authorized coach must register as a coach" else "מאמן מורשה נרשם רק כמאמן",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                             selectedTab = 1
                         }
@@ -1179,7 +1158,11 @@ fun RegistrationFormScreen(
                         // ✅ לא מורשה: מותר רק טאב מתאמן
                         else -> {
                             if (newTab == 1) {
-                                Toast.makeText(ctx, "הרישום כמאמן מותר רק למאמנים מורשים", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) "Coach registration is allowed only for authorized coaches" else "הרישום כמאמן מותר רק למאמנים מורשים",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                             selectedTab = 0
                         }
@@ -1337,7 +1320,9 @@ fun RegistrationFormScreen(
         val normalizedPhone = phone.filter { it.isDigit() }
         val nameFromPhone = CoachWhitelist.allowedPhones[normalizedPhone]
         val nameFromEmail = CoachWhitelist.allowedEmails[email.trim()]
-        val coachDisplayName = nameFromPhone ?: nameFromEmail ?: fullName.ifBlank { "מאמן" }
+        val coachDisplayName = nameFromPhone ?: nameFromEmail ?: fullName.ifBlank {
+            if (isEnglish) "Coach" else "מאמן"
+        }
 
         AlertDialog(
             onDismissRequest = { /* לא נסגור לבד */ },
@@ -1351,12 +1336,27 @@ fun RegistrationFormScreen(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     )
-                ) { Text("אישור") }
+                ) {
+                    Text(if (isEnglish) "OK" else "אישור")
+                }
             },
-            title = { Text(text = "שלום, $coachDisplayName") },
+            title = {
+                Text(
+                    text = if (isEnglish) "Hello, $coachDisplayName" else "שלום, $coachDisplayName",
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = "קוד המאמן שלך:")
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                ) {
+                    Text(
+                        text = if (isEnglish) "Your coach code:" else "קוד המאמן שלך:",
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         shape = MaterialTheme.shapes.medium
@@ -1370,7 +1370,13 @@ fun RegistrationFormScreen(
                         )
                     }
                     Text(
-                        text = "עליך לשמור את קוד המאמן שהתקבל לכניסה למערכת ולפעולות מתקדמות (כמו שליחת הודעות לקבוצה)."
+                        text = if (isEnglish) {
+                            "Please save your coach code for system access and advanced actions, such as sending messages to a group."
+                        } else {
+                            "עליך לשמור את קוד המאמן שהתקבל לכניסה למערכת ולפעולות מתקדמות, כמו שליחת הודעות לקבוצה."
+                        },
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }

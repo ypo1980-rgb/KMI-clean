@@ -32,7 +32,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import il.kmi.app.KmiCalendarSync
 import il.kmi.app.hasCalendarPermission
-import androidx.appcompat.app.AppCompatDelegate
 import il.kmi.app.StatsVm as AppStatsVm
 import android.Manifest
 import androidx.compose.foundation.clickable
@@ -119,9 +118,9 @@ private fun shareApp(
     isEnglish: Boolean = false
 ) {
     val text = if (isEnglish) {
-        "Download K.A.M.I – Israeli Krav Magen"
+        "Download KAMI – Israeli Krav Magen"
     } else {
-        "הורידו את K.A.M.I – ק.מ.י"
+        "הורידו את KAMI – ק.מ.י"
     }
 
     val chooserTitle = if (isEnglish) "Share with" else "שתף באמצעות"
@@ -185,7 +184,6 @@ fun SettingsScreenModern(
     val isEnglish = currentLanguage == AppLanguage.ENGLISH
     val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
-    val rowSpaceBetween = Arrangement.SpaceBetween
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
@@ -225,7 +223,6 @@ fun SettingsScreenModern(
             )
         )
     }
-    var calendarSync by rememberSaveable { mutableStateOf(sp.getBoolean("calendar_sync_enabled", true)) }
     var themeModeLocal by rememberSaveable(themeMode) {
         mutableStateOf(
             when {
@@ -244,10 +241,6 @@ fun SettingsScreenModern(
             }
         )
     }
-
-    // (אופציונלי, נשאר לעתיד)
-    var tapSound by rememberSaveable { mutableStateOf(sp.getBoolean("tap_sound", false)) }
-    var shortHaptic by rememberSaveable { mutableStateOf(sp.getBoolean("short_haptic", false)) }
 
     // --- תרגיל יומי ---
     val appCtx = LocalContext.current
@@ -288,27 +281,12 @@ fun SettingsScreenModern(
         dailyReminderHour = safeHour
         dailyReminderMinute = safeMinute
 
-        android.util.Log.e(
-            "KMI_REMINDER",
-            "applyDailyReminderSettings enabled=$enabled hour=$safeHour minute=$safeMinute " +
-                    "isCoach=$isCoach hasNotificationPermission=${hasNotificationPermissionForDailyReminder()}"
-        )
-
         if (enabled) {
             if (!hasNotificationPermissionForDailyReminder()) {
-                android.util.Log.e(
-                    "KMI_REMINDER",
-                    "Daily reminder not scheduled because notification permission is missing"
-                )
                 return
             }
 
             if (!DailyReminderScheduler.canScheduleExactDailyReminder(appCtx)) {
-                android.util.Log.e(
-                    "KMI_REMINDER",
-                    "Exact alarm permission missing. Opening exact alarm settings."
-                )
-
                 android.widget.Toast.makeText(
                     appCtx,
                     tr(
@@ -351,22 +329,6 @@ fun SettingsScreenModern(
             ).show()
         }
     }
-
-    // ▼▼ דיבוג: הדפסת כל המפתחות שקיימים ב-SharedPreferences למסך ה-Logcat ▼▼
-    LaunchedEffect(Unit) {
-        android.util.Log.d("Stats", "SP keys: " + sp.all.keys.joinToString())
-        // אופציונלי: הצצה לערכים נפוצים אם קיימים
-        val probeKeys = listOf(
-            "progress_yellow","yellow_progress","yellowPercent","yellow_percentage",
-            "progress_orange","orange_progress","orangePercent","orange_percentage",
-            "progress_green","green_progress","greenPercent","green_percentage",
-            "progress_blue","blue_progress","bluePercent","blue_percentage",
-            "progress_brown","brown_progress","brownPercent","brown_percentage",
-            "progress_black","black_progress","blackPercent","black_percentage"
-        )
-        android.util.Log.d("Stats", probeKeys.joinToString { k -> "$k=${sp.all[k]}" })
-    }
-    // ▲▲ סוף דיבוג ▲▲
 
     // ---- גרדיאנט כותרת לפי תפקיד (נשאר כפי שהיה) ----
     val headerBrush = if (isCoach)
@@ -756,12 +718,6 @@ fun SettingsScreenModern(
 
                 val notifPermissionLauncher =
                     rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                        android.util.Log.e(
-                            "KMI_REMINDER",
-                            "daily reminder notification permission granted=$granted " +
-                                    "hour=$dailyReminderHour minute=$dailyReminderMinute"
-                        )
-
                         if (granted) {
                             applyDailyReminderSettings(
                                 enabled = true,
@@ -862,10 +818,6 @@ fun SettingsScreenModern(
                                         dailyReminderEnabled = true
 
                                         if (Build.VERSION.SDK_INT >= 33 && !hasNotificationPermissionForDailyReminder()) {
-                                            android.util.Log.e(
-                                                "KMI_REMINDER",
-                                                "Requesting notification permission after time selected hour=$hourOfDay minute=$minute"
-                                            )
                                             notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                         } else {
                                             applyDailyReminderSettings(
@@ -1236,7 +1188,13 @@ fun SettingsScreenModern(
 
                     AlertDialog(
                         onDismissRequest = { showCalendarPicker = false },
-                        title = { Text(tr("בחר יומן לסנכרון", "Choose calendar for sync")) },
+                        title = {
+                            Text(
+                                text = tr("בחר יומן לסנכרון", "Choose calendar for sync"),
+                                textAlign = textAlignPrimary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
                         text = {
                             Column(
                                 modifier = Modifier
@@ -1247,11 +1205,13 @@ fun SettingsScreenModern(
                             ) {
                                 if (writableCalendars.isEmpty()) {
                                     Text(
-                                        tr(
+                                        text = tr(
                                             "לא נמצאו יומנים זמינים לכתיבה במכשיר.",
                                             "No writable calendars were found on this device."
                                         ),
-                                        style = MaterialTheme.typography.bodyMedium
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        textAlign = textAlignPrimary,
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                 } else {
                                     writableCalendars.forEach { cal ->
@@ -2033,7 +1993,7 @@ fun SettingsScreenModern(
                             }
                             openEmailFeedback(
                                 ctx = ctx,
-                                to = "support@kmi.example",
+                                to = "ypo1980@gmail.com",
                                 subject = tr("משוב על האפליקציה", "App feedback"),
                                 body = body,
                                 isEnglish = isEnglish
@@ -2122,6 +2082,7 @@ fun BeltsProgressBars(
     val sp  = remember { ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE) }
     val languageManager = remember { AppLanguageManager(ctx) }
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val progressTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
 
     val belts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK)
 
@@ -2183,16 +2144,37 @@ fun BeltsProgressBars(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        row.title,
-                        color = textColor,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "${row.pct}%",
-                        color = textColor,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (isEnglish) {
+                        Text(
+                            text = row.title,
+                            color = textColor,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = progressTextAlign,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Text(
+                            text = "${row.pct}%",
+                            color = textColor,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Right
+                        )
+                    } else {
+                        Text(
+                            text = "${row.pct}%",
+                            color = textColor,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Left
+                        )
+
+                        Text(
+                            text = row.title,
+                            color = textColor,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = progressTextAlign,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
                 Box(
                     modifier = Modifier
@@ -2293,15 +2275,6 @@ fun SettingsCard(
             content()
         }
     }
-}
-
-private fun applyTheme(mode: String) {
-    val night = when (mode) {
-        "dark"  -> AppCompatDelegate.MODE_NIGHT_YES
-        "light" -> AppCompatDelegate.MODE_NIGHT_NO
-        else    -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-    }
-    AppCompatDelegate.setDefaultNightMode(night)
 }
 
 private fun traineeRankDisplayName(
