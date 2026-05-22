@@ -132,6 +132,18 @@ private fun traineeRankOptions(): List<TraineeRankOption> {
     )
 }
 
+private fun registrationGroupLabelForUi(
+    group: String,
+    isEnglish: Boolean
+): String {
+    if (!isEnglish) return group
+
+    return TrainingCatalog.groupDisplayName(
+        group = group,
+        isEnglish = true
+    )
+}
+
 @Composable
 fun RegistrationFormContent(
     isCoach: Boolean,
@@ -1258,7 +1270,16 @@ private fun MultiGroupsPicker(
         modifier = Modifier.fillMaxWidth()
     ) {
         val display =
-            if (selectedGroups.isEmpty()) "" else selectedGroups.joinToString("\n")
+            if (selectedGroups.isEmpty()) {
+                ""
+            } else {
+                selectedGroups.joinToString("\n") { group ->
+                    registrationGroupLabelForUi(
+                        group = group,
+                        isEnglish = isEnglish
+                    )
+                }
+            }
 
         OutlinedTextField(
             value = display,
@@ -1297,8 +1318,10 @@ private fun MultiGroupsPicker(
                 Text(
                     text = trLocal(
                         "בחר/י 1–3 קבוצות מכל הסניפים",
-                        "Select 1–3 groups from all branches"
-                    )
+                        "Select 1–3 groups"
+                    ),
+                    textAlign = align,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         )
@@ -1325,7 +1348,10 @@ private fun MultiGroupsPicker(
                             Spacer(Modifier.width(8.dp))
 
                             Text(
-                                text = g,
+                                text = registrationGroupLabelForUi(
+                                    group = g,
+                                    isEnglish = isEnglish
+                                ),
                                 color = Color.Black,
                                 textAlign = align,
                                 modifier = Modifier.weight(1f)

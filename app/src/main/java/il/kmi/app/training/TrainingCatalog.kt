@@ -221,6 +221,18 @@ object TrainingCatalog {
             "רחוב אבא אחימאיר 6, נתניה" -> "6 Aba Ahimeir St, Netanya"
             "אריה לוין 3, נתניה",
             "אריה לוין 3 נתניה" -> "3 Arie Levin St, Netanya"
+            "מושב עזריאל, מאחורי מכולת המושב" -> "Moshav Azriel, behind the local grocery store"
+            "רעננה – מרכז קהילתי לב הפארק" -> "Lev HaPark Community Center, Ra'anana"
+            "הרצליה – מרכז קהילתי נוף ים" -> "Nof Yam Community Center, Herzliya"
+            "כפר סבא – היכל התרבות" -> "Cultural Hall, Kfar Saba"
+            "הוד השרון – מרכז ספורט עירוני" -> "Municipal Sports Center, Hod HaSharon"
+            "מתנ\"ס עמישב, פתח תקווה" -> "Amishav Community Center, Petah Tikva"
+            "הרוא\"ה 2א/הרצל, רמת גן" -> "HaRo'e 2A / Herzl, Ramat Gan"
+            "גומל 6, בני ברק" -> "6 Gomel St, Bnei Brak"
+            "תל אביב" -> "Tel Aviv"
+            "קריית אונו" -> "Kiryat Ono"
+            "גוליס, נס ציונה" -> "Golis, Ness Ziona"
+            "ישרש" -> "Yashresh"
             else -> heb
         }
     }
@@ -239,6 +251,76 @@ object TrainingCatalog {
         return if (isEnglish) regionEn else region
     }
 
+    private fun branchCanonicalKey(branch: String): String {
+        val clean = branch.trim()
+
+        BRANCH_INFO.entries.firstOrNull { (_, info) ->
+            info.branch.he == clean || info.branch.en.equals(clean, ignoreCase = true)
+        }?.let { return it.key }
+
+        return BRANCHES_BY_REGION_RAW.values
+            .flatten()
+            .firstOrNull { it == clean }
+            ?: clean
+    }
+
+    fun groupDisplayName(group: String, isEnglish: Boolean): String {
+        if (!isEnglish) return group
+
+        val clean = group.trim()
+        val normalized = normalizeGroupName(clean)
+
+        return when {
+            clean.contains("טרום חובה", ignoreCase = true) && clean.contains("חובה", ignoreCase = true) ->
+                "Pre-K + Kindergarten"
+
+            clean.contains("גן חובה", ignoreCase = true) && clean.contains("כיתה א", ignoreCase = true) ->
+                "Kindergarten - 1st Grade"
+
+            clean.contains("כיתה א", ignoreCase = true) && clean.contains("כיתה ב", ignoreCase = true) ->
+                "1st - 2nd Grade"
+
+            clean.contains("כיתה ב", ignoreCase = true) && clean.contains("כיתה ה", ignoreCase = true) ->
+                "2nd - 5th Grade"
+
+            clean.contains("כיתה ג", ignoreCase = true) && clean.contains("כיתה ו", ignoreCase = true) ->
+                "3rd - 6th Grade"
+
+            clean.contains("כיתה ג", ignoreCase = true) && clean.contains("כיתה ז", ignoreCase = true) ->
+                "3rd - 7th Grade"
+
+            clean.contains("כיתה ו", ignoreCase = true) && clean.contains("כיתה ח", ignoreCase = true) ->
+                "6th - 8th Grade"
+
+            normalized == "נוער + בוגרים" -> "Youth + Adults"
+            normalized == "בוגרים" -> "Adults"
+            normalized == "נוער" -> "Youth"
+            normalized == "ילדים" -> "Children"
+
+            else -> clean
+        }
+    }
+
+    fun groupsDisplayNames(groups: List<String>, isEnglish: Boolean): List<String> {
+        return groups.map { groupDisplayName(it, isEnglish) }
+    }
+
+    private fun localizedTrainingData(
+        slot: TrainingSlot,
+        isEnglish: Boolean
+    ): TrainingData {
+        return TrainingData.nextWeekly(
+            dayOfWeek = slot.dayOfWeek,
+            startHour = slot.startHour,
+            startMinute = slot.startMinute,
+            durationMinutes = slot.durationMinutes,
+            place = placeDisplayName(slot.branch, isEnglish),
+            address = addressFor(slot.branch, isEnglish),
+            coach = slot.coach,
+            branch = branchDisplayName(slot.branch, isEnglish)
+        )
+    }
+
     // קריאת משך אימון מ-TrainingData בצורה עמידה לאי-תאמויות
     private fun readDurationMinutes(td: TrainingData): Int {
         val cls = td::class.java
@@ -252,14 +334,6 @@ object TrainingCatalog {
             }.getOrNull()
             if (v != null && v > 0) return v
         }
-
-        val branchCoordinates = mapOf(
-
-            "נתניה – סוקולוב" to Pair(32.1750, 34.9070),
-            "נתניה – אופק" to Pair(32.1795, 34.9105),
-            "נתניה – נורדאו" to Pair(32.3215, 34.8532)
-
-        )
 
         // 2) נסה לגזור לפי end (אם קיים) מול td.cal
         val endAny = runCatching {
@@ -344,6 +418,7 @@ object TrainingCatalog {
 
     // כרגע אין הודעת HOLD פעילה כי כל האזורים פעילים.
     const val REGION_HOLD_MESSAGE: String = "אין סניפים זמינים באזור זה"
+    private const val REGION_HOLD_MESSAGE_EN: String = "No branches are available in this region"
 
     // כרגע אין סניפים על HOLD — מציגים את כל הסניפים.
     private val INACTIVE_BRANCHES: Set<String> = emptySet()
@@ -351,9 +426,17 @@ object TrainingCatalog {
     /** האם האזור פעיל (כלומר *לא* על HOLD) */
     fun isRegionActive(region: String): Boolean = !INACTIVE_REGIONS.contains(region)
 
-    /** הודעת סטטוס לאזור על HOLD; אחרת null */
+    /** הודעת סטטוס לאזור על HOLD; אחרת null — תאימות ישנה בעברית */
     fun regionStatusMessage(region: String): String? =
-        if (isRegionActive(region)) null else REGION_HOLD_MESSAGE
+        regionStatusMessage(region, isEnglish = false)
+
+    /** הודעת סטטוס לאזור על HOLD; אחרת null — דו־לשוני */
+    fun regionStatusMessage(region: String, isEnglish: Boolean): String? =
+        if (isRegionActive(region)) {
+            null
+        } else {
+            if (isEnglish) REGION_HOLD_MESSAGE_EN else REGION_HOLD_MESSAGE
+        }
 
     /**
      * Map "חי" שמחזיר את כל הסניפים.
@@ -482,6 +565,17 @@ object TrainingCatalog {
             "רחוב אבא אחימאיר 6, נתניה" -> "6 Aba Ahimeir St, Netanya"
             "אריה לוין 3, נתניה" -> "3 Arie Levin St, Netanya"
             "מושב עזריאל, מאחורי מכולת המושב" -> "Moshav Azriel (behind the grocery store)"
+            "רעננה – מרכז קהילתי לב הפארק" -> "Lev HaPark Community Center, Ra'anana"
+            "הרצליה – מרכז קהילתי נוף ים" -> "Nof Yam Community Center, Herzliya"
+            "כפר סבא – היכל התרבות" -> "Cultural Hall, Kfar Saba"
+            "הוד השרון – מרכז ספורט עירוני" -> "Municipal Sports Center, Hod HaSharon"
+            "מתנ\"ס עמישב, פתח תקווה" -> "Amishav Community Center, Petah Tikva"
+            "הרוא\"ה 2א/הרצל, רמת גן" -> "HaRo'e 2A / Herzl, Ramat Gan"
+            "גומל 6, בני ברק" -> "6 Gomel St, Bnei Brak"
+            "תל אביב" -> "Tel Aviv"
+            "קריית אונו" -> "Kiryat Ono"
+            "גוליס, נס ציונה" -> "Golis, Ness Ziona"
+            "ישרש" -> "Yashresh"
             else -> heb
         }
     }
@@ -628,7 +722,7 @@ object TrainingCatalog {
         addAll(
             listOf(
                 TrainingSlot(
-                    branch = AppStrings.t("branch_netanya_ofek"),
+                    branch = "נתניה – מרכז קהילתי אופק",
                     groups = listOf("גן חובה - כיתה א'"),
                     dayOfWeek = Calendar.MONDAY,   // 16:45–17:15
                     startHour = 16, startMinute = 45,
@@ -638,7 +732,7 @@ object TrainingCatalog {
                     coach = "יוני מלסה"
                 ),
                 TrainingSlot(
-                    branch = AppStrings.t("branch_netanya_ofek"),
+                    branch = "נתניה – מרכז קהילתי אופק",
                     groups = listOf("גן חובה - כיתה א'"),
                     dayOfWeek = Calendar.THURSDAY, // 16:45–17:15
                     startHour = 16, startMinute = 45,
@@ -652,7 +746,7 @@ object TrainingCatalog {
         addAll(
             listOf(
                 TrainingSlot(
-                    branch = AppStrings.t("branch_netanya_ofek"),
+                    branch = "נתניה – מרכז קהילתי אופק",
                     groups = listOf("כיתה ב' - כיתה ה'"),
                     dayOfWeek = Calendar.MONDAY,   // 17:15–18:00
                     startHour = 17, startMinute = 15,
@@ -662,7 +756,7 @@ object TrainingCatalog {
                     coach = "יוני מלסה"
                 ),
                 TrainingSlot(
-                    branch = AppStrings.t("branch_netanya_ofek"),
+                    branch = "נתניה – מרכז קהילתי אופק",
                     groups = listOf("כיתה ב' - כיתה ה'"),
                     dayOfWeek = Calendar.THURSDAY, // 17:15–18:00
                     startHour = 17, startMinute = 15,
@@ -676,7 +770,7 @@ object TrainingCatalog {
         addAll(
             listOf(
                 TrainingSlot(
-                    branch = AppStrings.t("branch_netanya_ofek"),
+                    branch = "נתניה – מרכז קהילתי אופק",
                     groups = listOf("כיתה ו' - כיתה ח'"),
                     dayOfWeek = Calendar.MONDAY,   // 18:00–19:00
                     startHour = 18, startMinute = 0,
@@ -686,7 +780,7 @@ object TrainingCatalog {
                     coach = "יוני מלסה"
                 ),
                 TrainingSlot(
-                    branch = AppStrings.t("branch_netanya_ofek"),
+                    branch = "נתניה – מרכז קהילתי אופק",
                     groups = listOf("כיתה ו' - כיתה ח'"),
                     dayOfWeek = Calendar.THURSDAY, // 18:00–19:00
                     startHour = 18, startMinute = 0,
@@ -700,7 +794,7 @@ object TrainingCatalog {
         addAll(
             listOf(
                 TrainingSlot(
-                    branch = AppStrings.t("branch_netanya_ofek"),
+                    branch = "נתניה – מרכז קהילתי אופק",
                     groups = listOf("נוער + בוגרים"),
                     dayOfWeek = Calendar.MONDAY,   // 19:00–20:30
                     startHour = 19, startMinute = 0,
@@ -710,7 +804,7 @@ object TrainingCatalog {
                     coach = "יוני מלסה"
                 ),
                 TrainingSlot(
-                    branch = AppStrings.t("branch_netanya_ofek"),
+                    branch = "נתניה – מרכז קהילתי אופק",
                     groups = listOf("נוער + בוגרים"),
                     dayOfWeek = Calendar.THURSDAY, // 19:00–20:30
                     startHour = 19, startMinute = 0,
@@ -997,64 +1091,93 @@ object TrainingCatalog {
         return branch in branches
     }
 
-    /** אימונים שבועיים קבועים עבור סניף/קבוצה (null=כל הקבוצות) */
+    /** אימונים שבועיים קבועים עבור סניף/קבוצה — תאימות ישנה בעברית */
     fun trainingsFor(branch: String, group: String?): List<TrainingData> {
+        return trainingsFor(
+            branch = branch,
+            group = group,
+            isEnglish = false
+        )
+    }
+
+    /** אימונים שבועיים קבועים עבור סניף/קבוצה — דו־לשוני */
+    fun trainingsFor(
+        branch: String,
+        group: String?,
+        isEnglish: Boolean
+    ): List<TrainingData> {
+        val branchKey = branchCanonicalKey(branch)
         val wantedNorm = normalizeGroupName(group)
         val wantedClean = cleanLabel(wantedNorm)
 
         val relevant = slots.filter { slot ->
-            // התאמה לפי סניף (בדיוק כפי שמוגדר ב-slots)
-            slot.branch == branch &&
-                    // התאמת קבוצה: אם group ריק → כל הקבוצות; אחרת נבדוק:
-                    (group == null || slot.groups.any { sg ->
+            slot.branch == branchKey &&
+                    (group == null || group.isBlank() || slot.groups.any { sg ->
                         val normSlot = normalizeGroupName(sg)
 
-                        // 1) התאמה לפי קטגוריית־על מדויקת
                         if (normSlot == wantedNorm) return@any true
-
-                        // 2) התאמה “מטושטשת” אחרי ניקוי סימני פיסוק
                         if (cleanLabel(sg) == wantedClean) return@any true
-
-                        // 3) התאמה טקסטואלית ישירה
                         if (sg == group) return@any true
 
-                        // 4) **התאמות מרחיבות:**
-                        // נוער → נוער + בוגרים
                         if (wantedNorm == "נוער" && normSlot == "נוער + בוגרים") return@any true
-
-                        // בוגרים → נוער + בוגרים
                         if (wantedNorm == "בוגרים" && normSlot == "נוער + בוגרים") return@any true
+                        if (wantedNorm == "Youth" && normSlot == "נוער + בוגרים") return@any true
+                        if (wantedNorm == "Adults" && normSlot == "נוער + בוגרים") return@any true
 
                         false
                     })
         }
 
-        return relevant.map { s ->
-            TrainingData.nextWeekly(
-                dayOfWeek = s.dayOfWeek,
-                startHour = s.startHour,
-                startMinute = s.startMinute,
-                durationMinutes = s.durationMinutes,
-                place = s.place,
-                address = s.address,
-                coach = s.coach,
-                branch = s.branch
-            )
-        }.sortedBy { it.cal.timeInMillis }
+        return relevant
+            .map { slot -> localizedTrainingData(slot, isEnglish) }
+            .sortedBy { it.cal.timeInMillis }
     }
 
-    /** אימונים קרובים לתצוגה במסך הבית */
+    /** אימונים קרובים לתצוגה במסך הבית — תאימות ישנה בעברית */
     fun upcomingFor(
         region: String,
         branch: String,
         group: String,
         count: Int = 3
     ): List<TrainingData> {
-        // אם האזור על HOLD → אין תוצאות (UI יכול להציג regionStatusMessage(region))
-        if (!isRegionActive(region)) return emptyList()
-        if (!isBranchInRegion(region, branch)) return emptyList()
+        return upcomingFor(
+            region = region,
+            branch = branch,
+            group = group,
+            count = count,
+            isEnglish = false
+        )
+    }
+
+    /** אימונים קרובים לתצוגה במסך הבית — דו־לשוני */
+    fun upcomingFor(
+        region: String,
+        branch: String,
+        group: String,
+        count: Int = 3,
+        isEnglish: Boolean
+    ): List<TrainingData> {
+        val regionKey = when (region.trim()) {
+            "Sharon" -> "השרון"
+            "Center" -> "מרכז"
+            "Jerusalem" -> "ירושלים"
+            "North" -> "צפון"
+            "South" -> "דרום"
+            else -> region.trim()
+        }
+
+        val branchKey = branchCanonicalKey(branch)
+
+        if (!isRegionActive(regionKey)) return emptyList()
+        if (!isBranchInRegion(regionKey, branchKey)) return emptyList()
+
         val g: String? = group.ifBlank { null }
-        return trainingsFor(branch, g).take(count)
+
+        return trainingsFor(
+            branch = branchKey,
+            group = g,
+            isEnglish = isEnglish
+        ).take(count)
     }
 }
 
@@ -1138,22 +1261,42 @@ object TrainingDirectory {
         return GroupSchedule(coachName = coach, slots = slots)
     }
 
-    /** אימונים עתידיים לפי בחירת המשתמש ב-SP (עם גרייס שעה), מוגבלים ל.limit */
-    fun getUserUpcomingTrainings(context: android.content.Context, limit: Int = 3): List<UpcomingTraining> {
+    /** אימונים עתידיים לפי בחירת המשתמש ב-SP — תאימות ישנה בעברית */
+    fun getUserUpcomingTrainings(
+        context: android.content.Context,
+        limit: Int = 3
+    ): List<UpcomingTraining> {
+        return getUserUpcomingTrainings(
+            context = context,
+            limit = limit,
+            isEnglish = false
+        )
+    }
+
+    /** אימונים עתידיים לפי בחירת המשתמש ב-SP — דו־לשוני */
+    fun getUserUpcomingTrainings(
+        context: android.content.Context,
+        limit: Int = 3,
+        isEnglish: Boolean
+    ): List<UpcomingTraining> {
         val sp = context.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
         val branch = sp.getString("branch", "") ?: return emptyList()
         val groupRaw  = sp.getString("group", "") ?: return emptyList()
-        val group = TrainingCatalog.normalizeGroupLabel(groupRaw)   // ⬅️ נרמול שם הקבוצה
+        val group = TrainingCatalog.normalizeGroupLabel(groupRaw)
 
-        val base = TrainingCatalog.trainingsFor(branch, group)
+        val base = TrainingCatalog.trainingsFor(
+            branch = branch,
+            group = group,
+            isEnglish = isEnglish
+        )
         if (base.isEmpty()) return emptyList()
 
         // גרייס של שעה אחורה
         val nowMinus = System.currentTimeMillis() - 60 * 60_000L
 
-        // ✅ השתמש בפונקציות מתוך TrainingCatalog
-        val plc  = TrainingCatalog.placeFor(branch)
-        val addr = TrainingCatalog.addressFor(branch)
+        // ✅ השתמש בפונקציות מתוך TrainingCatalog לפי שפה
+        val plc  = TrainingCatalog.placeDisplayName(branch, isEnglish)
+        val addr = TrainingCatalog.addressFor(branch, isEnglish)
 
         return base.map { td ->
             // מקדם קדימה עד שיהיה בעתיד (עם גרייס)
@@ -1194,15 +1337,36 @@ object TrainingDirectory {
         }.sortedBy { it.start.timeInMillis }.take(n = limit)
     }
 
-    /** עזר פורמט כמו קודם */
+    /** עזר פורמט כמו קודם — תאימות ישנה בעברית */
     fun formatUpcoming(t: UpcomingTraining): String {
-        val dateFmt = java.text.SimpleDateFormat("EEEE, d/M/yyyy", java.util.Locale("he", "IL"))
-        val timeFmt = java.text.SimpleDateFormat("HH:mm",         java.util.Locale("he", "IL"))
+        return formatUpcoming(t, isEnglish = false)
+    }
+
+    /** עזר פורמט דו־לשוני */
+    fun formatUpcoming(t: UpcomingTraining, isEnglish: Boolean): String {
+        val locale = if (isEnglish) {
+            java.util.Locale.ENGLISH
+        } else {
+            java.util.Locale("he", "IL")
+        }
+
+        val dateFmt = java.text.SimpleDateFormat("EEEE, d/M/yyyy", locale)
+        val timeFmt = java.text.SimpleDateFormat("HH:mm", locale)
+
         return buildString {
-            append(dateFmt.format(t.start.time)); append("  ")
-            append(timeFmt.format(t.start.time)); append(" – "); append(timeFmt.format(t.end.time))
-            append("\nבמקום: ").append(t.placeName)
-            append("\nמאמן: ").append(t.coachName)
+            append(dateFmt.format(t.start.time))
+            append("  ")
+            append(timeFmt.format(t.start.time))
+            append(" – ")
+            append(timeFmt.format(t.end.time))
+
+            if (isEnglish) {
+                append("\nLocation: ").append(t.placeName)
+                append("\nCoach: ").append(t.coachName)
+            } else {
+                append("\nבמקום: ").append(t.placeName)
+                append("\nמאמן: ").append(t.coachName)
+            }
         }
     }
 }
