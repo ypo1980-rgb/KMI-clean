@@ -241,10 +241,6 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             ?: ""
 
         if (roomId.isBlank() && messageId.isBlank()) {
-            android.util.Log.e(
-                "KMI_FORUM_PUSH",
-                "forum push intent ignored - missing roomId/messageId"
-            )
             return
         }
 
@@ -260,11 +256,6 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             .putString("forum_sender_id", senderId)
             .putLong("received_at", System.currentTimeMillis())
             .apply()
-
-        android.util.Log.e(
-            "KMI_FORUM_PUSH",
-            "pending forum push saved roomId=$roomId messageId=$messageId branchId=$branchId groupKey=$groupKey"
-        )
     }
 
     private fun handleDailyReminderIntent(i: Intent?) {
@@ -282,10 +273,6 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         val item = intent.getStringExtra("daily_reminder_item").orEmpty()
 
         if (beltId.isBlank() && topic.isBlank() && item.isBlank()) {
-            android.util.Log.e(
-                "KMI_DAILY_REMINDER_NAV",
-                "daily reminder intent ignored - missing belt/topic/item"
-            )
             return
         }
 
@@ -301,11 +288,6 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             .putString("daily_reminder_item", item)
             .putLong("received_at", System.currentTimeMillis())
             .apply()
-
-        android.util.Log.e(
-            "KMI_DAILY_REMINDER_NAV",
-            "pending daily reminder saved beltId=$beltId topic=$topic item=$item"
-        )
     }
 
     private fun ensureNotificationPermission() {
@@ -328,9 +310,17 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     private fun ensureCoachBroadcastNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
+        val isEnglish =
+            AppLanguageManager(this).getCurrentLanguage() ==
+                    il.kmi.shared.localization.AppLanguage.ENGLISH
+
         val channelId = "coach_broadcasts"
-        val channelName = "הודעות מאמן"
-        val channelDescription = "התראות על הודעות חדשות מהמאמן"
+        val channelName = if (isEnglish) "Coach Messages" else "הודעות מאמן"
+        val channelDescription = if (isEnglish) {
+            "Notifications for new messages from the coach"
+        } else {
+            "התראות על הודעות חדשות מהמאמן"
+        }
 
         val channel = NotificationChannel(
             channelId,
@@ -344,11 +334,6 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
         val manager = getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(channel)
-
-        android.util.Log.e(
-            "KMI_FCM_TOKEN",
-            "coach broadcast notification channel ensured id=$channelId"
-        )
     }
 
     private fun setupFcmTokenSync(userSp: SharedPreferences) {
@@ -406,18 +391,10 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             val cleanToken = token.trim()
 
             if (cleanUserDocId.isBlank()) {
-                android.util.Log.e(
-                    "KMI_FCM_TOKEN",
-                    "skip saving fcm token - blank userDocId reason=$reason"
-                )
                 return
             }
 
             if (cleanToken.isBlank()) {
-                android.util.Log.e(
-                    "KMI_FCM_TOKEN",
-                    "skip saving fcm token - blank token userDocId=$cleanUserDocId reason=$reason"
-                )
                 return
             }
 
@@ -444,17 +421,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     SetOptions.merge()
                 )
                 .addOnSuccessListener {
-                    android.util.Log.e(
-                        "KMI_FCM_TOKEN",
-                        "fcm token + fcmTokens saved userDocId=$cleanUserDocId reason=$reason tokenPrefix=${cleanToken.take(18)}..."
-                    )
                 }
-                .addOnFailureListener { e ->
-                    android.util.Log.e(
-                        "KMI_FCM_TOKEN",
-                        "failed saving fcm token/fcmTokens userDocId=$cleanUserDocId reason=$reason",
-                        e
-                    )
+                .addOnFailureListener {
                 }
         }
 
@@ -462,10 +430,6 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             FirebaseMessaging.getInstance().token
                 .addOnSuccessListener { token ->
                     if (token.isNullOrBlank()) {
-                        android.util.Log.e(
-                            "KMI_FCM_TOKEN",
-                            "fcm token is blank"
-                        )
                         return@addOnSuccessListener
                     }
 
@@ -473,11 +437,6 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val profileEmail = localProfileEmail()
                     val profilePhone = localProfilePhone()
                     val authUid = auth.currentUser?.uid.orEmpty().trim()
-
-                    android.util.Log.e(
-                        "KMI_FCM_TOKEN",
-                        "resolve target profileUid=$profileUid email=$profileEmail phone=$profilePhone authUid=$authUid"
-                    )
 
                     // ✅ קודם מחפשים לפי אימייל/טלפון בפרופיל העסקי.
                     // הסיבה: לפעמים FirebaseAuth uid / uid מקומי הוא ישן או שייך למסמך אחר,
@@ -517,18 +476,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                                                     reason = "fallback_auth_uid_after_email_phone"
                                                 )
                                             } else {
-                                                android.util.Log.e(
-                                                    "KMI_FCM_TOKEN",
-                                                    "no user doc found for email=$profileEmail phone=$profilePhone and no authUid"
-                                                )
                                             }
                                         }
-                                        .addOnFailureListener { e ->
-                                            android.util.Log.e(
-                                                "KMI_FCM_TOKEN",
-                                                "phone lookup failed phone=$profilePhone",
-                                                e
-                                            )
+                                        .addOnFailureListener {
                                         }
                                 } else if (authUid.isNotBlank()) {
                                     saveTokenToUserDoc(
@@ -537,18 +487,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                                         reason = "fallback_auth_uid_after_email"
                                     )
                                 } else {
-                                    android.util.Log.e(
-                                        "KMI_FCM_TOKEN",
-                                        "no user doc found for email=$profileEmail and no phone/authUid"
-                                    )
                                 }
                             }
-                            .addOnFailureListener { e ->
-                                android.util.Log.e(
-                                    "KMI_FCM_TOKEN",
-                                    "email lookup failed email=$profileEmail",
-                                    e
-                                )
+                            .addOnFailureListener {
                             }
 
                         return@addOnSuccessListener
@@ -576,18 +517,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                                         reason = "fallback_auth_uid_after_phone"
                                     )
                                 } else {
-                                    android.util.Log.e(
-                                        "KMI_FCM_TOKEN",
-                                        "no user doc found for phone=$profilePhone and no authUid"
-                                    )
                                 }
                             }
-                            .addOnFailureListener { e ->
-                                android.util.Log.e(
-                                    "KMI_FCM_TOKEN",
-                                    "phone lookup failed phone=$profilePhone",
-                                    e
-                                )
+                            .addOnFailureListener {
                             }
 
                         return@addOnSuccessListener
@@ -607,18 +539,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                             reason = "fallback_auth_uid_only"
                         )
                     } else {
-                        android.util.Log.e(
-                            "KMI_FCM_TOKEN",
-                            "skip fcm token sync - no profile uid/email/phone and no Firebase auth uid"
-                        )
                     }
                 }
-                .addOnFailureListener { e ->
-                    android.util.Log.e(
-                        "KMI_FCM_TOKEN",
-                        "failed getting fcm token",
-                        e
-                    )
+                .addOnFailureListener {
                 }
         }
 
@@ -827,11 +750,6 @@ private fun AndroidAppRoot(
             IntroScreen(
                 // כניסה רגילה / רישום בדרך הרגילה
                 onContinue = {
-                    android.util.Log.e(
-                        "KMI_INTRO_FLOW",
-                        "regular login / register button clicked -> registration landing"
-                    )
-
                     // ✅ כניסה רגילה תמיד מובילה למסך הבחירה:
                     // משתמש חדש / משתמש קיים.
                     // גם אם יש נתוני משתמש שמורים, לא מדלגים לבית.
@@ -842,11 +760,6 @@ private fun AndroidAppRoot(
                 // Google Login הצליח והפרופיל מלא
                 // מדלגים על מסך משתמש חדש / משתמש קיים ונכנסים לבית
                 onProfileComplete = {
-                    android.util.Log.e(
-                        "KMI_INTRO_FLOW",
-                        "google profile complete -> main/home"
-                    )
-
                     startRoute = Route.Home.route
                     currentScreen = "main"
                 },
@@ -854,11 +767,6 @@ private fun AndroidAppRoot(
                 // Google Login הצליח אבל חסרים פרטי KMI
                 // מדלגים על מסך משתמש חדש / משתמש קיים ונכנסים ישר להשלמת פרטים
                 onProfileMissing = {
-                    android.util.Log.e(
-                        "KMI_INTRO_FLOW",
-                        "google profile missing -> google_profile_completion"
-                    )
-
                     startRoute = "google_profile_completion"
                     currentScreen = "main"
                 }
@@ -875,13 +783,6 @@ private fun AndroidAppRoot(
         }
 
         "main" -> {
-            LaunchedEffect(Unit) {
-                android.util.Log.e(
-                    "KMI_INTRO_FLOW",
-                    "entered main from intro - drawer open should be suppressed"
-                )
-            }
-
             MainApp(
                 sp = sp,
                 vm = vm,

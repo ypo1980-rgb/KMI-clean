@@ -285,11 +285,7 @@ fun SubjectExercisesScreen(
     val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val beltsForUi: List<Belt> = remember(effectiveAppSubject) {
         effectiveAppSubject.belts.mapNotNull { appBelt ->
-            val b = toSharedBeltOrNull(appBelt.id)
-            if (b == null) {
-                android.util.Log.e("KMI_DBG", "SubjectExercisesScreen: cannot map belt id='${appBelt.id}'")
-            }
-            b
+            toSharedBeltOrNull(appBelt.id)
         }.distinct()
     }
 
@@ -297,7 +293,6 @@ fun SubjectExercisesScreen(
         effectiveAppSubject.topicsByBelt.mapNotNull { (appBelt, topics) ->
             val b = toSharedBeltOrNull(appBelt.id)
             if (b == null) {
-                android.util.Log.e("KMI_DBG", "SubjectExercisesScreen: cannot map topicsByBelt key id='${appBelt.id}'")
                 null
             } else {
                 b to topics
@@ -316,12 +311,6 @@ fun SubjectExercisesScreen(
             requireAllItemKeywords = effectiveAppSubject.requireAllItemKeywords.orEmpty(),
             excludeItemKeywords = effectiveAppSubject.excludeItemKeywords.orEmpty()
         )
-    }
-
-    LaunchedEffect(subjectId, beltsForUi, sharedTopicsByBelt) {
-        android.util.Log.e("KMI_DBG", "SubjectExercisesScreen subjectId=$subjectId title='${screenTitleResolved}'")
-        android.util.Log.e("KMI_DBG", "beltsForUi=${beltsForUi.joinToString { it.name }}")
-        android.util.Log.e("KMI_DBG", "sharedTopicsByBelt.keys=${sharedTopicsByBelt.keys.joinToString { it.name }}")
     }
 
     val haptic = rememberHapticsGlobal()
@@ -489,13 +478,6 @@ fun SubjectExercisesScreen(
         .favoritesFlow
         .collectAsState(initial = emptySet())
 
-    LaunchedEffect(favIds) {
-        android.util.Log.e(
-            "KMI_FAV",
-            "favorites changed -> size=${favIds.size} ids=${favIds.joinToString()}"
-        )
-    }
-
     var recentIds by remember(subjectId) { mutableStateOf(loadRecents()) }
     var filterMode by remember { mutableStateOf(FilterMode.ALL) }
 
@@ -617,10 +599,6 @@ fun SubjectExercisesScreen(
                                     isDarkMode = isDarkMode,
                                     showMeta = (effectiveAppSubject.id != "releases"),
                                     onToggleFavorite = {
-                                        android.util.Log.e(
-                                            "KMI_FAV",
-                                            "toggle favorite RECENTS -> id=${row.canonicalId} currentlyFav=${row.canonicalId in favIds}"
-                                        )
                                         FavoritesStore.toggle(row.canonicalId)
                                     },
                                     onClick = {
@@ -662,10 +640,6 @@ fun SubjectExercisesScreen(
                                                 isDarkMode = isDarkMode,
                                                 showMeta = (effectiveAppSubject.id != "releases"),
                                                 onToggleFavorite = {
-                                                    android.util.Log.e(
-                                                        "KMI_FAV",
-                                                        "toggle favorite BELT_LIST -> id=${row.canonicalId} currentlyFav=${row.canonicalId in favIds}"
-                                                    )
                                                     FavoritesStore.toggle(row.canonicalId)
                                                 },
                                                 onClick = {
@@ -1067,10 +1041,6 @@ private fun ExerciseRowCardModern(
 
                 IconButton(
                     onClick = {
-                        android.util.Log.e(
-                            "KMI_FAV",
-                            "STAR_ICON_BUTTON clicked -> item=$item isFavorite=$isFavorite"
-                        )
                         onToggleFavorite()
                     },
                     modifier = Modifier
@@ -1094,10 +1064,6 @@ private fun ExerciseRowCardModern(
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
                         .clickable {
-                            android.util.Log.e(
-                                "KMI_FAV",
-                                "ROW_TEXT clicked -> item=$item"
-                            )
                             onClick()
                         }
                         .padding(vertical = 2.dp)

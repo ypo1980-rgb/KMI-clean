@@ -254,7 +254,6 @@ fun FreeSessionsScreen(
                                                 selected = null // אם במקרה פתוח שיט של אותו אימון
                                             } else {
                                                 val e = res.exceptionOrNull()
-                                                android.util.Log.e("FREE_SESSIONS", "deleteFreeSession failed", e)
                                                 val msg = e?.message?.takeIf { it.isNotBlank() } ?: "מחיקת אימון נכשלה"
                                                 Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
                                                 pendingDelete = null
@@ -367,7 +366,6 @@ fun FreeSessionsScreen(
                                 .show()
                         } else {
                             val e = result.exceptionOrNull()
-                            android.util.Log.e("FREE_SESSIONS", "createFreeSession failed", e)
 
                             // אם זה PERMISSION_DENIED / חסר אינדקס / רשת וכו' – תראה לפחות טקסט מועיל
                             val msg = e?.message?.takeIf { it.isNotBlank() } ?: "יצירת אימון נכשלה"

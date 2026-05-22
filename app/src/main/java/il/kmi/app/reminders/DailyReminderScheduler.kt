@@ -37,12 +37,6 @@ object DailyReminderScheduler {
 
         runCatching {
             context.startActivity(intent)
-        }.onFailure { error ->
-            android.util.Log.e(
-                "KMI_REMINDER",
-                "Failed to open exact alarm settings",
-                error
-            )
         }
     }
 
@@ -83,17 +77,7 @@ object DailyReminderScheduler {
                     preferredHour = tomorrow.get(Calendar.HOUR_OF_DAY),
                     preferredMinute = tomorrow.get(Calendar.MINUTE)
                 )
-
-            android.util.Log.w(
-                "KMI_REMINDER",
-                "schedule adjusted triggerAtMillis because computed time was too close/past. adjusted=$triggerAtMillis now=$now"
-            )
         }
-
-        android.util.Log.d(
-            "KMI_REMINDER",
-            "schedule triggerAtMillis=$triggerAtMillis hour=$hour minute=$minute now=$now"
-        )
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = reminderPendingIntent(context)
@@ -118,11 +102,6 @@ object DailyReminderScheduler {
         val reminderPrefs = ReminderPrefs(prefs)
         val isCoach = isCoachUser(prefs)
         val isEnabled = reminderPrefs.isEnabledForRole(isCoach)
-
-        android.util.Log.d(
-            "KMI_REMINDER",
-            "rescheduleNextDay isCoach=$isCoach isEnabled=$isEnabled hour=${reminderPrefs.getHour()} minute=${reminderPrefs.getMinute()}"
-        )
 
         if (!isEnabled) {
             cancel(context)
@@ -150,18 +129,8 @@ object DailyReminderScheduler {
         triggerAtMillis: Long,
         pendingIntent: PendingIntent
     ) {
-        android.util.Log.d(
-            "KMI_REMINDER",
-            "scheduleExactAlarm triggerAtMillis=$triggerAtMillis sdk=${android.os.Build.VERSION.SDK_INT}"
-        )
-
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             val canExact = alarmManager.canScheduleExactAlarms()
-
-            android.util.Log.d(
-                "KMI_REMINDER",
-                "canScheduleExactAlarms=$canExact"
-            )
 
             if (canExact) {
                 alarmManager.setExactAndAllowWhileIdle(
@@ -169,18 +138,11 @@ object DailyReminderScheduler {
                     triggerAtMillis,
                     pendingIntent
                 )
-                android.util.Log.d("KMI_REMINDER", "Scheduled with setExactAndAllowWhileIdle")
             } else {
                 alarmManager.setAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
                     triggerAtMillis,
                     pendingIntent
-                )
-
-                android.util.Log.e(
-                    "KMI_REMINDER",
-                    "Exact alarm permission missing. Scheduled with setAndAllowWhileIdle fallback, " +
-                            "but Android may delay the daily reminder."
                 )
             }
         } else {
@@ -189,7 +151,6 @@ object DailyReminderScheduler {
                 triggerAtMillis,
                 pendingIntent
             )
-            android.util.Log.d("KMI_REMINDER", "Scheduled on pre-Android 12 exact path")
         }
     }
 

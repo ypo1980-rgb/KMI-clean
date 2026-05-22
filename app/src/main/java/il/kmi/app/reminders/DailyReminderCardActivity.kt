@@ -129,14 +129,6 @@ class DailyReminderCardActivity : ComponentActivity() {
             isEnglish = isEnglishForContent
         )
 
-        android.util.Log.e(
-            "KMI_REMINDER_CARD",
-            "open card belt=$belt topic=$topic item=$item " +
-                    "intentExplanationLength=${explanationFromIntent.length} " +
-                    "finalExplanationLength=${explanation.length} " +
-                    "finalIsFallback=${isDailyReminderFallbackExplanation(explanation)}"
-        )
-
         setContent {
 
             val favorites by FavoritesStore.favoritesFlow.collectAsState(initial = emptySet())
@@ -755,12 +747,6 @@ private fun resolveDailyReminderExplanation(
     candidates.forEach { candidate ->
         val raw = Explanations.get(belt, candidate).trim()
         val cleaned = cleanupDailyReminderExplanation(raw)
-
-        android.util.Log.e(
-            "KMI_REMINDER_CARD",
-            "explanation candidate='$candidate' length=${cleaned.length} " +
-                    "fallback=${isDailyReminderFallbackExplanation(cleaned)}"
-        )
 
         if (
             cleaned.isNotBlank() &&

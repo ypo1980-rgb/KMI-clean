@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -41,7 +40,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -455,7 +453,7 @@ fun SubscriptionScreen(
     var subscriptionUiRefreshTick by remember { mutableStateOf(0) }
 
     DisposableEffect(userSp, subsSp) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (
                 key == "has_full_access" ||
                 key == "full_access" ||
@@ -467,18 +465,6 @@ fun SubscriptionScreen(
                 key == "access_changed_at"
             ) {
                 subscriptionUiRefreshTick++
-
-                android.util.Log.e(
-                    "KMI_SUB_UI",
-                    "subscription ui pref changed source=${if (changedSp === userSp) "kmi_user" else "kmi_subs"} " +
-                            "key=$key tick=$subscriptionUiRefreshTick " +
-                            "userActive=${userSp.getBoolean("subscription_active", false)} " +
-                            "subsActive=${subsSp.getBoolean("subscription_active", false)} " +
-                            "userProduct=${userSp.getString("sub_product", "")} " +
-                            "subsProduct=${subsSp.getString("sub_product", "")} " +
-                            "userUntil=${userSp.getLong("sub_access_until", 0L)} " +
-                            "subsUntil=${subsSp.getLong("sub_access_until", 0L)}"
-                )
             }
         }
 
@@ -529,17 +515,6 @@ fun SubscriptionScreen(
             timeActive &&
                     (userActive || subsActive || savedProductId != null)
 
-        android.util.Log.e(
-            "KMI_SUB_UI",
-            "effectiveActive resolved active=$active " +
-                    "stateActive=${state.active} " +
-                    "timeActive=$timeActive " +
-                    "userActive=$userActive " +
-                    "subsActive=$subsActive " +
-                    "savedProductId=$savedProductId " +
-                    "savedAccessUntil=$savedAccessUntil now=$now"
-        )
-
         active
     }
 
@@ -568,23 +543,6 @@ fun SubscriptionScreen(
         ?: if (isEnglish) "Not loaded yet" else "טרם נטען"
 
     val renewalLabel = formatDate(savedAccessUntil)
-
-    LaunchedEffect(effectiveActive, savedProductId, savedAccessUntil, subscriptionUiRefreshTick) {
-        android.util.Log.e(
-            "KMI_SUB_UI",
-            "resolved effectiveActive=$effectiveActive " +
-                    "stateActive=${state.active} " +
-                    "product=$savedProductId " +
-                    "accessUntil=$savedAccessUntil " +
-                    "tick=$subscriptionUiRefreshTick " +
-                    "userActive=${userSp.getBoolean("subscription_active", false)} " +
-                    "subsActive=${subsSp.getBoolean("subscription_active", false)} " +
-                    "userFull=${userSp.getBoolean("has_full_access", false)} " +
-                    "subsFull=${subsSp.getBoolean("has_full_access", false)} " +
-                    "userProduct=${userSp.getString("sub_product", "")} " +
-                    "subsProduct=${subsSp.getString("sub_product", "")}"
-        )
-    }
 
 // חיפוש: דיאלוג מקומי אחרי בחירה מהחיפוש (כשזמין)
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1080,13 +1038,7 @@ fun SubscriptionScreen(
 
                                             // ✅ מכריח את מסך ניהול המנוי לקרוא שוב את הנתונים שנשמרו
                                             subscriptionUiRefreshTick++
-                                        }.onFailure { error ->
-                                            android.util.Log.e(
-                                                "KMI_BILLING",
-                                                "restore purchases failed",
-                                                error
-                                            )
-
+                                        }.onFailure {
                                             Toast.makeText(
                                                 ctx,
                                                 if (isEnglish) {

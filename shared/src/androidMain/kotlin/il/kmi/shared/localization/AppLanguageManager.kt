@@ -3,7 +3,6 @@ package il.kmi.shared.localization
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
-import android.util.Log
 import java.util.Locale
 
 class AppLanguageManager(
@@ -19,37 +18,13 @@ class AppLanguageManager(
 
     fun getCurrentLanguage(): AppLanguage {
         val language = repository.currentLanguage()
-
-        Log.e(
-            "KMI_LANG",
-            "AppLanguageManager.getCurrentLanguage repository=$language runtimeBefore=${LocalizationRuntime.currentLanguage}"
-        )
-
         LocalizationRuntime.currentLanguage = language
-
-        Log.e(
-            "KMI_LANG",
-            "AppLanguageManager.getCurrentLanguage runtimeAfter=${LocalizationRuntime.currentLanguage}"
-        )
-
         return language
     }
 
     fun setLanguage(language: AppLanguage) {
-        Log.e(
-            "KMI_LANG",
-            "AppLanguageManager.setLanguage START requested=$language runtimeBefore=${LocalizationRuntime.currentLanguage}"
-        )
-
         repository.setLanguage(language)
-
-        val storedAfter = repository.currentLanguage()
         LocalizationRuntime.currentLanguage = language
-
-        Log.e(
-            "KMI_LANG",
-            "AppLanguageManager.setLanguage END requested=$language storedAfter=$storedAfter runtimeAfter=${LocalizationRuntime.currentLanguage}"
-        )
     }
 
     fun text(key: String): String {

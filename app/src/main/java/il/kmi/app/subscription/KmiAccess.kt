@@ -37,11 +37,6 @@ object KmiAccess {
      */
     fun setAdmin(sp: SharedPreferences, value: Boolean) {
         sp.edit().putBoolean(KEY_IS_ADMIN, value).apply()
-
-        android.util.Log.e(
-            "KMI_ACCESS",
-            "setAdmin value=$value savedNow=${sp.getBoolean(KEY_IS_ADMIN, false)}"
-        )
     }
 
     /**
@@ -68,11 +63,6 @@ object KmiAccess {
                 .putBoolean(KEY_DEV_UNLOCK, true)
                 .apply()
         }
-
-        android.util.Log.e(
-            "KMI_ACCESS",
-            "tryDevUnlock ok=$ok savedNow=${sp.getBoolean(KEY_DEV_UNLOCK, false)}"
-        )
 
         return ok
     }
@@ -137,11 +127,6 @@ object KmiAccess {
             .remove(KEY_SUB_ACCESS_UNTIL)
             .putLong(KEY_ACCESS_CHANGED_AT, now)
             .apply()
-
-        android.util.Log.e(
-            "KMI_ACCESS",
-            "clearExpiredSubscriptionFlags until=$until now=$now"
-        )
     }
 
     fun hasValidTimedSubscription(sp: SharedPreferences): Boolean {
@@ -154,12 +139,6 @@ object KmiAccess {
         if (!active && hasFlags && until > 0L && until <= now) {
             clearExpiredSubscriptionFlags(sp, until, now)
         }
-
-        android.util.Log.e(
-            "KMI_ACCESS",
-            "hasValidTimedSubscription hasFlags=$hasFlags until=$until now=$now active=$active"
-        )
-
         return active
     }
     /**
@@ -176,10 +155,6 @@ object KmiAccess {
             ADMIN_BYPASSES_SUBSCRIPTION && admin
 
         if (FORCE_SUBSCRIPTION_LOCK && !adminAccess && !dev) {
-            android.util.Log.e(
-                "KMI_ACCESS",
-                "hasFullAccess FORCE_SUBSCRIPTION_LOCK=true and no admin/dev unlock -> result=false"
-            )
             return false
         }
 
@@ -187,13 +162,6 @@ object KmiAccess {
             adminAccess ||
                     dev ||
                     timedSubscription
-
-        android.util.Log.e(
-            "KMI_ACCESS",
-            "hasFullAccess admin=$admin adminBypass=$ADMIN_BYPASSES_SUBSCRIPTION " +
-                    "adminAccess=$adminAccess devUnlock=$dev " +
-                    "timedSubscription=$timedSubscription result=$result"
-        )
 
         return result
     }

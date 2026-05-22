@@ -1,7 +1,6 @@
 package il.kmi.app.screens.SubTopics
 
 import android.net.Uri
-import android.util.Log
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -67,11 +66,6 @@ fun NavGraphBuilder.subTopicsByBeltNavGraph(
         val belt = Belt.fromId(beltId) ?: Belt.GREEN
         val topic = Uri.decode(topicEnc).trim()
 
-        Log.e(
-            "KMI_SUB_BELT",
-            "SubTopicsByBeltRoute composable belt=${belt.id} topic='$topic'"
-        )
-
         SubTopicsScreen(
             belt = belt,
             topic = topic,
@@ -90,11 +84,6 @@ fun NavGraphBuilder.subTopicsByBeltNavGraph(
                     subTopic = subTitle
                 ) ?: return@SubTopicsScreen
 
-                Log.e(
-                    "KMI_SUB_BELT",
-                    "SubTopicsByBeltRoute onOpenSubTopic belt=${belt.id} topic='$topic' sub='$subTitle' route='$route'"
-                )
-
                 nav.navigate(route) {
                     launchSingleTop = true
                     restoreState = true
@@ -102,11 +91,6 @@ fun NavGraphBuilder.subTopicsByBeltNavGraph(
             },
             onOpenExercise = { itemName ->
                 val route = Route.Exercise.make(itemName)
-
-                Log.e(
-                    "KMI_SUB_BELT",
-                    "SubTopicsByBeltRoute onOpenExercise item='$itemName' route='$route'"
-                )
 
                 nav.navigate(route) {
                     launchSingleTop = true

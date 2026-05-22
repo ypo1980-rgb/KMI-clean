@@ -56,7 +56,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.LaunchedEffect
@@ -339,35 +338,7 @@ fun FloatingQuickMenu(
 
     val isMenuLocked = !effectiveHasFullAccess
 
-    LaunchedEffect(hasFullAccess, effectiveHasFullAccess, accessRefreshTick) {
-        android.util.Log.e(
-            "KMI_LOCK_DEBUG",
-            "FloatingQuickMenu hasFullAccessParam=$hasFullAccess " +
-                    "effectiveHasFullAccess=$effectiveHasFullAccess " +
-                    "isMenuLocked=$isMenuLocked " +
-                    "tick=$accessRefreshTick " +
 
-                    "user_full=${userSp.getBoolean("has_full_access", false)} " +
-                    "subs_full=${subsSp.getBoolean("has_full_access", false)} " +
-                    "legacy_full=${legacySp.getBoolean("has_full_access", false)} " +
-
-                    "user_active=${userSp.getBoolean("subscription_active", false)} " +
-                    "subs_active=${subsSp.getBoolean("subscription_active", false)} " +
-                    "legacy_active=${legacySp.getBoolean("subscription_active", false)} " +
-
-                    "user_verified=${userSp.getBoolean("google_subscription_verified", false)} " +
-                    "subs_verified=${subsSp.getBoolean("google_subscription_verified", false)} " +
-                    "legacy_verified=${legacySp.getBoolean("google_subscription_verified", false)} " +
-
-                    "user_product=${userSp.getString("sub_product", "")} " +
-                    "subs_product=${subsSp.getString("sub_product", "")} " +
-                    "legacy_product=${legacySp.getString("sub_product", "")} " +
-
-                    "user_until=${userSp.getLong("sub_access_until", 0L)} " +
-                    "subs_until=${subsSp.getLong("sub_access_until", 0L)} " +
-                    "legacy_until=${legacySp.getLong("sub_access_until", 0L)}"
-        )
-    }
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 

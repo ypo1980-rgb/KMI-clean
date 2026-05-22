@@ -209,11 +209,6 @@ fun persistCoachBroadcast(
             onResult(true, null)
         }
         .addOnFailureListener { e ->
-            android.util.Log.e(
-                "KMI_COACH_BROADCAST",
-                "persist failed",
-                e
-            )
             onResult(false, e)
         }
 }
@@ -647,13 +642,7 @@ fun CoachBroadcastScreen(
             val finalRecipients = docsToRecipients(docs)
 
             recipients = finalRecipients
-        } catch (e: Exception) {
-            android.util.Log.e(
-                "KMI_COACH_BROADCAST",
-                "failed loading recipients",
-                e
-            )
-
+        } catch (_: Exception) {
             recipients = emptyList()
         }
     }
@@ -740,12 +729,6 @@ fun CoachBroadcastScreen(
                     }
                 } else {
                     isSending = false
-
-                    android.util.Log.e(
-                        "KMI_COACH_BROADCAST",
-                        "saveBroadcast failed",
-                        error
-                    )
 
                     scope.launch {
                         snackbarHostState.showSnackbar(
@@ -1297,13 +1280,7 @@ fun CoachBroadcastScreen(
                                                     "The messaging app opened with ${selectedNumbers.size} trainees"
                                                 )
                                             )
-                                        }.onFailure { e ->
-                                            android.util.Log.e(
-                                                "KMI_COACH_BROADCAST",
-                                                "failed opening SMS app",
-                                                e
-                                            )
-
+                                        }.onFailure {
                                             snackbarHostState.showSnackbar(
                                                 coachBroadcastTr(
                                                     isEnglish,

@@ -1,6 +1,5 @@
 package il.kmi.app.ui.training
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import il.kmi.app.data.training.FirestoreTrainingSummaryRepo
@@ -11,16 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.FieldPath
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
 
 data class SelectedExerciseUi(
     val exerciseId: String,
@@ -69,8 +61,6 @@ class TrainingSummaryViewModel(
     // ❌ למחוק מכאן את כל הפונקציה bootstrapMembersFromUsers(...)
     // (היא שייכת ל-AttendanceViewModel בלבד)
 
-    private val TAG = "TRAINING_SUMMARY"
-
     private val isoFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     private fun todayIso(): String = isoFmt.format(Date())
 
@@ -113,8 +103,7 @@ class TrainingSummaryViewModel(
                 )
 
                 _state.update { it.copy(summaryDaysInCalendarMonth = dates) }
-            }.onFailure { t ->
-                Log.e(TAG, "loadSummaryDaysForMonth failed y=$year m=$month1to12", t)
+            }.onFailure {
                 // לא נכשיל UX – פשוט נשאיר ריק
                 _state.update { it.copy(summaryDaysInCalendarMonth = emptySet()) }
             }
@@ -209,13 +198,11 @@ class TrainingSummaryViewModel(
                     }
                 )
 
-                val id = repo.saveForOwner(
+                repo.saveForOwner(
                     ownerUid = snap.ownerUid,
                     ownerRole = snap.ownerRole,
                     summary = model
                 )
-
-                Log.w(TAG, "Saved training summary id=$id exercises=${model.exercises.size}")
 
                 _state.update {
                     it.copy(
@@ -227,8 +214,6 @@ class TrainingSummaryViewModel(
 
                 onSuccess?.invoke()
             } catch (t: Throwable) {
-                Log.e(TAG, "Save failed", t)
-
                 _state.update {
                     it.copy(
                         lastSaveMsg = "❌ השמירה נכשלה",

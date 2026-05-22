@@ -314,7 +314,7 @@ class KmiViewModel(
 
     fun preloadTopicsBySubjectCounts() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-            try {
+            runCatching {
                 val subjects = il.kmi.app.domain.TopicsBySubjectRegistry.allSubjects()
                 val handsBase = subjects.firstOrNull { it.id == "hands_all" }
 
@@ -323,8 +323,6 @@ class KmiViewModel(
                         subjects = subjects,
                         handsBase = handsBase
                     )
-            } catch (t: Throwable) {
-                android.util.Log.e("KMI_PERF", "preloadTopicsBySubjectCounts failed", t)
             }
         }
     }

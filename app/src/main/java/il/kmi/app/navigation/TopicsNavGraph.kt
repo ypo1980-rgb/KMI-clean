@@ -2,7 +2,6 @@ package il.kmi.app.navigation
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraphBuilder
@@ -52,8 +51,6 @@ fun NavGraphBuilder.topicsNavGraph(
 ) {
     composable(Route.Topics.route) {
 
-        Log.e("KMI_NAV", "ENTER Route.Topics CALLBACK_PROBE_A")
-
         val appCtx = LocalContext.current
         val userSp = remember(appCtx) {
             appCtx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
@@ -75,21 +72,12 @@ fun NavGraphBuilder.topicsNavGraph(
             }.getOrDefault(false)
         }
 
-        Log.e("KMI_WHERE", "ENTER TopicsNavGraph -> Route.Topics isCoach=$isCoachFlag")
-        Log.e("KMI_NAV", "ENTER Route.Topics isCoach=$isCoachFlag")
-        Log.e("KMI_NAV", "CALL BeltQuestionsByTopicScreen from Route.Topics CALLBACK_PROBE_B")
-
         fun openSubTopics(belt: Belt, topic: String) {
             vm.setSelectedBelt(belt)
 
             val route = il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
                 belt = belt,
                 topic = topic
-            )
-
-            Log.e(
-                "KMI_SUB",
-                "topicsNavGraph openSubTopics belt=${belt.id} topic='$topic' route='$route'"
             )
 
             nav.navigate(route) {
@@ -111,11 +99,6 @@ fun NavGraphBuilder.topicsNavGraph(
                 subTopic = subTopic
             )
 
-            Log.e(
-                "KMI_SUB",
-                "topicsNavGraph openChosenSubTopic belt=${belt.id} topic='$topic' sub='$subTopic' route='$route'"
-            )
-
             if (route != null) {
                 nav.navigate(route) {
                     launchSingleTop = true
@@ -134,11 +117,6 @@ fun NavGraphBuilder.topicsNavGraph(
 
             onOpenHardSubjectRoute = { belt, subjectId ->
                 vm.setSelectedBelt(belt)
-
-                Log.e(
-                    "KMI_SUB",
-                    "topicsNavGraph onOpenHardSubjectRoute belt=${belt.id} subjectId='$subjectId'"
-                )
 
                 if (shouldBlockPremiumTopic(subjectId)) {
                     nav.navigate(Route.Subscription.route) {

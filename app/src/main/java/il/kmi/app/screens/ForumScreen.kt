@@ -187,16 +187,6 @@ fun ForumScreen(
                 key == "isDarkMode"
             ) {
                 themeRefreshTick++
-
-                android.util.Log.e(
-                    "KMI_FORUM_THEME",
-                    "theme changed key=$key tick=$themeRefreshTick " +
-                            "sp.theme_mode=${sp.getString("theme_mode", null)} " +
-                            "user.theme_mode=${userSp.getString("theme_mode", null)} " +
-                            "settings.theme_mode=${settingsSp.getString("theme_mode", null)} " +
-                            "settings.darkMode=${settingsSp.getBoolean("darkMode", false)} " +
-                            "settings.isDarkMode=${settingsSp.getBoolean("isDarkMode", false)}"
-                )
             }
         }
 
@@ -239,13 +229,6 @@ fun ForumScreen(
         }
     }
 
-    LaunchedEffect(appThemeMode, isDarkMode, themeRefreshTick) {
-        android.util.Log.e(
-            "KMI_FORUM_THEME",
-            "resolved appThemeMode=$appThemeMode isDarkMode=$isDarkMode systemDark=$systemDark tick=$themeRefreshTick"
-        )
-    }
-
     val isCoachProfile = remember {
         val role = userSp.getString("user_role", "trainee").orEmpty().lowercase()
         role.contains("coach") || role.contains("מאמן")
@@ -282,7 +265,7 @@ fun ForumScreen(
     var forumAccessRefreshTick by remember { mutableIntStateOf(0) }
 
     DisposableEffect(userSp, subsSp, legacySp) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (
                 key == "has_full_access" ||
                 key == "full_access" ||
@@ -295,15 +278,6 @@ fun ForumScreen(
                 key == "sub_product"
             ) {
                 forumAccessRefreshTick++
-
-                android.util.Log.e(
-                    "KMI_FORUM_ACCESS",
-                    "forum access pref changed source=${
-                        if (changedSp === userSp) "kmi_user"
-                        else if (changedSp === subsSp) "kmi_subs"
-                        else "kmi_prefs"
-                    } key=$key tick=$forumAccessRefreshTick"
-                )
             }
         }
 
@@ -351,22 +325,6 @@ fun ForumScreen(
     // פתוח רק למנהל או למנוי חודשי/שנתי פעיל.
     // Trial לא פותח פורום.
     val canUseExtras = hasFull
-
-    LaunchedEffect(canUseExtras, hasFull, isTrial) {
-        android.util.Log.e(
-            "KMI_FORUM_ACCESS",
-            "canUseExtras=$canUseExtras hasFull=$hasFull isTrial=$isTrial " +
-                    "user_full=${userSp.getBoolean("has_full_access", false)} " +
-                    "subs_full=${subsSp.getBoolean("has_full_access", false)} " +
-                    "legacy_full=${legacySp.getBoolean("has_full_access", false)} " +
-                    "user_active=${userSp.getBoolean("subscription_active", false)} " +
-                    "subs_active=${subsSp.getBoolean("subscription_active", false)} " +
-                    "legacy_active=${legacySp.getBoolean("subscription_active", false)} " +
-                    "user_product=${userSp.getString("sub_product", "")} " +
-                    "subs_product=${subsSp.getString("sub_product", "")} " +
-                    "legacy_product=${legacySp.getString("sub_product", "")}"
-        )
-    }
 
     // סניף + קבוצה של המשתמש — מקור אמת מחדר הפורום
     val branch = remember {
@@ -427,29 +385,8 @@ fun ForumScreen(
         mutableStateOf(!openFromPushInitial)
     }
 
-    LaunchedEffect(openFromPushInitial, pendingPushRoomId, pendingPushMessageId, forumRoomId) {
-        if (!openFromPushInitial) return@LaunchedEffect
-
-        android.util.Log.e(
-            "KMI_FORUM_PUSH",
-            "ForumScreen opened from push targetRoomId=$pendingPushRoomId currentRoomId=$forumRoomId targetMessageId=$pendingPushMessageId"
-        )
-
-        if (pendingPushRoomId.isNotBlank() && pendingPushRoomId != forumRoomId) {
-            android.util.Log.e(
-                "KMI_FORUM_PUSH",
-                "ForumScreen push room differs from current user room. targetRoomId=$pendingPushRoomId currentRoomId=$forumRoomId"
-            )
-        }
-    }
-
     LaunchedEffect(openFromPushInitial, pendingPushMessageId) {
         if (openFromPushInitial && pendingPushMessageId.isBlank()) {
-            android.util.Log.e(
-                "KMI_FORUM_PUSH",
-                "ForumScreen opened from push without messageId - clearing pending flag after opening forum"
-            )
-
             pendingPushHandled = true
 
             sp.edit()
@@ -479,11 +416,6 @@ fun ForumScreen(
             userSp.edit()
                 .putLong(forumLastReadKey(branch, groupKey), System.currentTimeMillis())
                 .apply()
-
-            android.util.Log.e(
-                "KMI_FORUM_UNREAD",
-                "last forum read updated branch=$branch groupKey=$groupKey room=$forumRoomId"
-            )
         }
     }
 
@@ -513,13 +445,7 @@ fun ForumScreen(
     // במסך אמת לא מתחברים אנונימית.
     // הפורום צריך לעבוד עם משתמש Firebase אמיתי מהכניסה לאפליקציה.
     LaunchedEffect(Unit) {
-        val auth = FirebaseAuth.getInstance()
-        if (auth.currentUser == null) {
-            android.util.Log.e(
-                "KMI_FORUM_AUTH",
-                "Forum opened without Firebase user. Messages will not be sent until login is ready."
-            )
-        }
+        FirebaseAuth.getInstance()
     }
 
     // ================== האזנה בזמן אמת ==================
@@ -539,11 +465,6 @@ fun ForumScreen(
                 .addSnapshotListener { snap, error ->
 
                     if (error != null) {
-                        android.util.Log.e(
-                            "KMI_FORUM",
-                            "Failed listening to forum messages branch=$branch groupKey=$groupKey room=$forumRoomId",
-                            error
-                        )
                         return@addSnapshotListener
                     }
 
@@ -603,11 +524,6 @@ fun ForumScreen(
                             }
 
                             if (targetIndex >= 0) {
-                                android.util.Log.e(
-                                    "KMI_FORUM_PUSH",
-                                    "scrolling to pushed forum message index=$targetIndex messageId=$pendingPushMessageId"
-                                )
-
                                 listState.animateScrollToItem(targetIndex)
                                 pendingPushHandled = true
 
@@ -625,11 +541,6 @@ fun ForumScreen(
                                 pendingPushMessageId = ""
                                 pendingPushRoomId = ""
                             } else {
-                                android.util.Log.e(
-                                    "KMI_FORUM_PUSH",
-                                    "pushed forum message not found yet messageId=$pendingPushMessageId messages=${uiList.size}"
-                                )
-
                                 listState.animateScrollToItem(0)
                             }
                         } else if (uiList.isNotEmpty()) {
@@ -907,11 +818,6 @@ fun ForumScreen(
             .filter { it.isNotBlank() }
             .distinct()
 
-        android.util.Log.e(
-            "KMI_FORUM_USERS",
-            "loading participants branch=$branch groupKey=$groupKey branchCandidates=$branchCandidates groupCandidates=$groupCandidates"
-        )
-
         scope.launch {
             try {
                 var docs = branchCandidates
@@ -919,11 +825,6 @@ fun ForumScreen(
                     .distinctBy { it.id }
 
                 if (docs.isEmpty()) {
-                    android.util.Log.w(
-                        "KMI_FORUM_USERS",
-                        "direct query returned 0 -> fallback all users and filter client-side"
-                    )
-
                     val all = mutableListOf<DocumentSnapshot>()
                     val col = db.collection("users")
 
@@ -957,11 +858,6 @@ fun ForumScreen(
                         matchesBranch(doc.branchTokensNorm(), candNorm) &&
                                 matchesForumGroup(doc.groupTokensNorm(), groupNorm)
                     }.distinctBy { it.id }
-
-                    android.util.Log.w(
-                        "KMI_FORUM_USERS",
-                        "fallback matched docs=${docs.size} from all=${all.size}"
-                    )
                 }
 
                 fun normalizeParticipantName(value: String): String {
@@ -1027,17 +923,7 @@ fun ForumScreen(
                     .toList()
 
                 participantsByUsers = realParticipants
-
-                android.util.Log.e(
-                    "KMI_FORUM_USERS",
-                    "Forum participants loaded from Firestore count=${realParticipants.size} branch=$branch groupKey=$groupKey room=$forumRoomId names=${realParticipants.map { it.name }}"
-                )
-            } catch (e: Exception) {
-                android.util.Log.e(
-                    "KMI_FORUM_USERS",
-                    "Failed loading real forum participants for branch=$branch",
-                    e
-                )
+            } catch (_: Exception) {
                 participantsByUsers = emptyList()
             }
         }
@@ -1307,7 +1193,6 @@ fun ForumScreen(
             keyboardController?.hide()
 
         } catch (e: Exception) {
-            android.util.Log.e("KMI_FORUM", "sendMessageInternal failed", e)
             Toast.makeText(
                 ctx,
                 forumTr(

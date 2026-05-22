@@ -203,15 +203,12 @@ private fun findExplanationForHitLocal(
 
 @Composable
 private fun rememberEnsureContentRepoInitialized() {
-    android.util.Log.e("KMI_TOPIC_SCREEN", "BeltQuestionsByTopicScreen LOADED")
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         scope.launch(Dispatchers.Default) {
-            try {
+            runCatching {
                 ContentRepo.initIfNeeded()
-            } catch (t: Throwable) {
-                android.util.Log.e("KMI_DBG", "ContentRepo init failed", t)
             }
         }
     }
@@ -277,23 +274,6 @@ fun BeltQuestionsByTopicScreen(
                 key == "access_changed_at"
             ) {
                 accessRefreshTick++
-
-                android.util.Log.e(
-                    "KMI_ACCESS_MODE",
-                    "BY_TOPIC pref changed source=${
-                        if (changedSp === userSp) "kmi_user"
-                        else if (changedSp === subsSp) "kmi_subs"
-                        else "kmi_prefs"
-                    } key=$key tick=$accessRefreshTick " +
-                            "userActive=${userSp.getBoolean("subscription_active", false)} " +
-                            "subsActive=${subsSp.getBoolean("subscription_active", false)} " +
-                            "userFull=${userSp.getBoolean("has_full_access", false)} " +
-                            "subsFull=${subsSp.getBoolean("has_full_access", false)} " +
-                            "userProduct=${userSp.getString("sub_product", "")} " +
-                            "subsProduct=${subsSp.getString("sub_product", "")} " +
-                            "userUntil=${userSp.getLong("sub_access_until", 0L)} " +
-                            "subsUntil=${subsSp.getLong("sub_access_until", 0L)}"
-                )
             }
         }
 
@@ -320,29 +300,6 @@ fun BeltQuestionsByTopicScreen(
 
     val hasAccess = accessMode == AccessMode.OPEN
 
-    LaunchedEffect(hasManagerAccess, hasAccess, accessMode, accessRefreshTick) {
-        android.util.Log.e(
-            "KMI_ACCESS_MODE",
-            "BY_TOPIC resolved hasManagerAccess=$hasManagerAccess " +
-                    "hasAccess=$hasAccess accessMode=$accessMode tick=$accessRefreshTick " +
-                    "userAdmin=${KmiAccess.isAdmin(userSp)} " +
-                    "userFull=${userSp.getBoolean("has_full_access", false)} " +
-                    "subsFull=${subsSp.getBoolean("has_full_access", false)} " +
-                    "userActive=${userSp.getBoolean("subscription_active", false)} " +
-                    "subsActive=${subsSp.getBoolean("subscription_active", false)} " +
-                    "userVerified=${userSp.getBoolean("google_subscription_verified", false)} " +
-                    "subsVerified=${subsSp.getBoolean("google_subscription_verified", false)} " +
-                    "userProduct=${userSp.getString("sub_product", "")} " +
-                    "subsProduct=${subsSp.getString("sub_product", "")} " +
-                    "userUntil=${userSp.getLong("sub_access_until", 0L)} " +
-                    "subsUntil=${subsSp.getLong("sub_access_until", 0L)}"
-        )
-
-        android.util.Log.e(
-            "KMI_LOCK_TRACE",
-            "BeltQuestionsByTopicScreen LIVE hasAccess=$hasAccess accessMode=$accessMode"
-        )
-    }
 
     // State לניהול התפריט המהיר
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -408,10 +365,6 @@ fun BeltQuestionsByTopicScreen(
                     accessMode = accessMode,
                     hasAccess = hasAccess,
                     onOpenSubscription = {
-                        android.util.Log.e(
-                            "KMI_LOCK_TRACE",
-                            "BeltQuestionsByTopicScreen -> forwarding onOpenSubscription"
-                        )
                         onOpenSubscription()
                     },
                     onSubjectClick = { belt, subject ->
@@ -988,8 +941,6 @@ internal fun TopicsBySubjectCard(
             currentBelt = currentBelt
         )
 
-        android.util.Log.e("KMI_NAV", action.logMessage)
-
         onSubjectClick(action.chosenBelt, subject)
     }
 
@@ -1215,30 +1166,13 @@ internal fun TopicsBySubjectCard(
                             onClick = {
                                 when (card.first) {
                                     "defense_root" -> {
-                                        android.util.Log.e(
-                                            "KMI_NAV",
-                                            "TOPICS_CARD defense root -> open defense dialog belt=${currentBelt.id}"
-                                        )
                                         askDefense = true
                                     }
 
                                     "releases" -> {
-                                        android.util.Log.e(
-                                            "KMI_LOCK_TRACE",
-                                            "TOPICS_CARD releases clicked hasAccess=$hasAccess accessMode=$accessMode belt=${currentBelt.id}"
-                                        )
-
                                         if (!hasAccess) {
-                                            android.util.Log.e(
-                                                "KMI_LOCK_TRACE",
-                                                "TOPICS_CARD releases BLOCKED -> open subscription"
-                                            )
                                             onOpenSubscription()
                                         } else {
-                                            android.util.Log.e(
-                                                "KMI_NAV",
-                                                "TOPICS_CARD releases root -> open sub-topics dialog belt=${currentBelt.id}"
-                                            )
                                             askSubTopicsForId = "releases"
                                         }
                                     }
@@ -1289,10 +1223,6 @@ internal fun TopicsBySubjectCard(
                                 isDarkMode = isDarkMode,
                                 onClick = {
                                     if (card.id == "releases_hugs") {
-                                        android.util.Log.e(
-                                            "KMI_NAV",
-                                            "TOPICS_CARD releases_hugs -> open premium gate belt=${currentBelt.id}"
-                                        )
                                         onOpenHardSubjectRoute(currentBelt, "releases_hugs")
                                     } else {
                                         askSubTopicsForId = card.id
@@ -1333,20 +1263,10 @@ internal fun TopicsBySubjectCard(
 
                                     val chosenBelt = action.chosenBelt
 
-                                    android.util.Log.e(
-                                        "KMI_NAV",
-                                        "KAVALER HARD_ROUTE -> currentBelt=${currentBelt.id} chosenBelt=${chosenBelt.id} subjectId='topic_kavaler'"
-                                    )
-
                                     onOpenHardSubjectRoute(chosenBelt, "topic_kavaler")
                                 }
 
                                 else -> {
-                                    android.util.Log.e(
-                                        "KMI_NAV",
-                                        "NO_SUBTOPIC click -> title='${subject.titleHeb}' id='${subject.id}' currentBelt=${currentBelt.id}"
-                                    )
-
                                     openSubjectSmart(subject)
                                 }
                             }
@@ -1380,10 +1300,6 @@ internal fun TopicsBySubjectCard(
                                             accessMode == AccessMode.OPEN
 
                                         if (!canOpen) {
-                                            android.util.Log.e(
-                                                "KMI_LOCK_TRACE",
-                                                "DEFENSE ROOT BLOCKED -> open subscription for kind='${decision.kind}'"
-                                            )
                                             onOpenSubscription()
                                         } else {
                                             askKind = decision.kind
@@ -1395,10 +1311,6 @@ internal fun TopicsBySubjectCard(
                                             LockedContentPolicy.canOpenTopic(accessMode, decision.subjectId)
 
                                         if (!canOpen) {
-                                            android.util.Log.e(
-                                                "KMI_LOCK_TRACE",
-                                                "DEFENSE ROOT BLOCKED -> open subscription for subjectId='${decision.subjectId}'"
-                                            )
                                             onOpenSubscription()
                                         } else {
                                             onOpenHardSubjectRoute(currentBelt, decision.subjectId)
@@ -1428,10 +1340,6 @@ internal fun TopicsBySubjectCard(
                                             accessMode == AccessMode.OPEN
 
                                         if (!canOpen) {
-                                            android.util.Log.e(
-                                                "KMI_LOCK_TRACE",
-                                                "DEFENSE KIND BLOCKED -> open subscription kind='${decision.kind}' pick='${decision.pick}'"
-                                            )
                                             onOpenSubscription()
                                         } else {
                                             onOpenDefenseList(
@@ -1481,11 +1389,6 @@ internal fun TopicsBySubjectCard(
                                 val hardSubjectId = handsSectionIdFor(picked)
 
                                 if (hardSubjectId != null) {
-                                    android.util.Log.e(
-                                        "KMI_NAV",
-                                        "Hands dialog -> hard subject '$hardSubjectId' picked='$picked'"
-                                    )
-
                                     onOpenHardSubjectRoute(currentBelt, hardSubjectId)
                                 } else {
                                     val subject = SubjectTopicsUiLogic.resolveHandsPick(
@@ -1494,14 +1397,7 @@ internal fun TopicsBySubjectCard(
                                     )
 
                                     if (subject != null) {
-                                        android.util.Log.e(
-                                            "KMI_NAV",
-                                            "Hands tmp subject: id='${subject.id}' title='${subject.titleHeb}' hint='${subject.subTopicHint}' topicsByBelt=${subject.topicsByBelt}"
-                                        )
-
                                         openSubjectSmart(subject)
-                                    } else {
-                                        android.util.Log.e("KMI_NAV", "Hands base is NULL -> cannot navigate")
                                     }
                                 }
                             }
@@ -1554,11 +1450,6 @@ internal fun TopicsBySubjectCard(
                                                 dialogData.base?.titleHeb.orEmpty()
                                             )
 
-                                android.util.Log.e(
-                                    "KMI_LOCK_TRACE",
-                                    "BY_TOPIC onPick parentId='${dialogData.base?.id}' parentTitle='${dialogData.base?.titleHeb}' pickedDisplay='$pickedDisplay' picked='$picked' hasAccess=$hasAccess accessMode=$accessMode isLockedPick=$isLockedPick"
-                                )
-
                                 if (isLockedPick) {
                                     onOpenSubscription()
                                     return@SubTopicsPickModeDialogModern
@@ -1573,11 +1464,6 @@ internal fun TopicsBySubjectCard(
 
                                 when (decision) {
                                     is SubjectTopicsUiLogic.SubTopicPickDecision.OpenTopicWithSub -> {
-                                        android.util.Log.e(
-                                            "KMI_NAV",
-                                            "SubTopic decision -> onOpenTopicWithSub(${decision.topic}, ${decision.subTopic})"
-                                        )
-
                                         onOpenTopicWithSub(
                                             currentBelt,
                                             decision.topic,
@@ -1592,18 +1478,8 @@ internal fun TopicsBySubjectCard(
                                         }
 
                                         if (hardSubjectId != null) {
-                                            android.util.Log.e(
-                                                "KMI_NAV",
-                                                "SubTopic decision DIRECT_HARD_SUBJECT -> subjectId='$hardSubjectId' picked='$picked'"
-                                            )
-
                                             onOpenHardSubjectRoute(currentBelt, hardSubjectId)
                                         } else {
-                                            android.util.Log.e(
-                                                "KMI_NAV",
-                                                "SubTopic decision -> openSubjectSmart id='${decision.subject.id}' title='${decision.subject.titleHeb}'"
-                                            )
-
                                             openSubjectSmart(decision.subject)
                                         }
                                     }

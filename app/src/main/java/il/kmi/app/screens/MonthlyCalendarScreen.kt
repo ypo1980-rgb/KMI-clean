@@ -69,48 +69,6 @@ private data class CalendarTrainingItem(
 }
 
 /* -------------------------------------------------------------------------- */
-/*                              Debug banner                                  */
-/* -------------------------------------------------------------------------- */
-
-@Composable
-private fun DebugBanner(
-    region: String,
-    normBranchKey: String,
-    normGroupKey: String,
-    ym: YearMonth,
-    holidaysByDate: Map<LocalDate, String>,
-    trainingsCountByDate: Map<LocalDate, Int>,
-    missingReason: String?
-) {
-    // ✅ "בעיה" רק אם יש סיבה אמיתית
-    val hasIssue = (missingReason != null) || trainingsCountByDate.isEmpty()
-
-    // ✅ אם אין בעיה – לא מציגים באנר בכלל (גם אם holidays=0)
-    if (!hasIssue) return
-
-    Surface(
-        color = Color(0x33FF0000),
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-    ) {
-        Column(Modifier.padding(10.dp)) {
-            Text("דיאגנוסטיקה", fontWeight = FontWeight.Bold)
-            if (missingReason != null) Text("• $missingReason", color = Color.Red)
-
-            Text("• YM: $ym")
-            Text("• region='$region'")
-            Text("• branchKey='$normBranchKey'  (branches=${TrainingCatalog.branchesFor(region)})")
-            Text("• groupKey='$normGroupKey'")
-            Text("• holidays.thisMonth=${holidaysByDate.size}")
-            Text("• trainings.thisMonth=${trainingsCountByDate.size}")
-        }
-    }
-}
-
-
-/* -------------------------------------------------------------------------- */
 /*                             Screen itself                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -325,28 +283,6 @@ fun MonthlyCalendarScreen(
             !databaseBranchExists && !TrainingCatalog.branchesFor(region).contains(primaryBranch) ->
                 "הסניף \"$primaryBranch\" לא שייך לאזור \"$region\""
             else -> null
-        }
-
-        // לוגים
-        LaunchedEffect(
-            ym,
-            holidaysByDate,
-            trainingsCountByDate,
-            region,
-            primaryBranch,
-            primaryGroup,
-            summaryDatesThisMonth
-        ) {
-            if (missingReason != null) {
-                android.util.Log.w("CalendarDebug", "NO TRAININGS: $missingReason")
-            } else {
-                android.util.Log.d(
-                    "CalendarDebug",
-                    "ym=$ym holidays=${holidaysByDate.size} trainings=${trainingsCountByDate.size} " +
-                            "region=$region branchKey=$primaryBranch groupKey=$primaryGroup " +
-                            "summaryDates=$summaryDatesThisMonth"
-                )
-            }
         }
 
         Scaffold(
@@ -1571,25 +1507,12 @@ object JewishHolidays {
                 .bufferedReader()
                 .use(BufferedReader::readText)
             parse(json)
-        }.getOrElse { e ->
-            val assetList = runCatching { ctx.assets.list("")?.toList().orEmpty() }.getOrElse { emptyList() }
-            android.util.Log.e(
-                "CalendarDebug",
-                "Failed to open/parse asset '$assetFile'. assets(root)=$assetList error=${e::class.java.simpleName}: ${e.message}"
-            )
+        }.getOrElse {
             emptyMap()
         }
 
         cache = all
         loadedFrom = assetFile
-
-        // ✅ חדש: לוג טווח אמיתי בקובץ
-        val min = all.keys.minOrNull()
-        val max = all.keys.maxOrNull()
-        android.util.Log.d(
-            "CalendarDebug",
-            "Holidays loaded: asset='$assetFile' items=${all.size} range=${min ?: "n/a"}..${max ?: "n/a"}"
-        )
 
         return all.filterKeys { YearMonth.from(it) == ym }
     }

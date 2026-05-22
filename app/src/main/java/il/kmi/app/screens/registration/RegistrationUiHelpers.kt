@@ -5,12 +5,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
-import android.util.Log
-import android.widget.Toast
-import androidx.compose.runtime.*
 import com.google.firebase.FirebaseException
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
 import il.kmi.shared.prefs.KmiPrefs
@@ -165,8 +161,6 @@ object PhoneAuthHelpers {
             }
 
             override fun onVerificationFailed(e: FirebaseException) {
-                val code = (e as? FirebaseAuthException)?.errorCode
-                Log.e("PhoneAuth", "onVerificationFailed code=$code", e)
                 onError(e)
             }
 

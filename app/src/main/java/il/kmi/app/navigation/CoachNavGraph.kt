@@ -55,12 +55,6 @@ fun NavGraphBuilder.coachNavGraph(
 
                 runCatching {
                     ctx.startActivity(intent)
-                }.onFailure { e ->
-                    android.util.Log.e(
-                        "CoachBroadcast",
-                        "failed to open SMS app numbers=${numbers.size}",
-                        e
-                    )
                 }
             },
 
@@ -80,12 +74,6 @@ fun NavGraphBuilder.coachNavGraph(
 
                 runCatching {
                     ctx.startActivity(chooser)
-                }.onFailure { e ->
-                    android.util.Log.e(
-                        "CoachBroadcast",
-                        "failed to open share sheet",
-                        e
-                    )
                 }
             }
         )

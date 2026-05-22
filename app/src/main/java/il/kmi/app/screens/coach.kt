@@ -4,7 +4,6 @@ package il.kmi.app.screens.coach
 
 import android.app.Application
 import android.content.Context
-import android.util.Log
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,6 +13,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -564,8 +564,7 @@ fun CoachTraineesScreen(
                     displayName = fullName.trim()
                 )
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Exception) {
         }
 
         // --- מאזינים ל-DB המקומי ובונים TraineeProfile "עשיר" (כולל Firestore) ---
@@ -774,8 +773,6 @@ fun CoachTraineesScreen(
                             )
                         }
                 }
-            }.onFailure { e ->
-                Log.e("COACH_TRAINEES", "fetch users for profiles FAILED", e)
             }.getOrNull().orEmpty()
 
             for (doc in userDocs) {
@@ -980,11 +977,6 @@ fun CoachTraineesScreen(
         val targetBranch = selectedProfile.branch.normSaveKey()
         val targetGroup = selectedProfile.groupKey.normSaveKey()
 
-        Log.e(
-            "COACH_TRAINEES_SAVE",
-            "resolveUserDocId fallback name=${selectedProfile.fullName} branch=${selectedProfile.branch} group=${selectedProfile.groupKey}"
-        )
-
         val docs = Firebase.firestore.collection("users")
             .whereEqualTo("role", "trainee")
             .get()
@@ -1033,11 +1025,6 @@ fun CoachTraineesScreen(
 
         val resolvedDocId = matched?.id.orEmpty()
 
-        Log.e(
-            "COACH_TRAINEES_SAVE",
-            "resolveUserDocId result name=${selectedProfile.fullName} resolvedDocId=$resolvedDocId"
-        )
-
         if (resolvedDocId.isBlank()) {
             error("Missing userDocId for trainee: ${selectedProfile.fullName}")
         }
@@ -1050,11 +1037,6 @@ fun CoachTraineesScreen(
         dates: Map<String, String>
     ) {
         val userDocId = resolveUserDocIdForSelected(selectedProfile)
-
-        Log.e(
-            "COACH_TRAINEES_SAVE",
-            "saveBeltAwardDates userDocId=$userDocId name=${selectedProfile.fullName} dates=$dates"
-        )
 
         val cleanedDates = dates
             .mapValues { it.value.trim() }
@@ -1070,11 +1052,6 @@ fun CoachTraineesScreen(
             .document(userDocId)
             .update(updates)
             .await()
-
-        Log.e(
-            "COACH_TRAINEES_SAVE",
-            "saveBeltAwardDates SUCCESS userDocId=$userDocId updates=$updates"
-        )
     }
 
     suspend fun saveCoachDateSectionForSelected(
@@ -1781,13 +1758,7 @@ fun CoachTraineesScreen(
                                                                 )
                                                             }.onSuccess {
                                                                 beltDatesSaveMessage = coachTr(isEnglish, "תאריכי החגורות נשמרו", "Belt dates saved")
-                                                            }.onFailure { error ->
-                                                                Log.e(
-                                                                    "COACH_TRAINEES_SAVE",
-                                                                    "saveBeltAwardDates FAILED name=${selectedProfile.fullName}",
-                                                                    error
-                                                                )
-
+                                                            }.onFailure {
                                                                 beltDatesSaveMessage = coachTr(
                                                                     isEnglish,
                                                                     "שמירת תאריכי החגורות נכשלה",

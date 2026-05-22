@@ -22,9 +22,6 @@ class KmiApp : Application() {
         // ✅ חובה: אתחול ה-ContentRepo (Source of Truth)
         il.kmi.app.domain.ContentRepo.initIfNeeded()
 
-        // ✅ DEBUG – מדפיס פעם אחת מה באמת יש ב-Repo
-        il.kmi.app.search.KmiSearchBridge.debugLogRepoOnce()
-
         // ✅ Shared platform & prefs
         runCatching { il.kmi.shared.Platform.init(appContext = this) }
         runCatching { il.kmi.shared.prefs.SharedSettingsFactoryProvider.init(context = this) }

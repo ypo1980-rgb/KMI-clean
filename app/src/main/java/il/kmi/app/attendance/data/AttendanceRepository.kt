@@ -1,7 +1,6 @@
 package il.kmi.app.attendance.data
 
 import android.app.Application
-import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
@@ -115,25 +114,13 @@ class AttendanceRepository private constructor(
 
         val groupId = groupDocId(branch, groupKey)
 
-        Log.i(
-            "ATT_FIRESTORE",
-            "members listener START groupId=$groupId branch=$branch group=$groupKey"
-        )
-
         val registration: ListenerRegistration = membersRef(branch, groupKey)
             .orderBy("displayName")
             .addSnapshotListener { snap, error ->
                 if (error != null) {
-                    Log.e(
-                        "ATT_FIRESTORE",
-                        "members listener FAILED groupId=$groupId branch=$branch group=$groupKey",
-                        error
-                    )
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
-
-                val docsCount = snap?.documents?.size ?: 0
 
                 val list = snap?.documents
                     ?.mapNotNull { doc ->
@@ -150,11 +137,6 @@ class AttendanceRepository private constructor(
                         )
                     }
                     ?: emptyList()
-
-                Log.i(
-                    "ATT_FIRESTORE",
-                    "members listener RESULT groupId=$groupId docs=$docsCount list=${list.size} names=${list.map { it.displayName }}"
-                )
 
                 trySend(list)
             }
@@ -207,11 +189,6 @@ class AttendanceRepository private constructor(
 
         docRef.set(data, SetOptions.merge()).await()
 
-        Log.i(
-            "ATT_FIRESTORE",
-            "member added/merged branch=$branch group=$groupKey memberId=$memberId name=$cleanName"
-        )
-
         return memberId
     }
 
@@ -241,19 +218,8 @@ class AttendanceRepository private constructor(
                     .document(memberId.toString())
                     .delete()
                     .await()
-            }.onFailure {
-                Log.e(
-                    "ATT_FIRESTORE",
-                    "failed deleting record for memberId=$memberId session=${session.id}",
-                    it
-                )
             }
         }
-
-        Log.i(
-            "ATT_FIRESTORE",
-            "member removed branch=$branch group=$groupKey memberId=$memberId"
-        )
     }
 
     /**
@@ -319,11 +285,6 @@ class AttendanceRepository private constructor(
             .collection("records")
             .addSnapshotListener { snap, error ->
                 if (error != null) {
-                    Log.e(
-                        "ATT_FIRESTORE",
-                        "attendanceForDay listener failed branch=$branch group=$groupKey date=$date",
-                        error
-                    )
                     trySend(emptyList())
                     return@addSnapshotListener
                 }
@@ -393,11 +354,6 @@ class AttendanceRepository private constructor(
             .document(memberId.toString())
             .set(data, SetOptions.merge())
             .await()
-
-        Log.i(
-            "ATT_FIRESTORE",
-            "marked sessionId=$sessionId memberId=$memberId status=$status"
-        )
     }
 
     /**
@@ -542,11 +498,6 @@ class AttendanceRepository private constructor(
             .await()
 
         deleteReportsOlderThanOneYear(branch, groupKey)
-
-        Log.i(
-            "ATT_FIRESTORE",
-            "report saved branch=$branch group=$groupKey date=$date total=$total percent=$percent"
-        )
     }
 
     private suspend fun deleteReportsOlderThanOneYear(branch: String, groupKey: String) {
@@ -579,8 +530,6 @@ class AttendanceRepository private constructor(
                     .delete()
                     .await()
                 deleted++
-            }.onFailure {
-                Log.e("ATT_FIRESTORE", "failed deleting report id=$id", it)
             }
         }
 
@@ -636,7 +585,6 @@ class AttendanceRepository private constructor(
 
         val registration = query.addSnapshotListener { snap, error ->
             if (error != null) {
-                Log.e("ATT_FIRESTORE", "reports listener failed branch=$branch group=$groupKey", error)
                 trySend(emptyList())
                 return@addSnapshotListener
             }
@@ -702,11 +650,6 @@ class AttendanceRepository private constructor(
         }
 
         clearReports(branch, groupKey)
-
-        Log.i(
-            "ATT_FIRESTORE",
-            "attendance reset branch=$branch group=$groupKey"
-        )
     }
 
     companion object {

@@ -52,24 +52,15 @@ private val subjectScreenGradientMid = Color(0xFFF7F8FC)
 private val subjectScreenGradientBottom = Color(0xFFFDFDFE)
 
 @Composable
-fun UnifiedSubjectExercisesScreen(    subjectId: String,
+fun UnifiedSubjectExercisesScreen(
+    subjectId: String,
     sectionId: String? = null,
     onOpenSection: (subjectId: String, sectionId: String?) -> Unit,
     onBack: () -> Unit
 ) {
-    android.util.Log.e(
-        "KMI_HARD",
-        "UnifiedSubjectExercisesScreen subjectId='$subjectId' sectionId='$sectionId'"
-    )
-
     val result = remember(subjectId, sectionId) {
         HardSectionsResolver.resolve(subjectId, sectionId)
     }
-
-    android.util.Log.e(
-        "KMI_HARD",
-        "UnifiedSubjectExercisesScreen result='${result?.javaClass?.simpleName}'"
-    )
 
     Scaffold(
         topBar = {
@@ -105,11 +96,6 @@ fun UnifiedSubjectExercisesScreen(    subjectId: String,
         ) {
             when (result) {
                 is HardSectionsResolver.NodeResult.Sections -> {
-                    android.util.Log.e(
-                        "KMI_HARD",
-                        "UnifiedSubjectExercisesScreen render Sections title='${result.title}' entries=${result.entries.map { it.id }}"
-                    )
-
                     SectionsContent(
                         subjectId = subjectId,
                         title = result.title,
@@ -120,11 +106,6 @@ fun UnifiedSubjectExercisesScreen(    subjectId: String,
                 }
 
                 is HardSectionsResolver.NodeResult.BeltGroups -> {
-                    android.util.Log.e(
-                        "KMI_HARD",
-                        "UnifiedSubjectExercisesScreen render BeltGroups title='${result.title}' groups=${result.groups.map { it.belt.id to it.items.size }}"
-                    )
-
                     BeltGroupsContent(
                         title = result.title,
                         groups = result.groups,

@@ -2,7 +2,6 @@ package il.kmi.app.navigation
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
@@ -310,19 +309,8 @@ fun NavGraphBuilder.homeNavGraph(
         fun shouldBlockPremiumTopic(raw: String): Boolean {
             val locked = isLockedPremiumTopic(raw)
             val hasAccess = hasPremiumAccessNow()
-            val result = locked && !hasAccess
-
-            Log.e(
-                "KMI_LOCK_TRACE",
-                "HomeNavGraph shouldBlockPremiumTopic raw='$raw' locked=$locked hasAccess=$hasAccess result=$result"
-            )
-
-            return result
+            return locked && !hasAccess
         }
-
-        Log.e("KMI_WHERE", "ENTER HomeNavGraph -> Route.BeltQByTopic")
-        Log.e("KMI_NAV", "ENTER Route.BeltQByTopic CALLBACK_PROBE_C")
-        Log.e("KMI_NAV", "CALL BeltQuestionsByTopicScreen from Route.BeltQByTopic CALLBACK_PROBE_D")
 
         fun openSubTopics(
             belt: Belt,
@@ -333,11 +321,6 @@ fun NavGraphBuilder.homeNavGraph(
             val route = il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
                 belt = belt,
                 topic = topic
-            )
-
-            Log.e(
-                "KMI_SUB",
-                "home openSubTopics belt=${belt.id} topic='$topic' route='$route'"
             )
 
             nav.navigate(route) {
@@ -359,11 +342,6 @@ fun NavGraphBuilder.homeNavGraph(
                 subTopic = subTopic
             ) ?: return
 
-            Log.e(
-                "KMI_SUB",
-                "home openChosenSubTopic belt=${belt.id} topic='$topic' sub='$subTopic' route='$route'"
-            )
-
             nav.navigate(route) {
                 launchSingleTop = true
                 restoreState = true
@@ -373,7 +351,6 @@ fun NavGraphBuilder.homeNavGraph(
         BeltQuestionsByTopicScreen(
 
             onOpenSubscription = {
-                Log.e("KMI_LOCK_TRACE", "HOME_NAV -> Route.Subscription")
                 nav.navigate(Route.Subscription.route) {
                     launchSingleTop = true
                     restoreState = true
@@ -383,11 +360,6 @@ fun NavGraphBuilder.homeNavGraph(
             onOpenHardSubjectRoute = { belt, subjectId ->
 
                 vm.setSelectedBelt(belt)
-
-                Log.e(
-                    "KMI_SUB",
-                    "homeNavGraph onOpenHardSubjectRoute belt=${belt.id} subjectId='$subjectId'"
-                )
 
                 if (shouldBlockPremiumTopic(subjectId)) {
                     nav.navigate(Route.Subscription.route) {

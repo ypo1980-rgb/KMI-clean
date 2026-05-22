@@ -1,6 +1,5 @@
 package il.kmi.app.domain
 
-import android.util.Log
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 
@@ -29,14 +28,8 @@ object ContentRepo {
         synchronized(this) {
             if (inited) return
 
-            val keysBefore = SharedContentRepo.data.keys
-            Log.e("KMI_DBG", "ContentRepo.initIfNeeded() shared keys BEFORE=${keysBefore.size} -> $keysBefore")
-
             // ✅ ניסיון להפעיל warmup ב-Shared גם אם השם המדויק לא ידוע (reflection-safe)
             tryWarmupSharedRepo()
-
-            val keysAfter = SharedContentRepo.data.keys
-            Log.e("KMI_DBG", "ContentRepo.initIfNeeded() shared keys AFTER=${keysAfter.size} -> $keysAfter")
 
             inited = true
         }
@@ -66,8 +59,6 @@ object ContentRepo {
 
                 m.isAccessible = true
                 m.invoke(instance)
-
-                Log.e("KMI_DBG", "ContentRepo.initIfNeeded() invoked SharedContentRepo.$name()")
             }
         }
     }

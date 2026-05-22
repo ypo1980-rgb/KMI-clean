@@ -87,7 +87,6 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.database.KmiDatabaseProvider
 import kotlinx.coroutines.delay
-import il.kmi.app.debug.ExplanationAudit
 
 //=================================================================================
 
@@ -236,12 +235,6 @@ fun HomeScreen(
     val haptic = rememberHapticsGlobal()
     val clickSound = rememberClickSound()
 
-    // ✅ בדיקה זמנית: מוצא את כל התרגילים שאין להם הסבר אמיתי.
-    // אחרי שסיימת לבדוק ב-Logcat — למחוק את ה-LaunchedEffect הזה.
-    LaunchedEffect(Unit) {
-        ExplanationAudit.runHebrewAudit()
-    }
-
     // 🔵 מצב לדיאלוג העוזר האישי (AI)
     var showAiDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -388,12 +381,6 @@ fun HomeScreen(
                         key == "access_changed_at"
                     ) {
                         homeAccessRefreshTick++
-
-                        android.util.Log.e(
-                            "KMI_ACCESS_MODE",
-                            "HOME access pref changed source=${if (changedSp === userSp) "kmi_user" else if (changedSp === subsSp) "kmi_subs" else "kmi_prefs"} " +
-                                    "key=$key tick=$homeAccessRefreshTick"
-                        )
                     }
                 }
 
@@ -438,10 +425,6 @@ fun HomeScreen(
                         .putLong("access_changed_at", System.currentTimeMillis())
                         .apply()
 
-                    android.util.Log.e(
-                        "KMI_ACCESS_MODE",
-                        "HOME expired subscription flags cleared prefs=$this until=$until now=$now"
-                    )
                 }
 
                 return active
@@ -451,26 +434,6 @@ fun HomeScreen(
                 userSp.hasActiveSubscriptionAccess() ||
                         subsSp.hasActiveSubscriptionAccess() ||
                         legacySp.hasActiveSubscriptionAccess()
-            }
-
-            LaunchedEffect(hasFullAccess, homeAccessRefreshTick) {
-                android.util.Log.e(
-                    "KMI_ACCESS_MODE",
-                    "HOME hasFullAccess=$hasFullAccess tick=$homeAccessRefreshTick " +
-                            "isAdmin=${KmiAccess.isAdmin(userSp)} " +
-                            "user_full=${userSp.getBoolean("has_full_access", false)} " +
-                            "subs_full=${subsSp.getBoolean("has_full_access", false)} " +
-                            "legacy_full=${legacySp.getBoolean("has_full_access", false)} " +
-                            "user_active=${userSp.getBoolean("subscription_active", false)} " +
-                            "subs_active=${subsSp.getBoolean("subscription_active", false)} " +
-                            "legacy_active=${legacySp.getBoolean("subscription_active", false)} " +
-                            "user_verified=${userSp.getBoolean("google_subscription_verified", false)} " +
-                            "subs_verified=${subsSp.getBoolean("google_subscription_verified", false)} " +
-                            "legacy_verified=${legacySp.getBoolean("google_subscription_verified", false)} " +
-                            "user_product=${userSp.getString("sub_product", "")} " +
-                            "subs_product=${subsSp.getString("sub_product", "")} " +
-                            "legacy_product=${legacySp.getString("sub_product", "")}"
-                )
             }
 
             // הסרגל הצף מופיע רק אחרי גלילה קטנה למטה.
@@ -571,16 +534,6 @@ fun HomeScreen(
                             "age_group",
                             "group" -> {
                                 groupsRefreshTick++
-                                android.util.Log.e(
-                                    "KMI_HOME_GROUPS",
-                                    "groups pref changed key=$key tick=$groupsRefreshTick " +
-                                            "groups_json=${userSp.getString("groups_json", "")} " +
-                                            "selected_groups=${userSp.getString("selected_groups", "")} " +
-                                            "groups=${userSp.getString("groups", "")} " +
-                                            "age_groups=${userSp.getString("age_groups", "")} " +
-                                            "age_group=${userSp.getString("age_group", "")} " +
-                                            "group=${userSp.getString("group", "")}"
-                                )
                             }
 
                             "coach_name" -> coachFromPrefs =
@@ -596,12 +549,6 @@ fun HomeScreen(
                     if (savedGroups.isEmpty()) listOf("בוגרים") else savedGroups
                 }
 
-                LaunchedEffect(groupsEffective, groupsRefreshTick) {
-                    android.util.Log.e(
-                        "KMI_HOME_GROUPS",
-                        "resolved groupsEffective=$groupsEffective tick=$groupsRefreshTick"
-                    )
-                }
                 // === KMI_MULTI_GROUPS (FIX) ===
 
                 // =========================
@@ -630,27 +577,12 @@ fun HomeScreen(
 
                         val reg = query.addSnapshotListener { snap, e ->
                             if (e != null) {
-                                android.util.Log.e(
-                                    "KMI_HOME_BROADCAST",
-                                    "coachBroadcast listener FAILED currentUid=$currentUid",
-                                    e
-                                )
                                 // אם יש שגיאה – לא מוחקים את ההודעה האחרונה שכבר מוצגת
                                 return@addSnapshotListener
                             }
 
-                            android.util.Log.e(
-                                "KMI_HOME_BROADCAST",
-                                "coachBroadcast snap currentUid=$currentUid size=${snap?.size() ?: -1}"
-                            )
-
                             if (snap != null && !snap.isEmpty) {
                                 val doc = snap.documents.first()
-
-                                android.util.Log.e(
-                                    "KMI_HOME_BROADCAST",
-                                    "coachBroadcast latest id=${doc.id} text=${doc.getString("text")} targetUids=${doc.get("targetUids")}"
-                                )
 
                                 lastCoachMessage = doc.getString("text")
                                     ?: doc.getString("message")
@@ -805,12 +737,6 @@ fun HomeScreen(
                             val branchesJson = org.json.JSONArray(remoteBranches).toString()
                             val groupsJson = org.json.JSONArray(remoteGroups).toString()
 
-                            android.util.Log.e(
-                                "KMI_HOME_HYDRATE",
-                                "remoteBranches=$remoteBranches remoteGroups=$remoteGroups " +
-                                        "activeBranch=$remoteActiveBranch activeGroup=$remoteActiveGroup"
-                            )
-
                             if (remoteBranches.isNotEmpty() || remoteGroups.isNotEmpty()) {
                                 userSp.edit()
                                     // ✅ ניקוי טיפוסים ישנים שאולי נשמרו כ־StringSet
@@ -840,12 +766,7 @@ fun HomeScreen(
                                 groupsRefreshTick++
                             }
                         }
-                        .addOnFailureListener { e ->
-                            android.util.Log.e(
-                                "KMI_HOME_HYDRATE",
-                                "failed to hydrate home profile from Firestore",
-                                e
-                            )
+                        .addOnFailureListener {
                         }
                 }
 
@@ -861,18 +782,6 @@ fun HomeScreen(
                             key == "branch_type"
                         ) {
                             branchesRefreshTick++
-
-                            android.util.Log.e(
-                                "KMI_HOME_BRANCHES",
-                                "branches pref changed key=$key tick=$branchesRefreshTick " +
-                                        "branches_json=${userSp.getString("branches_json", "")} " +
-                                        "selected_branches=${userSp.getString("selected_branches", "")} " +
-                                        "branches=${userSp.getString("branches", "")} " +
-                                        "branch=${userSp.getString("branch", "")} " +
-                                        "branch2=${userSp.getString("branch2", "")} " +
-                                        "branch3=${userSp.getString("branch3", "")} " +
-                                        "branch_type=${userSp.getString("branch_type", "")}"
-                            )
                         }
                     }
 
@@ -899,19 +808,6 @@ fun HomeScreen(
                     } else {
                         selectedBranches.take(3)
                     }
-                }
-
-                LaunchedEffect(branchesEffective, branchTypeHome, branchesRefreshTick) {
-                    android.util.Log.e(
-                        "KMI_HOME_BRANCHES",
-                        "resolved branchesEffective=$branchesEffective " +
-                                "selectedBranches=$selectedBranches " +
-                                "branchTypeHome=$branchTypeHome tick=$branchesRefreshTick " +
-                                "branches_json=${userSp.getString("branches_json", "")} " +
-                                "selected_branches=${userSp.getString("selected_branches", "")} " +
-                                "branches=${userSp.getString("branches", "")} " +
-                                "branch=${userSp.getString("branch", "")}"
-                    )
                 }
 
                 // ✅ name להצגה + פרמטרים לניווט אימונים חופשיים (נעדכן state כדי שה-FAB יוכל להשתמש גם מחוץ ל-Column)
@@ -1258,10 +1154,6 @@ fun HomeScreen(
 
                 val currentWeekCandidates: List<TrainingData> =
                     remember(branchesEffective, groupsEffective, coachFromPrefs, isEnglish) {
-                        android.util.Log.e(
-                            "KMI_HOME_SCHEDULE",
-                            "START DB-FIRST branchesEffective=$branchesEffective groupsEffective=$groupsEffective"
-                        )
 
                         val all = mutableListOf<TrainingData>()
 
@@ -1283,11 +1175,6 @@ fun HomeScreen(
                                     val validDbItems = dbItems
                                         .map { it.copy(cal = rollForwardIfPast(it.cal, 60)) }
                                         .filter { isWithinUpcomingSevenDays(it.cal) }
-
-                                    android.util.Log.e(
-                                        "KMI_HOME_SCHEDULE",
-                                        "DB items branch='$branchName' group='$grp' count=${validDbItems.size}"
-                                    )
 
                                     all += validDbItems
                                     return@forEach
@@ -1331,13 +1218,6 @@ fun HomeScreen(
                                     }
                                     .firstOrNull()
 
-                                android.util.Log.e(
-                                    "KMI_HOME_SCHEDULE",
-                                    "FALLBACK schedule lookup originalBranch='$branchName' originalGroup='$grp' " +
-                                            "matchedBranch='$matchedBranch' matchedGroup='$matchedGroup' " +
-                                            "found=${sched != null}"
-                                )
-
                                 val coach =
                                     sched?.coachName?.takeIf { it.isNotBlank() }
                                         ?: coachFromPrefs.takeIf { it.isNotBlank() }
@@ -1361,11 +1241,6 @@ fun HomeScreen(
                                     .map { it.copy(cal = rollForwardIfPast(it.cal, 60)) }
                                     .filter { isWithinUpcomingSevenDays(it.cal) }
 
-                                android.util.Log.e(
-                                    "KMI_HOME_SCHEDULE",
-                                    "FALLBACK items branch='$branchName' group='$grp' count=${validFallbackItems.size}"
-                                )
-
                                 all += validFallbackItems
                             }
                         }
@@ -1382,14 +1257,6 @@ fun HomeScreen(
                             }
                         }
                             .sortedBy { it.cal.timeInMillis }
-
-                        android.util.Log.e(
-                            "KMI_HOME_SCHEDULE",
-                            "FINAL DB-FIRST candidates=${result.size} " +
-                                    result.joinToString(" || ") {
-                                        "${it.place} | ${it.address} | ${it.cal.time}"
-                                    }
-                        )
 
                         result
                     }

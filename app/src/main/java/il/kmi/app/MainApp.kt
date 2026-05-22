@@ -182,22 +182,8 @@ fun MainApp(
         // במסכי רישום/כניסה לא דוחפים את המשתמש בכוח לפורום.
         // אחרי כניסה לאפליקציה, ה-effect ירוץ שוב ויפתח את הפורום.
         if (isRegistrationRouteForDrawer) {
-            android.util.Log.e(
-                "KMI_FORUM_PUSH",
-                "pending forum push exists but current route is registration/entry route=$currentRoute"
-            )
             return@LaunchedEffect
         }
-
-        val roomId = forumPushSp.getString("forum_room_id", "").orEmpty()
-        val messageId = forumPushSp.getString("forum_message_id", "").orEmpty()
-        val branchId = forumPushSp.getString("forum_branch_id", "").orEmpty()
-        val groupKey = forumPushSp.getString("forum_group_key", "").orEmpty()
-
-        android.util.Log.e(
-            "KMI_FORUM_PUSH",
-            "opening forum from pending push roomId=$roomId messageId=$messageId branchId=$branchId groupKey=$groupKey currentRoute=$currentRoute"
-        )
 
         forumPushSp.edit()
             .putBoolean("has_pending_forum_push", false)
@@ -241,11 +227,6 @@ fun MainApp(
                     il.kmi.shared.localization.AppLanguageManager(ctxForLanguage)
                         .getCurrentLanguage()
 
-                android.util.Log.e(
-                    "KMI_LANG",
-                    "MAIN_PREF_LISTENER key=$key newStoredLanguage=$newStoredLanguage oldState=$appLanguage"
-                )
-
                 appLanguage = newStoredLanguage
             }
         }
@@ -262,11 +243,6 @@ fun MainApp(
 
         appLanguage = newLanguage
         manager.setLanguage(newLanguage)
-
-        android.util.Log.e(
-            "KMI_LANG",
-            "MAIN_onLanguageChanged requested=$newLanguage finalState=$appLanguage"
-        )
     }
 
     MaterialTheme(

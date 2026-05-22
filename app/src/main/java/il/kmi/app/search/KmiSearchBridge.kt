@@ -123,28 +123,6 @@ object KmiSearchBridge {
         return SharedContentRepo.data[belt]
     }
 
-    // ✅ DEBUG: בדיקה מה נטען (מה-SharedContentRepo בפועל)
-    @JvmStatic
-    fun debugLogRepoOnce() {
-        try {
-            android.util.Log.e("KMI_DBG", "debugLogRepoOnce() START")
-
-            val dump = debugDumpRepo()
-            android.util.Log.e("KMI_DBG", "repoDump=$dump")
-
-            val greenTitles = topicTitlesFor(belt = Belt.GREEN)
-            android.util.Log.e("KMI_DBG", "GREEN topics count=${greenTitles.size}")
-            if (greenTitles.isNotEmpty()) {
-                android.util.Log.e(
-                    "KMI_DBG",
-                    "GREEN topics sample=${greenTitles.take(5).joinToString(" | ")}"
-                )
-            }
-        } catch (t: Throwable) {
-            android.util.Log.e("KMI_DBG", "debugLogRepoOnce failed", t)
-        }
-    }
-
     /** דיבוג מהיר לראות מה נטען (מה-SharedContentRepo בפועל) */
     fun debugDumpRepo(): String = runCatching {
         val keys = SharedContentRepo.data.keys.joinToString(",") { it.name }

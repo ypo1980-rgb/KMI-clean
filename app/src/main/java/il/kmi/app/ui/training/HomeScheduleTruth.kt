@@ -632,11 +632,6 @@ fun TrainingSummaryScreen(
                                             System.currentTimeMillis()
                                         )
                                         .apply()
-
-                                    android.util.Log.d(
-                                        "KMI_SUMMARY_MARK",
-                                        "summary day marked locally cleanIso=$cleanIso local=$cur calendar=$summaryCur"
-                                    )
                                 }
 
                                 vm.save(
@@ -644,13 +639,7 @@ fun TrainingSummaryScreen(
                                         markSummaryDayLocally()
                                         onBack?.invoke()
                                     },
-                                    onError = { t ->
-                                        android.util.Log.e(
-                                            "KMI_SUMMARY_MARK",
-                                            "summary remote save failed - returning anyway and marking locally",
-                                            t
-                                        )
-
+                                    onError = {
                                         // כרגע Firestore חסום בהרשאות.
                                         // כדי שה-UX לא ייתקע, נסמן מקומית ונחזור למסך הקודם.
                                         markSummaryDayLocally()

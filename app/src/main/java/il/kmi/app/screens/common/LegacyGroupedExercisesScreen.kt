@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import il.kmi.app.ui.color
 import il.kmi.shared.domain.Belt
-import il.kmi.shared.domain.content.HardSectionsCatalog
 
 @Composable
 fun LegacyGroupedExercisesScreen(
@@ -133,64 +132,6 @@ fun LegacyGroupedExercisesScreen(
                 fontWeight = FontWeight.Medium
             )
             return
-        }
-
-        // ✅ DEBUG: הוכחה שהנתונים הם בדיוק מהקטלוג הקשיח (רק למסכי שחרורים)
-        if (title.contains("שחרור") || title.contains("שחרורים")) {
-
-            val hardMap: Map<Belt, List<String>> = remember {
-                val order: List<Belt> = listOf(
-                    Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK
-                )
-
-                order.associateWith { belt: Belt ->
-                    HardSectionsCatalog.releases
-                        .flatMap { sec ->
-                            // ✅ itemsFor הוא member-extension -> חייבים run { }
-                            HardSectionsCatalog.run { sec.itemsFor(belt) }
-                        }
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                }
-            }
-
-            val uiMap: Map<Belt, List<String>> = remember(groupedItems) {
-                groupedItems.associate { (b: Belt, items: List<String>) ->
-                    b to items.map { it.trim() }.filter { it.isNotBlank() }
-                }
-            }
-
-            val same: Boolean = hardMap.all { (belt: Belt, hardItems: List<String>) ->
-                val uiItems: List<String> = uiMap[belt].orEmpty()
-                uiItems.toSet() == hardItems.toSet() // ✅ לא תלוי סדר
-            }
-
-            val diffSummary: String = if (!same) {
-                hardMap.entries.joinToString(" | ") { (belt: Belt, hardItems: List<String>) ->
-                    val uiItems: List<String> = uiMap[belt].orEmpty()
-                    val missing = hardItems.toSet() - uiItems.toSet()
-                    val extra = uiItems.toSet() - hardItems.toSet()
-                    "${belt.name}: missing=${missing.size}, extra=${extra.size}"
-                }
-            } else ""
-
-            val hardSizes = remember(hardMap) {
-                hardMap.entries.joinToString { (b, it) -> "${b.name}=${it.size}" }
-            }
-            val uiSizes = remember(uiMap) {
-                uiMap.entries.joinToString { (b, it) -> "${b.name}=${it.size}" }
-            }
-
-            androidx.compose.runtime.LaunchedEffect(same, diffSummary, hardSizes, uiSizes) {
-                android.util.Log.e(
-                    "KMI_DBG",
-                    "RELEASES source-check: sameAsHard=$same " +
-                            hardSizes +
-                            " | ui=" +
-                            uiSizes +
-                            (if (diffSummary.isNotBlank()) " | diff=$diffSummary" else "")
-                )
-            }
         }
 
         // מציג לפי סדר חגורות

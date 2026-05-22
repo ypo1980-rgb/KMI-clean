@@ -7,7 +7,6 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.app.Activity
 import android.content.ContextWrapper
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
@@ -175,6 +174,7 @@ fun KmiTopBar(
     val ctx = LocalContext.current
     val languageManager = remember { AppLanguageManager(ctx) }
     val currentLangResolved = languageManager.getCurrentLanguage().code
+    val isEnglish = currentLangResolved == "en"
     val rootView = LocalView.current
     var hideBottomForShare by remember { mutableStateOf(false) }
 
@@ -278,15 +278,12 @@ fun KmiTopBar(
     val userIsCoach = isCoach(userRole)
     val isCoachForPill = modePillIsCoach ?: userIsCoach
 
-    // 🔧 דגל עזר: לאפשר פתיחה גם בלי “רשום” (כדי שלא ייחסם במסכי מאמן חדש)
-    val debugAllowCoachBroadcastWithoutRegistration = true
-
     // הגדרות זמינות תמיד
     val showSettingsAllowed = showSettings
 
     // האם לאפשר פתיחה
     val canBroadcast = userIsCoach &&
-            (!requireRegistrationForCoachBroadcast || isRegistered || debugAllowCoachBroadcastWithoutRegistration)
+            (!requireRegistrationForCoachBroadcast || isRegistered)
 
     /** טריגר לפתיחת "שידור מאמן". */
     val triggerCoachBroadcast: () -> Unit =
@@ -294,7 +291,11 @@ fun KmiTopBar(
             {
                 if (!canBroadcast) {
                     android.widget.Toast
-                        .makeText(ctx, "שידור זמין רק למאמנים", android.widget.Toast.LENGTH_SHORT)
+                        .makeText(
+                            ctx,
+                            if (isEnglish) "Broadcast is available to coaches only" else "שידור זמין רק למאמנים",
+                            android.widget.Toast.LENGTH_SHORT
+                        )
                         .show()
                     return@remember
                 }
@@ -633,7 +634,6 @@ fun KmiTopBar(
                         // 🔵 פה – אייקון ה-AI בסרגל התחתון
                         onOpenAi = {
                             if (isInsideAssistant) {
-                                Log.e("KMI_AI", "AI icon ignored (already inside assistant)")
                                 return@BottomActionsBarEdgeToEdge
                             }
                             showAiDialog = true
@@ -707,7 +707,7 @@ fun KmiTopBar(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        "שידור מאמן",
+                        if (isEnglish) "Coach Broadcast" else "שידור מאמן",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -717,7 +717,7 @@ fun KmiTopBar(
                         IconButton(onClick = { historyExpanded = true }) {
                             Icon(
                                 imageVector = Icons.Filled.History,
-                                contentDescription = "הודעות קודמות"
+                                contentDescription = if (isEnglish) "Previous messages" else "הודעות קודמות"
                             )
                         }
                         DropdownMenu(
@@ -726,7 +726,7 @@ fun KmiTopBar(
                         ) {
                             if (recentMessages.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text("אין הודעות שמורות") },
+                                    text = { Text(if (isEnglish) "No saved messages" else "אין הודעות שמורות") },
                                     enabled = false,
                                     onClick = {}
                                 )
@@ -754,7 +754,7 @@ fun KmiTopBar(
                                 }
                                 Divider()
                                 DropdownMenuItem(
-                                    text = { Text("נקה היסטוריה") },
+                                    text = { Text(if (isEnglish) "Clear history" else "נקה היסטוריה") },
                                     onClick = {
                                         spUser.edit().remove(PREF_RECENTS_KEY).apply()
                                         recentMessages.clear()
@@ -774,7 +774,7 @@ fun KmiTopBar(
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
                 maxLines = 6,
-                label = { Text("תוכן ההודעה") },
+                label = { Text(if (isEnglish) "Message content" else "תוכן ההודעה") },
                 isError = broadcastText.length > MAX_BROADCAST_CHARS,
                 supportingText = {
                     val count = "${broadcastText.length}/$MAX_BROADCAST_CHARS"
@@ -808,14 +808,14 @@ fun KmiTopBar(
                         }
                     },
                     enabled = canSend
-                ) { Text("שלח") }
+                ) { Text(if (isEnglish) "Send" else "שלח") }
 
                 TextButton(onClick = {
                     scope.launch {
                         runCatching { broadcastSheetState.hide() }
                         showBroadcastSheet = false
                     }
-                }) { Text("ביטול") }
+                }) { Text(if (isEnglish) "Cancel" else "ביטול") }
             }
 
             Spacer(Modifier.height(8.dp))
@@ -876,18 +876,31 @@ fun PremiumActionIcon(
 /* ====================== עזרים ====================== */
 
 private fun shareAppDefault(ctx: Context, text: String = "הורידו את KAMI – ק.מ.י") {
+    val isEnglish = AppLanguageManager(ctx).getCurrentLanguage().code == "en"
+    val shareTitle = if (isEnglish) "Share with" else "שתף באמצעות"
+
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, text)
     }
-    val chooser = Intent.createChooser(send, "שתף באמצעות")
+    val chooser = Intent.createChooser(send, shareTitle)
     if (ctx !is Activity) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     ctx.startActivity(chooser)
 }
 
 @Composable
 fun ModeBadgeSmall(isCoach: Boolean) {
-    val label = if (isCoach) "מאמן" else "מתאמן"
+    val ctx = LocalContext.current
+    val isEnglish = remember(ctx) {
+        AppLanguageManager(ctx).getCurrentLanguage().code == "en"
+    }
+
+    val label = if (isCoach) {
+        if (isEnglish) "Coach" else "מאמן"
+    } else {
+        if (isEnglish) "Trainee" else "מתאמן"
+    }
+
     Text(
         text = label,
         style = MaterialTheme.typography.labelSmall,

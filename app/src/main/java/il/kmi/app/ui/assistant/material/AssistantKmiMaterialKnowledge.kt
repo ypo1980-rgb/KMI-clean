@@ -1,6 +1,5 @@
 package il.kmi.app.ui.assistant.material
 
-import android.util.Log
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.search.asSharedRepo
 import il.kmi.app.search.toShared
@@ -23,8 +22,6 @@ import il.kmi.shared.search.SearchHit
  * - הקובץ הזה מחזיק את מנוע החיפוש והפורמט לרשימות, כדי להקטין את AiAssistantDialog.
  */
 object AssistantKmiMaterialKnowledge {
-
-    private const val TAG = "KMI_MATERIAL"
 
     data class MaterialAnswer(
         val text: String,
@@ -50,8 +47,7 @@ object AssistantKmiMaterialKnowledge {
                 query = q,
                 belt = preferredBelt?.toShared()
             )
-        } catch (t: Throwable) {
-            Log.e(TAG, "KmiSearch failed", t)
+        } catch (_: Throwable) {
             emptyList()
         }
     }

@@ -1,7 +1,6 @@
 package il.kmi.app.attendance.ui
 
 import android.content.Intent
-import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -86,7 +85,7 @@ fun AttendanceScreen(
         vm.events.collect { ev ->
             when (ev) {
                 is UiEvent.ReportSaved -> onOpenGroupStats(ev.branch, ev.groupKey)
-                is UiEvent.ReportSaveFailed -> Log.e("ATT_SAVE", "save failed: ${ev.message}")
+                is UiEvent.ReportSaveFailed -> Unit
             }
         }
     }
@@ -234,8 +233,6 @@ fun AttendanceScreen(
                     tr("שליחת דו\"ח", "Send report")
                 )
             )
-        }.onFailure { e ->
-            Log.e("ATT_SHARE", "shareReport failed", e)
         }
     }
 

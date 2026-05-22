@@ -2,7 +2,6 @@ package il.kmi.app.subscription
 
 import android.app.Activity
 import android.content.Context
-import android.util.Log
 import com.android.billingclient.api.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,31 +33,16 @@ class BillingRepository(
 ) : PurchasesUpdatedListener {
 
     private companion object {
-        const val TAG = "KMI_BILLING"
-
-        // ✅ לפני הפצה: להשאיר false כדי שלא יודפסו לוגים רגישים של מנויים / טוקנים.
-        const val ENABLE_BILLING_LOGS = false
-
         fun logBilling(message: String) {
-            if (ENABLE_BILLING_LOGS) {
-                Log.e(TAG, message)
-            }
+            // Production no-op
         }
 
         fun logBillingError(message: String, throwable: Throwable? = null) {
-            if (ENABLE_BILLING_LOGS) {
-                if (throwable != null) {
-                    Log.e(TAG, message, throwable)
-                } else {
-                    Log.e(TAG, message)
-                }
-            }
+            // Production no-op
         }
 
         fun logBillingWarning(message: String) {
-            if (ENABLE_BILLING_LOGS) {
-                Log.w(TAG, message)
-            }
+            // Production no-op
         }
     }
 

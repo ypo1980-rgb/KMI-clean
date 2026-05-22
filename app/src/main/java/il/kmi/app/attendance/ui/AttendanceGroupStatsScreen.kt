@@ -1,6 +1,5 @@
 package il.kmi.app.attendance.ui
 
-import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -477,8 +476,6 @@ fun AttendanceGroupStatsScreen(
                         scope.launch {
                             runCatching {
                                 repo.resetAttendanceForGroup(branch, groupKey)
-                            }.onFailure {
-                                Log.e("ATT_STATS", "resetAttendanceForGroup failed", it)
                             }
                             busy = false
                             deleteMode = false
@@ -511,8 +508,6 @@ fun AttendanceGroupStatsScreen(
                                     groupKey = groupKey,
                                     reportIds = selectedIds
                                 )
-                            }.onFailure {
-                                Log.e("ATT_STATS", "deleteReports(selected) failed", it)
                             }
                             busy = false
                             deleteMode = false

@@ -2,14 +2,12 @@ package il.kmi.app.navigation
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.compose.runtime.Composable
 import il.kmi.app.screens.SmsVerifyScreen
 import androidx.compose.runtime.remember
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
@@ -55,22 +53,14 @@ import il.kmi.app.screens.payments.PaymentScreen
 import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.screens.InitialLanguageScreen
 import com.google.firebase.auth.FirebaseAuth
-import il.kmi.app.auth.UserProfileCompletion
 
 private const val APP_ENTRY_ROUTE = "app_entry"
 private const val GOOGLE_PROFILE_COMPLETION_ROUTE = "google_profile_completion"
-private const val NAV_LOG = "KMI_ENTRY_NAV"
 
 private fun NavHostController.openIntroCleanFrom(sourceRoute: String) {
     val currentRoute = currentBackStackEntry?.destination?.route
 
-    Log.e(
-        NAV_LOG,
-        "openIntroCleanFrom(source=$sourceRoute) current=$currentRoute target=${Route.Intro.route}"
-    )
-
     if (currentRoute == Route.Intro.route) {
-        Log.e(NAV_LOG, "SKIP openIntroCleanFrom - already on intro")
         return
     }
 
@@ -84,17 +74,12 @@ private fun NavHostController.openIntroCleanFrom(sourceRoute: String) {
 private fun markInitialLanguageSelected(sp: SharedPreferences) {
     // חשוב להשתמש ב-commit כאן:
     // Google Login יכול לפתוח Activity/flow חיצוני, ולכן אנחנו רוצים שהשמירה תהיה מיידית.
-    val saved = sp.edit()
+    sp.edit()
         .putBoolean("initial_language_selected", true)
         .putBoolean("initial_language_selected_v2", true)
         .putBoolean("initial_language_selected_v3", true)
         .putBoolean("initial_language_selected_v4", true)
         .commit()
-
-    Log.e(
-        NAV_LOG,
-        "markInitialLanguageSelected saved=$saved v4=${sp.getBoolean("initial_language_selected_v4", false)}"
-    )
 }
 
 /**
@@ -139,11 +124,6 @@ fun MainNavHost(
         val topic = dailyReminderSp.getString("daily_reminder_topic", "").orEmpty()
         val item = dailyReminderSp.getString("daily_reminder_item", "").orEmpty()
 
-        Log.e(
-            "KMI_DAILY_REMINDER_NAV",
-            "consume pending daily reminder source=$source beltId=$beltId topic=$topic item=$item"
-        )
-
         dailyReminderSp.edit()
             .putBoolean("has_pending_daily_reminder", false)
             .remove("daily_reminder_belt_id")
@@ -162,11 +142,6 @@ fun MainNavHost(
             Route.BeltQ.route
         }
 
-        Log.e(
-            "KMI_DAILY_REMINDER_NAV",
-            "navigate daily reminder targetRoute=$targetRoute item=$item"
-        )
-
         nav.navigate(targetRoute) {
             launchSingleTop = true
             restoreState = false
@@ -182,16 +157,6 @@ fun MainNavHost(
         if (!hasPendingForumPush) {
             return false
         }
-
-        val roomId = forumPushSp.getString("forum_room_id", "").orEmpty()
-        val messageId = forumPushSp.getString("forum_message_id", "").orEmpty()
-        val branchId = forumPushSp.getString("forum_branch_id", "").orEmpty()
-        val groupKey = forumPushSp.getString("forum_group_key", "").orEmpty()
-
-        Log.e(
-            "KMI_FORUM_PUSH",
-            "consume pending forum push source=$source roomId=$roomId messageId=$messageId branchId=$branchId groupKey=$groupKey"
-        )
 
         forumPushSp.edit()
             .putBoolean("has_pending_forum_push", false)
@@ -220,19 +185,6 @@ fun MainNavHost(
     val isEnglish = langManager.getCurrentLanguage() ==
             il.kmi.shared.localization.AppLanguage.ENGLISH
 
-    val backStackEntry by nav.currentBackStackEntryAsState()
-    LaunchedEffect(backStackEntry?.destination?.route) {
-        Log.e(
-            NAV_LOG,
-            "BACK_STACK current=${backStackEntry?.destination?.route} " +
-                    "navHash=${nav.hashCode()} " +
-                    "mainV4=${sp.getBoolean("initial_language_selected_v4", false)} " +
-                    "userV4=${userPrefsForEntry.getBoolean("initial_language_selected_v4", false)} " +
-                    "selectedAny=${isInitialLanguageAlreadySelected()} " +
-                    "firebaseUid=${FirebaseAuth.getInstance().currentUser?.uid}"
-        )
-    }
-
     // ✅ אם MainApp ביקש לפתוח מסך ספציפי, למשל registration_landing,
     // לא עוברים דרך app_entry / splash כדי למנוע מסך לבן ומעבר מיותר.
     val actualStartDestination = remember(startDestination) {
@@ -250,13 +202,6 @@ fun MainNavHost(
 
             else -> APP_ENTRY_ROUTE
         }
-    }
-
-    LaunchedEffect(actualStartDestination, startDestination) {
-        Log.e(
-            NAV_LOG,
-            "MainNavHost startDestination requested=$startDestination actual=$actualStartDestination"
-        )
     }
 
     // מונע שני ניווטים רצופים אל אותו מסך כניסה בגלל recomposition / Activity recreation
@@ -355,24 +300,13 @@ fun MainNavHost(
                     val selectedNow = isInitialLanguageAlreadySelected()
                     val currentRoute = nav.currentBackStackEntry?.destination?.route
 
-                    Log.e(
-                        NAV_LOG,
-                        "APP_ENTRY effect START current=$currentRoute selectedNow=$selectedNow " +
-                                "locked=$entryNavigationLocked " +
-                                "mainV4=${sp.getBoolean("initial_language_selected_v4", false)} " +
-                                "userV4=${userPrefsForEntry.getBoolean("initial_language_selected_v4", false)} " +
-                                "firebaseUid=${FirebaseAuth.getInstance().currentUser?.uid}"
-                    )
-
                     if (entryNavigationLocked) {
-                        Log.e(NAV_LOG, "APP_ENTRY SKIP - entryNavigationLocked=true")
                         return@LaunchedEffect
                     }
 
                     entryNavigationLocked = true
 
                     if (!selectedNow) {
-                        Log.e(NAV_LOG, "APP_ENTRY -> initial_language")
 
                         nav.navigate("initial_language") {
                             popUpTo(APP_ENTRY_ROUTE) { inclusive = true }
@@ -386,10 +320,6 @@ fun MainNavHost(
                     // APP_ENTRY לא בודק כאן פרופיל ולא מדלג ל-Home / השלמת פרטים.
                     // הוא תמיד מעביר קודם למסך הטעינה.
                     // מסך הטעינה הוא זה שמחליט בסיום לאן ממשיכים.
-                    Log.e(
-                        NAV_LOG,
-                        "APP_ENTRY -> splash/loading selectedNow=true firebaseUid=${FirebaseAuth.getInstance().currentUser?.uid}"
-                    )
 
                     nav.navigate(Route.Splash.route) {
                         popUpTo(APP_ENTRY_ROUTE) { inclusive = true }
@@ -400,28 +330,15 @@ fun MainNavHost(
             }
 
             composable("initial_language") {
-                LaunchedEffect(Unit) {
-                    Log.e(
-                        NAV_LOG,
-                        "SCREEN initial_language ENTER " +
-                                "mainV4=${sp.getBoolean("initial_language_selected_v4", false)} " +
-                                "userV4=${userPrefsForEntry.getBoolean("initial_language_selected_v4", false)} " +
-                                "selectedAny=${isInitialLanguageAlreadySelected()} " +
-                                "firebaseUid=${FirebaseAuth.getInstance().currentUser?.uid}"
-                    )
-                }
 
                 InitialLanguageScreen(
                     entrySp = sp,
                     onLanguageSelected = {
-                        Log.e(NAV_LOG, "initial_language onLanguageSelected CLICK")
 
                         markInitialLanguageSelected(sp)
 
                         // אחרי שהגענו למסך אמיתי, מאפשרים ניווט עתידי תקין
                         entryNavigationLocked = false
-
-                        Log.e(NAV_LOG, "initial_language -> splash/loading")
 
                         nav.navigate(Route.Splash.route) {
                             popUpTo("initial_language") { inclusive = true }
@@ -436,25 +353,11 @@ fun MainNavHost(
                 val splashScope = rememberCoroutineScope()
                 var splashFinishedLocked by remember { mutableStateOf(false) }
 
-                LaunchedEffect(Unit) {
-                    Log.e(
-                        NAV_LOG,
-                        "SCREEN splash ENTER selectedV4=${sp.getBoolean("initial_language_selected_v4", false)} " +
-                                "firebaseUid=${FirebaseAuth.getInstance().currentUser?.uid}"
-                    )
-                }
-
                 KmiStartupLoadingScreen(
                     isEnglish = isEnglish,
                     onFinished = {
-                        Log.e(
-                            NAV_LOG,
-                            "splash onFinished CLICK/AUTO locked=$splashFinishedLocked " +
-                                    "firebaseUid=${FirebaseAuth.getInstance().currentUser?.uid}"
-                        )
 
                         if (splashFinishedLocked) {
-                            Log.e(NAV_LOG, "splash onFinished SKIP duplicate")
                             return@KmiStartupLoadingScreen
                         }
 
@@ -464,7 +367,6 @@ fun MainNavHost(
                         val firebaseUser = FirebaseAuth.getInstance().currentUser
 
                         if (firebaseUser == null) {
-                            Log.e(NAV_LOG, "splash -> intro, no Firebase user")
 
                             nav.openIntroCleanFrom(Route.Splash.route)
                             return@KmiStartupLoadingScreen
@@ -475,7 +377,6 @@ fun MainNavHost(
 // ✅ קודם בודקים דגל מקומי שהרישום כבר הושלם.
 // זה מונע חזרה לטופס בגלל missing=[belt] או שדה בודד.
                         if (isProfileCompletedLocally(sp, userPrefsForEntry, uid)) {
-                            Log.e(NAV_LOG, "splash -> home because LOCAL profile_completed=true uid=$uid")
 
                             if (consumePendingDailyReminderAndNavigate("splash_local_profile_completed")) {
                                 return@KmiStartupLoadingScreen
@@ -494,23 +395,12 @@ fun MainNavHost(
                             return@KmiStartupLoadingScreen
                         }
 
-                        Log.e(
-                            NAV_LOG,
-                            "splash detected Firebase user uid=$uid -> checking remote completion before field validation"
-                        )
-
                         splashScope.launch {
                             val remoteCompleted = runCatching {
                                 isProfileCompletedRemotely(uid)
-                            }.onFailure {
-                                Log.e(NAV_LOG, "splash remote completion check failed", it)
                             }.getOrDefault(false)
 
                             if (remoteCompleted) {
-                                Log.e(
-                                    NAV_LOG,
-                                    "splash remote completed=true -> hydrate local profile before home uid=$uid"
-                                )
 
                                 val hydrated = runCatching {
                                     hydrateProfileLocallyFromFirestore(
@@ -519,11 +409,7 @@ fun MainNavHost(
                                         kmiPrefs = kmiPrefs,
                                         uid = uid
                                     )
-                                }.onFailure {
-                                    Log.e(NAV_LOG, "splash hydrate local profile failed", it)
                                 }.getOrDefault(false)
-
-                                Log.e(NAV_LOG, "splash hydrate result=$hydrated uid=$uid")
 
                                 markProfileCompletedLocally(sp, userPrefsForEntry, uid)
 
@@ -544,12 +430,6 @@ fun MainNavHost(
                                 return@launch
                             }
 
-                            Log.e(
-                                NAV_LOG,
-                                "splash remote not completed -> google_profile_completion. " +
-                                        "missing required core profile fields"
-                            )
-
                             nav.navigate(GOOGLE_PROFILE_COMPLETION_ROUTE) {
                                 popUpTo(Route.Splash.route) { inclusive = true }
                                 launchSingleTop = true
@@ -563,11 +443,6 @@ fun MainNavHost(
             // מסך כניסה
             composable(Route.Intro.route) {
                 LaunchedEffect(Unit) {
-                    Log.e(
-                        NAV_LOG,
-                        "SCREEN intro ENTER selectedV4=${sp.getBoolean("initial_language_selected_v4", false)}"
-                    )
-
                     markInitialLanguageSelected(sp)
                     entryNavigationLocked = false
                 }
@@ -575,7 +450,6 @@ fun MainNavHost(
                 IntroScreen(
                     // כניסה רגילה — כן מגיעה למסך "לקוח חדש / קיים"
                     onContinue = {
-                        Log.e(NAV_LOG, "intro onContinue -> registration_landing")
 
                         markInitialLanguageSelected(sp)
 
@@ -589,7 +463,6 @@ fun MainNavHost(
                     // Google Login הצליח + הפרופיל מלא
                     // ✅ קודם מציגים את מסך הלוגו הדינמי וטעינת הנתונים
                     onProfileComplete = {
-                        Log.e(NAV_LOG, "intro onProfileComplete -> splash/loading CLEAR_STACK")
 
                         markInitialLanguageSelected(sp)
 
@@ -603,7 +476,6 @@ fun MainNavHost(
                     // Google Login הצליח אבל חסרים פרטי KMI
                     // מדלגים על "לקוח חדש / קיים" ונכנסים ישירות להשלמת פרטים.
                     onProfileMissing = {
-                        Log.e(NAV_LOG, "intro onProfileMissing -> google_profile_completion")
 
                         markInitialLanguageSelected(sp)
 
@@ -804,8 +676,6 @@ fun MainNavHost(
                     onOpenLegal = { nav.navigate(Route.Legal.route) },
                     onOpenTerms = { nav.navigate(Route.Legal.route) },
                     onRegistrationDone = {
-                        Log.e(NAV_LOG, "registration_landing onRegistrationDone -> splash/loading CLEAR_STACK")
-
                         nav.navigate(Route.Splash.route) {
                             popUpTo(0) { inclusive = true }
                             launchSingleTop = true
@@ -832,8 +702,6 @@ fun MainNavHost(
                     onOpenLegal = { nav.navigate(Route.Legal.route) },
                     onOpenTerms = { nav.navigate(Route.Legal.route) },
                     onRegistrationDone = {
-                        Log.e(NAV_LOG, "google_profile_completion onRegistrationDone -> splash/loading CLEAR_STACK")
-
                         nav.navigate(Route.Splash.route) {
                             popUpTo(0) { inclusive = true }
                             launchSingleTop = true
@@ -1134,16 +1002,6 @@ private fun isProfileCompletedLocally(
     val completedFlag = (mainCompleted || userCompleted) && (mainFormCompleted || userFormCompleted)
     val finalResult = uidMatches && completedFlag && hasCoreProfile
 
-    Log.e(
-        NAV_LOG,
-        "isProfileCompletedLocally uid=$uid mainCompleted=$mainCompleted userCompleted=$userCompleted " +
-                "savedUid=$savedUid uidMatches=$uidMatches role=$role " +
-                "mainFormCompleted=$mainFormCompleted userFormCompleted=$userFormCompleted " +
-                "fullName=${fullName.isNotBlank()} email=${email.isNotBlank()} phoneLen=${phone.length} " +
-                "region=${region.isNotBlank()} branch=${branch.isNotBlank()} group=${group.isNotBlank()} " +
-                "gender=${gender.isNotBlank()} belt=$belt finalResult=$finalResult"
-    )
-
     return finalResult
 }
 
@@ -1162,7 +1020,6 @@ private suspend fun hydrateProfileLocallyFromFirestore(
         .await()
 
     if (!doc.exists()) {
-        Log.e(NAV_LOG, "hydrateProfileLocallyFromFirestore uid=$uid exists=false")
         return false
     }
 
@@ -1293,14 +1150,6 @@ private suspend fun hydrateProfileLocallyFromFirestore(
     kmiPrefs.ageGroup = primaryGroup
     kmiPrefs.username = email
 
-    Log.e(
-        NAV_LOG,
-        "hydrateProfileLocallyFromFirestore uid=$uid " +
-                "fullName=${fullName.isNotBlank()} email=${email.isNotBlank()} phoneLen=${phone.length} " +
-                "region=${region.isNotBlank()} branch=${branchesFinal.isNotBlank()} " +
-                "group=${primaryGroup.isNotBlank()} gender=${gender.isNotBlank()} belt=$beltFinal"
-    )
-
     return true
 }
 
@@ -1335,10 +1184,6 @@ private fun markProfileCompletedLocally(
         .putLong("profile_completed_at", completedAt)
         .commit()
 
-    Log.e(
-        NAV_LOG,
-        "markProfileCompletedLocally uid=$uid completedAt=$completedAt registration_form_completed=true schema=2"
-    )
 }
 
 private suspend fun isProfileCompletedRemotely(uid: String): Boolean {
@@ -1351,7 +1196,6 @@ private suspend fun isProfileCompletedRemotely(uid: String): Boolean {
         .await()
 
     if (!doc.exists()) {
-        Log.e(NAV_LOG, "isProfileCompletedRemotely uid=$uid exists=false")
         return false
     }
 
@@ -1417,19 +1261,6 @@ private suspend fun isProfileCompletedRemotely(uid: String): Boolean {
     val finalResult =
         hasCoreProfile && (hasNewRegistrationCompletion || hasLegacyCompletion)
 
-    Log.e(
-        NAV_LOG,
-        "isProfileCompletedRemotely uid=$uid exists=true " +
-                "profileCompleted=$profileCompleted registrationComplete=$registrationComplete " +
-                "registrationFormCompleted=$registrationFormCompleted registrationSchemaVersion=$registrationSchemaVersion " +
-                "hasNewRegistrationCompletion=$hasNewRegistrationCompletion " +
-                "hasLegacyCompletion=$hasLegacyCompletion " +
-                "role=$role fullName=${fullName.isNotBlank()} email=${email.isNotBlank()} " +
-                "phoneLen=${phone.length} region=${region.isNotBlank()} " +
-                "hasBranch=$hasBranch hasGroup=$hasGroup gender=${gender.isNotBlank()} " +
-                "belt=$belt hasBeltIfNeeded=$hasBeltIfNeeded finalResult=$finalResult"
-    )
-
     if (finalResult && !hasNewRegistrationCompletion) {
         runCatching {
             Firebase.firestore.collection("users")
@@ -1443,17 +1274,6 @@ private suspend fun isProfileCompletedRemotely(uid: String): Boolean {
                     )
                 )
                 .await()
-        }.onSuccess {
-            Log.e(
-                NAV_LOG,
-                "isProfileCompletedRemotely upgraded legacy profile flags uid=$uid"
-            )
-        }.onFailure {
-            Log.e(
-                NAV_LOG,
-                "isProfileCompletedRemotely failed to upgrade legacy flags uid=$uid",
-                it
-            )
         }
     }
 

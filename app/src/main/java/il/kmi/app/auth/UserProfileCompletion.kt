@@ -2,14 +2,11 @@ package il.kmi.app.auth
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 
 object UserProfileCompletion {
-
-    private const val TAG = "KMI_PROFILE_CHECK"
 
     data class ProfileStatus(
         val isComplete: Boolean,
@@ -33,8 +30,7 @@ object UserProfileCompletion {
                 .document(user.uid)
                 .get()
                 .await()
-        } catch (t: Throwable) {
-            Log.e(TAG, "Failed to read user profile from Firestore", t)
+        } catch (_: Throwable) {
             null
         }
 
@@ -243,16 +239,6 @@ object UserProfileCompletion {
             isComplete = isComplete
         )
 
-        Log.e(
-            TAG,
-            "Profile status uid=${user.uid} complete=$isComplete missing=$missing " +
-                    "fullName=${fullName.isNotBlank()} email=${email.isNotBlank()} " +
-                    "phoneLen=${phone.length} role=$role region=${region.isNotBlank()} " +
-                    "branch=${branchesFinal.isNotBlank()} group=${primaryGroup.isNotBlank()} " +
-                    "gender=${gender.isNotBlank()} belt=$beltFinal birthDate=${birthDate.isNotBlank()} " +
-                    "registrationFormCompleted=$registrationFormCompleted schema=$registrationSchemaVersion"
-        )
-
         return ProfileStatus(
             isComplete = isComplete,
             missingFields = missing
@@ -308,12 +294,6 @@ object UserProfileCompletion {
         userSp.edit()
             .putAuthOnly()
             .apply()
-
-        Log.e(
-            TAG,
-            "persistAuthOnlyUser uid=$uid email=${email.orEmpty().isNotBlank()} " +
-                    "displayName=${displayName.orEmpty().isNotBlank()} phoneLen=${cleanPhone.length}"
-        )
     }
 
     private fun persistProfileLocally(
@@ -418,15 +398,6 @@ object UserProfileCompletion {
         userSp.edit()
             .putProfileCore()
             .commit()
-
-        Log.e(
-            TAG,
-            "persistProfileLocally uid=$uid isComplete=$isComplete " +
-                    "fullName=${fullName.isNotBlank()} email=${email.isNotBlank()} " +
-                    "phoneLen=${phone.length} role=$role region=${region.isNotBlank()} " +
-                    "branch=${branchesFinal.isNotBlank()} group=${primaryGroup.isNotBlank()} " +
-                    "gender=${gender.isNotBlank()} belt=$beltFinal birthDate=${birthDate.isNotBlank()}"
-        )
     }
 
     private fun splitCsv(raw: String): List<String> {

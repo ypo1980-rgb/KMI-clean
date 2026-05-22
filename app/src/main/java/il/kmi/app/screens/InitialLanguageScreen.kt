@@ -2,7 +2,6 @@ package il.kmi.app.screens
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,7 +10,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -23,8 +21,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
-
-private const val INITIAL_LANG_LOG = "KMI_ENTRY_NAV"
 
 @Composable
 fun InitialLanguageScreen(
@@ -47,25 +43,9 @@ fun InitialLanguageScreen(
 
     val clickLocked = remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        Log.e(
-            INITIAL_LANG_LOG,
-            "ENTER InitialLanguageScreen instance=${System.identityHashCode(this)} " +
-                    "v1=${sp.getBoolean("initial_language_selected", false)} " +
-                    "v2=${sp.getBoolean("initial_language_selected_v2", false)} " +
-                    "v3=${sp.getBoolean("initial_language_selected_v3", false)} " +
-                    "v4=${sp.getBoolean("initial_language_selected_v4", false)}"
-        )
-    }
 
     fun selectLanguage(lang: AppLanguage) {
-        Log.e(
-            INITIAL_LANG_LOG,
-            "selectLanguage CLICK lang=$lang locked=${clickLocked.value}"
-        )
-
         if (clickLocked.value) {
-            Log.e(INITIAL_LANG_LOG, "selectLanguage SKIP duplicate click lang=$lang")
             return
         }
 
@@ -84,28 +64,13 @@ fun InitialLanguageScreen(
                 .commit()
         }
 
-        val savedMain = sp.markSelected()
-        val savedUser = userSp.markSelected()
-
-        Log.e(
-            INITIAL_LANG_LOG,
-            "selectLanguage SAVED BEFORE setLanguage lang=$lang " +
-                    "savedMain=$savedMain savedUser=$savedUser " +
-                    "mainV4=${sp.getBoolean("initial_language_selected_v4", false)} " +
-                    "userV4=${userSp.getBoolean("initial_language_selected_v4", false)}"
-        )
+        sp.markSelected()
+        userSp.markSelected()
 
         // ✅ רק אחרי שהדגלים נשמרו, משנים את שפת האפליקציה.
         langManager.setLanguage(lang)
 
-        Log.e(
-            INITIAL_LANG_LOG,
-            "selectLanguage AFTER setLanguage lang=$lang " +
-                    "v4=${sp.getBoolean("initial_language_selected_v4", false)}"
-        )
-
         // מעבר למסך הבא
-        Log.e(INITIAL_LANG_LOG, "selectLanguage -> onLanguageSelected")
         onLanguageSelected()
     }
 

@@ -423,25 +423,6 @@ internal fun BeltPangoLayout(
                 key == "access_changed_at"
             ) {
                 accessRefreshTick++
-
-                android.util.Log.e(
-                    "KMI_ACCESS_MODE",
-                    "BY_BELT pref changed source=${if (changedSp === userSp) "kmi_user" else "kmi_subs"} " +
-                            "key=$key tick=$accessRefreshTick " +
-                            "user_isAdmin=${KmiAccess.isAdmin(userSp)} " +
-                            "user_hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
-                            "subs_hasFullAccess=${KmiAccess.hasFullAccess(subsSp)} " +
-                            "user_has_full_access=${userSp.getBoolean("has_full_access", false)} " +
-                            "subs_has_full_access=${subsSp.getBoolean("has_full_access", false)} " +
-                            "user_subscription_active=${userSp.getBoolean("subscription_active", false)} " +
-                            "subs_subscription_active=${subsSp.getBoolean("subscription_active", false)} " +
-                            "user_google_verified=${userSp.getBoolean("google_subscription_verified", false)} " +
-                            "subs_google_verified=${subsSp.getBoolean("google_subscription_verified", false)} " +
-                            "user_sub_product=${userSp.getString("sub_product", "")} " +
-                            "subs_sub_product=${subsSp.getString("sub_product", "")} " +
-                            "user_until=${userSp.getLong("sub_access_until", 0L)} " +
-                            "subs_until=${subsSp.getLong("sub_access_until", 0L)}"
-                )
             }
         }
 
@@ -464,28 +445,6 @@ internal fun BeltPangoLayout(
     )
 
     val hasUnlockedAccess = accessMode == AccessMode.OPEN
-
-    LaunchedEffect(accessMode, hasManagerAccess, accessRefreshTick) {
-        android.util.Log.e(
-            "KMI_ACCESS_MODE",
-            "BY_BELT resolved hasManagerAccess=$hasManagerAccess " +
-                    "hasUnlockedAccess=$hasUnlockedAccess " +
-                    "accessMode=$accessMode tick=$accessRefreshTick " +
-                    "user_isAdmin=${KmiAccess.isAdmin(userSp)} " +
-                    "user_hasFullAccess=${KmiAccess.hasFullAccess(userSp)} " +
-                    "subs_hasFullAccess=${KmiAccess.hasFullAccess(subsSp)} " +
-                    "user_has_full_access=${userSp.getBoolean("has_full_access", false)} " +
-                    "subs_has_full_access=${subsSp.getBoolean("has_full_access", false)} " +
-                    "user_subscription_active=${userSp.getBoolean("subscription_active", false)} " +
-                    "subs_subscription_active=${subsSp.getBoolean("subscription_active", false)} " +
-                    "user_google_verified=${userSp.getBoolean("google_subscription_verified", false)} " +
-                    "subs_google_verified=${subsSp.getBoolean("google_subscription_verified", false)} " +
-                    "user_sub_product=${userSp.getString("sub_product", "")} " +
-                    "subs_sub_product=${subsSp.getString("sub_product", "")} " +
-                    "user_until=${userSp.getLong("sub_access_until", 0L)} " +
-                    "subs_until=${subsSp.getLong("sub_access_until", 0L)}"
-        )
-    }
 
     fun normalizeFavoriteId(raw: String): String =
         raw.substringAfter("::", raw)
@@ -1442,11 +1401,6 @@ private fun TopicsCardForBelt(
             )
             .map { it.value }
 
-        android.util.Log.e(
-            "KMI_TOPIC_ORDER",
-            "BY_BELT belt=${belt.id} final=$sorted"
-        )
-
         sorted
     }
 
@@ -1506,11 +1460,6 @@ private fun TopicsCardForBelt(
                 // לכן מאפסים לראש הרשימה, כדי שבאמת נראה את הנושאים עם תתי־נושאים למעלה.
                 LaunchedEffect(belt.id, topicTitles) {
                     topicsScroll.scrollTo(0)
-
-                    android.util.Log.e(
-                        "KMI_TOPIC_ORDER",
-                        "BY_BELT scroll reset to top belt=${belt.id} firstTopics=${topicTitles.take(5)}"
-                    )
                 }
 
                 Column(
@@ -1766,18 +1715,8 @@ private fun TopicsCardForBelt(
                                                                     LockedContentPolicy.canOpenTopic(accessMode, title)
 
                                                         if (!canOpenSubTopic) {
-                                                            android.util.Log.e(
-                                                                "KMI_ACCESS_MODE",
-                                                                "BY_BELT locked subTopic -> subscription: accessMode=$accessMode title=$title sub=$sub"
-                                                            )
-
                                                             onOpenSubscription()
                                                         } else {
-                                                            android.util.Log.e(
-                                                                "KMI_ACCESS_MODE",
-                                                                "BY_BELT open belt subTopic: accessMode=$accessMode belt=${belt.id} title=$title sub=$sub"
-                                                            )
-
                                                             onOpenSubTopic(belt, title, sub)
                                                         }
                                                     },

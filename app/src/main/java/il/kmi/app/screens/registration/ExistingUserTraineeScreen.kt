@@ -1038,11 +1038,6 @@ private fun RecoveryDialog(
                                 runCatching {
                                     val resetUrl = "https://app-1c22cc8d.web.app/reset-password.html"
 
-                                    android.util.Log.e(
-                                        "KMI_RESET_EMAIL",
-                                        "Sending password reset email. email=$cleanEmail resetUrl=$resetUrl"
-                                    )
-
                                     val actionCodeSettings = ActionCodeSettings.newBuilder()
                                         .setUrl(resetUrl)
                                         .setHandleCodeInApp(false)
@@ -1052,22 +1047,12 @@ private fun RecoveryDialog(
                                         .sendPasswordResetEmail(cleanEmail, actionCodeSettings)
                                         .await()
                                 }.onSuccess {
-                                    android.util.Log.e(
-                                        "KMI_RESET_EMAIL",
-                                        "Password reset email sent successfully with ActionCodeSettings"
-                                    )
-
                                     isSending = false
                                     successText = tr(
                                         "נשלח מייל לשחזור הסיסמה. בדוק את תיבת הדואר שלך וגם את תיקיית הספאם / דואר זבל.",
                                         "A password reset email was sent. Please check your inbox and also your spam or junk folder."
                                     )
                                 }.onFailure { error ->
-                                    android.util.Log.e(
-                                        "KMI_RESET_EMAIL",
-                                        "Password reset email failed: ${error.message}",
-                                        error
-                                    )
                                     isSending = false
 
                                     errorText = when {

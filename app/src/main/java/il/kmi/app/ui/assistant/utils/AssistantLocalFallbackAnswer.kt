@@ -1,6 +1,5 @@
 package il.kmi.app.ui.assistant.utils
 
-import android.util.Log
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.search.asSharedRepo
 import il.kmi.app.search.toShared
@@ -307,8 +306,7 @@ object AssistantLocalFallbackAnswer {
                 query = question,
                 belt = beltEnum?.toShared()
             )
-        } catch (t: Throwable) {
-            Log.e("KMI-AI", "KmiSearch failed", t)
+        } catch (_: Throwable) {
             emptyList()
         }
     }

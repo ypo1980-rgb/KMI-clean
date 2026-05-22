@@ -2,8 +2,6 @@ package il.kmi.app.navigation
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraphBuilder
@@ -55,11 +53,6 @@ fun NavGraphBuilder.aboutNavGraph(
                         groupKey.isNotBlank()
 
             if (hasForumTarget) {
-                Log.e(
-                    "KMI_FORUM_PUSH",
-                    "Route.Forum entered with push target roomId=$roomId messageId=$messageId branchId=$branchId groupKey=$groupKey"
-                )
-
                 sp.edit()
                     .putBoolean("forum_open_from_push", true)
                     .putString("forum_push_room_id", roomId)
