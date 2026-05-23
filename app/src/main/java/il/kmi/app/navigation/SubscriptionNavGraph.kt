@@ -49,8 +49,41 @@ fun NavGraphBuilder.subscriptionNavGraph(
 
     // ---------- מסך "תוכניות מנוי" (מסלולים ורכישה) ----------
     composable(Route.SubscriptionPlans.route) {
+
+        fun continueToLockedContentAfterPurchase() {
+            // קודם סוגרים את מסך תוכניות המנוי
+            nav.popBackStack(
+                route = Route.SubscriptionPlans.route,
+                inclusive = true
+            )
+
+            // אם הגענו למסלולים דרך מסך "ניהול מנוי",
+            // סוגרים גם אותו כדי לחזור למסך שממנו נלחץ המנעול.
+            if (nav.currentBackStackEntry?.destination?.route == Route.Subscription.route) {
+                nav.popBackStack(
+                    route = Route.Subscription.route,
+                    inclusive = true
+                )
+            }
+
+            // הגנה: אם משום מה ה-stack נשאר ריק/לא יציב, חוזרים לבית.
+            if (nav.currentBackStackEntry == null) {
+                nav.navigate(Route.Home.route) {
+                    popUpTo(nav.graph.startDestinationId) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+        }
+
         SubscriptionPlansGate(
             onBack = { nav.popBackStack() },
+
+            onContinueToContent = {
+                continueToLockedContentAfterPurchase()
+            },
 
             onOpenHome = {
                 // אותו לוגיקה כמו במסך ניהול מנוי

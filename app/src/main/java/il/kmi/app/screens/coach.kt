@@ -426,6 +426,9 @@ fun CoachTraineesScreen(
     var isProfilesLoading by remember { mutableStateOf(true) }
     var didFinishInitialProfilesLoad by remember { mutableStateOf(false) }
 
+    // מונע הצגת "לא נמצאו מתאמנים" לפני שהסנכרון הראשוני באמת הסתיים
+    var isInitialServerSyncRunning by remember { mutableStateOf(true) }
+
     // ✅ אם effectiveBranch מגיע כ-CSV ("סניף1, סניף2") – עובדים בפועל עם הסניף הראשון
     val effectiveBranchPrimary = remember(effectiveBranch) {
         effectiveBranch
@@ -436,7 +439,9 @@ fun CoachTraineesScreen(
     }
 
     LaunchedEffect(effectiveBranch, effectiveGroupKey) {
-        isProfilesLoading = traineeProfiles.isEmpty()
+        isProfilesLoading = true
+        isInitialServerSyncRunning = true
+        didFinishInitialProfilesLoad = false
 
         fun String.norm(): String = this
             .trim()
@@ -446,6 +451,7 @@ fun CoachTraineesScreen(
         val groupName = effectiveGroupKey.norm()
         if (groupName.isBlank()) {
             isProfilesLoading = false
+            isInitialServerSyncRunning = false
             didFinishInitialProfilesLoad = true
             return@LaunchedEffect
         }
@@ -482,6 +488,7 @@ fun CoachTraineesScreen(
         val branchDbKey = pickDbBranchKey()
         if (branchDbKey.isBlank()) {
             isProfilesLoading = false
+            isInitialServerSyncRunning = false
             didFinishInitialProfilesLoad = true
             return@LaunchedEffect
         }
@@ -565,22 +572,29 @@ fun CoachTraineesScreen(
                 )
             }
         } catch (_: Exception) {
+        } finally {
+            isInitialServerSyncRunning = false
         }
 
         // --- מאזינים ל-DB המקומי ובונים TraineeProfile "עשיר" (כולל Firestore) ---
         repo.members(branchDbKey, groupName).collectLatest { members: List<GroupMember> ->
             if (members.isEmpty()) {
-                if (!serverHasPotentialMembers) {
-                    traineeProfiles = emptyList()
-                    isProfilesLoading = false
-                    didFinishInitialProfilesLoad = true
+                if (serverHasPotentialMembers || isInitialServerSyncRunning) {
+                    isProfilesLoading = true
+                    didFinishInitialProfilesLoad = false
+                    return@collectLatest
                 }
 
+                traineeProfiles = emptyList()
+                isProfilesLoading = false
+                didFinishInitialProfilesLoad = true
                 return@collectLatest
             }
 
-            isProfilesLoading = false
-            didFinishInitialProfilesLoad = true
+            // יש members, אבל עדיין לא בנינו את traineeProfiles.
+            // לכן ממשיכים להציג טעינה ולא מציגים "לא נמצאו מתאמנים".
+            isProfilesLoading = true
+            didFinishInitialProfilesLoad = false
 
             // 1) אחוז נוכחות מה-DB המקומי
             val today = LocalDate.now()
@@ -841,7 +855,7 @@ fun CoachTraineesScreen(
                 )
             }
 
-            traineeProfiles = members.map { m ->
+            val builtProfiles = members.map { m ->
                 val stat = statsMap[m.id]
                 val pct = if (stat != null && stat.second > 0) {
                     ((stat.first * 100.0) / stat.second).toInt()
@@ -876,6 +890,11 @@ fun CoachTraineesScreen(
                     certificationDates = certificationDates
                 )
             }
+
+            traineeProfiles = builtProfiles
+            isProfilesLoading = false
+            isInitialServerSyncRunning = false
+            didFinishInitialProfilesLoad = true
         }
     }
 
@@ -1312,7 +1331,7 @@ fun CoachTraineesScreen(
                                         .fillMaxWidth()
                                         .padding(16.dp)
                                 )
-                            } else if (isProfilesLoading && !didFinishInitialProfilesLoad) {
+                            } else if (isProfilesLoading || isInitialServerSyncRunning || !didFinishInitialProfilesLoad) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1335,7 +1354,7 @@ fun CoachTraineesScreen(
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
-                            } else if (uiProfiles.isEmpty()) {
+                            } else if (uiProfiles.isEmpty() && didFinishInitialProfilesLoad && !isProfilesLoading && !isInitialServerSyncRunning) {
                                 Text(
                                     text = coachTr(
                                         isEnglish,

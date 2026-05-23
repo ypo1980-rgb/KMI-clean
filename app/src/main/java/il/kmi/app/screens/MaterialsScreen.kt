@@ -48,6 +48,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import il.kmi.app.ui.color
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
@@ -211,6 +212,7 @@ fun MaterialsScreen(
     var explainTriple by remember { mutableStateOf<Triple<Belt, String, String>?>(null) }
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
     var noteDraft by rememberSaveable { mutableStateOf("") }
+    var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
 
     val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val explanationTextColor = if (isDarkSurface) Color.White else Color.Black
@@ -437,15 +439,19 @@ fun MaterialsScreen(
         } else {
             "${topicUi}__${subTopicFilter}"
         }
+
         val key = "note_${belt.id}_${suffix}_$itemId"
-        with(sp.edit()) {
-            if (value.isBlank()) {
+        val clean = value.trim()
+
+        sp.edit().apply {
+            if (clean.isBlank()) {
                 remove(key)
             } else {
-                putString(key, value)
+                putString(key, clean)
             }
-            apply()
-        }
+        }.apply()
+
+        notesRefreshKey++
     }
 
     // טעינת מצבי שליטה — מקור אמת יחיד: VM/DataStore
@@ -485,7 +491,7 @@ fun MaterialsScreen(
             var matchedKey: String? = null
 
             for (key in topicKeysToRead) {
-                val valueFromKey: Boolean? =
+                val valueFromStatusId: Boolean? =
                     runCatching {
                         vm.getItemStatusNullable(
                             belt = belt,
@@ -500,8 +506,28 @@ fun MaterialsScreen(
                                     topic = key,
                                     item = statusId
                                 )
-                                ) true else null
+                            ) true else null
                         }.getOrNull()
+
+                val valueFromCanonicalId: Boolean? =
+                    runCatching {
+                        vm.getItemStatusNullable(
+                            belt = belt,
+                            topic = key,
+                            item = canonicalId
+                        )
+                    }.getOrNull()
+                        ?: runCatching {
+                            if (
+                                vm.isMastered(
+                                    belt = belt,
+                                    topic = key,
+                                    item = canonicalId
+                                )
+                            ) true else null
+                        }.getOrNull()
+
+                val valueFromKey = valueFromStatusId ?: valueFromCanonicalId
 
                 if (valueFromKey != null) {
                     vFromVm = valueFromKey
@@ -512,8 +538,8 @@ fun MaterialsScreen(
 
             // ✅ fallback לשמירה המקומית הישנה
             val localFallback: Boolean? = when {
-                masteredSet.contains(statusId) -> true
-                unknowns.contains(statusId) -> false
+                masteredSet.contains(statusId) || masteredSet.contains(canonicalId) -> true
+                unknowns.contains(statusId) || unknowns.contains(canonicalId) -> false
                 else -> null
             }
 
@@ -540,6 +566,13 @@ fun MaterialsScreen(
                         belt = belt,
                         topic = key,
                         item = statusId,
+                        value = finalValue
+                    )
+
+                    vm.setItemStatusNullable(
+                        belt = belt,
+                        topic = key,
+                        item = canonicalId,
                         value = finalValue
                     )
                 }
@@ -799,11 +832,15 @@ fun MaterialsScreen(
                     "(${b.heb})"
                 }
 
+                val dialogNoteText = remember(canonical, notesRefreshKey) {
+                    loadNote(canonical)
+                }
+
                 ExerciseExplanationDialog(
                     title = dialogTitle,
                     beltLabel = dialogBeltLabel,
                     explanation = explanation,
-                    noteText = loadNote(canonical),
+                    noteText = dialogNoteText,
                     isFavorite = favorites.contains(canonical),
                     accentColor = b.color,
                     isEnglish = isEnglish,
@@ -812,24 +849,28 @@ fun MaterialsScreen(
                         noteEditorFor = canonical
                         noteDraft = loadNote(canonical)
                     },
+                    onDeleteNote = {
+                        noteDraft = ""
+                        saveNote(canonical, "")
+                    },
                     onToggleFavorite = { toggleFavorite(canonical) }
                 )
             }
         // ===== סוף הדיאלוג =====
 
         noteEditorFor?.let { itemId ->
-            PremiumExerciseNoteDialog(
-                isEnglish = isEnglish,
+            ExerciseNoteEditorDialog(
                 noteText = noteDraft,
+                isEnglish = isEnglish,
+                accentColor = belt.color,
                 onNoteChange = { noteDraft = it },
-                onDismiss = { noteEditorFor = null },
-                onSave = {
-                    saveNote(itemId, noteDraft)
+                onDismiss = {
                     noteEditorFor = null
                 },
-                onDelete = {
-                    noteDraft = ""
-                    saveNote(itemId, "")
+                onSave = {
+                    val cleanNote = noteDraft.trim()
+                    noteDraft = cleanNote
+                    saveNote(itemId, cleanNote)
                     noteEditorFor = null
                 }
             )
@@ -953,7 +994,7 @@ fun MaterialsScreen(
                                 itemTitleForUi(topicUi, item, currentLang)
                             }
 
-                            var noteText by remember(item, belt.id, excludedKeySuffix) {
+                            var noteText by remember(item, belt.id, excludedKeySuffix, notesRefreshKey) {
                                 mutableStateOf(loadNote(canonicalId))
                             }
 
@@ -1060,11 +1101,20 @@ fun MaterialsScreen(
                                                         item = statusId,
                                                         value = newVal
                                                     )
+
+                                                    vm.setItemStatusNullable(
+                                                        belt = belt,
+                                                        topic = key,
+                                                        item = canonicalId,
+                                                        value = newVal
+                                                    )
                                                 }
 
                                                 // ✅ שמירה מקומית תואמת לסיכום/מסכים ישנים
                                                 setMasteredLocal(statusId, newVal == true)
+                                                setMasteredLocal(canonicalId, newVal == true)
                                                 setUnknown(statusId, newVal == false)
+                                                setUnknown(canonicalId, newVal == false)
 
                                                 // ✅ בתת־נושא שומרים מקומית רק למפתח המדויק.
                                                 // במסך נושא רגיל נשארת שמירה רחבה לסנכרון עם תרגול.
@@ -1096,17 +1146,26 @@ fun MaterialsScreen(
                                                     when (newVal) {
                                                         true -> {
                                                             masteredSetForPractice.add(statusId)
+                                                            masteredSetForPractice.add(canonicalId)
+
                                                             unknownSetForPractice.remove(statusId)
+                                                            unknownSetForPractice.remove(canonicalId)
                                                         }
 
                                                         false -> {
                                                             unknownSetForPractice.add(statusId)
+                                                            unknownSetForPractice.add(canonicalId)
+
                                                             masteredSetForPractice.remove(statusId)
+                                                            masteredSetForPractice.remove(canonicalId)
                                                         }
 
                                                         null -> {
                                                             masteredSetForPractice.remove(statusId)
+                                                            masteredSetForPractice.remove(canonicalId)
+
                                                             unknownSetForPractice.remove(statusId)
+                                                            unknownSetForPractice.remove(canonicalId)
                                                         }
                                                     }
 
@@ -1131,18 +1190,18 @@ fun MaterialsScreen(
 
                             // דיאלוג הערה
                             if (showNoteDialog) {
-                                PremiumExerciseNoteDialog(
-                                    isEnglish = isEnglish,
+                                ExerciseNoteEditorDialog(
                                     noteText = noteText,
+                                    isEnglish = isEnglish,
+                                    accentColor = belt.color,
                                     onNoteChange = { noteText = it },
-                                    onDismiss = { showNoteDialog = false },
-                                    onSave = {
-                                        saveNote(canonicalId, noteText)
+                                    onDismiss = {
                                         showNoteDialog = false
                                     },
-                                    onDelete = {
-                                        noteText = ""
-                                        saveNote(canonicalId, "")
+                                    onSave = {
+                                        val cleanNote = noteText.trim()
+                                        noteText = cleanNote
+                                        saveNote(canonicalId, cleanNote)
                                         showNoteDialog = false
                                     }
                                 )
@@ -1155,187 +1214,6 @@ fun MaterialsScreen(
             }
         }
     }
-}
-
-@Composable
-private fun PremiumExerciseNoteDialog(
-    isEnglish: Boolean,
-    noteText: String,
-    onNoteChange: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onSave: () -> Unit,
-    onDelete: (() -> Unit)? = null
-) {
-    val noteTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val noteHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color.Transparent,
-        tonalElevation = 0.dp,
-        shape = RoundedCornerShape(30.dp),
-        title = null,
-        text = {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(30.dp),
-                color = Color.White.copy(alpha = 0.98f),
-                shadowElevation = 18.dp,
-                tonalElevation = 0.dp,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = Color(0xFF7E57C2).copy(alpha = 0.16f)
-                )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.White,
-                                    Color(0xFFF7F2FF),
-                                    Color.White
-                                )
-                            )
-                        )
-                        .padding(horizontal = 20.dp, vertical = 20.dp),
-                    horizontalAlignment = noteHorizontalAlignment,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text(
-                        text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = noteTextAlign,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF1F2937)
-                    )
-
-                    Text(
-                        text = if (isEnglish) {
-                            "Write a personal note that will stay attached to this exercise."
-                        } else {
-                            "כתוב הערה אישית שתישמר לתרגיל הזה"
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = noteTextAlign,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF64748B)
-                    )
-
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        color = Color.White.copy(alpha = 0.96f),
-                        shadowElevation = 7.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = Color(0xFF7E57C2).copy(alpha = 0.18f)
-                        )
-                    ) {
-                        OutlinedTextField(
-                            value = noteText,
-                            onValueChange = onNoteChange,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            minLines = 4,
-                            maxLines = 7,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                textAlign = noteTextAlign,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF111827)
-                            ),
-                            placeholder = {
-                                Text(
-                                    text = if (isEnglish) "Write a free note" else "הקלד הערה חופשית",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = noteTextAlign,
-                                    color = Color(0xFF94A3B8),
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            },
-                            shape = RoundedCornerShape(20.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent,
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                cursorColor = Color(0xFF7E57C2)
-                            )
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
-                            shape = RoundedCornerShape(18.dp),
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color = Color(0xFF7E57C2).copy(alpha = 0.24f)
-                            ),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = Color.White.copy(alpha = 0.78f),
-                                contentColor = Color(0xFF6D5BA6)
-                            )
-                        ) {
-                            Text(
-                                text = if (isEnglish) "Cancel" else "בטל",
-                                fontWeight = FontWeight.Black,
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                        }
-
-                        Button(
-                            onClick = onSave,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
-                            shape = RoundedCornerShape(18.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF5B3FA6),
-                                contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.buttonElevation(
-                                defaultElevation = 8.dp,
-                                pressedElevation = 2.dp
-                            )
-                        ) {
-                            Text(
-                                text = if (isEnglish) "Save" else "שמור",
-                                fontWeight = FontWeight.Black,
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                        }
-                    }
-
-                    if (noteText.isNotBlank() && onDelete != null) {
-                        TextButton(
-                            onClick = onDelete,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = if (isEnglish) "Delete note" else "מחק הערה",
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFB3261E)
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {}
-    )
 }
 
 // ===== כפתור מונפש =====

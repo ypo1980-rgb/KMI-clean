@@ -6,12 +6,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -33,6 +40,7 @@ fun ExerciseExplanationDialog(
     isEnglish: Boolean = false,
     onDismiss: () -> Unit,
     onEditNote: () -> Unit,
+    onDeleteNote: () -> Unit = {},
     onToggleFavorite: () -> Unit,
     backgroundBrush: Brush = Brush.verticalGradient(
         colors = listOf(
@@ -43,6 +51,14 @@ fun ExerciseExplanationDialog(
         )
     )
 ) {
+    var localIsFavorite by remember(title, beltLabel) {
+        mutableStateOf(isFavorite)
+    }
+
+    LaunchedEffect(isFavorite, title, beltLabel) {
+        localIsFavorite = isFavorite
+    }
+
     AlertDialog(
         modifier = Modifier
             .background(
@@ -150,32 +166,46 @@ fun ExerciseExplanationDialog(
                         }
 
                         Surface(
-                            onClick = onToggleFavorite,
+                            onClick = {
+                                localIsFavorite = !localIsFavorite
+                                onToggleFavorite()
+                            },
                             shape = RoundedCornerShape(12.dp),
-                            color = Color.White.copy(alpha = 0.72f),
+                            color = if (localIsFavorite) {
+                                Color(0xFFFFF8E1)
+                            } else {
+                                Color.White.copy(alpha = 0.72f)
+                            },
                             border = BorderStroke(
                                 1.dp,
-                                accentColor.copy(alpha = 0.12f)
+                                if (localIsFavorite) {
+                                    Color(0xFFFFC107).copy(alpha = 0.55f)
+                                } else {
+                                    accentColor.copy(alpha = 0.12f)
+                                }
                             ),
                             shadowElevation = 2.dp,
                             modifier = Modifier.size(36.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                if (isFavorite) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Star,
-                                        contentDescription = if (isEnglish) "Remove from favorites" else "הסר ממועדפים",
-                                        tint = Color(0xFFFFC107),
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = if (isEnglish) "Add to favorites" else "הוסף למועדפים",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = if (localIsFavorite) {
+                                        Icons.Filled.Star
+                                    } else {
+                                        Icons.Outlined.StarBorder
+                                    },
+                                    contentDescription = if (localIsFavorite) {
+                                        if (isEnglish) "Remove from favorites" else "הסר ממועדפים"
+                                    } else {
+                                        if (isEnglish) "Add to favorites" else "הוסף למועדפים"
+                                    },
+                                    tint = if (localIsFavorite) {
+                                        Color(0xFFFFC107)
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.size(22.dp)
+                                )
                             }
                         }
                     }
@@ -215,13 +245,125 @@ fun ExerciseExplanationDialog(
                 if (noteText.isNotBlank()) {
                     HorizontalDivider(color = accentColor.copy(alpha = 0.18f))
 
-                    Text(
-                        text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
-                        fontWeight = FontWeight.Bold,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        color = if (isEnglish) Color(0xFFB08900) else accentColor,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = if (isEnglish) {
+                            Arrangement.Start
+                        } else {
+                            Arrangement.End
+                        }
+                    ) {
+                        if (isEnglish) {
+                            Text(
+                                text = "Trainee note:",
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Left,
+                                color = Color(0xFFB08900)
+                            )
+
+                            Spacer(Modifier.width(8.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    onClick = onEditNote,
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = accentColor.copy(alpha = 0.10f),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        accentColor.copy(alpha = 0.16f)
+                                    ),
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Edit,
+                                            contentDescription = "Edit note",
+                                            tint = accentColor,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    onClick = onDeleteNote,
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFFFEBEE),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        Color(0xFFE57373).copy(alpha = 0.35f)
+                                    ),
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Delete,
+                                            contentDescription = "Delete note",
+                                            tint = Color(0xFFD32F2F),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "הערה של המתאמן:",
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Right,
+                                color = accentColor
+                            )
+
+                            Spacer(Modifier.width(8.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    onClick = onEditNote,
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = accentColor.copy(alpha = 0.10f),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        accentColor.copy(alpha = 0.16f)
+                                    ),
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Edit,
+                                            contentDescription = "עריכת הערה",
+                                            tint = accentColor,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    onClick = onDeleteNote,
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFFFEBEE),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        Color(0xFFE57373).copy(alpha = 0.35f)
+                                    ),
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Delete,
+                                            contentDescription = "מחיקת הערה",
+                                            tint = Color(0xFFD32F2F),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     Text(
                         text = noteText,
@@ -241,6 +383,175 @@ fun ExerciseExplanationDialog(
                 )
             }
         }
+    )
+
+    BackHandler(enabled = true) {
+        onDismiss()
+    }
+}
+
+@Composable
+fun ExerciseNoteEditorDialog(
+    noteText: String,
+    isEnglish: Boolean = false,
+    accentColor: Color,
+    onNoteChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnClickOutside = false,
+            dismissOnBackPress = true
+        ),
+        containerColor = Color.Transparent,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(30.dp),
+        title = null,
+        text = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(
+                        elevation = 18.dp,
+                        shape = RoundedCornerShape(30.dp),
+                        clip = false
+                    ),
+                shape = RoundedCornerShape(30.dp),
+                color = Color.White.copy(alpha = 0.98f),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = accentColor.copy(alpha = 0.18f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.99f),
+                                    accentColor.copy(alpha = 0.08f),
+                                    Color.White.copy(alpha = 0.96f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 20.dp, vertical = 20.dp),
+                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF1F2937)
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            "Write a personal note that will stay attached to this exercise."
+                        } else {
+                            "כתוב הערה אישית שתישמר לתרגיל הזה"
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF64748B)
+                    )
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.White.copy(alpha = 0.96f),
+                        shadowElevation = 7.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = accentColor.copy(alpha = 0.22f)
+                        )
+                    ) {
+                        OutlinedTextField(
+                            value = noteText,
+                            onValueChange = onNoteChange,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            minLines = 4,
+                            maxLines = 7,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF111827)
+                            ),
+                            placeholder = {
+                                Text(
+                                    text = if (isEnglish) "Write a free note" else "הקלד הערה חופשית",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                    color = Color(0xFF94A3B8),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                cursorColor = accentColor
+                            )
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                        ) {
+                            Text(
+                                text = if (isEnglish) "Cancel" else "בטל",
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF6D5BA6),
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                        }
+
+                        Surface(
+                            onClick = onSave,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            color = accentColor,
+                            shadowElevation = 8.dp
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isEnglish) "Save" else "שמור",
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {}
     )
 
     BackHandler(enabled = true) {

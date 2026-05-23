@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import il.kmi.shared.domain.Belt
@@ -39,11 +38,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.outlined.StarBorder
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.KmiTtsManager.speak
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
+import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.shared.platform.PlatformSoundPlayer
 import java.net.URLDecoder   // ✅ נשאר רק זה
@@ -108,6 +107,22 @@ private fun normalizeFavoriteId(raw: String): String =
     raw.substringAfter("::", raw)
         .substringAfter(":", raw)
         .trim()
+
+private fun savePracticeNote(
+    prefs: android.content.SharedPreferences,
+    key: String,
+    text: String
+) {
+    val clean = text.trim()
+
+    prefs.edit().apply {
+        if (clean.isBlank()) {
+            remove(key)
+        } else {
+            putString(key, clean)
+        }
+    }.apply()
+}
 
 private fun decTokenPart(s: String): String =
     runCatching { URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
@@ -1197,175 +1212,57 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                     FavoritesStore.toggle(favId)
                 }
 
-                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-                ModalBottomSheet(
-                    onDismissRequest = {
+                ExerciseExplanationDialog(
+                    title = itemTitleUi,
+                    beltLabel = "$topicTitleUi • ${if (isEnglish) b.en else b.heb}",
+                    explanation = explanation,
+                    noteText = noteText,
+                    isFavorite = isFav,
+                    accentColor = b.color,
+                    isEnglish = isEnglish,
+                    onDismiss = {
                         pickedSearchHit = null
                         showHelp = false
                         showSearch = false
                         searchQuery = ""
                     },
-                    sheetState = sheetState,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 4.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.align(if (isEnglish) Alignment.CenterEnd else Alignment.CenterStart),
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                IconButton(onClick = { toggleFav() }) {
-                                    if (isFav) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Star,
-                                            contentDescription = if (isEnglish) "Remove from favorites" else "הסר ממועדפים",
-                                            tint = Color(0xFFFFC107)
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Outlined.StarBorder,
-                                            contentDescription = if (isEnglish) "Add to favorites" else "הוסף למועדפים"
-                                        )
-                                    }
-                                }
+                    onEditNote = {
+                        showNoteEditor = true
+                    },
+                    onDeleteNote = {
+                        noteText = ""
 
-                                IconButton(onClick = { showNoteEditor = true }) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Edit,
-                                        contentDescription = if (isEnglish) "Edit note" else "ערוך הערה",
-                                        tint = Color(0xFF42A5F5)
-                                    )
-                                }
-                            }
-
-                            Column(
-                                modifier = Modifier
-                                    .align(if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd)
-                                    .fillMaxWidth()
-                                    .padding(
-                                        start = if (isEnglish) 0.dp else 92.dp,
-                                        end = if (isEnglish) 92.dp else 0.dp
-                                    ),
-                                horizontalAlignment = sheetHorizontalAlignment
-                            ) {
-                                Text(
-                                    text = itemTitleUi,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = sheetTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Text(
-                                    text = "$topicTitleUi • ${if (isEnglish) b.en else b.heb}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    textAlign = sheetTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = sheetHorizontalAlignment
-                        ) {
-                            Text(
-                                text = explanation,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = sheetTextAlign,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            if (noteText.isNotBlank()) {
-                                Spacer(Modifier.height(12.dp))
-                                HorizontalDivider()
-                                Spacer(Modifier.height(10.dp))
-
-                                Text(
-                                    text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = sheetTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Spacer(Modifier.height(6.dp))
-
-                                Text(
-                                    text = noteText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    textAlign = sheetTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
-                        ) {
-                            TextButton(onClick = {
-                                pickedSearchHit = null
-                                showHelp = false
-                                showSearch = false
-                                searchQuery = ""
-                            }) {
-                                Text(if (isEnglish) "Close" else "סגור")
-                            }
-                        }
-
-                        Spacer(Modifier.height(6.dp))
+                        savePracticeNote(
+                            prefs = notePrefs,
+                            key = noteKey,
+                            text = ""
+                        )
+                    },
+                    onToggleFavorite = {
+                        toggleFav()
                     }
-                }
+                )
 
                 if (showNoteEditor) {
-                    AlertDialog(
-                        onDismissRequest = { showNoteEditor = false },
-                        title = {
-                            Text(
-                                text = if (isEnglish) "Exercise Note" else "הערה לתרגיל",
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
+                    ExerciseNoteEditorDialog(
+                        noteText = noteText,
+                        isEnglish = isEnglish,
+                        accentColor = b.color,
+                        onNoteChange = { noteText = it },
+                        onDismiss = {
+                            showNoteEditor = false
+                        },
+                        onSave = {
+                            val cleanNote = noteText.trim()
+                            noteText = cleanNote
+
+                            savePracticeNote(
+                                prefs = notePrefs,
+                                key = noteKey,
+                                text = cleanNote
                             )
-                        },
-                        text = {
-                            OutlinedTextField(
-                                value = noteText,
-                                onValueChange = { noteText = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = LocalTextStyle.current.copy(textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right),
-                                label = { Text(if (isEnglish) "Write a note" else "כתוב הערה") }
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    notePrefs.edit()
-                                        .putString(noteKey, noteText.trim())
-                                        .apply()
-                                    showNoteEditor = false
-                                }
-                            ) {
-                                Text(if (isEnglish) "Save" else "שמור")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showNoteEditor = false }) {
-                                Text(if (isEnglish) "Cancel" else "ביטול")
-                            }
+
+                            showNoteEditor = false
                         }
                     )
                 }
@@ -1422,165 +1319,54 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                     FavoritesStore.toggle(favId)
                 }
 
-                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                ExerciseExplanationDialog(
+                    title = safeItemTitleUi,
+                    beltLabel = "(${if (isEnglish) belt.en else belt.heb})",
+                    explanation = explanation,
+                    noteText = noteText,
+                    isFavorite = isFav,
+                    accentColor = belt.color,
+                    isEnglish = isEnglish,
+                    onDismiss = {
+                        showHelp = false
+                    },
+                    onEditNote = {
+                        showNoteEditor = true
+                    },
+                    onDeleteNote = {
+                        noteText = ""
 
-                ModalBottomSheet(
-                    onDismissRequest = { showHelp = false },
-                    sheetState = sheetState,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 4.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.align(if (isEnglish) Alignment.CenterEnd else Alignment.CenterStart),
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                IconButton(onClick = { toggleFav() }) {
-                                    if (isFav) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Star,
-                                            contentDescription = if (isEnglish) "Remove from favorites" else "הסר ממועדפים",
-                                            tint = Color(0xFFFFC107)
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Outlined.StarBorder,
-                                            contentDescription = if (isEnglish) "Add to favorites" else "הוסף למועדפים"
-                                        )
-                                    }
-                                }
-
-                                IconButton(onClick = { showNoteEditor = true }) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Edit,
-                                        contentDescription = if (isEnglish) "Edit note" else "ערוך הערה",
-                                        tint = Color(0xFF42A5F5)
-                                    )
-                                }
-                            }
-
-                            Column(
-                                modifier = Modifier
-                                    .align(if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd)
-                                    .fillMaxWidth()
-                                    .padding(
-                                        start = if (isEnglish) 0.dp else 92.dp,
-                                        end = if (isEnglish) 92.dp else 0.dp
-                                    ),
-                                horizontalAlignment = helpHorizontalAlignment
-                            ) {
-                                Text(
-                                    text = safeItemTitleUi,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = helpTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                Text(
-                                    text = "(${if (isEnglish) belt.en else belt.heb})",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    textAlign = helpTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = helpHorizontalAlignment
-                        ) {
-                            Text(
-                                text = explanation,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = helpTextAlign,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            if (noteText.isNotBlank()) {
-                                Spacer(Modifier.height(12.dp))
-                                HorizontalDivider()
-                                Spacer(Modifier.height(10.dp))
-
-                                Text(
-                                    text = if (isEnglish) "Trainee note:" else "הערה של המתאמן:",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = helpTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Spacer(Modifier.height(6.dp))
-
-                                Text(
-                                    text = noteText,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    textAlign = helpTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
-                        ) {
-                            TextButton(onClick = { showHelp = false }) {
-                                Text(if (isEnglish) "Close" else "סגור")
-                            }
-                        }
-
-                        Spacer(Modifier.height(6.dp))
+                        savePracticeNote(
+                            prefs = notePrefs,
+                            key = noteKey,
+                            text = ""
+                        )
+                    },
+                    onToggleFavorite = {
+                        toggleFav()
                     }
-                }
+                )
 
                 if (showNoteEditor) {
-                    AlertDialog(
-                        onDismissRequest = { showNoteEditor = false },
-                        title = {
-                            Text(
-                                text = if (isEnglish) "Exercise Note" else "הערה לתרגיל",
-                                textAlign = helpTextAlign,
-                                modifier = Modifier.fillMaxWidth()
+                    ExerciseNoteEditorDialog(
+                        noteText = noteText,
+                        isEnglish = isEnglish,
+                        accentColor = belt.color,
+                        onNoteChange = { noteText = it },
+                        onDismiss = {
+                            showNoteEditor = false
+                        },
+                        onSave = {
+                            val cleanNote = noteText.trim()
+                            noteText = cleanNote
+
+                            savePracticeNote(
+                                prefs = notePrefs,
+                                key = noteKey,
+                                text = cleanNote
                             )
-                        },
-                        text = {
-                            OutlinedTextField(
-                                value = noteText,
-                                onValueChange = { noteText = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = LocalTextStyle.current.copy(textAlign = helpTextAlign),
-                                label = { Text(if (isEnglish) "Write a note" else "כתוב הערה") }
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    notePrefs.edit()
-                                        .putString(noteKey, noteText.trim())
-                                        .apply()
-                                    showNoteEditor = false
-                                }
-                            ) {
-                                Text(if (isEnglish) "Save" else "שמור")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showNoteEditor = false }) {
-                                Text(if (isEnglish) "Cancel" else "ביטול")
-                            }
+
+                            showNoteEditor = false
                         }
                     )
                 }

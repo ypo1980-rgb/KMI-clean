@@ -197,15 +197,77 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     // 👇 חדש: שומר “הודעה ממתינה להצגה” ב-SharedPreferences ייעודי
     private fun handleCoachGateIntent(i: Intent?) {
         val intent = i ?: return
-        val open = intent.getBooleanExtra(CoachGate.EXTRA_OPEN, false)
-        if (!open) return
+
+        fun firstStringExtra(vararg keys: String): String {
+            return keys
+                .asSequence()
+                .map { key -> intent.getStringExtra(key).orEmpty().trim() }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+        }
+
+        val rawType = firstStringExtra(
+            "fcm_type",
+            "type",
+            "pushType",
+            "notificationType",
+            "kind"
+        ).lowercase()
+
+        val broadcastId = firstStringExtra(
+            CoachGate.EXTRA_BROADCAST_ID,
+            "broadcastId",
+            "broadcast_id",
+            "coachBroadcastId",
+            "coach_broadcast_id"
+        )
+
+        val shouldOpenCoachGate =
+            intent.getBooleanExtra(CoachGate.EXTRA_OPEN, false) ||
+                    intent.getBooleanExtra("open_from_push", false) ||
+                    rawType in setOf(
+                "coach_broadcast",
+                "coachbroadcast",
+                "coach_message",
+                "coachmessage",
+                "broadcast",
+                "trainer_message",
+                "trainer_broadcast"
+            ) ||
+                    broadcastId.isNotBlank()
+
+        if (!shouldOpenCoachGate) {
+            return
+        }
 
         val gateSp = getSharedPreferences(CoachGate.SP_NAME, Context.MODE_PRIVATE)
 
-        val text = intent.getStringExtra(CoachGate.EXTRA_TEXT).orEmpty()
-        val from = intent.getStringExtra(CoachGate.EXTRA_FROM).orEmpty()
-        val sentAt = intent.getLongExtra(CoachGate.EXTRA_SENT_AT, 0L)
-        val broadcastId = intent.getStringExtra(CoachGate.EXTRA_BROADCAST_ID).orEmpty()
+        val text = firstStringExtra(
+            CoachGate.EXTRA_TEXT,
+            "text",
+            "body",
+            "message",
+            "content",
+            "push_body"
+        )
+
+        val from = firstStringExtra(
+            CoachGate.EXTRA_FROM,
+            "coachName",
+            "coach_name",
+            "from",
+            "senderName",
+            "sender_name"
+        ).ifBlank {
+            "המאמן"
+        }
+
+        val sentAt =
+            intent.getLongExtra(CoachGate.EXTRA_SENT_AT, 0L)
+                .takeIf { it > 0L }
+                ?: firstStringExtra("sentAt", "createdAt", "createdAtMillis", "sentAtMillis")
+                    .toLongOrNull()
+                ?: System.currentTimeMillis()
 
         gateSp.edit()
             .putBoolean(CoachGate.SP_HAS_PENDING, true)
@@ -219,31 +281,95 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     private fun handleForumPushIntent(i: Intent?) {
         val intent = i ?: return
 
-        val type = intent.getStringExtra("fcm_type").orEmpty()
-        if (type != "forum_message") return
+        fun firstStringExtra(vararg keys: String): String {
+            return keys
+                .asSequence()
+                .map { key -> intent.getStringExtra(key).orEmpty().trim() }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+        }
 
-        val roomId = intent.getStringExtra("forumRoomId")
-            ?: intent.getStringExtra("roomId")
-            ?: ""
+        val rawType = firstStringExtra(
+            "fcm_type",
+            "type",
+            "pushType",
+            "notificationType",
+            "kind"
+        ).lowercase()
 
-        val roomName = intent.getStringExtra("forumRoomName")
-            ?: intent.getStringExtra("roomName")
-            ?: ""
+        val roomId = firstStringExtra(
+            "forumRoomId",
+            "roomId",
+            "forum_room_id",
+            "room_id"
+        )
 
-        val messageId = intent.getStringExtra("forumMessageId")
-            ?: intent.getStringExtra("messageId")
-            ?: ""
+        val roomName = firstStringExtra(
+            "forumRoomName",
+            "roomName",
+            "forum_room_name",
+            "room_name"
+        )
 
-        val branchId = intent.getStringExtra("branchId").orEmpty()
-        val groupKey = intent.getStringExtra("groupKey").orEmpty()
-        val senderId = intent.getStringExtra("forumSenderId")
-            ?: intent.getStringExtra("senderId")
-            ?: ""
+        val messageId = firstStringExtra(
+            "forumMessageId",
+            "messageId",
+            "forum_message_id",
+            "message_id"
+        )
 
-        if (roomId.isBlank() && messageId.isBlank()) {
+        val branchId = firstStringExtra(
+            "branchId",
+            "branch_id",
+            "forumBranchId",
+            "forum_branch_id"
+        )
+
+        val groupKey = firstStringExtra(
+            "groupKey",
+            "group_key",
+            "forumGroupKey",
+            "forum_group_key"
+        )
+
+        val senderId = firstStringExtra(
+            "forumSenderId",
+            "senderId",
+            "sender_id",
+            "forum_sender_id"
+        )
+
+        val shouldOpenForum =
+            intent.getBooleanExtra("open_from_push", false) ||
+                    rawType in setOf(
+                "forum_message",
+                "forummessage",
+                "forum"
+            ) ||
+                    roomId.isNotBlank() ||
+                    messageId.isNotBlank()
+
+        if (!shouldOpenForum) {
             return
         }
 
+        // חשוב:
+        // ForumScreen קורא את הדגלים מתוך kmi_settings,
+        // לכן שומרים בדיוק שם ולא רק ב-kmi_forum_push.
+        val settingsSp = getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+
+        settingsSp.edit()
+            .putBoolean("forum_open_from_push", true)
+            .putString("forum_push_room_id", roomId)
+            .putString("forum_push_room_name", roomName)
+            .putString("forum_push_message_id", messageId)
+            .putString("forum_push_branch_id", branchId)
+            .putString("forum_push_group_key", groupKey)
+            .putString("forum_push_sender_id", senderId)
+            .putLong("forum_push_received_at", System.currentTimeMillis())
+            .apply()
+
+        // משאירים גם תאימות אחורה למפתח הישן, אם קיים קוד אחר שקורא ממנו.
         val forumSp = getSharedPreferences("kmi_forum_push", Context.MODE_PRIVATE)
 
         forumSp.edit()
@@ -658,8 +784,23 @@ private fun AndroidAppRoot(
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val gateSp = remember { ctx.getSharedPreferences(CoachGate.SP_NAME, Context.MODE_PRIVATE) }
 
+    val forumPushSp = remember {
+        ctx.getSharedPreferences("kmi_forum_push", Context.MODE_PRIVATE)
+    }
+
+    val settingsPushSp = remember {
+        ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+    }
+
     var hasPendingGate by remember {
         mutableStateOf(gateSp.getBoolean(CoachGate.SP_HAS_PENDING, false))
+    }
+
+    var hasPendingForumPush by remember {
+        mutableStateOf(
+            forumPushSp.getBoolean("has_pending_forum_push", false) ||
+                    settingsPushSp.getBoolean("forum_open_from_push", false)
+        )
     }
 
     DisposableEffect(gateSp) {
@@ -670,6 +811,29 @@ private fun AndroidAppRoot(
         }
         gateSp.registerOnSharedPreferenceChangeListener(l)
         onDispose { gateSp.unregisterOnSharedPreferenceChangeListener(l) }
+    }
+
+    DisposableEffect(forumPushSp, settingsPushSp) {
+        val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (
+                key == "has_pending_forum_push" ||
+                key == "forum_open_from_push" ||
+                key == "forum_push_message_id" ||
+                key == "forum_push_room_id"
+            ) {
+                hasPendingForumPush =
+                    forumPushSp.getBoolean("has_pending_forum_push", false) ||
+                            settingsPushSp.getBoolean("forum_open_from_push", false)
+            }
+        }
+
+        forumPushSp.registerOnSharedPreferenceChangeListener(l)
+        settingsPushSp.registerOnSharedPreferenceChangeListener(l)
+
+        onDispose {
+            forumPushSp.unregisterOnSharedPreferenceChangeListener(l)
+            settingsPushSp.unregisterOnSharedPreferenceChangeListener(l)
+        }
     }
 
     // ✅ אם יש הודעה ממתינה — מציגים כרטיס לפני Intro/Login
@@ -721,18 +885,38 @@ private fun AndroidAppRoot(
         )
     }
 
+// מסלול פתיחה חד-פעמי ל־MainApp
+    var startRoute by remember {
+        mutableStateOf<String?>(
+            if (hasPendingForumPush) Route.Splash.route else null
+        )
+    }
+
 // מסך פתיחה
     var currentScreen by remember {
         mutableStateOf(
             when {
                 !initialLanguageSelected -> "language"
+
+                // ✅ לחיצה על התראת פורום צריכה להכניס ל-MainApp,
+                // כדי ש-MainNavHost יוכל לנווט לפורום.
+                hasPendingForumPush -> "main"
+
                 else -> "intro"
             }
         )
     }
 
-// מסלול פתיחה חד-פעמי ל־MainApp
-    var startRoute by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(hasPendingForumPush, initialLanguageSelected, currentScreen) {
+        if (
+            hasPendingForumPush &&
+            initialLanguageSelected &&
+            currentScreen != "main"
+        ) {
+            startRoute = Route.Splash.route
+            currentScreen = "main"
+        }
+    }
 
     when (currentScreen) {
 

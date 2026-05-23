@@ -152,12 +152,16 @@ fun MainNavHost(
 
     fun consumePendingForumPushAndNavigate(source: String): Boolean {
         val hasPendingForumPush =
-            forumPushSp.getBoolean("has_pending_forum_push", false)
+            forumPushSp.getBoolean("has_pending_forum_push", false) ||
+                    sp.getBoolean("forum_open_from_push", false)
 
         if (!hasPendingForumPush) {
             return false
         }
 
+        // מנקים רק את הדגל הישן.
+        // את forum_open_from_push ב-kmi_settings לא מנקים כאן,
+        // כי ForumScreen צריך לקרוא אותו כדי לגלול להודעה הנכונה.
         forumPushSp.edit()
             .putBoolean("has_pending_forum_push", false)
             .apply()

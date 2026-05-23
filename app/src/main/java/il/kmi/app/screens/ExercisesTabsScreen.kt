@@ -10,11 +10,7 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,6 +39,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import il.kmi.app.ui.KmiTtsManager
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -52,6 +50,7 @@ import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.domain.ContentRepo
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
+import il.kmi.app.ui.ext.color
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -81,10 +80,13 @@ fun ExercisesTabsScreen(
         .favoritesFlow
         .collectAsState(initial = emptySet())
 
+    // ✅ רענון סימוני יודע/לא יודע שהגיעו ממסכים אחרים, כולל MaterialsScreen
+    val marksVersion by vm.marksVersion.collectAsState()
+
     fun readSet(key: String): MutableSet<String> =
         sp.getStringSet(key, emptySet())?.toMutableSet() ?: mutableSetOf()
 
-    val allUnknownKeys = remember(belt.id) {
+    val allUnknownKeys = remember(belt.id, marksVersion) {
         sp.all.keys.filter { it.startsWith("unknown_${belt.id}_") }
     }
 
@@ -212,6 +214,7 @@ fun ExercisesTabsScreen(
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }   // ← תרגיל שנבחר מחיפוש כללי
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
     var noteDraft by rememberSaveable { mutableStateOf("") }
+    var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
     // --- מצב טאבים (0=הכל, 1=לא יודע, 2=מועדפים) — חייב להיות לפני ה-Scaffold ---
     var selectedTab by rememberSaveable { mutableStateOf(0) }
 
@@ -234,16 +237,44 @@ fun ExercisesTabsScreen(
             .substringAfter(":", raw)
             .trim()
 
+    fun normalizeStatusPart(raw: String): String =
+        raw.replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
     fun noteKeyFor(raw: String): String = "note_${belt.id}_${normalizeItemId(raw)}"
 
     fun loadNote(raw: String): String =
         notesSp.getString(noteKeyFor(raw), "")?.trim().orEmpty()
 
     fun saveNote(raw: String, value: String) {
-        notesSp.edit().putString(noteKeyFor(raw), value.trim()).apply()
+        val clean = value.trim()
+
+        notesSp.edit().apply {
+            if (clean.isBlank()) {
+                remove(noteKeyFor(raw))
+            } else {
+                putString(noteKeyFor(raw), clean)
+            }
+        }.apply()
+
+        notesRefreshKey++
     }
 
-    fun hasNote(raw: String): Boolean = loadNote(raw).isNotBlank()
+    fun deleteNote(raw: String) {
+        notesSp.edit()
+            .remove(noteKeyFor(raw))
+            .apply()
+
+        notesRefreshKey++
+    }
+
+    fun hasNote(raw: String): Boolean {
+        notesRefreshKey
+        return loadNote(raw).isNotBlank()
+    }
 
     // סטטוסים מה-VM
     val itemStates = remember(belt.id, topic, subTopicFilter) { mutableStateMapOf<String, Boolean?>() }
@@ -275,19 +306,64 @@ fun ExercisesTabsScreen(
     }
 
 
-    var unknowns by remember(belt.id, topic, suffix, allUnknownKeys) {
+    var unknowns by remember(belt.id, topic, suffix, allUnknownKeys, marksVersion) {
         mutableStateOf(
             if (topic == "__ALL__") {
                 allUnknownKeys
                     .flatMap { key -> readSet(key) }
-                    .map { normalizeItemId(it) }
                     .toMutableSet()
             } else {
                 readSet("unknown_${belt.id}_$suffix")
-                    .map { normalizeItemId(it) }
                     .toMutableSet()
             }
         )
+    }
+
+    fun unknownCandidateIdsFor(raw: String): Set<String> {
+        val tp = topicForRawItem(raw)
+        val cleanId = normalizeItemId(raw)
+        val displayName = ExerciseTitleFormatter.displayName(raw)
+            .ifBlank { raw.trim() }
+            .trim()
+
+        val canonicalFromRaw = CanonicalIds.canonicalFor(belt, tp, raw)
+        val canonicalFromClean = CanonicalIds.canonicalFor(belt, tp, cleanId)
+        val canonicalFromDisplay = CanonicalIds.canonicalFor(belt, tp, displayName)
+
+        return buildSet {
+            add(raw.trim())
+            add(cleanId)
+            add(displayName)
+            add(canonicalFromRaw)
+            add(canonicalFromClean)
+            add(canonicalFromDisplay)
+        }.filter { it.isNotBlank() }.toSet()
+    }
+
+    fun isUnknownRawItem(raw: String): Boolean {
+        val candidates = unknownCandidateIdsFor(raw)
+        val cleanRaw = normalizeStatusPart(raw)
+        val cleanDisplay = normalizeStatusPart(
+            ExerciseTitleFormatter.displayName(raw).ifBlank { raw.trim() }
+        )
+
+        return unknowns.any { storedRaw ->
+            val stored = storedRaw.trim()
+            val storedNormalized = normalizeItemId(stored)
+
+            stored in candidates ||
+                    storedNormalized in candidates ||
+                    candidates.contains(storedNormalized) ||
+                    (
+                            stored.startsWith("status_${belt.id}_") &&
+                                    (
+                                            stored.endsWith("_$cleanRaw") ||
+                                                    stored.endsWith("_$cleanDisplay") ||
+                                                    stored.contains(cleanRaw) ||
+                                                    stored.contains(cleanDisplay)
+                                            )
+                            )
+        }
     }
 
     fun toggleFavorite(rawId: String) {
@@ -300,32 +376,122 @@ fun ExercisesTabsScreen(
       /**
      * סימון/הסרה "לא יודע"
      */
-    fun setUnknown(id: String, set: Boolean) {
-        val cleanId = normalizeItemId(id)
+      fun setUnknown(id: String, set: Boolean) {
+          val cleanId = normalizeItemId(id)
 
-        if (topic == "__ALL__") {
-            unknowns = unknowns.toMutableSet().apply {
-                if (set) add(cleanId) else remove(cleanId)
-            }
+          fun removeMatchingUnknowns(
+              setToClean: MutableSet<String>,
+              raw: String,
+              canonicalId: String
+          ) {
+              val cleanRaw = normalizeStatusPart(raw)
+              val cleanDisplay = normalizeStatusPart(
+                  ExerciseTitleFormatter.displayName(raw).ifBlank { raw.trim() }
+              )
 
-            allTopicItems.forEach { ti ->
-                if (ti.items.any { normalizeItemId(it) == cleanId }) {
-                    val key = "unknown_${belt.id}_${ti.topic}"
-                    val s = readSet(key).apply {
-                        if (set) add(cleanId) else remove(cleanId)
-                    }
-                    sp.edit().putStringSet(key, s).apply()
-                }
-            }
-        } else {
-            val key = "unknown_${belt.id}_$suffix"
-            val s = readSet(key).apply {
-                if (set) add(cleanId) else remove(cleanId)
-            }
-            unknowns = s.map { normalizeItemId(it) }.toMutableSet()
-            sp.edit().putStringSet(key, s).apply()
-        }
-    }
+              setToClean.remove(cleanId)
+              setToClean.remove(raw)
+              setToClean.remove(canonicalId)
+
+              setToClean.removeAll { stored ->
+                  stored.trim() == cleanId ||
+                          stored.trim() == raw.trim() ||
+                          stored.trim() == canonicalId ||
+                          (
+                                  stored.startsWith("status_${belt.id}_") &&
+                                          (
+                                                  stored.endsWith("_$cleanRaw") ||
+                                                          stored.endsWith("_$cleanDisplay") ||
+                                                          stored.contains(cleanRaw) ||
+                                                          stored.contains(cleanDisplay)
+                                                  )
+                                  )
+              }
+          }
+
+          if (topic == "__ALL__") {
+              val nextUnknowns = unknowns.toMutableSet()
+
+              allTopicItems.forEach { ti ->
+                  val matchedItems = ti.items.filter { raw ->
+                      normalizeItemId(raw) == cleanId ||
+                              raw.trim() == id.trim() ||
+                              CanonicalIds.canonicalFor(belt, ti.topic, raw) == id.trim()
+                  }
+
+                  matchedItems.forEach { raw ->
+                      val canonicalId = CanonicalIds.canonicalFor(belt, ti.topic, raw)
+                      val key = "unknown_${belt.id}_${ti.topic}"
+
+                      val s = readSet(key)
+
+                      if (set) {
+                          s.add(cleanId)
+                          s.add(canonicalId)
+
+                          nextUnknowns.add(cleanId)
+                          nextUnknowns.add(canonicalId)
+
+                          vm.setItemStatusNullable(
+                              belt = belt,
+                              topic = ti.topic,
+                              item = canonicalId,
+                              value = false
+                          )
+                      } else {
+                          removeMatchingUnknowns(s, raw, canonicalId)
+                          removeMatchingUnknowns(nextUnknowns, raw, canonicalId)
+
+                          vm.setItemStatusNullable(
+                              belt = belt,
+                              topic = ti.topic,
+                              item = canonicalId,
+                              value = null
+                          )
+                      }
+
+                      sp.edit()
+                          .putStringSet(key, s)
+                          .apply()
+                  }
+              }
+
+              unknowns = nextUnknowns
+          } else {
+              val tp = topicForRawItem(id)
+              val canonicalId = CanonicalIds.canonicalFor(belt, tp, id)
+              val key = "unknown_${belt.id}_$suffix"
+
+              val s = readSet(key)
+
+              if (set) {
+                  s.add(cleanId)
+                  s.add(canonicalId)
+
+                  vm.setItemStatusNullable(
+                      belt = belt,
+                      topic = tp,
+                      item = canonicalId,
+                      value = false
+                  )
+              } else {
+                  removeMatchingUnknowns(s, id, canonicalId)
+
+                  vm.setItemStatusNullable(
+                      belt = belt,
+                      topic = tp,
+                      item = canonicalId,
+                      value = null
+                  )
+              }
+
+              unknowns = s.toMutableSet()
+
+              sp.edit()
+                  .putStringSet(key, s)
+                  .apply()
+          }
+      }
 
     Scaffold(
         topBar = {
@@ -539,8 +705,8 @@ fun ExercisesTabsScreen(
         }
 
         val allCount     = itemList.size
-        // ✅ סטים נשמרים מנורמלים → צריך לספור לפי normalizeItemId(...)
-        val unknownCount = itemList.count { normalizeItemId(it) in unknowns }
+        // ✅ תומך גם ב-cleanId, גם ב-canonicalId וגם ב-statusId שמגיע מ-MaterialsScreen
+        val unknownCount = itemList.count { isUnknownRawItem(it) }
         val favCount     = itemList.count { normalizeItemId(it) in favorites }
 
         Column(
@@ -576,7 +742,7 @@ fun ExercisesTabsScreen(
             Spacer(Modifier.height(8.dp))
 
             val filtered = when (selectedTab) {
-                1 -> itemList.filter { normalizeItemId(it) in unknowns }
+                1 -> itemList.filter { isUnknownRawItem(it) }
                 2 -> itemList.filter { normalizeItemId(it) in favorites }
                 else -> itemList
             }
@@ -604,7 +770,9 @@ fun ExercisesTabsScreen(
                     val tpForUi = topicForRawItem(item)
                     val displayName = CanonicalIds.uiDisplayName(tpForUi, item)
                     val isFav = favorites.contains(normalizeItemId(item))
-                    val itemHasNote = hasNote(item)
+                    val itemHasNote = remember(item, notesRefreshKey) {
+                        hasNote(item)
+                    }
 
                     CompositionLocalProvider(
                         LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
@@ -620,7 +788,7 @@ fun ExercisesTabsScreen(
                                 isEnglish = isEnglish,
                                 isFav = isFav,
                                 hasNote = itemHasNote,
-                                isUnknown = normalizeItemId(item) in unknowns,
+                                isUnknown = isUnknownRawItem(item),
                                 onInfo = {
                                     pressed = true
                                     explainFromSearch = item
@@ -637,8 +805,7 @@ fun ExercisesTabsScreen(
                                     noteDraft = loadNote(item)
                                 },
                                 onToggleUnknown = {
-                                    val cleanId = normalizeItemId(item)
-                                    setUnknown(item, cleanId !in unknowns)
+                                    setUnknown(item, !isUnknownRawItem(item))
                                 },
                                 modifier = Modifier.scale(scale)
                             )
@@ -680,6 +847,8 @@ fun ExercisesTabsScreen(
         pickedKey?.let { key ->
             val (hitBelt, hitTopic, hitItem) = parseSearchKey(key)
             val displayName = ExerciseTitleFormatter.displayName(hitItem)
+                .ifBlank { hitItem.trim() }
+
             val explanation = remember(hitBelt, hitItem, hitTopic, isEnglish) {
                 val raw = findExplanationForHit(hitBelt, hitItem, hitTopic)
                 if (raw == "NO_EXPLANATION") {
@@ -688,105 +857,34 @@ fun ExercisesTabsScreen(
                     raw
                 }
             }
+
             val isFav = favorites.contains(normalizeItemId(hitItem))
-            val noteText = loadNote(hitItem)
+            val noteText = remember(hitItem, notesRefreshKey) {
+                loadNote(hitItem)
+            }
 
-            AlertDialog(
-                onDismissRequest = { pickedKey = null },
-                title = {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-
-                        Column(
-                            modifier = Modifier
-                                .align(androidx.compose.ui.AbsoluteAlignment.CenterRight)
-                                .fillMaxWidth(),
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            Text(
-                                text = displayName,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                text = if (isEnglish) "(${hitBelt.en})" else "(${hitBelt.heb})",
-                                style = MaterialTheme.typography.labelSmall,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.align(androidx.compose.ui.AbsoluteAlignment.CenterLeft),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    noteEditorFor = hitItem
-                                    noteDraft = loadNote(hitItem)
-                                }
-                            ) {
-                                Icon(
-                                    Icons.Filled.Edit,
-                                    contentDescription = "עריכת הערה",
-                                    tint = if (noteText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            IconButton(
-                                onClick = { toggleFavorite(hitItem) }
-                            ) {
-                                if (isFav) {
-                                    Icon(
-                                        Icons.Filled.Star,
-                                        contentDescription = "הסר ממועדפים",
-                                        tint = Color(0xFFFFC107)
-                                    )
-                                } else {
-                                    Icon(
-                                        Icons.Outlined.StarBorder,
-                                        contentDescription = "הוסף למועדפים"
-                                    )
-                                }
-                            }
-                        }
-                    }
+            ExerciseExplanationDialog(
+                title = displayName,
+                beltLabel = if (isEnglish) {
+                    "$hitTopic • ${hitBelt.en}"
+                } else {
+                    "$hitTopic • ${hitBelt.heb}"
                 },
-                text = {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        val annotated = buildExplanationWithStanceHighlight(
-                            source = explanation,
-                            stanceColor = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = annotated,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        if (noteText.isNotBlank()) {
-                            HorizontalDivider()
-                            Text(
-                                text = "הערה של המתאמן:",
-                                fontWeight = FontWeight.Bold,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                text = noteText,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
+                explanation = explanation,
+                noteText = noteText,
+                isFavorite = isFav,
+                accentColor = hitBelt.color,
+                isEnglish = isEnglish,
+                onDismiss = { pickedKey = null },
+                onEditNote = {
+                    noteEditorFor = hitItem
+                    noteDraft = loadNote(hitItem)
                 },
-                confirmButton = {
-                    TextButton(onClick = { pickedKey = null }) { Text(tr("סגור", "Close")) }
+                onDeleteNote = {
+                    deleteNote(hitItem)
+                },
+                onToggleFavorite = {
+                    toggleFavorite(hitItem)
                 }
             )
         }
@@ -795,6 +893,7 @@ fun ExercisesTabsScreen(
         explainFromSearch?.let { item ->
 
             val displayName = ExerciseTitleFormatter.displayName(item)
+                .ifBlank { item.trim() }
 
             LaunchedEffect(item) {
                 KmiTtsManager.init(ctx)
@@ -808,174 +907,47 @@ fun ExercisesTabsScreen(
                 .ifBlank { tr("לא נמצא הסבר עבור \"$displayName\".", "No explanation found for \"$displayName\".") }
 
             val isFav = favorites.contains(normalizeItemId(item))
-            val noteText = loadNote(item)
+            val noteText = remember(item, notesRefreshKey) {
+                loadNote(item)
+            }
 
-            AlertDialog(
-                onDismissRequest = {
+            ExerciseExplanationDialog(
+                title = displayName,
+                beltLabel = if (isEnglish) "(${belt.en})" else "(${belt.heb})",
+                explanation = explanation,
+                noteText = noteText,
+                isFavorite = isFav,
+                accentColor = belt.color,
+                isEnglish = isEnglish,
+                onDismiss = {
                     KmiTtsManager.stop()
                     explainFromSearch = null
                 },
-                title = {
-                    androidx.compose.runtime.CompositionLocalProvider(
-                        androidx.compose.ui.platform.LocalLayoutDirection provides
-                                androidx.compose.ui.unit.LayoutDirection.Ltr
-                    ) {
-                        Box(modifier = Modifier.fillMaxWidth()) {
-
-                            Row(
-                                modifier = Modifier.align(Alignment.CenterStart),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        noteEditorFor = item
-                                        noteDraft = loadNote(item)
-                                    }
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Edit,
-                                        contentDescription = tr("עריכת הערה", "Edit note"),
-                                        tint = if (noteText.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = { toggleFavorite(item) }
-                                ) {
-                                    if (isFav) {
-                                        Icon(
-                                            Icons.Filled.Star,
-                                            contentDescription = tr("הסר ממועדפים", "Remove from favorites"),
-                                            tint = Color(0xFFFFC107)
-                                        )
-                                    } else {
-                                        Icon(
-                                            Icons.Outlined.StarBorder,
-                                            contentDescription = tr("הוסף למועדפים", "Add to favorites")
-                                        )
-                                    }
-                                }
-                            }
-
-                            androidx.compose.runtime.CompositionLocalProvider(
-                                androidx.compose.ui.platform.LocalLayoutDirection provides
-                                        androidx.compose.ui.unit.LayoutDirection.Rtl
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .align(Alignment.CenterEnd)
-                                        .fillMaxWidth(),
-                                    horizontalAlignment = Alignment.End
-                                ) {
-                                    Text(
-                                        text = displayName,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Text(
-                                        text = if (isEnglish) "(${belt.en})" else "(${belt.heb})",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
-                        }
-                    }
+                onEditNote = {
+                    noteEditorFor = item
+                    noteDraft = loadNote(item)
                 },
-                text = {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        val annotated = buildExplanationWithStanceHighlight(
-                            source = explanation,
-                            stanceColor = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            annotated,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        if (noteText.isNotBlank()) {
-                            HorizontalDivider()
-                            Text(
-                                text = tr("הערה של המתאמן:", "Trainee note:"),
-                                fontWeight = FontWeight.Bold,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                text = noteText,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        IconButton(onClick = { KmiTtsManager.speak(explanation) }) {
-                            Icon(Icons.Filled.VolumeUp, contentDescription = tr("השמע הסבר", "Play explanation"))
-                        }
-                    }
+                onDeleteNote = {
+                    deleteNote(item)
                 },
-                confirmButton = {
-                    TextButton(onClick = {
-                        KmiTtsManager.stop()
-                        explainFromSearch = null
-                    }) { Text(tr("סגור", "Close")) }
+                onToggleFavorite = {
+                    toggleFavorite(item)
                 }
             )
         }
 
         noteEditorFor?.let { item ->
-            AlertDialog(
-                onDismissRequest = { noteEditorFor = null },
-                title = {
-                    Text(
-                        text = tr("עריכת הערה", "Edit note"),
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+            ExerciseNoteEditorDialog(
+                noteText = noteDraft,
+                isEnglish = isEnglish,
+                accentColor = belt.color,
+                onNoteChange = { noteDraft = it },
+                onDismiss = {
+                    noteEditorFor = null
                 },
-                text = {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = ExerciseTitleFormatter.displayName(item),
-                            fontWeight = FontWeight.Bold,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        OutlinedTextField(
-                            value = noteDraft,
-                            onValueChange = { noteDraft = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 4,
-                            maxLines = 8,
-                            textStyle = LocalTextStyle.current.copy(textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right)
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            saveNote(item, noteDraft)
-                            noteEditorFor = null
-                        }
-                    ) { Text(tr("שמור", "Save")) }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            noteEditorFor = null
-                        }
-                    ) { Text(tr("ביטול", "Cancel")) }
+                onSave = {
+                    saveNote(item, noteDraft)
+                    noteEditorFor = null
                 }
             )
         }

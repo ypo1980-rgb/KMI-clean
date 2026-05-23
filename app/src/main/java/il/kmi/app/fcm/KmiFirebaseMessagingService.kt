@@ -41,7 +41,47 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(message)
 
         val data = message.data
-        val type = data["type"] ?: ""
+
+        val rawType =
+            data["type"]
+                ?: data["pushType"]
+                ?: data["notificationType"]
+                ?: data["kind"]
+                ?: ""
+
+        val type = when (rawType.trim().lowercase()) {
+            "coach_broadcast",
+            "coachbroadcast",
+            "coach_message",
+            "coachmessage",
+            "broadcast",
+            "trainer_message",
+            "trainer_broadcast" -> "coach_broadcast"
+
+            "forum_message",
+            "forummessage",
+            "forum" -> "forum_message"
+
+            else -> when {
+                data["broadcastId"]?.isNotBlank() == true ||
+                        data["broadcast_id"]?.isNotBlank() == true ||
+                        data["coachBroadcastId"]?.isNotBlank() == true ||
+                        data["coach_broadcast_id"]?.isNotBlank() == true -> {
+                    "coach_broadcast"
+                }
+
+                data["roomId"]?.isNotBlank() == true ||
+                        data["forumRoomId"]?.isNotBlank() == true ||
+                        data["messageId"]?.isNotBlank() == true ||
+                        data["forumMessageId"]?.isNotBlank() == true ||
+                        data["forum_room_id"]?.isNotBlank() == true ||
+                        data["forum_message_id"]?.isNotBlank() == true -> {
+                    "forum_message"
+                }
+
+                else -> rawType.trim()
+            }
+        }
 
         // כותרת + טקסט – קודם מ-notification, אם אין אז מה-data, ואם אין אז ברירת מחדל
         val titleFromPayload = message.notification?.title
@@ -89,11 +129,27 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
 
         // Intent שייפתח בלחיצה על ההתראה
         val intent = Intent(context, MainActivity::class.java).apply {
-            // ✅ חשוב: כדי ש-onNewIntent יתפוס כשהאפליקציה פתוחה/ברקע
-            // וגם כדי לא ליצור Activity כפולה
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            // ✅ פתיחה אמינה גם כשהאפליקציה סגורה, ברקע או כבר פתוחה.
+            // NEW_TASK חשוב במיוחד כשההתראה נוצרת מתוך Service.
+            flags =
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
 
+            action = "il.kmi.app.OPEN_FROM_PUSH_${System.currentTimeMillis()}"
+            setPackage(context.packageName)
+
+            putExtra("open_from_push", true)
             putExtra("fcm_type", type)
+            putExtra("type", type)
+            putExtra("push_title", title)
+            putExtra("push_body", body)
+
+            // שומרים גם את כל שדות ה-data המקוריים, כדי ש-MainActivity תוכל לקלוט
+            // גם אם Cloud Function שינתה שם שדה.
+            data.forEach { (key, value) ->
+                putExtra(key, value)
+            }
 
             data["broadcastId"]?.let { putExtra("broadcastId", it) }
             data["branchId"]?.let { putExtra("branchId", it) }

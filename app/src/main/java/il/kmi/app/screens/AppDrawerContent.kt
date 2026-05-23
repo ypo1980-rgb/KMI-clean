@@ -391,6 +391,8 @@ fun AppDrawerContent(
 
     var resolvedIsAdmin by remember { mutableStateOf<Boolean?>(null) }
 
+    val effectiveIsAdmin = isAdmin || resolvedIsAdmin == true
+
     // 🎬 דיאלוג סרטוני הדגמה
     var showDemoVideos by rememberSaveable { mutableStateOf(false) }
 
@@ -398,7 +400,12 @@ fun AppDrawerContent(
     var showFormsPaymentsDialog by rememberSaveable { mutableStateOf(false) }
     var showFormsListDialog by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(authUid) {
+    LaunchedEffect(authUid, isAdmin) {
+        if (isAdmin) {
+            resolvedIsAdmin = true
+            return@LaunchedEffect
+        }
+
         if (authUid.isNullOrBlank()) {
             resolvedIsAdmin = null
             return@LaunchedEffect
@@ -959,8 +966,8 @@ fun AppDrawerContent(
                             Spacer(Modifier.height(14.dp))
                         }
 
-                // ===== אזור מנהל – רק למנהל =====
-                        if (resolvedIsAdmin == true) {
+                        // ===== אזור מנהל – רק למנהל =====
+                        if (effectiveIsAdmin) {
                             if (isEnglish) {
                                 DrawerLineItemEn(
                                     title = "Manage Users",
@@ -981,10 +988,8 @@ fun AppDrawerContent(
                                 )
                             }
 
-                    Spacer(Modifier.height(16.dp))
-                    Divider(color = Color.White.copy(alpha = 0.12f))
-                    Spacer(Modifier.height(8.dp))
-                }
+                            Spacer(Modifier.height(8.dp))
+                        }
 
                         // ===== כפתור ראשון: אודות אבי אביסידון =====
                         if (isEnglish) {

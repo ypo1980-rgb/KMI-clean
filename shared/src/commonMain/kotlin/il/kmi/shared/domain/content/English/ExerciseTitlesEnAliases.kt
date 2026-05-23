@@ -15,7 +15,7 @@ object ExerciseTitlesEnAliases {
         "גלגול לפנים שמאל" to "Forward Roll - Left",
         "גלגול לפנים - שמאל" to "Forward Roll - Left",
         "גלגול לפנ" +
-                "ים – שמאל" to "Forward Roll - Left",
+        "ים – שמאל" to "Forward Roll - Left",
         "גלגול לפנים צד שמאל" to "Forward Roll - Left Side",
 
         "גלגול לאחור" to "Backward Roll",
@@ -33,6 +33,13 @@ object ExerciseTitlesEnAliases {
         "שחרור מחביקת צוואר מהצד בשכיבה" to "Release from Side Neck Hold on the Ground",
         "שחרור מחביקת צואר ויד מהצד בשכיבה" to "Release from Side Neck-and-Arm Hold on the Ground",
         "שחרור מחביקת צוואר ויד מהצד בשכיבה" to "Release from Side Neck-and-Arm Hold on the Ground",
+        "שחרורים מחניקות בשכיבה" to "Releases from Chokes on the Ground",
+
+        "שחרורים מתפיסות ידיים בשכיבה" to "Releases from Wrist Grabs on the Ground",
+        "שחרורים מחביקות בשכיבה" to "Releases from Holds on the Ground",
+        "שחרורים מחביקת בשכיבה" to "Releases from Holds on the Ground",
+        "שחרורים מחביקות על הקרקע" to "Releases from Holds on the Ground",
+        "שחרורים מחביקות בקרקע" to "Releases from Holds on the Ground",
 
         "הגנה נגד אגרופים על הקרקע" to "Defence against Punches while in the Ground",
         "הגנה נגד אגרופים בשכיבה" to "Defense Against Punches on the Ground"

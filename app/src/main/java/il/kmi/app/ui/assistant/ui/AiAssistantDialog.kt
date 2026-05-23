@@ -2611,120 +2611,147 @@ fun AiAssistantDialog(
                     }
 
                     if (assistantMode != null) {
+                        val inputEnabled = !isThinking
+                        val inputScrollState = rememberScrollState()
+
                         Surface(
                             shape = RoundedCornerShape(999.dp),
                             tonalElevation = 0.dp,
-                            shadowElevation = 8.dp,
-                            color = Color.White.copy(alpha = 0.86f),
+                            shadowElevation = 10.dp,
+                            color = Color.White.copy(alpha = 0.96f),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 3.dp)
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                                    shape = RoundedCornerShape(999.dp)
+                                )
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .background(Color.Transparent)
-                                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.Transparent)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
 
                             Box(
                                 modifier = Modifier.size(44.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                            if (isListening) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .scale(waveScale)
-                                        .background(
-                                            MaterialTheme.colorScheme.primary.copy(alpha = waveAlpha),
-                                            shape = RoundedCornerShape(50)
-                                        )
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .background(
-                                        when {
-                                            isSpeaking -> Color(0x22E53935)
-                                            isListening -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                                            else -> Color.Transparent
-                                        },
-                                        shape = RoundedCornerShape(50)
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                IconButton(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .scale(micScale),
-                                    onClick = {
-                                        if (isSpeaking) {
-                                            stopSpeaking()
-                                            return@IconButton
-                                        }
-
-                                        if (isListening) {
-                                            stopListeningHard()
-                                            return@IconButton
-                                        }
-
-                                        pendingSendFromStt = null
-
-                                        if (hasRecordAudioPermission()) {
-                                            pendingStartStt = true
-                                        } else {
-                                            recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = when {
-                                            isSpeaking -> Icons.Filled.Stop
-                                            isListening -> Icons.Filled.Mic
-                                            else -> Icons.Filled.Mic
-                                        },
-                                        contentDescription = when {
-                                            isSpeaking -> tr("עצור דיבור", "Stop speaking")
-                                            isListening -> tr("המיקרופון מאזין", "Microphone is listening")
-                                            else -> tr("הפעל מיקרופון", "Start microphone")
-                                        },
-                                        tint = when {
-                                            isSpeaking -> Color(0xFFE53935)
-                                            isListening -> MaterialTheme.colorScheme.primary
-                                            else -> MaterialTheme.colorScheme.primary
-                                        }
+                                if (isListening) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .scale(waveScale)
+                                            .background(
+                                                MaterialTheme.colorScheme.primary.copy(alpha = waveAlpha),
+                                                shape = RoundedCornerShape(50)
+                                            )
                                     )
                                 }
-                            }
-                        }
 
-                        val inputScrollState = rememberScrollState()
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .background(
+                                            when {
+                                                isSpeaking -> Color(0x22E53935)
+                                                isListening -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                                                else -> Color.Transparent
+                                            },
+                                            shape = RoundedCornerShape(50)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    IconButton(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .scale(micScale),
+                                        enabled = inputEnabled || isSpeaking || isListening,
+                                        onClick = {
+                                            if (isSpeaking) {
+                                                stopSpeaking()
+                                                return@IconButton
+                                            }
+
+                                            if (isListening) {
+                                                stopListeningHard()
+                                                return@IconButton
+                                            }
+
+                                            if (!inputEnabled) return@IconButton
+
+                                            pendingSendFromStt = null
+
+                                            if (hasRecordAudioPermission()) {
+                                                pendingStartStt = true
+                                            } else {
+                                                recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = when {
+                                                isSpeaking -> Icons.Filled.Stop
+                                                isListening -> Icons.Filled.Mic
+                                                else -> Icons.Filled.Mic
+                                            },
+                                            contentDescription = when {
+                                                isSpeaking -> tr("עצור דיבור", "Stop speaking")
+                                                isListening -> tr("המיקרופון מאזין", "Microphone is listening")
+                                                else -> tr("הפעל מיקרופון", "Start microphone")
+                                            },
+                                            tint = when {
+                                                isSpeaking -> Color(0xFFE53935)
+                                                isListening -> MaterialTheme.colorScheme.primary
+                                                inputEnabled -> MaterialTheme.colorScheme.primary
+                                                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.width(6.dp))
 
                             TextField(
                                 value = input,
                                 onValueChange = {
+                                    if (!inputEnabled) return@TextField
+
                                     input = it
-                                    scope.launch { inputScrollState.scrollTo(inputScrollState.maxValue) }
+                                    scope.launch {
+                                        inputScrollState.scrollTo(inputScrollState.maxValue)
+                                    }
                                 },
+                                enabled = inputEnabled,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .heightIn(min = 38.dp, max = 58.dp)
+                                    .heightIn(min = 44.dp, max = 68.dp)
                                     .verticalScroll(inputScrollState)
                                     .bringIntoViewRequester(bringIntoViewRequester)
                                     .onFocusEvent { f ->
                                         if (f.isFocused) {
-                                            scope.launch { bringIntoViewRequester.bringIntoView() }
+                                            scope.launch {
+                                                bringIntoViewRequester.bringIntoView()
+                                            }
                                         }
                                     },
                                 maxLines = 2,
                                 singleLine = false,
                                 placeholder = {
                                     Text(
-                                        text = dynamicInputPlaceholder,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                                        text = if (assistantMode == null) {
+                                            tr(
+                                                "בחר נושא ואז כתוב כאן את הבקשה",
+                                                "Choose a mode, then type your request here"
+                                            )
+                                        } else {
+                                            dynamicInputPlaceholder
+                                        },
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
                                         textAlign = textAlignPrimary,
                                         modifier = Modifier.fillMaxWidth()
                                     )
@@ -2733,11 +2760,11 @@ fun AiAssistantDialog(
                                     color = MaterialTheme.colorScheme.onSurface,
                                     textAlign = textAlignPrimary
                                 ),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                                 keyboardActions = KeyboardActions(
                                     onSend = {
                                         val cleanInput = input.trim()
-                                        if (cleanInput.isBlank()) return@KeyboardActions
+                                        if (!inputEnabled || cleanInput.isBlank()) return@KeyboardActions
 
                                         stopListeningHard()
                                         hideKeyboardHard()
@@ -2745,40 +2772,46 @@ fun AiAssistantDialog(
                                         sendQuestion(cleanInput)
                                     }
                                 ),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.White.copy(alpha = 0.64f),
-                                unfocusedContainerColor = Color.White.copy(alpha = 0.38f),
-                                disabledContainerColor = Color.White.copy(alpha = 0.24f),
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                disabledIndicatorColor = Color.Transparent,
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                                shape = RoundedCornerShape(24.dp),
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.White.copy(alpha = 0.98f),
+                                    unfocusedContainerColor = Color.White.copy(alpha = 0.94f),
+                                    disabledContainerColor = Color.White.copy(alpha = 0.90f),
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent,
+                                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    disabledTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
+                                    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
+                                    disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f)
+                                )
                             )
-                        )
 
-                                IconButton(
-                                    onClick = {
-                                        val cleanInput = input.trim()
-                                        if (cleanInput.isBlank()) return@IconButton
+                            Spacer(Modifier.width(4.dp))
 
-                                        stopListeningHard()
-                                        requestHideKeyboard = true
-                                        sendQuestion(cleanInput)
-                                    },
-                                    enabled = assistantMode != null && input.trim().isNotBlank()
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Send,
-                                        contentDescription = tr("שלח שאלה", "Send question"),
-                                        tint = if (assistantMode != null && input.isNotBlank())
-                                            MaterialTheme.colorScheme.primary
-                                        else
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                            IconButton(
+                                onClick = {
+                                    val cleanInput = input.trim()
+                                    if (!inputEnabled || cleanInput.isBlank()) return@IconButton
+
+                                    stopListeningHard()
+                                    requestHideKeyboard = true
+                                    sendQuestion(cleanInput)
+                                },
+                                enabled = inputEnabled && input.trim().isNotBlank()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Send,
+                                    contentDescription = tr("שלח שאלה", "Send question"),
+                                    tint = if (inputEnabled && input.isNotBlank())
+                                        MaterialTheme.colorScheme.primary
+                                    else
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                )
                             }
+                        }
                         }
                     }
                 }

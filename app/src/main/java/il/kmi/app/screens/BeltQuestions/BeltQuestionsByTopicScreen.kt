@@ -34,6 +34,7 @@ import il.kmi.app.screens.parseSearchKey
 import il.kmi.app.ui.FloatingQuickMenu
 import il.kmi.app.ui.QuickMenuTriggerMode
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.screens.PracticeByTopicsSelection
 import il.kmi.app.screens.PracticeMenuDialog
 import il.kmi.shared.domain.Belt
@@ -201,6 +202,22 @@ private fun findExplanationForHitLocal(
     return "אין כרגע הסבר לתרגיל הזה."
 }
 
+private fun saveBeltQuestionNote(
+    prefs: SharedPreferences,
+    noteKey: String,
+    text: String
+) {
+    val clean = text.trim()
+
+    prefs.edit().apply {
+        if (clean.isBlank()) {
+            remove(noteKey)
+        } else {
+            putString(noteKey, clean)
+        }
+    }.apply()
+}
+
 @Composable
 private fun rememberEnsureContentRepoInitialized() {
     val scope = rememberCoroutineScope()
@@ -306,6 +323,7 @@ fun BeltQuestionsByTopicScreen(
     var showPracticeMenu by rememberSaveable { mutableStateOf(false) }
     var effectiveBelt by rememberSaveable { mutableStateOf(Belt.GREEN) }
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
 
     if (showPracticeMenu) {
         PracticeMenuDialog(
@@ -471,7 +489,7 @@ fun BeltQuestionsByTopicScreen(
             val isFavorite = favorites.contains(favoriteId)
 
             val noteKey = "note_${belt.id}_${topic.trim()}_${favoriteId}"
-            var noteText by remember(noteKey) {
+            var noteText by remember(noteKey, notesRefreshKey) {
                 mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
             }
 
@@ -494,6 +512,7 @@ fun BeltQuestionsByTopicScreen(
                 noteText = noteText,
                 isFavorite = isFavorite,
                 accentColor = belt.color,
+                isEnglish = isEnglish,
                 onDismiss = {
                     pickedKey = null
                     showNoteEditor = false
@@ -501,60 +520,43 @@ fun BeltQuestionsByTopicScreen(
                 onEditNote = {
                     showNoteEditor = true
                 },
+                onDeleteNote = {
+                    noteText = ""
+
+                    saveBeltQuestionNote(
+                        prefs = notePrefs,
+                        noteKey = noteKey,
+                        text = ""
+                    )
+
+                    notesRefreshKey++
+                },
                 onToggleFavorite = {
                     FavoritesStore.toggle(favoriteId)
                 }
             )
 
             if (showNoteEditor) {
-                AlertDialog(
-                    onDismissRequest = { showNoteEditor = false },
-                    title = {
-                        Text(
-                            text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Right,
-                            fontWeight = FontWeight.Bold
-                        )
+                ExerciseNoteEditorDialog(
+                    noteText = noteText,
+                    isEnglish = isEnglish,
+                    accentColor = belt.color,
+                    onNoteChange = { noteText = it },
+                    onDismiss = {
+                        showNoteEditor = false
                     },
-                    text = {
-                        OutlinedTextField(
-                            value = noteText,
-                            onValueChange = { noteText = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 4,
-                            maxLines = 7,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                textAlign = TextAlign.Right
-                            ),
-                            placeholder = {
-                                Text(
-                                    text = if (isEnglish) "Write a free note" else "הקלד הערה חופשית",
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Right
-                                )
-                            }
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                notePrefs.edit()
-                                    .putString(noteKey, noteText)
-                                    .apply()
+                    onSave = {
+                        val cleanNote = noteText.trim()
+                        noteText = cleanNote
 
-                                showNoteEditor = false
-                            }
-                        ) {
-                            Text(if (isEnglish) "Save" else "שמור")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = { showNoteEditor = false }
-                        ) {
-                            Text(if (isEnglish) "Cancel" else "בטל")
-                        }
+                        saveBeltQuestionNote(
+                            prefs = notePrefs,
+                            noteKey = noteKey,
+                            text = cleanNote
+                        )
+
+                        notesRefreshKey++
+                        showNoteEditor = false
                     }
                 )
             }

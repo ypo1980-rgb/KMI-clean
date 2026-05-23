@@ -39,8 +39,10 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.ext.color
 import kotlinx.coroutines.tasks.await
 import java.util.Calendar
+import java.util.Locale
 import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -96,6 +98,7 @@ data class AdminUserRecord(
     val birthYear: Int?,
     val region: String?,
     val branch: String?,
+    val branches: List<String> = emptyList(),
     val groups: List<String>,
     val currentBeltId: String?,
     val phone: String?,
@@ -290,6 +293,36 @@ private fun AdminUserRecord.dedupeKey(): String {
     return "name:${fullName.trim()}"
 }
 
+private fun AdminUserRecord.hasRealAdminUserContent(): Boolean {
+    val cleanName = fullName.trim()
+    val cleanEmail = email.orEmpty().trim()
+    val cleanPhoneDigits = phone.orEmpty().filter { it.isDigit() }
+    val cleanUid = uidField.orEmpty().trim()
+    val cleanBranch = branch.orEmpty().trim()
+    val hasBranches = branches.any { it.trim().isNotBlank() }
+    val cleanRegion = region.orEmpty().trim()
+    val cleanBelt = currentBeltId.orEmpty().trim()
+
+    // מסמכים שנוצרו בלי פרטי משתמש אמיתיים לא יוצגו במסך הניהול
+    if (cleanName.startsWith("Unknown user", ignoreCase = true) &&
+        cleanEmail.isBlank() &&
+        cleanPhoneDigits.isBlank()
+    ) {
+        return false
+    }
+
+    // אם אין שום פרט מזהה/תצוגה משמעותי — לא מציגים
+    return cleanName.isNotBlank() ||
+            cleanEmail.isNotBlank() ||
+            cleanPhoneDigits.isNotBlank() ||
+            cleanUid.isNotBlank() ||
+            cleanBranch.isNotBlank() ||
+            hasBranches ||
+            cleanRegion.isNotBlank() ||
+            cleanBelt.isNotBlank() ||
+            groups.isNotEmpty()
+}
+
 /**
  * המרה של מסמך Firestore למודל AdminUserRecord
  * מנסה לתמוך במספר שמות אפשריים לשדות.
@@ -326,6 +359,33 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         return null
     }
 
+    fun stringListOrEmpty(vararg keys: String): List<String> {
+        for (k in keys) {
+            val v = get(k)
+
+            when (v) {
+                is List<*> -> {
+                    val list = v
+                        .mapNotNull { it?.toString()?.trim() }
+                        .filter { it.isNotBlank() }
+
+                    if (list.isNotEmpty()) return list
+                }
+
+                is String -> {
+                    val list = v
+                        .split(",", "•", "|", ";")
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+
+                    if (list.isNotEmpty()) return list
+                }
+            }
+        }
+
+        return emptyList()
+    }
+
     val name =
         stringOrNull("fullName", "name", "displayName", "userName", "username", "full_name")
             ?: stringOrNull("email")
@@ -359,6 +419,28 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
     val role = stringOrNull("role", "userType", "type")
     val isCoachFlag = boolOrNull("isCoach", "coach", "isTrainer", "trainer")
 
+    val branchValue = stringOrNull(
+        "branch",
+        "branchName",
+        "selectedBranch",
+        "selectedBranchName",
+        "trainingBranch",
+        "trainingBranchName",
+        "club",
+        "dojo"
+    )
+
+    val branchList = stringListOrEmpty(
+        "branches",
+        "branchNames",
+        "selectedBranches",
+        "selectedBranchNames",
+        "trainingBranches",
+        "trainingBranchNames",
+        "clubs",
+        "dojos"
+    )
+
     return AdminUserRecord(
         id = id,
         uidField = uidField,
@@ -367,8 +449,9 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         birthDay = birthDay,
         birthMonth = birthMonth,
         birthYear = birthYear,
-        region = stringOrNull("region", "area"),
-        branch = stringOrNull("branch", "club", "dojo"),
+        region = stringOrNull("region", "area", "selectedRegion", "trainingRegion"),
+        branch = branchValue,
+        branches = branchList,
         groups = groupsList,
         currentBeltId = stringOrNull("currentBeltId", "currentBelt", "belt_current", "beltId", "belt"),
         phone = stringOrNull("phone", "phoneNumber"),
@@ -423,13 +506,22 @@ fun AdminUsersScreen(
                 .mapNotNull { doc ->
                     doc.toAdminUserRecord()
                 }
+                .filter { user ->
+                    user.hasRealAdminUserContent()
+                }
 
             users = raw
                 .groupBy { it.dedupeKey() }
                 .map { (_, list) ->
                     list.maxByOrNull { it.createdAtMillis ?: 0L } ?: list.first()
                 }
-                .sortedBy { it.fullName }
+                .sortedWith(
+                    compareBy<AdminUserRecord> {
+                        it.fullName.startsWith("Unknown user", ignoreCase = true)
+                    }.thenBy {
+                        it.fullName.trim().lowercase()
+                    }
+                )
 
         } catch (t: Throwable) {
             val rawErr = t.message ?: adminTr(
@@ -506,7 +598,11 @@ fun AdminUsersScreen(
             }
     }
     val allAgeBuckets = remember(users) {
-        users.map { it.ageBucket }.distinct().sortedBy { it }
+        users
+            .map { it.ageBucket }
+            .filter { it != "לא ידוע" }
+            .distinct()
+            .sortedBy { it }
     }
 
     val filteredUsers = remember(users, genderFilter, regionFilter, beltFilter, ageBucketFilter, isEnglish) {
@@ -555,8 +651,20 @@ fun AdminUsersScreen(
         .mapValues { it.value.size }
 
     val branchCount = users
-        .mapNotNull { it.branch?.trim() }
-        .filter { it.isNotBlank() }
+        .flatMap { user ->
+            buildList {
+                user.branch?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+                addAll(user.branches.map { it.trim() }.filter { it.isNotBlank() })
+            }
+        }
+        .filter { branch ->
+            branch.isNotBlank() &&
+                    !branch.equals("לא ידוע", ignoreCase = true) &&
+                    !branch.equals("unknown", ignoreCase = true) &&
+                    !branch.equals("null", ignoreCase = true) &&
+                    branch != "—"
+        }
+        .map { it.lowercase() }
         .distinct()
         .size
 
@@ -623,15 +731,15 @@ fun AdminUsersScreen(
                 // ---------- כרטיסי סטטוס עליונים ----------
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     StatCard(
-                        title = adminTr(isEnglish, "סה\"כ משתמשים", "Total users"),
+                        title = adminTr(isEnglish, "משתמשים", "Users"),
                         value = if (loading) "…" else totalUsers.toString(),
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        title = adminTr(isEnglish, "מס' סניפים", "Branches"),
+                        title = adminTr(isEnglish, "סניפים", "Branches"),
                         value = if (loading) "…" else branchCount.toString(),
                         modifier = Modifier.weight(1f)
                     )
@@ -641,7 +749,7 @@ fun AdminUsersScreen(
                             "…"
                         } else {
                             avgAge?.let { String.format("%.1f", it) }
-                                ?: adminTr(isEnglish, "לא ידוע", "Unknown")
+                                ?: "-"
                         },
                         modifier = Modifier.weight(1f)
                     )
@@ -663,8 +771,7 @@ fun AdminUsersScreen(
                     title = adminTr(isEnglish, "חלוקה לפי מין", "Gender distribution"),
                     data = listOf(
                         adminTr(isEnglish, "זכר", "Male") to (genderCounts["male"] ?: genderCounts["m"] ?: 0),
-                        adminTr(isEnglish, "נקבה", "Female") to (genderCounts["female"] ?: genderCounts["f"] ?: 0),
-                        adminTr(isEnglish, "לא ידוע", "Unknown") to (genderCounts["unknown"] ?: 0)
+                        adminTr(isEnglish, "נקבה", "Female") to (genderCounts["female"] ?: genderCounts["f"] ?: 0)
                     ),
                     accent = Color(0xFF38BDF8)
                 )
@@ -976,7 +1083,7 @@ private fun StatCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.height(82.dp),
+        modifier = modifier.heightIn(min = 96.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF020617).copy(alpha = 0.9f)
@@ -986,26 +1093,32 @@ private fun StatCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 8.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.Center
         ) {
 
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelSmall,
                 color = Color(0xFF9CA3AF),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 2,
+                lineHeight = 14.sp
             )
+
+            Spacer(Modifier.height(6.dp))
 
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = Color(0xFFE5E7EB),
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Black,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 1,
+                lineHeight = 22.sp
             )
         }
     }
@@ -1250,6 +1363,111 @@ private fun FilterRow(
     }
 }
 
+private fun AdminUserRecord.displayBranchesText(isEnglish: Boolean): String {
+    val allBranches = buildList {
+        branch?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
+        addAll(branches.map { it.trim() }.filter { it.isNotBlank() })
+    }
+        .filterNot {
+            it.equals("לא ידוע", ignoreCase = true) ||
+                    it.equals("unknown", ignoreCase = true) ||
+                    it.equals("null", ignoreCase = true) ||
+                    it == "—"
+        }
+        .distinctBy { it.lowercase() }
+
+    return if (allBranches.isEmpty()) {
+        adminTr(isEnglish, "לא נבחר סניף", "No branch selected")
+    } else {
+        allBranches.joinToString(" + ")
+    }
+}
+
+private fun AdminUserRecord.displayRegionText(isEnglish: Boolean): String {
+    return region
+        ?.trim()
+        ?.takeIf {
+            it.isNotBlank() &&
+                    !it.equals("לא ידוע", ignoreCase = true) &&
+                    !it.equals("unknown", ignoreCase = true) &&
+                    !it.equals("null", ignoreCase = true)
+        }
+        ?: adminTr(isEnglish, "לא נבחר אזור", "No region selected")
+}
+
+private fun AdminUserRecord.displayAppTenureText(isEnglish: Boolean): String {
+    val created = createdAtMillis ?: return adminTr(
+        isEnglish,
+        "לא ידוע",
+        "Unknown"
+    )
+
+    val now = System.currentTimeMillis()
+    val diffMillis = (now - created).coerceAtLeast(0L)
+
+    val days = diffMillis / (1000L * 60L * 60L * 24L)
+
+    return when {
+        days <= 0L -> adminTr(
+            isEnglish,
+            "היום",
+            "Today"
+        )
+
+        days == 1L -> adminTr(
+            isEnglish,
+            "יום אחד",
+            "1 day"
+        )
+
+        days < 30L -> adminTr(
+            isEnglish,
+            "$days ימים",
+            "$days days"
+        )
+
+        days < 365L -> {
+            val months = (days / 30L).coerceAtLeast(1L)
+            if (months == 1L) {
+                adminTr(isEnglish, "חודש אחד", "1 month")
+            } else {
+                adminTr(isEnglish, "$months חודשים", "$months months")
+            }
+        }
+
+        else -> {
+            val years = days / 365L
+            val remainingMonths = (days % 365L) / 30L
+
+            when {
+                years == 1L && remainingMonths == 0L ->
+                    adminTr(isEnglish, "שנה אחת", "1 year")
+
+                years == 1L ->
+                    adminTr(
+                        isEnglish,
+                        String.format(Locale.US, "שנה ו-%d חודשים", remainingMonths),
+                        String.format(Locale.US, "1 year and %d months", remainingMonths)
+                    )
+
+                remainingMonths == 0L ->
+                    adminTr(
+                        isEnglish,
+                        String.format(Locale.US, "%d שנים", years),
+                        String.format(Locale.US, "%d years", years)
+                    )
+
+                else ->
+                    adminTr(
+                        isEnglish,
+                        String.format(Locale.US, "%d שנים ו-%d חודשים", years, remainingMonths),
+                        String.format(Locale.US, "%d years and %d months", years, remainingMonths)
+                    )
+            }
+        }
+    }
+}
+
 @Composable
 private fun UserRowCard(
     user: AdminUserRecord,
@@ -1342,17 +1560,43 @@ private fun UserRowCard(
                 }
 
                 val ageText = user.age?.toString() ?: adminTr(isEnglish, "לא ידוע", "Unknown")
-                val regionBranch =
-                    listOfNotNull(user.region, user.branch).joinToString(" · ").ifBlank { "—" }
+                val regionText = user.displayRegionText(isEnglish)
+                val branchesText = user.displayBranchesText(isEnglish)
 
                 Text(
                     text = adminTr(
                         isEnglish,
-                        "$beltText  •  גיל: $ageText  •  $regionBranch",
-                        "$beltText  •  Age: $ageText  •  $regionBranch"
+                        "$beltText  •  גיל: $ageText  •  אזור: $regionText",
+                        "$beltText  •  Age: $ageText  •  Region: $regionText"
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF9CA3AF),
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = adminTr(
+                        isEnglish,
+                        "סניפים: $branchesText",
+                        "Branches: $branchesText"
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF9CA3AF),
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                val appTenureText = user.displayAppTenureText(isEnglish)
+
+                Text(
+                    text = adminTr(
+                        isEnglish,
+                        "וותק באפליקציה: $appTenureText",
+                        "App tenure: $appTenureText"
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF7DD3FC),
                     textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
                 )

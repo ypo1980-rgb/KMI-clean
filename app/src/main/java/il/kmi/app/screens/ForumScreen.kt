@@ -66,6 +66,7 @@ import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
@@ -1032,32 +1033,49 @@ fun ForumScreen(
                 .ifBlank { email }
                 .ifBlank { forumTr(isEnglish, "משתתף", "Participant") }
 
-            // מבטיח שחדר הפורום קיים כמסמך אמת בשרת
+            // מבטיח שחדר הפורום קיים כמסמך אמת בשרת.
+            // חשוב:
+            // אם חוקי Firestore לא מאפשרים למשתמש רגיל לעדכן את מסמך החדר,
+            // לא נפיל את שליחת ההודעה. ננסה לעדכן את החדר, ואם אין הרשאה —
+            // נמשיך לשמירת ההודעה עצמה.
             val roomRef = db.collection("branches")
                 .document(branch)
                 .collection("forumRooms")
                 .document(forumRoomId)
 
-            roomRef.set(
-                mapOf(
-                    "roomId" to forumRoomId,
-                    "branch" to branch,
-                    "groupKey" to groupKey,
-                    "participantCount" to participantsByUsers.size,
-                    "participantIds" to participantsByUsers.map { it.id }.take(200),
-                    "participantNames" to participantsByUsers.map { it.name }.take(200),
-                    "participantSource" to "users_by_branch_and_group",
-                    "pushEnabled" to true,
-                    "pushTarget" to "forum_room_participants",
-                    "updatedAt" to FieldValue.serverTimestamp(),
-                    "updatedAtMillis" to System.currentTimeMillis(),
-                    "lastMessagePreview" to messagePreview,
-                    "lastMessageAuthorUid" to currentUid,
-                    "lastMessageAuthorName" to safeAuthorName,
-                    "source" to "android_forum"
-                ),
-                SetOptions.merge()
-            ).await()
+            val canWriteRoomMetadata = runCatching {
+                roomRef.set(
+                    mapOf(
+                        "roomId" to forumRoomId,
+                        "branch" to branch,
+                        "groupKey" to groupKey,
+                        "participantCount" to participantsByUsers.size,
+                        "participantIds" to participantsByUsers.map { it.id }.take(200),
+                        "participantNames" to participantsByUsers.map { it.name }.take(200),
+                        "participantSource" to "users_by_branch_and_group",
+                        "pushEnabled" to true,
+                        "pushTarget" to "forum_room_participants",
+                        "updatedAt" to FieldValue.serverTimestamp(),
+                        "updatedAtMillis" to System.currentTimeMillis(),
+                        "lastMessagePreview" to messagePreview,
+                        "lastMessageAuthorUid" to currentUid,
+                        "lastMessageAuthorName" to safeAuthorName,
+                        "source" to "android_forum"
+                    ),
+                    SetOptions.merge()
+                ).await()
+
+                true
+            }.getOrElse { error ->
+                if (
+                    error is FirebaseFirestoreException &&
+                    error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
+                ) {
+                    false
+                } else {
+                    throw error
+                }
+            }
 
             val expiresAtDate = Date(
                 System.currentTimeMillis() + FORUM_MESSAGE_RETENTION_MILLIS
@@ -1107,26 +1125,30 @@ fun ForumScreen(
                     .set(baseData.filterValues { it != null }, SetOptions.merge())
                     .await()
 
-                roomRef.set(
-                    mapOf(
-                        "lastMessageId" to messageRef.id,
-                        "lastMessagePreview" to messagePreview,
-                        "lastMessageAuthorUid" to currentUid,
-                        "lastMessageAuthorName" to safeAuthorName,
-                        "lastMessageAt" to FieldValue.serverTimestamp(),
-                        "lastMessageAtMillis" to nowMillis,
-                        "lastMessageHasMedia" to (mediaUrl != null && mediaType != null),
-                        "lastMessageMediaType" to mediaType,
-                        "pendingPushMessageId" to messageRef.id,
-                        "pendingPushAuthorUid" to currentUid,
-                        "pendingPushPreview" to messagePreview,
-                        "pendingPushAt" to FieldValue.serverTimestamp(),
-                        "pendingPushAtMillis" to nowMillis,
-                        "updatedAt" to FieldValue.serverTimestamp(),
-                        "updatedAtMillis" to nowMillis
-                    ),
-                    SetOptions.merge()
-                ).await()
+                if (canWriteRoomMetadata) {
+                    runCatching {
+                        roomRef.set(
+                            mapOf(
+                                "lastMessageId" to messageRef.id,
+                                "lastMessagePreview" to messagePreview,
+                                "lastMessageAuthorUid" to currentUid,
+                                "lastMessageAuthorName" to safeAuthorName,
+                                "lastMessageAt" to FieldValue.serverTimestamp(),
+                                "lastMessageAtMillis" to nowMillis,
+                                "lastMessageHasMedia" to (mediaUrl != null && mediaType != null),
+                                "lastMessageMediaType" to mediaType,
+                                "pendingPushMessageId" to messageRef.id,
+                                "pendingPushAuthorUid" to currentUid,
+                                "pendingPushPreview" to messagePreview,
+                                "pendingPushAt" to FieldValue.serverTimestamp(),
+                                "pendingPushAtMillis" to nowMillis,
+                                "updatedAt" to FieldValue.serverTimestamp(),
+                                "updatedAtMillis" to nowMillis
+                            ),
+                            SetOptions.merge()
+                        ).await()
+                    }
+                }
             } else {
                 val msg = editingMessage ?: return
                 val canEditThisMessage = msg.isMine || isManagerOverride
@@ -1167,18 +1189,22 @@ fun ForumScreen(
                     )
                     .await()
 
-                roomRef.set(
-                    mapOf(
-                        "lastMessagePreview" to messagePreview,
-                        "lastMessageAuthorUid" to currentUid,
-                        "lastMessageAuthorName" to safeAuthorName,
-                        "lastMessageEditedAt" to FieldValue.serverTimestamp(),
-                        "lastMessageEditedAtMillis" to nowMillis,
-                        "updatedAt" to FieldValue.serverTimestamp(),
-                        "updatedAtMillis" to nowMillis
-                    ),
-                    SetOptions.merge()
-                ).await()
+                if (canWriteRoomMetadata) {
+                    runCatching {
+                        roomRef.set(
+                            mapOf(
+                                "lastMessagePreview" to messagePreview,
+                                "lastMessageAuthorUid" to currentUid,
+                                "lastMessageAuthorName" to safeAuthorName,
+                                "lastMessageEditedAt" to FieldValue.serverTimestamp(),
+                                "lastMessageEditedAtMillis" to nowMillis,
+                                "updatedAt" to FieldValue.serverTimestamp(),
+                                "updatedAtMillis" to nowMillis
+                            ),
+                            SetOptions.merge()
+                        ).await()
+                    }
+                }
             }
 
             // ניקוי מצב אחרי שליחה / עדכון

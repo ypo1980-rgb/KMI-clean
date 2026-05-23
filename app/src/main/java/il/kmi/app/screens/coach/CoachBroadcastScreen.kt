@@ -982,11 +982,14 @@ fun CoachBroadcastScreen(
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
                             ) {
                                 OutlinedButton(
                                     onClick = { sendScope = "group" },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 78.dp),
                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                                     border = BorderStroke(
                                         1.dp,
@@ -1003,23 +1006,52 @@ fun CoachBroadcastScreen(
                                             Color(0xFF0B1220).copy(alpha = 0.82f)
                                         },
                                         contentColor = Color(0xFFE0F2FE)
+                                    ),
+                                    contentPadding = PaddingValues(
+                                        horizontal = 10.dp,
+                                        vertical = 10.dp
                                     )
                                 ) {
-                                    Text(
-                                        text = coachBroadcastTr(
-                                            isEnglish,
-                                            "הקבוצה שלי",
-                                            "My group"
-                                        ),
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 2,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = coachBroadcastTr(
+                                                isEnglish,
+                                                "הקבוצה שלי",
+                                                "My group"
+                                            ),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            color = Color.White,
+                                            fontSize = 18.sp,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        Spacer(Modifier.height(4.dp))
+
+                                        Text(
+                                            text = coachBroadcastTr(
+                                                isEnglish,
+                                                "רק המתאמנים של הקבוצה",
+                                                "Only this group's trainees"
+                                            ),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 2,
+                                            color = Color(0xFFBAE6FD),
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
                                 }
 
                                 OutlinedButton(
                                     onClick = { sendScope = "branch" },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 78.dp),
                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                                     border = BorderStroke(
                                         1.dp,
@@ -1036,18 +1068,45 @@ fun CoachBroadcastScreen(
                                             Color(0xFF0B1220).copy(alpha = 0.82f)
                                         },
                                         contentColor = Color(0xFFE0F2FE)
+                                    ),
+                                    contentPadding = PaddingValues(
+                                        horizontal = 10.dp,
+                                        vertical = 10.dp
                                     )
                                 ) {
-                                    Text(
-                                        text = coachBroadcastTr(
-                                            isEnglish,
-                                            "כל הסניף",
-                                            "Entire branch"
-                                        ),
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 2,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = coachBroadcastTr(
+                                                isEnglish,
+                                                "כל הסניף",
+                                                "Entire branch"
+                                            ),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            color = Color.White,
+                                            fontSize = 18.sp,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        Spacer(Modifier.height(4.dp))
+
+                                        Text(
+                                            text = coachBroadcastTr(
+                                                isEnglish,
+                                                "כולל כל הקבוצות בסניף",
+                                                "Includes all groups in branch"
+                                            ),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 2,
+                                            color = Color(0xFFBAE6FD),
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
                                 }
                             }
 
@@ -1057,15 +1116,19 @@ fun CoachBroadcastScreen(
                                     if (sendScope == "group") {
                                         "ההודעה תישלח רק למתאמני הקבוצה: $coachGroupKey"
                                     } else {
-                                        "ההודעה תישלח לכל המתאמנים הפעילים בסניף שנבחר."
+                                        "ההודעה תישלח לכל המתאמנים הפעילים בכל הקבוצות של הסניף שנבחר."
                                     },
                                     if (sendScope == "group") {
                                         "The message will be sent only to trainees in: $coachGroupKey"
                                     } else {
-                                        "The message will be sent to all active trainees in the selected branch."
+                                        "The message will be sent to all active trainees in all groups of the selected branch."
                                     }
                                 ),
-                                color = Color(0xFFE0F2FE),
+                                color = if (sendScope == "branch") {
+                                    Color(0xFFBAE6FD)
+                                } else {
+                                    Color(0xFFE0F2FE)
+                                },
                                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                                 textAlign = screenTextAlign,
                                 modifier = Modifier.fillMaxWidth()

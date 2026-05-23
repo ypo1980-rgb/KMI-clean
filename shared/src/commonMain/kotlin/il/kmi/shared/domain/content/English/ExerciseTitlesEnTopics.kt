@@ -67,6 +67,33 @@ object ExerciseTitlesEnTopics {
         "הגנה – סכין" to "Defense - Knife",
         "הגנה – מקל" to "Defense - Stick",
         "הגנה – איום אקדח" to "Defense - Gun Threat",
+        "הגנות מסכין" to "Knife Defenses",
+        "הגנות סכין" to "Knife Defenses",
+        "הגנות נגד סכין" to "Defenses Against Knife Attacks",
+        "הגנות מאיום סכין לקיר" to "Defenses Against Knife Threats Against a Wall",
+
+        "הגנות נגד מספר תוקפים" to "Defenses Against Multiple Attackers",
+        "הגנות מספר תוקפים" to "Defenses Against Multiple Attackers",
+
+        "הגנות עם רובה נגד דקירות סכין" to "Rifle Defenses Against Knife Stabs",
+        "הגנות עם רובה נגד סכין" to "Rifle Defenses Against Knife",
+
+        "הגנות נגד מקל / רובה" to "Defenses Against Stick / Rifle Attacks",
+        "הגנות נגד מקל ורובה" to "Defenses Against Stick / Rifle Attacks",
+
+        "הגנות פנימיות - אגרופים" to "Internal Defenses - Punches",
+        "הגנות פנימיות – אגרופים" to "Internal Defenses - Punches",
+        "הגנות פנימיות - בעיטות" to "Internal Defenses - Kicks",
+        "הגנות פנימיות – בעיטות" to "Internal Defenses - Kicks",
+
+        "הגנות חיצוניות - אגרופים" to "External Defenses - Punches",
+        "הגנות חיצוניות – אגרופים" to "External Defenses - Punches",
+        "הגנות חיצוניות - בעיטות" to "External Defenses - Kicks",
+        "הגנות חיצוניות – בעיטות" to "External Defenses - Kicks",
+
+        "שחרורים מתפיסות ידיים בשכיבה" to "Releases from Wrist Grabs on the Ground",
+        "שחרורים מחביקות בשכיבה" to "Releases from Holds on the Ground",
+        "שחרורים מחניקות בשכיבה" to "Releases from Chokes on the Ground",
         "שחרורים מחביקות צואר" to "Releases from Neck Holds",
         "שחרורים מתפיסות נלסון" to "Releases from Nelson Holds",
         "שחרורים מחביקות גוף" to "Releases from Body Bear Hugs"

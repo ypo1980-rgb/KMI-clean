@@ -2,27 +2,22 @@ package il.kmi.app.subscription
 
 import android.app.Activity
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -36,10 +31,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,23 +46,49 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+
+private fun formatStorePriceNoTrailingZeros(raw: String): String {
+    return raw
+        .replace(Regex("""(\d+)[.,]0+(?!\d)""")) { match ->
+            match.groupValues[1]
+        }
+        .replace(Regex("""\s+"""), " ")
+        .trim()
+}
+
+private fun subscriptionPlanLabelForSuccess(
+    productId: String?,
+    isEnglish: Boolean
+): String {
+    return when (productId) {
+        SubscriptionProducts.REGULAR_YEARLY,
+        SubscriptionProducts.MEMBER_YEARLY -> {
+            if (isEnglish) "yearly subscription" else "המנוי השנתי"
+        }
+
+        SubscriptionProducts.REGULAR_MONTHLY,
+        SubscriptionProducts.MEMBER_MONTHLY -> {
+            if (isEnglish) "monthly subscription" else "המנוי החודשי"
+        }
+
+        else -> {
+            if (isEnglish) "subscription" else "המנוי"
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubscriptionPlansScreen(
     onBack: () -> Unit,
+    onContinueToContent: () -> Unit = onBack,
     onOpenHome: () -> Unit,
     onOpenAssociationMembership: () -> Unit,
 ) {
@@ -82,8 +107,46 @@ fun SubscriptionPlansScreen(
     val userSp = remember {
         ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
     }
+
+    val subsSp = remember {
+        ctx.getSharedPreferences("kmi_subs", android.content.Context.MODE_PRIVATE)
+    }
+
     val isAssociationMember = remember {
         userSp.getBoolean("is_association_member", false)
+    }
+
+    var purchaseStartedFromPlans by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var purchasedProductIdForDialog by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+
+    var showPurchaseSuccessDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    fun hasActiveSubscriptionInPrefs(): Boolean {
+        val now = System.currentTimeMillis()
+
+        val userUntil = userSp.getLong("sub_access_until", 0L)
+        val subsUntil = subsSp.getLong("sub_access_until", 0L)
+
+        val userHasAccess =
+            userSp.getBoolean("has_full_access", false) ||
+                    userSp.getBoolean("full_access", false) ||
+                    userSp.getBoolean("subscription_active", false) ||
+                    userSp.getBoolean("is_subscribed", false)
+
+        val subsHasAccess =
+            subsSp.getBoolean("has_full_access", false) ||
+                    subsSp.getBoolean("full_access", false) ||
+                    subsSp.getBoolean("subscription_active", false) ||
+                    subsSp.getBoolean("is_subscribed", false)
+
+        return (userUntil > now || subsUntil > now) && (userHasAccess || subsHasAccess)
     }
 
     val monthlyProductId = remember(isAssociationMember) {
@@ -100,10 +163,12 @@ fun SubscriptionPlansScreen(
 
     val monthlyStorePrice = remember(state, monthlyProductId) {
         repo.getPriceForProduct(monthlyProductId)
+            ?.let(::formatStorePriceNoTrailingZeros)
     }
 
     val yearlyStorePrice = remember(state, yearlyProductId) {
         repo.getPriceForProduct(yearlyProductId)
+            ?.let(::formatStorePriceNoTrailingZeros)
     }
 
     val monthlyPriceText = monthlyStorePrice
@@ -113,6 +178,48 @@ fun SubscriptionPlansScreen(
         ?: if (isEnglish) "Price will appear soon" else "המחיר יופיע בקרוב"
 
     val isBillingReady = state.connected && state.productsLoaded && state.error == null
+
+    DisposableEffect(userSp, subsSp, purchaseStartedFromPlans) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (
+                purchaseStartedFromPlans &&
+                (
+                        key == "has_full_access" ||
+                                key == "full_access" ||
+                                key == "subscription_active" ||
+                                key == "is_subscribed" ||
+                                key == "sub_product" ||
+                                key == "sub_access_until" ||
+                                key == "access_changed_at"
+                        )
+            ) {
+                if (hasActiveSubscriptionInPrefs()) {
+                    purchasedProductIdForDialog =
+                        userSp.getString("sub_product", null)
+                            ?: subsSp.getString("sub_product", null)
+
+                    showPurchaseSuccessDialog = true
+                    purchaseStartedFromPlans = false
+                }
+            }
+        }
+
+        userSp.registerOnSharedPreferenceChangeListener(listener)
+        subsSp.registerOnSharedPreferenceChangeListener(listener)
+
+        onDispose {
+            userSp.unregisterOnSharedPreferenceChangeListener(listener)
+            subsSp.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+
+    LaunchedEffect(state.active, state.productId, purchaseStartedFromPlans) {
+        if (purchaseStartedFromPlans && state.active) {
+            purchasedProductIdForDialog = state.productId
+            showPurchaseSuccessDialog = true
+            purchaseStartedFromPlans = false
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -265,9 +372,14 @@ fun SubscriptionPlansScreen(
                     },
                     onBuy = {
                         if (activity != null && state.connected) {
+                            purchaseStartedFromPlans = true
+                            purchasedProductIdForDialog = monthlyProductId
+
                             val launched = repo.launchPurchase(activity, monthlyProductId)
 
                             if (!launched) {
+                                purchaseStartedFromPlans = false
+
                                 Toast.makeText(
                                     ctx,
                                     if (isEnglish) {
@@ -336,9 +448,14 @@ fun SubscriptionPlansScreen(
                     },
                     onBuy = {
                         if (activity != null && state.connected) {
+                            purchaseStartedFromPlans = true
+                            purchasedProductIdForDialog = yearlyProductId
+
                             val launched = repo.launchPurchase(activity, yearlyProductId)
 
                             if (!launched) {
+                                purchaseStartedFromPlans = false
+
                                 Toast.makeText(
                                     ctx,
                                     if (isEnglish) {
@@ -376,6 +493,104 @@ fun SubscriptionPlansScreen(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            if (showPurchaseSuccessDialog) {
+                val planLabel = subscriptionPlanLabelForSuccess(
+                    productId = purchasedProductIdForDialog,
+                    isEnglish = isEnglish
+                )
+
+                Dialog(
+                    onDismissRequest = {
+                        showPurchaseSuccessDialog = false
+                        onContinueToContent()
+                    }
+                ) {
+                    ElevatedCard(
+                        shape = RoundedCornerShape(30.dp),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = Color(0xFFF7F4FB)
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(18.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                Color(0xFF7C3AED),
+                                                Color(0xFF06B6D4)
+                                            )
+                                        )
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Color.White
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isEnglish) "Purchase approved" else "רכישה אושרה",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = if (isEnglish) {
+                                    "Your $planLabel purchase was completed successfully. You can now continue to the content."
+                                } else {
+                                    "הרכישה של $planLabel בוצעה בהצלחה. כעת ניתן להמשיך לתוכן."
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                textAlign = TextAlign.Center,
+                                color = Color(0xFF374151),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Button(
+                                onClick = {
+                                    showPurchaseSuccessDialog = false
+                                    onContinueToContent()
+                                },
+                                shape = RoundedCornerShape(22.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF6D4DB3),
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                            ) {
+                                Text(
+                                    text = if (isEnglish) "Continue to content" else "המשך לתוכן",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -449,14 +664,22 @@ private fun TariffCard(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                            .padding(horizontal = 10.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         PremiumTariffRow(
                             label = if (isAssociationMember) {
-                                if (isEnglish) "KAMI member plan" else "מסלול חבר עמותת ק.מ.י"
+                                if (isEnglish) {
+                                    "KAMI\nmember\nplan"
+                                } else {
+                                    "מסלול\nחבר עמותת\nק.מ.י"
+                                }
                             } else {
-                                if (isEnglish) "Regular user plan" else "מסלול משתמש רגיל"
+                                if (isEnglish) {
+                                    "Regular\nuser\nplan"
+                                } else {
+                                    "מסלול\nמשתמש\nרגיל"
+                                }
                             },
                             monthly = if (isEnglish) "Monthly" else "חודשי",
                             yearly = if (isEnglish) "Yearly" else "שנתי",
@@ -532,6 +755,8 @@ private fun PremiumTariffRow(
     }
 
     val fontWeight = if (isHeader) FontWeight.ExtraBold else FontWeight.SemiBold
+    val headerStyle = MaterialTheme.typography.bodyMedium
+    val regularStyle = MaterialTheme.typography.bodyLarge
 
     CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
         Row(
@@ -543,27 +768,35 @@ private fun PremiumTariffRow(
                 text = label,
                 color = textColor,
                 fontWeight = fontWeight,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1.6f),
-                textAlign = labelAlign
+                style = if (isHeader) headerStyle else regularStyle,
+                modifier = Modifier.weight(1.55f),
+                textAlign = if (isHeader) TextAlign.Center else labelAlign,
+                maxLines = if (isHeader) 3 else 2,
+                overflow = if (isHeader) TextOverflow.Clip else TextOverflow.Ellipsis
             )
 
             Text(
                 text = monthly,
                 color = textColor,
                 fontWeight = fontWeight,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center
+                style = if (isHeader) headerStyle else regularStyle,
+                modifier = Modifier.weight(0.95f),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
             )
 
             Text(
                 text = yearly,
                 color = textColor,
                 fontWeight = fontWeight,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center
+                style = if (isHeader) headerStyle else regularStyle,
+                modifier = Modifier.weight(0.95f),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
             )
         }
     }

@@ -40,6 +40,7 @@ import il.kmi.shared.localization.AppLanguage
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.domain.content.English.ExerciseExplanationsEn
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 
 //===========================================================================
 
@@ -485,29 +486,14 @@ fun SubTopicsScreen(
 
                 if (isHardFlow && hardSubSections.isNotEmpty()) {
                     hardSubSections.forEach { section ->
-                        val totalCount = section.totalItemsCount()
+                        val beltCount = section.itemsFor(belt).size
+                        val displayCount = if (beltCount > 0) beltCount else section.totalItemsCount()
 
                         HardSubTopicCategoryCard(
                             belt = belt,
                             title = if (isEnglish) ExerciseTitlesEn.getOrSame(section.title) else section.title,
-                            count = totalCount,
+                            count = displayCount,
                             onClick = { onOpenSubTopic(section.id) }
-                        )
-                    }
-
-                } else if (isHardFlow && hardBeltGroups.isNotEmpty()) {
-
-                    hardBeltGroups.forEach { group ->
-                        HardBeltGroupCard(
-                            belt = group.belt,
-                            items = group.items,
-                            isDarkMode = isDarkMode,
-                            onOpenExercise = { item ->
-                                openedExerciseRequest = OpenedExerciseRequest(
-                                    belt = group.belt,
-                                    item = item
-                                )
-                            }
                         )
                     }
 
@@ -547,6 +533,22 @@ fun SubTopicsScreen(
                             explanation = explanation,
                             accentColor = belt.color,
                             onDismiss = { explain = null }
+                        )
+                    }
+
+                } else if (isHardFlow && hardBeltGroups.isNotEmpty()) {
+
+                    hardBeltGroups.forEach { group ->
+                        HardBeltGroupCard(
+                            belt = group.belt,
+                            items = group.items,
+                            isDarkMode = isDarkMode,
+                            onOpenExercise = { item ->
+                                openedExerciseRequest = OpenedExerciseRequest(
+                                    belt = group.belt,
+                                    item = item
+                                )
+                            }
                         )
                     }
 
@@ -804,6 +806,22 @@ private fun findExplanationForHitLocal(
     }
 }
 
+private fun saveSubTopicExerciseNote(
+    prefs: android.content.SharedPreferences,
+    noteKey: String,
+    text: String
+) {
+    val clean = text.trim()
+
+    prefs.edit().apply {
+        if (clean.isBlank()) {
+            remove(noteKey)
+        } else {
+            putString(noteKey, clean)
+        }
+    }.apply()
+}
+
 @Composable
 private fun ModernExerciseInfoDialog(
     title: String,
@@ -830,7 +848,11 @@ private fun ModernExerciseInfoDialog(
         "note_${subtitle.orEmpty().trim()}_${favoriteId}"
     }
 
-    var noteText by remember(noteKey) {
+    var notesRefreshKey by rememberSaveable(noteKey) {
+        mutableIntStateOf(0)
+    }
+
+    var noteText by remember(noteKey, notesRefreshKey) {
         mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
     }
 
@@ -854,6 +876,7 @@ private fun ModernExerciseInfoDialog(
         noteText = noteText,
         isFavorite = effectiveFavorite,
         accentColor = accentColor,
+        isEnglish = isEnglish,
         backgroundBrush = Brush.verticalGradient(
             colors = listOf(
                 Color.White,
@@ -869,6 +892,17 @@ private fun ModernExerciseInfoDialog(
         onEditNote = {
             showNoteEditor = true
         },
+        onDeleteNote = {
+            noteText = ""
+
+            saveSubTopicExerciseNote(
+                prefs = notePrefs,
+                noteKey = noteKey,
+                text = ""
+            )
+
+            notesRefreshKey++
+        },
         onToggleFavorite = {
             if (onToggleFav != null) {
                 onToggleFav()
@@ -880,63 +914,26 @@ private fun ModernExerciseInfoDialog(
     )
 
     if (showNoteEditor) {
-        AlertDialog(
-            onDismissRequest = { showNoteEditor = false },
-            containerColor = Color(0xFFF7F4FB),
-            shape = RoundedCornerShape(28.dp),
-            title = {
-                Text(
-                    text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                    fontWeight = FontWeight.ExtraBold
-                )
+        ExerciseNoteEditorDialog(
+            noteText = noteText,
+            isEnglish = isEnglish,
+            accentColor = accentColor,
+            onNoteChange = { noteText = it },
+            onDismiss = {
+                showNoteEditor = false
             },
-            text = {
-                OutlinedTextField(
-                    value = noteText,
-                    onValueChange = { noteText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 4,
-                    maxLines = 7,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    placeholder = {
-                        Text(
-                            text = if (isEnglish) "Write a free note" else "הקלד הערה חופשית",
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                        )
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        notePrefs.edit()
-                            .putString(noteKey, noteText)
-                            .apply()
+            onSave = {
+                val cleanNote = noteText.trim()
+                noteText = cleanNote
 
-                        showNoteEditor = false
-                    }
-                ) {
-                    Text(
-                        text = if (isEnglish) "Save" else "שמור",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showNoteEditor = false }
-                ) {
-                    Text(
-                        text = if (isEnglish) "Cancel" else "בטל",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                saveSubTopicExerciseNote(
+                    prefs = notePrefs,
+                    noteKey = noteKey,
+                    text = cleanNote
+                )
+
+                notesRefreshKey++
+                showNoteEditor = false
             }
         )
     }

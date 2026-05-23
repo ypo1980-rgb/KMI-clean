@@ -52,6 +52,8 @@ import androidx.compose.foundation.border
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 
 /* ------------------------------ MarkState (3 states) ------------------------------ */
 
@@ -544,6 +546,7 @@ fun SummaryScreen(
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
     var noteEditorTopic by rememberSaveable { mutableStateOf<String?>(null) }
     var noteDraft by rememberSaveable { mutableStateOf("") }
+    var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
 
     val handlePickFromTopBar: (String) -> Unit = { key ->
         fun dec(s: String) = try { java.net.URLDecoder.decode(s, "UTF-8") } catch (_: Exception) { s }
@@ -775,7 +778,9 @@ fun SummaryScreen(
 
             val cleanFavId = cleanItem(t, canonical)
             val isFav = favorites.contains(cleanFavId)
-            val noteText = loadNote(t, cleanFavId)
+            val noteText = remember(t, cleanFavId, notesRefreshKey) {
+                loadNote(t, cleanFavId)
+            }
 
             val dialogTitle = exerciseDisplayNameForUi(
                 topicTitle = t,
@@ -797,7 +802,7 @@ fun SummaryScreen(
                 "(${b.heb})"
             }
 
-            il.kmi.app.ui.dialogs.ExerciseExplanationDialog(
+            ExerciseExplanationDialog(
                 title = dialogTitle,
                 beltLabel = dialogBeltLabel,
                 explanation = explanation,
@@ -814,6 +819,11 @@ fun SummaryScreen(
                     noteEditorFor = cleanFavId
                     noteDraft = loadNote(t, cleanFavId)
                 },
+                onDeleteNote = {
+                    saveNote(t, cleanFavId, "")
+                    noteDraft = ""
+                    notesRefreshKey++
+                },
                 onToggleFavorite = {
                     FavoritesStore.toggle(cleanFavId)
                 }
@@ -823,57 +833,24 @@ fun SummaryScreen(
         noteEditorFor?.let { item ->
             val noteTopic = noteEditorTopic ?: topic.ifBlank { "כללי" }
 
-            AlertDialog(
-                onDismissRequest = {
+            ExerciseNoteEditorDialog(
+                noteText = noteDraft,
+                isEnglish = isEnglish,
+                accentColor = belt.color,
+                onNoteChange = { noteDraft = it },
+                onDismiss = {
                     noteEditorFor = null
                     noteEditorTopic = null
                 },
-                title = {
-                    Text(
-                        text = tr("עריכת הערה", "Edit note"),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                },
-                text = {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = exerciseDisplayNameForUi("", item, isEnglish),
-                            fontWeight = FontWeight.Bold,
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                onSave = {
+                    val cleanNote = noteDraft.trim()
+                    noteDraft = cleanNote
 
-                        OutlinedTextField(
-                            value = noteDraft,
-                            onValueChange = { noteDraft = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 4,
-                            maxLines = 8,
-                            textStyle = LocalTextStyle.current.copy(
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                            )
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            saveNote(noteTopic, item, noteDraft)
-                            noteEditorFor = null
-                            noteEditorTopic = null
-                        }
-                    ) { Text(tr("שמור", "Save")) }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            noteEditorFor = null
-                            noteEditorTopic = null
-                        }
-                    ) { Text(tr("ביטול", "Cancel")) }
+                    saveNote(noteTopic, item, cleanNote)
+
+                    notesRefreshKey++
+                    noteEditorFor = null
+                    noteEditorTopic = null
                 }
             )
         }

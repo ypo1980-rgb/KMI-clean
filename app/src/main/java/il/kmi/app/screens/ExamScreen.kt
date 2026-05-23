@@ -1,13 +1,11 @@
 package il.kmi.app.screens
 
+import android.content.SharedPreferences
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.*
@@ -24,6 +22,8 @@ import androidx.compose.ui.unit.sp
 import il.kmi.shared.domain.Belt
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.KmiTtsManager
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import kotlinx.coroutines.delay
@@ -35,6 +35,53 @@ private fun normalizeFavoriteId(raw: String): String =
     raw.substringAfter("::", raw)
         .substringAfter(":", raw)
         .trim()
+
+private fun exerciseNoteIdFor(raw: String): String {
+    return normalizeFavoriteId(toDisplayItem(raw))
+        .ifBlank { normalizeFavoriteId(raw) }
+        .trim()
+}
+
+private fun readExerciseNote(
+    prefs: SharedPreferences,
+    primaryKey: String,
+    vararg legacyKeys: String
+): String {
+    val keys = buildList {
+        add(primaryKey)
+        addAll(legacyKeys)
+    }.distinct()
+
+    return keys
+        .asSequence()
+        .map { key -> prefs.getString(key, "").orEmpty().trim() }
+        .firstOrNull { it.isNotBlank() }
+        .orEmpty()
+}
+
+private fun saveExerciseNote(
+    prefs: SharedPreferences,
+    text: String,
+    primaryKey: String,
+    vararg legacyKeys: String
+) {
+    val clean = text.trim()
+
+    prefs.edit().apply {
+        val keys = buildList {
+            add(primaryKey)
+            addAll(legacyKeys)
+        }.distinct()
+
+        keys.forEach { key ->
+            if (clean.isBlank()) {
+                remove(key)
+            } else {
+                putString(key, clean)
+            }
+        }
+    }.apply()
+}
 
 private fun findExplanationForExam(
     belt: Belt,
@@ -443,12 +490,24 @@ fun ExamScreen(
             val favId = remember(item) { normalizeFavoriteId(item) }
             val isFav = favorites.contains(favId)
 
-            val noteKey = remember(b, topic, favId) {
+            val noteId = remember(item) { exerciseNoteIdFor(item) }
+
+            val noteKey = remember(b, noteId) {
+                "note_${b.id}_${noteId}"
+            }
+
+            val legacyTopicNoteKey = remember(b, topic, favId) {
                 "note_${b.id}_${topic.trim()}_${favId}"
             }
 
-            var noteText by remember(noteKey) {
-                mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+            var noteText by remember(noteKey, legacyTopicNoteKey) {
+                mutableStateOf(
+                    readExerciseNote(
+                        prefs = notePrefs,
+                        primaryKey = noteKey,
+                        legacyTopicNoteKey
+                    )
+                )
             }
 
             var showNoteEditor by remember { mutableStateOf(false) }
@@ -458,165 +517,48 @@ fun ExamScreen(
                 FavoritesStore.toggle(favId)
             }
 
-            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            ExerciseExplanationDialog(
+                title = toDisplayItem(item),
+                beltLabel = "$topic • ${b.heb}",
+                explanation = explanation,
+                noteText = noteText,
+                isFavorite = isFav,
+                accentColor = b.color,
+                isEnglish = false,
+                onDismiss = { pickedSearchKey = null },
+                onEditNote = { showNoteEditor = true },
+                onDeleteNote = {
+                    noteText = ""
 
-            ModalBottomSheet(
-                onDismissRequest = { pickedSearchKey = null },
-                sheetState = sheetState,
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp
-            ) {
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { toggleFav() }) {
-                                if (isFav) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Star,
-                                        contentDescription = "הסר ממועדפים",
-                                        tint = Color(0xFFFFC107)
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = "הוסף למועדפים"
-                                    )
-                                }
-                            }
-
-                            IconButton(onClick = { showNoteEditor = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Edit,
-                                    contentDescription = "ערוך הערה",
-                                    tint = Color(0xFF42A5F5)
-                                )
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            Text(
-                                text = item,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                text = "$topic • ${b.heb}",
-                                style = MaterialTheme.typography.labelMedium,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.End
-                    ) {
-
-                        Text(
-                            text = explanation,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        if (noteText.isNotBlank()) {
-
-                            Spacer(Modifier.height(12.dp))
-                            HorizontalDivider()
-                            Spacer(Modifier.height(10.dp))
-
-                            Text(
-                                text = "הערה של המתאמן:",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(Modifier.height(6.dp))
-
-                            Text(
-                                text = noteText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { pickedSearchKey = null }) {
-                            Text("סגור")
-                        }
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-                }
-            }
+                    saveExerciseNote(
+                        prefs = notePrefs,
+                        text = "",
+                        primaryKey = noteKey,
+                        legacyTopicNoteKey
+                    )
+                },
+                onToggleFavorite = { toggleFav() }
+            )
 
             if (showNoteEditor) {
-                AlertDialog(
-                    onDismissRequest = { showNoteEditor = false },
-                    title = {
-                        Text(
-                            text = "הערה לתרגיל",
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
+                ExerciseNoteEditorDialog(
+                    noteText = noteText,
+                    isEnglish = false,
+                    accentColor = b.color,
+                    onNoteChange = { noteText = it },
+                    onDismiss = { showNoteEditor = false },
+                    onSave = {
+                        val cleanNote = noteText.trim()
+                        noteText = cleanNote
+
+                        saveExerciseNote(
+                            prefs = notePrefs,
+                            text = cleanNote,
+                            primaryKey = noteKey,
+                            legacyTopicNoteKey
                         )
-                    },
-                    text = {
-                        OutlinedTextField(
-                            value = noteText,
-                            onValueChange = { noteText = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
-                            label = { Text("כתוב הערה") }
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                notePrefs.edit()
-                                    .putString(noteKey, noteText.trim())
-                                    .apply()
-                                showNoteEditor = false
-                            }
-                        ) {
-                            Text("שמור")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showNoteEditor = false }) {
-                            Text("ביטול")
-                        }
+
+                        showNoteEditor = false
                     }
                 )
             }
@@ -633,12 +575,26 @@ fun ExamScreen(
             val favId = remember(rawItem) { normalizeFavoriteId(rawItem) }
             val isFav = favorites.contains(favId)
 
-            val noteKey = remember(belt, favId) {
+            val noteId = remember(rawItem) { exerciseNoteIdFor(rawItem) }
+
+            val noteKey = remember(belt, noteId) {
+                "note_${belt.id}_${noteId}"
+            }
+
+            val legacyExamNoteKey = remember(belt, favId) {
                 "note_${belt.id}_exam_${favId}"
             }
-            var noteText by remember(noteKey) {
-                mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+
+            var noteText by remember(noteKey, legacyExamNoteKey) {
+                mutableStateOf(
+                    readExerciseNote(
+                        prefs = notePrefs,
+                        primaryKey = noteKey,
+                        legacyExamNoteKey
+                    )
+                )
             }
+
             var showNoteEditor by remember { mutableStateOf(false) }
 
             fun toggleFav() {
@@ -646,161 +602,48 @@ fun ExamScreen(
                 FavoritesStore.toggle(favId)
             }
 
-            val helpSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            ExerciseExplanationDialog(
+                title = displayItem,
+                beltLabel = "מבחן מסכם • ${belt.heb}",
+                explanation = explanation,
+                noteText = noteText,
+                isFavorite = isFav,
+                accentColor = belt.color,
+                isEnglish = false,
+                onDismiss = { showHelp = false },
+                onEditNote = { showNoteEditor = true },
+                onDeleteNote = {
+                    noteText = ""
 
-            ModalBottomSheet(
-                onDismissRequest = { showHelp = false },
-                sheetState = helpSheetState,
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = { toggleFav() }) {
-                                if (isFav) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Star,
-                                        contentDescription = "הסר ממועדפים",
-                                        tint = Color(0xFFFFC107)
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = "הוסף למועדפים"
-                                    )
-                                }
-                            }
-
-                            IconButton(onClick = { showNoteEditor = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Edit,
-                                    contentDescription = "ערוך הערה",
-                                    tint = Color(0xFF42A5F5)
-                                )
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.End
-                        ) {
-                            Text(
-                                text = displayItem,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                text = "מבחן מסכם • ${belt.heb}",
-                                style = MaterialTheme.typography.labelMedium,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        Text(
-                            text = explanation,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        if (noteText.isNotBlank()) {
-                            Spacer(Modifier.height(12.dp))
-                            HorizontalDivider()
-                            Spacer(Modifier.height(10.dp))
-
-                            Text(
-                                text = "הערה של המתאמן:",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(Modifier.height(6.dp))
-
-                            Text(
-                                text = noteText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { showHelp = false }) {
-                            Text("סגור")
-                        }
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-                }
-            }
+                    saveExerciseNote(
+                        prefs = notePrefs,
+                        text = "",
+                        primaryKey = noteKey,
+                        legacyExamNoteKey
+                    )
+                },
+                onToggleFavorite = { toggleFav() }
+            )
 
             if (showNoteEditor) {
-                AlertDialog(
-                    onDismissRequest = { showNoteEditor = false },
-                    title = {
-                        Text(
-                            text = "הערה לתרגיל",
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
+                ExerciseNoteEditorDialog(
+                    noteText = noteText,
+                    isEnglish = false,
+                    accentColor = belt.color,
+                    onNoteChange = { noteText = it },
+                    onDismiss = { showNoteEditor = false },
+                    onSave = {
+                        val cleanNote = noteText.trim()
+                        noteText = cleanNote
+
+                        saveExerciseNote(
+                            prefs = notePrefs,
+                            text = cleanNote,
+                            primaryKey = noteKey,
+                            legacyExamNoteKey
                         )
-                    },
-                    text = {
-                        OutlinedTextField(
-                            value = noteText,
-                            onValueChange = { noteText = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Right),
-                            label = { Text("כתוב הערה") }
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                notePrefs.edit()
-                                    .putString(noteKey, noteText.trim())
-                                    .apply()
-                                showNoteEditor = false
-                            }
-                        ) {
-                            Text("שמור")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showNoteEditor = false }) {
-                            Text("ביטול")
-                        }
+
+                        showNoteEditor = false
                     }
                 )
             }

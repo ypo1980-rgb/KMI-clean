@@ -62,14 +62,11 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.domain.color
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -84,7 +81,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.sp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
-import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.database.KmiDatabaseProvider
 import kotlinx.coroutines.delay
 
@@ -255,6 +251,21 @@ fun HomeScreen(
             .trim()
 
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
+
+    fun saveHomeExerciseNote(noteKey: String, text: String) {
+        val clean = text.trim()
+
+        notePrefs.edit().apply {
+            if (clean.isBlank()) {
+                remove(noteKey)
+            } else {
+                putString(noteKey, clean)
+            }
+        }.apply()
+
+        notesRefreshKey++
+    }
 
 // ✅ Speed Dial FAB
     var fabExpanded by rememberSaveable { mutableStateOf(false) }
@@ -1746,7 +1757,7 @@ fun HomeScreen(
                     "note_${belt.id}_${topic.trim()}_${favoriteId}"
                 }
 
-                var noteText by remember(noteKey) {
+                var noteText by remember(noteKey, notesRefreshKey) {
                     mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
                 }
 
@@ -1763,12 +1774,17 @@ fun HomeScreen(
                 }
 
                 ExerciseExplanationDialog(
-                    title = displayName,
-                    beltLabel = "(${belt.heb})",
+                    title = if (isEnglish) {
+                        il.kmi.shared.domain.content.ExerciseTitlesEn.getOrSame(displayName)
+                    } else {
+                        displayName
+                    },
+                    beltLabel = if (isEnglish) "(${belt.en})" else "(${belt.heb})",
                     explanation = explanation,
                     noteText = noteText,
                     isFavorite = isFavorite,
                     accentColor = belt.color,
+                    isEnglish = isEnglish,
                     backgroundBrush = Brush.verticalGradient(
                         colors = listOf(
                             Color.White,
@@ -1788,6 +1804,13 @@ fun HomeScreen(
                         haptic(true)
                         showNoteEditor = true
                     },
+                    onDeleteNote = {
+                        clickSound()
+                        haptic(true)
+
+                        noteText = ""
+                        saveHomeExerciseNote(noteKey, "")
+                    },
                     onToggleFavorite = {
                         clickSound()
                         haptic(true)
@@ -1796,166 +1819,25 @@ fun HomeScreen(
                 )
 
                 if (showNoteEditor) {
-                    AlertDialog(
-                        onDismissRequest = { showNoteEditor = false },
-                        containerColor = Color.Transparent,
-                        tonalElevation = 0.dp,
-                        shape = RoundedCornerShape(30.dp),
-                        title = null,
-                        text = {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(30.dp),
-                                color = Color.White,
-                                shadowElevation = 18.dp,
-                                tonalElevation = 0.dp,
-                                border = androidx.compose.foundation.BorderStroke(
-                                    width = 1.dp,
-                                    color = belt.color.copy(alpha = 0.20f)
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(
-                                            brush = Brush.verticalGradient(
-                                                colors = listOf(
-                                                    Color.White,
-                                                    androidx.compose.ui.graphics.lerp(Color.White, belt.color, 0.10f),
-                                                    Color.White
-                                                )
-                                            )
-                                        )
-                                        .padding(horizontal = 20.dp, vertical = 20.dp),
-                                    horizontalAlignment = Alignment.End,
-                                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    Text(
-                                        text = "הערה על התרגיל",
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Right,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Black,
-                                        color = Color(0xFF1F2937)
-                                    )
-
-                                    Text(
-                                        text = "כתוב הערה אישית שתישמר לתרגיל הזה",
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Right,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF64748B)
-                                    )
-
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(24.dp),
-                                        color = Color.White.copy(alpha = 0.96f),
-                                        shadowElevation = 7.dp,
-                                        border = androidx.compose.foundation.BorderStroke(
-                                            width = 1.dp,
-                                            color = belt.color.copy(alpha = 0.20f)
-                                        )
-                                    ) {
-                                        OutlinedTextField(
-                                            value = noteText,
-                                            onValueChange = { noteText = it },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(12.dp),
-                                            minLines = 4,
-                                            maxLines = 7,
-                                            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                                textAlign = TextAlign.Right,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color(0xFF111827)
-                                            ),
-                                            placeholder = {
-                                                Text(
-                                                    text = "הקלד הערה חופשית",
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    textAlign = TextAlign.Right,
-                                                    color = Color(0xFF94A3B8),
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
-                                            },
-                                            shape = RoundedCornerShape(20.dp)
-                                        )
-                                    }
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        TextButton(
-                                            onClick = { showNoteEditor = false },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(50.dp)
-                                        ) {
-                                            Text(
-                                                text = "בטל",
-                                                fontWeight = FontWeight.Black,
-                                                color = Color(0xFF6D5BA6),
-                                                style = MaterialTheme.typography.titleSmall
-                                            )
-                                        }
-
-                                        Surface(
-                                            onClick = {
-                                                notePrefs.edit()
-                                                    .putString(noteKey, noteText.trim())
-                                                    .apply()
-
-                                                showNoteEditor = false
-                                            },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(50.dp),
-                                            shape = RoundedCornerShape(18.dp),
-                                            color = belt.color,
-                                            shadowElevation = 8.dp
-                                        ) {
-                                            Box(
-                                                modifier = Modifier.fillMaxSize(),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = "שמור",
-                                                    fontWeight = FontWeight.Black,
-                                                    color = Color.White,
-                                                    style = MaterialTheme.typography.titleSmall
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    if (noteText.isNotBlank()) {
-                                        TextButton(
-                                            onClick = {
-                                                noteText = ""
-                                                notePrefs.edit()
-                                                    .remove(noteKey)
-                                                    .apply()
-
-                                                showNoteEditor = false
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text(
-                                                text = "מחק הערה",
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFFB3261E)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                    ExerciseNoteEditorDialog(
+                        noteText = noteText,
+                        isEnglish = isEnglish,
+                        accentColor = belt.color,
+                        onNoteChange = { noteText = it },
+                        onDismiss = {
+                            showNoteEditor = false
                         },
-                        confirmButton = {},
-                        dismissButton = {}
+                        onSave = {
+                            clickSound()
+                            haptic(true)
+
+                            val cleanNote = noteText.trim()
+                            noteText = cleanNote
+
+                            saveHomeExerciseNote(noteKey, cleanNote)
+
+                            showNoteEditor = false
+                        }
                     )
                 }
             }

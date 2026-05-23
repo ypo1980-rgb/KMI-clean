@@ -349,13 +349,52 @@ object ExerciseTitlesEnItems {
         // Blue belt — exact English titles from the PDF
         //---------------------------------------------------
 
+        //----------------------------------------------
+        // Topic / Sub-topic titles — Blue belt and general defences
+        //---------------------------------------------------
+
+        "הגנות" to "Defenses",
+        "הגנות מסכין" to "Knife Defenses",
+        "הגנות נגד סכין" to "Defenses Against Knife Attacks",
+        "הגנות מאיום סכין" to "Defenses Against Knife Threats",
+        "הגנות מאיום סכין לקיר" to "Defenses Against Knife Threats Against a Wall",
+
+        "הגנות נגד בעיטות" to "Defenses Against Kicks",
+        "הגנות נגד בעיטות ברך" to "Defenses Against Knee Strikes",
+        "הגנות נגד בעיטות רגילות" to "Defenses Against Regular Kicks",
+        "הגנות נגד בעיטות מגל לפנים" to "Defenses Against Front Magal Kicks",
+        "הגנות נגד בעיטות לצד" to "Defenses Against Side Kicks",
+
+        "הגנות פנימיות - אגרופים" to "Internal Defenses - Punches",
+        "הגנות פנימיות – אגרופים" to "Internal Defenses - Punches",
+        "הגנות פנימיות - בעיטות" to "Internal Defenses - Kicks",
+        "הגנות פנימיות – בעיטות" to "Internal Defenses - Kicks",
+
+        "הגנות חיצוניות - אגרופים" to "External Defenses - Punches",
+        "הגנות חיצוניות – אגרופים" to "External Defenses - Punches",
+        "הגנות חיצוניות - בעיטות" to "External Defenses - Kicks",
+        "הגנות חיצוניות – בעיטות" to "External Defenses - Kicks",
+
+        "הגנות נגד מספר תוקפים" to "Defenses Against Multiple Attackers",
+        "הגנות עם רובה נגד דקירות סכין" to "Rifle Defenses Against Knife Stabs",
+        "הגנות נגד מקל" to "Defenses Against Stick Attacks",
+        "הגנות נגד מקל / רובה" to "Defenses Against Stick / Rifle Attacks",
+
+        "שחרורים" to "Releases",
+        "שחרורים מתפיסות ידיים בשכיבה" to "Releases from Wrist Grabs on the Ground",
+        "שחרורים מחביקות צוואר" to "Releases from Neck Holds",
+        "שחרורים מחביקות צואר" to "Releases from Neck Holds",
+        "שחרורים מחביקות בשכיבה" to "Releases from Holds on the Ground",
+        "שחרורים מחניקות" to "Releases from Chokes",
+        "שחרורים מחניקות בשכיבה" to "Releases from Chokes on the Ground",
+
         "בעיטת פטיש" to "Hammer Kick",
         "בעיטת גזיזה אחורית" to "Backward Cutting Kick",
         "בעיטת גזיזה קדמית" to "Forward Cutting Kick",
         "בעיטת גזיזה קדמית ובעיטת גזיזה אחורית בסיבוב" to "Forward Cutting Kick and a Backward Cutting Kick with a Spin",
         "בעיטת מגל לאחור בסיבוב" to "Backward Magal (Circular) kick with Spin",
         "בעיטת סטירה חיצונית בסיבוב" to "External Slap Kick with Spin",
-        "מניעת נפילה ממרחק שקיים מלפנים להפלה" to "Preventing a double leg Take-Down from the front",
+        "מניעת נפילה מחביקת שוקיים מלפנים להפלה" to "Preventing a double leg Take-Down from the front",
         "גלגול לצד - ימין/שמאל" to "Roll to the Side (Left and Right)",
         "גלגול ברחיפה - ימין/שמאל" to "Hover Roll (Left and Right)",
         "גלגול לגובה - ימין/שמאל" to "High Roll (Left and Right)",
@@ -372,7 +411,7 @@ object ExerciseTitlesEnItems {
         "שחרור תפיסת ידיים בשכיבה" to "Release from Grabbing Both Hands on the Ground with a Pull",
         "שחרור מחביקת צוואר מהצד והפלה" to "Release from Neck Hold from the Side with Falling",
         "שחרור מחביקת צוואר מאחור עם נעילה" to "Release from Neck Hold from Behind with Lock",
-        "שחרור מחביקת צוואר בשכיבה ברכיבה צמודה" to "Release From a Mounted Neckhold",
+        "שחרור מחביקת צואר בשכיבה ברכיבה צמודה" to "Release From a Mounted Neckhold",
         "שחרור מחניקה לקיר - מלפנים לא צמודה" to "Release From a Front Choke Against the Wall",
         "שחרור מחניקה לקיר - צמודה מלפנים" to "Release From a Front Choke Pressed Tightly Against the Wall",
         "שחרור מחניקה לקיר - דחיפה מאחור" to "Release From a Choke From the Back with a Push Toward the Wall",
@@ -381,13 +420,15 @@ object ExerciseTitlesEnItems {
         "שחרור מחניקה בשכיבה - ידיים ישרות" to "Release From a Mounted Choke - Attacker's Hands are Straight",
         "שחרור מחניקה צמודה בשכיבה" to "Release From a Mounted Choke While Pressed Tightly",
         "שחרור מחניקה מהצד בשכיבה" to "Release From a Choke From the Side on the Ground",
+        "שחרור מחביקת צואר מהצד והפלה" to "Release from Neck Hold from the Side with Falling",
+        "שחרור מחביקת צואר מאחור עם נעילה" to "Release from Neck Hold from Behind with Lock",
 
         "הגנה מאיום סכין לעורק שמאל" to "Defence From a Knife Threat to the Left Carotid Artery",
         "הגנה מאיום סכין לעורק ימין" to "Defence From a Knife Threat to the Right Carotid Artery",
         "הגנה מאיום סכין להב לגורגרת" to "Defence From a Knife Threat with the Blade to the Throat",
 
-        "הגנה מאיום סכין מלפנים - חוד הסכין לגרוגרת" to "Defence From a Knife Threat From the Front - Tip of the Knife to the Throat",
-        "הגנה מאיום סכין מאחור - להב הסכין לגרוגרת" to "Defence From a Knife Threat From the Back - Blade of the Knife to the Throat",
+        "הגנה מאיום סכין מלפנים - חוד הסכין לגורגרת" to "Defence From a Knife Threat From the Front - Tip of the Knife to the Throat",
+        "הגנה מאיום סכין מאחור - להב הסכין לגורגרת" to "Defence From a Knife Threat From the Back - Blade of the Knife to the Throat",
         "הגנה מאיום סכין מאחור - חוד לגב" to "Defence From a Knife Threat From the Back - Tip to the Back",
         "הגנה מאיום סכין מאחור - להב על העורף" to "Defence From a Knife Threat From the Back - Blade on the Neck",
         "הגנה נגד דקירה מזרחית - יד" to "Defence Against an Eastern Stab with a Hand",
