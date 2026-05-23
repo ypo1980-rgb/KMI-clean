@@ -1274,10 +1274,6 @@ private fun TopicsCardForBelt(
                 }
             }
 
-            if (belt == Belt.BROWN && clean.contains("שחרורים")) {
-                return 10
-            }
-
             return when {
                 hasRealSubTopics(title) -> 0
                 clean.contains("הגנות") -> 1
@@ -1396,14 +1392,9 @@ private fun TopicsCardForBelt(
                         val isExpanded = expandedTopic == title
                         val isDefenseTopic = title.trim().contains("הגנות")
 
-                        // ✅ חריג חשוב:
-                        // בחגורה חומה "שחרורים" הוא נושא רגיל עם תרגיל אחד,
-                        // לא תתי־נושאים ולא תוכן נעול.
-                        val isBrownSingleReleaseTopic =
-                            belt == Belt.BROWN &&
-                                    title.trim().contains("שחרורים") &&
-                                    !hasSubs &&
-                                    itemCount <= 1
+                        // ✅ שחרורים נשאר תוכן פרימיום גם אם בחגורה חומה
+                        // הוא מופיע כנושא רגיל עם תרגיל אחד וללא תתי־נושאים.
+                        val isBrownSingleReleaseTopic = false
 
                         val floatingTitleColor = rowTitleColor
                         val floatingSubColor = rowSubColor
@@ -1424,8 +1415,7 @@ private fun TopicsCardForBelt(
                                     haptic(true)
 
                                     val canOpen =
-                                        isBrownSingleReleaseTopic ||
-                                                LockedContentPolicy.canOpenTopic(accessMode, title)
+                                        LockedContentPolicy.canOpenTopic(accessMode, title)
 
                                     if (!canOpen) {
                                         onOpenSubscription()
@@ -1459,8 +1449,7 @@ private fun TopicsCardForBelt(
                                 horizontalAlignment = horizontalByLang
                             ) {
                                 val parentLocked =
-                                    !isBrownSingleReleaseTopic &&
-                                            LockedContentPolicy.shouldShowLock(accessMode, title)
+                                    LockedContentPolicy.shouldShowLock(accessMode, title)
 
                                 val topicImageRes = beltTopicImageFor(belt, title)
 
@@ -1553,6 +1542,14 @@ private fun TopicsCardForBelt(
                                                 contentDescription = null,
                                                 tint = belt.color.copy(alpha = 0.85f)
                                             )
+                                        } else if (parentLocked) {
+                                            // ✅ כאשר נושא נעול בלי תתי־נושאים, למשל שחרורים בחגורה חומה,
+                                            // שומרים מקום של חץ כדי שהמנעול יהיה מיושר מתחת למנעול של הגנות.
+                                            Spacer(Modifier.width(8.dp))
+
+                                            Box(
+                                                modifier = Modifier.size(24.dp)
+                                            )
                                         }
                                     }
                                 }
@@ -1575,8 +1572,7 @@ private fun TopicsCardForBelt(
                                     Spacer(Modifier.height(8.dp))
 
                                     val parentLocked =
-                                        !isBrownSingleReleaseTopic &&
-                                                LockedContentPolicy.shouldShowLock(accessMode, title)
+                                        LockedContentPolicy.shouldShowLock(accessMode, title)
 
                                     Column(
                                         modifier = Modifier

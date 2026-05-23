@@ -30,9 +30,9 @@ object ExerciseTitlesEnAliases {
         "מכת פטיש יד שמאל" to "Left Hammerfist Strike",
 
         "שחרור מחביקת צואר מהצד בשכיבה" to "Release from Side Neck Hold on the Ground",
-        "שחרור מחביקת צוואר מהצד בשכיבה" to "Release from Side Neck Hold on the Ground",
+        "שחרור מחביקת צואר מהצד בשכיבה" to "Release from Side Neck Hold on the Ground",
         "שחרור מחביקת צואר ויד מהצד בשכיבה" to "Release from Side Neck-and-Arm Hold on the Ground",
-        "שחרור מחביקת צוואר ויד מהצד בשכיבה" to "Release from Side Neck-and-Arm Hold on the Ground",
+        "שחרור מחביקת צואר ויד מהצד בשכיבה" to "Release from Side Neck-and-Arm Hold on the Ground",
         "שחרורים מחניקות בשכיבה" to "Releases from Chokes on the Ground",
 
         "שחרורים מתפיסות ידיים בשכיבה" to "Releases from Wrist Grabs on the Ground",

@@ -141,7 +141,7 @@ fun TopicRepoExercisesScreen(
             n0 == "releases_chokes" -> "שחרור מחניקות"
             n0 == "releases_hugs" -> "שחרור מחביקות"
             n0 == "releases_hugs_body" -> "חביקות גוף"
-            n0 == "releases_hugs_neck" -> "חביקות צוואר"
+            n0 == "releases_hugs_neck" -> "חביקות צואר"
             n0 == "releases_hugs_arm" -> "חביקות זרוע"
 
             // ✅ מתפיסות
@@ -157,7 +157,7 @@ fun TopicRepoExercisesScreen(
             n0.contains("מחביק") || n.contains("מחביק") ||
                     n0.startsWith("releases_hugs") -> when {
                 n0.contains("body") || n0.contains("גוף") || n.contains("גוף") -> "חביקות גוף"
-                n0.contains("neck") || n0.contains("צוואר") || n0.contains("צואר") || n.contains("צוואר") || n.contains("צואר") -> "חביקות צוואר"
+                n0.contains("neck") || n0.contains("צואר") || n0.contains("צואר") || n.contains("צואר") || n.contains("צואר") -> "חביקות צואר"
                 n0.contains("arm") || n0.contains("זרוע") || n.contains("זרוע") -> "חביקות זרוע"
                 else -> "שחרור מחביקות"
             }
@@ -201,7 +201,7 @@ fun TopicRepoExercisesScreen(
             }
         }
 
-        // 2) אם topic עצמו הוא "שחרור מחביקות" (הורה) והגיע sub = "חביקות גוף/צוואר/זרוע"
+        // 2) אם topic עצמו הוא "שחרור מחביקות" (הורה) והגיע sub = "חביקות גוף/צואר/זרוע"
         HardSectionsCatalog.releases.firstOrNull { sec ->
             normHebLocal(sec.title) == t
         }?.let { parent ->
@@ -213,7 +213,7 @@ fun TopicRepoExercisesScreen(
             return parent.itemsFor(belt)
         }
 
-        // 3) אם topic עצמו הוא "חביקות גוף/צוואר/זרוע" – נחפש אותו בתוך subSections
+        // 3) אם topic עצמו הוא "חביקות גוף/צואר/זרוע" – נחפש אותו בתוך subSections
         HardSectionsCatalog.releases.forEach { sec ->
             sec.subSections.firstOrNull { sub -> normHebLocal(sub.title) == t }
                 ?.let { return it.itemsFor(belt) }
@@ -238,7 +238,7 @@ fun TopicRepoExercisesScreen(
         val uiSub = subTopicOrNull?.trim()
 
         // ✅ FIX: אם נכנסו עם topic="שחרורים" ו-sub="שחרור מחביקות" (או כל Section הורה עם subSections)
-        // צריך להציג את תתי־הנושאים (חביקות גוף/צוואר/זרוע) במקום לנסות לטעון תרגילים ישר
+        // צריך להציג את תתי־הנושאים (חביקות גוף/צואר/זרוע) במקום לנסות לטעון תרגילים ישר
         val tTopic = normalizeReleasesSubAlias(uiTopic)
         val tSub = uiSub?.let(::normalizeReleasesSubAlias).orEmpty()
 

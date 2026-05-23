@@ -130,7 +130,7 @@ object SubjectItemsResolver {
                 )
             }
 
-            // ✅ NEW: תומך ב-subSections (למשל "שחרור מחביקות" -> "חביקות גוף/צוואר/זרוע")
+            // ✅ NEW: תומך ב-subSections (למשל "שחרור מחביקות" -> "חביקות גוף/צואר/זרוע")
             val out = mutableListOf<UiSection>()
 
             hardSections.forEach { sec ->

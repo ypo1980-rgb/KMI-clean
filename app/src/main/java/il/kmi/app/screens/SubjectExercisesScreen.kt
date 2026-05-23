@@ -193,7 +193,7 @@ fun SubjectExercisesScreen(
             )
 
             "שחרור מחניקות" -> ReleasesPickFilter(
-                includeAny = listOf("חניק", "חניקה", "חניקות", "צוואר"),
+                includeAny = listOf("חניק", "חניקה", "חניקות", "צואר"),
                 requireAll = emptyList(),
                 excludeAny = listOf("תפיס", "אחיז", "חביק", "חולצ", "שיער")
             )

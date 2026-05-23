@@ -368,7 +368,7 @@ internal fun SubTopicsPickModeDialogModern(
                 counts["חביקות גוף"] ?: 0
 
             "Neck Bear Hugs" ->
-                counts["חביקות צוואר"] ?: 0
+                counts["חביקות צואר"] ?: 0
 
             "Arm Bear Hugs" ->
                 counts["חביקות זרוע"] ?: 0
@@ -1380,7 +1380,7 @@ internal object SubjectTopicsUiLogic {
             "שחרור מחניקות" -> "releases_chokes"
             "שחרור מחביקות" -> "releases_hugs"
             "חביקות גוף" -> "releases_hugs_body"
-            "חביקות צוואר" -> "releases_hugs_neck"
+            "חביקות צואר" -> "releases_hugs_neck"
             "חביקות זרוע" -> "releases_hugs_arm"
             else -> null
         }

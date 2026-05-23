@@ -599,64 +599,94 @@ object ExerciseExplanationsEn {
             "הגנה פנימית נגד בעיטה לסנטר" ->
                 "[[RED_BOLD]]General Stance No. 1.[[/RED_BOLD]]\nPerform an internal defence with your left forearm. Step with your left foot into the attacker’s Blind Side and attack according to the attacker’s distance."
 
+            "הגנה חיצונית נגד בעיטה רגילה – פריצה",
+            "הגנה חיצונית נגד בעיטה רגילה - פריצה",
             "הגנה חיצונית נגד בעיטה רגילה בפריצה" ->
                 "[[RED_BOLD]]Low General Stance No. 1.[[/RED_BOLD]]\nPerform an external stabbing defence with your right forearm. Burst forward with your left foot while continuing the motion of the attacker’s kicking leg upward. Push the attacker backward and downward."
 
+            "הגנה חיצונית נגד בעיטה רגילה – גזיזה",
+            "הגנה חיצונית נגד בעיטה רגילה - גזיזה",
             "הגנה חיצונית נגד בעיטה רגילה בגזיזה" ->
                 "[[RED_BOLD]]Low General Stance No. 1.[[/RED_BOLD]]\nPerform an external stabbing defence with your right forearm. Burst forward with your left foot while continuing the motion of the attacker’s kicking leg upward. Perform a backward cutting kick with your right leg."
 
+            "הגנה חיצונית נגד בעיטה רגילה – טאטוא",
+            "הגנה חיצונית נגד בעיטה רגילה - טאטוא",
             "הגנה חיצונית נגד בעיטה רגילה בטאטוא" ->
                 "[[RED_BOLD]]Low General Stance No. 1.[[/RED_BOLD]]\nPerform an external stabbing defence with your right forearm. Burst forward with your left foot while continuing the motion of the attacker’s kicking leg upward. Position your body perpendicular to the attacker’s body and sweep the attacker."
 
+            "הגנה פנימית נגד בעיטה רגילה – טאטוא",
+            "הגנה פנימית נגד בעיטה רגילה - טאטוא",
             "הגנה פנימית נגד בעיטה רגילה עם בעיטת גזיזה קדמית" ->
                 "[[RED_BOLD]]General Stance No. 2.[[/RED_BOLD]]\nPerform an internal defence with your left hand. Step forward with your left leg. Grab the attacker’s arm and punch with your right hand. Push the attacker off balance and perform a cutting kick with your left leg."
 
             // ─────────── Defences Against Front Magal Kicks ───────────
 
+            "הגנה נגד בעיטת מגל – פריצה",
+            "הגנה נגד בעיטת מגל - פריצה",
             "הגנה נגד בעיטת מגל בפריצה" ->
                 "[[RED_BOLD]]General Stance No. 2.[[/RED_BOLD]]\nPerform an internal defence with your left hand. Step forward with your left leg. Grab the attacker’s arm and punch with your right hand. Push the attacker off balance and perform a cutting kick with your left leg."
 
+            "הגנה חיצונית נגד מגל לפנים – גזיזה",
+            "הגנה חיצונית נגד מגל לפנים - גזיזה",
             "הגנה חיצונית נגד בעיטת מגל לפנים בגזיזה" ->
                 "[[RED_BOLD]]General Stance No. 2.[[/RED_BOLD]]\nPerform an external stabbing defence with your left forearm away from the body. Burst forward with your left leg while continuing the motion of the kicking leg upward. Perform a backward cutting kick with your right leg."
 
+            "הגנה חיצונית נגד מגל לפנים – טאטוא",
+            "הגנה חיצונית נגד מגל לפנים - טאטוא",
             "הגנה חיצונית נגד בעיטת מגל לפנים בטאטוא" ->
                 "[[RED_BOLD]]General Stance No. 2.[[/RED_BOLD]]\nPerform an external stabbing defence with your left forearm away from the body. Burst forward with your left leg while continuing the motion of the kicking leg upward. Perform a sweep with your left leg to drop the attacker."
 
             // ─────────── Defences Against Reverse Magal Kicks ───────────
 
+            "הגנה נגד בעיטת מגל לאחור – פריצה",
+            "הגנה נגד בעיטת מגל לאחור - פריצה",
             "הגנה נגד בעיטת מגל לאחור בפריצה" ->
                 "[[RED_BOLD]]General Stance No. 1.[[/RED_BOLD]]\nPerform a stabbing external defence away from your body with your right hand while guarding your face with your left. Burst forward and push the attacker to the ground with your left hand."
 
             // ─────────── Releases From Neck Hold ───────────
 
-            "שחרור מחביקת צוואר מאחור במנוף - המתגונן כפוף" ->
-                "With a hooked right hand, grab the attacker’s forearm and turn your head toward the attacker’s elbow. With your left hand, push the attacker’s elbow upward. Drop to your knees and continue into a roll without placing your hands on the ground."
-
+            "חביקת צואר מאחור – בריח על העורף, המגן כפוף לפנים",
+            "חביקת צואר מאחור - בריח על העורף, המגן כפוף לפנים",
+            "שחרור מחביקת צואר מאחור במנוף - המתגונן כפוף",
             "שחרור מחביקת צואר מאחור במנוף - המתגונן כפוף" ->
                 "With a hooked right hand, grab the attacker’s forearm and turn your head toward the attacker’s elbow. With your left hand, push the attacker’s elbow upward. Drop to your knees and continue into a roll without placing your hands on the ground."
 
             // ─────────── Defences Against a Stick ───────────
 
+            "הגנה נגד מקל בסיבוב – צד חי",
+            "הגנה נגד מקל בסיבוב - צד חי",
             "הגנה נגד מקל בסיבוב לצד החי" ->
                 "[[RED_BOLD]]Neutral stance.[[/RED_BOLD]]\nBurst forward with your left foot with your hands straight forward and close to the head. Wrap your left forearm around the attacker’s arm and perform a front horizontal elbow strike with your right elbow while stepping forward."
 
+            "הגנה נגד מקל עם קוואלר – צד מת",
+            "הגנה נגד מקל עם קוואלר - צד מת",
             "הגנה נגד מקל בקוואלר לצד המת" ->
                 "[[RED_BOLD]]Neutral stance.[[/RED_BOLD]]\nBurst forward with your left foot with your hands straight forward and close to the head. Bring down the attacker’s hand by sliding both hands to the attacker’s wrist, then rotate 180 degrees clockwise with your right foot and perform a Cavalier to the Blind Side."
 
+            "הגנה נגד מקל נקודת תורפה – לצד המת",
+            "הגנה נגד מקל נקודת תורפה - לצד המת",
             "הגנה נגד מקל לצד המת עם נקודת תורפה בראש התוקף" ->
                 "[[RED_BOLD]]Neutral stance.[[/RED_BOLD]]\nBurst forward with your left foot with your hands straight forward and close to the head. Turn with your right foot to the attacker’s Blind Side. Grab a vital spot on the attacker’s head with your left hand and drop the attacker."
 
             // ─────────── Defences Against Knife Slashes ───────────
 
+            "הגנה נגד סכין בשיסוף – הטיה והגנה לצד החי",
+            "הגנה נגד סכין בשיסוף - הטיה והגנה לצד החי",
             "הגנה נגד שיסוף בהשענות לאחור והגנה לצד החי" ->
                 "[[RED_BOLD]]Neutral stance.[[/RED_BOLD]]\nStep backward with your right foot and raise your hands to protect the face. Then perform an external defence and grab the attacker’s hand with your left hand. Step forward with your right foot and punch with your right hand."
 
+            "הגנה נגד סכין בשיסוף – הטיה והגנה לצד המת",
+            "הגנה נגד סכין בשיסוף - הטיה והגנה לצד המת",
             "הגנה נגד שיסוף בהשענות לאחור והגנה לצד המת" ->
                 "[[RED_BOLD]]Neutral stance.[[/RED_BOLD]]\nStep backward with your right foot and raise your hands to protect the face. Perform an external defence with your right forearm while stepping forward with your left foot. Turn 180 degrees clockwise with your right foot while controlling the attacker’s hand."
 
+            "הגנה נגד סכין בשיסוף – פריצה והגנה לצד החי",
+            "הגנה נגד סכין בשיסוף - פריצה והגנה לצד החי",
             "הגנה נגד שיסוף בפריצה לצד החי" ->
                 "[[RED_BOLD]]Neutral stance.[[/RED_BOLD]]\nBurst forward with your left foot while performing an external defence with your left forearm. Continue rotating with the motion of the attack to grab the attacker’s wrist, then perform a side palm-heel strike with your right hand."
 
+            "הגנה נגד סכין בשיסוף – פריצה והגנה לצד המת",
+            "הגנה נגד סכין בשיסוף - פריצה והגנה לצד המת",
             "הגנה נגד שיסוף בפריצה לצד המת" ->
                 "[[RED_BOLD]]Neutral stance.[[/RED_BOLD]]\nBurst forward with your left foot while performing an external defence with your right forearm. Rotate your body 180 degrees clockwise with your right foot. Grab a vital spot on the attacker’s head with your left hand and drop the attacker."
 
@@ -668,12 +698,17 @@ object ExerciseExplanationsEn {
             "הגנה מאיום אקדח מאחור" ->
                 "[[RED_BOLD]]Gun threat note.[[/RED_BOLD]]\nAll techniques should be trained with a weapon in either hand. The techniques are described against a right-handed attacker. When possible, turn the barrel of the gun downward.\nGlance backward. Reach your left hand away from your body while rotating counterclockwise and stepping with your left foot into the attacker’s Live Side. Grab the attacker’s hand between your left arm and forearm under shoulder height and neutralize."
 
+            "הגנה מאיום אקדח מהצד החיצוני",
             "הגנה מאיום אקדח מהצד מאחורי היד" ->
                 "[[RED_BOLD]]Gun threat note.[[/RED_BOLD]]\nReach your left hand away from your body and step with your left foot into the attacker’s Live Side. Grab the attacker’s hand between your left arm and forearm under shoulder height. Simultaneously perform a right punch to the attacker’s face and neutralize."
 
+            "הגנה מאיום אקדח מהצד הפנימי – תוקף בצד ימין",
+            "הגנה מאיום אקדח מהצד הפנימי - תוקף בצד ימין",
             "הגנה מאיום אקדח מהצד לפני היד - התוקף בצד ימין" ->
                 "[[RED_BOLD]]Gun threat note.[[/RED_BOLD]]\nSimultaneously use your left hand to grab the attacker’s wrist to deflect the gun, and use your right hand to grab the barrel and trigger guard. Step with your left foot to the attacker’s Blind Side. Disarm the attacker while creating leverage on the weapon."
 
+            "הגנה מאיום אקדח מהצד הפנימי – תוקף בצד שמאל",
+            "הגנה מאיום אקדח מהצד הפנימי - תוקף בצד שמאל",
             "הגנה מאיום אקדח מהצד לפני היד - התוקף בצד שמאל" ->
                 "[[RED_BOLD]]Gun threat note.[[/RED_BOLD]]\nSimultaneously use your right hand to grab the attacker’s wrist to deflect the gun, and use your left hand to grab the barrel and trigger guard. Step with your right foot to the attacker’s Live Side. Disarm the attacker while creating leverage on the weapon."
 
@@ -818,7 +853,7 @@ object ExerciseExplanationsEn {
 
             "מכת מקל לראש" -> "חסר הסבר בחוברת"
             "מכת מקל לרקה" -> "חסר הסבר בחוברת"
-            "מכת מקל ללסת / צוואר" -> "חסר הסבר בחוברת"
+            "מכת מקל ללסת / צואר" -> "חסר הסבר בחוברת"
             "מכת מקל לפרקי האצבעות" -> "חסר הסבר בחוברת"
             "מכת מקל לעצם הבריח" -> "חסר הסבר בחוברת"
             "מכת מקל למרפק" -> "חסר הסבר בחוברת"
@@ -829,7 +864,7 @@ object ExerciseExplanationsEn {
             "דקירת מקל חיצונית לצלעות" -> "חסר הסבר בחוברת"
             "דקירת מקל ישרה לבטן / לגרון" -> "חסר הסבר בחוברת"
             "דקירת מקל הפוכה" -> "חסר הסבר בחוברת"
-            "מכה אופקית לצוואר" -> "From a regular stance, step forward with your left foot and strike the neck or face using the magazine or the handle or the weapon's body."
+            "מכה אופקית לצואר" -> "From a regular stance, step forward with your left foot and strike the neck or face using the magazine or the handle or the weapon's body."
             "דקירה" -> "From a regular stance, stab forward with the bayonet or the front side of the stick (The body movement is similar to the one used in a straight stab with a knife)."
             "שיסוף" -> "From a regular stance, slash with the bayonet or the front side of the stick while rotating the left heel."
             "מכה לצד" -> "From a neutral stance, strike to the side with the butt of the weapon or the rear of the stick."

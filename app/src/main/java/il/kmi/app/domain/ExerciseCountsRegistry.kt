@@ -111,7 +111,7 @@ object ExerciseCountsRegistry {
             subjectId = "releases",
             sectionId = "releases_hugs_body"
         ),
-        "חביקות צוואר" to hardSectionCount(
+        "חביקות צואר" to hardSectionCount(
             subjectId = "releases",
             sectionId = "releases_hugs_neck"
         ),

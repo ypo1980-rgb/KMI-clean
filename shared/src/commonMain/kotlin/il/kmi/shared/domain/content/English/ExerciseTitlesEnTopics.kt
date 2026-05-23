@@ -36,7 +36,7 @@ object ExerciseTitlesEnTopics {
         "שחרור מתפיסות ידיים" to "Releases from Hand Grabs",
         "שחרורים מתפיסות חולצה" to "Releases from Shirt Grabs",
         "שחרורים מתפיסות שיער" to "Releases from Hair Grabs",
-        "שחרורים מתפיסות צוואר וגוף" to "Releases from Neck and Body Holds",
+        "שחרורים מתפיסות צואר וגוף" to "Releases from Neck and Body Holds",
         "הגנות נגד מכות ישרות" to "Defenses Against Straight Punches",
         "6 הגנות חיצוניות נגד מכות" to "6 Outside Defenses Against Strikes",
         "הגנות חיצוניות נגד מכות מהצד" to "Outside Defenses Against Side Strikes",
@@ -71,7 +71,18 @@ object ExerciseTitlesEnTopics {
         "הגנות סכין" to "Knife Defenses",
         "הגנות נגד סכין" to "Defenses Against Knife Attacks",
         "הגנות מאיום סכין לקיר" to "Defenses Against Knife Threats Against a Wall",
+        // Brown belt sub-topics
+        "הגנה – בעיטה" to "Defense - Kicks",
+        "הגנה - בעיטה" to "Defense - Kicks",
 
+        "הגנה – סכין" to "Defense - Knife",
+        "הגנה - סכין" to "Defense - Knife",
+
+        "הגנה – מקל" to "Defense - Stick",
+        "הגנה - מקל" to "Defense - Stick",
+
+        "הגנה – איום אקדח" to "Defense - Gun Threat",
+        "הגנה - איום אקדח" to "Defense - Gun Threat",
         "הגנות נגד מספר תוקפים" to "Defenses Against Multiple Attackers",
         "הגנות מספר תוקפים" to "Defenses Against Multiple Attackers",
 

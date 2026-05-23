@@ -301,10 +301,10 @@ object TopicsBySubjectRegistry {
             id = "releases_chokes",
             parentId = "releases",
             titleHeb = "שחרור מחניקות",
-            description = "חניקות צוואר מלפנים/מאחור",
+            description = "חניקות צואר מלפנים/מאחור",
             belts = releasesBelts,
             topicsByBelt = releasesTopicsByBelt,
-            includeItemKeywords = listOf("חניק", "חניקה", "חניקות", "צוואר"),
+            includeItemKeywords = listOf("חניק", "חניקה", "חניקות", "צואר"),
             excludeItemKeywords = listOf("תפיס", "אחיז", "חביק", "חולצ", "שיער")
         ),
 
@@ -313,12 +313,12 @@ object TopicsBySubjectRegistry {
             id = "releases_hugs",
             parentId = "releases",
             titleHeb = "שחרור מחביקות",
-            description = "חביקות גוף / צוואר / זרוע",
+            description = "חביקות גוף / צואר / זרוע",
             belts = releasesBelts,
             topicsByBelt = releasesTopicsByBelt,
             subTopics = listOf(
                 "חביקות גוף",
-                "חביקות צוואר",
+                "חביקות צואר",
                 "חביקות זרוע"
             ),
             includeItemKeywords = listOf("חביק", "חיבוק", "חיבוקים", "חביקות"),

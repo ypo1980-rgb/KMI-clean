@@ -91,7 +91,7 @@ private fun hardDisplayTitleFallback(raw: String): String {
         "releases_chokes" -> "שחרור מחניקות"
         "releases_hugs" -> "שחרור מחביקות"
         "releases_hugs_body" -> "חביקות גוף"
-        "releases_hugs_neck" -> "חביקות צוואר"
+        "releases_hugs_neck" -> "חביקות צואר"
         "releases_hugs_arm" -> "חביקות זרוע"
         "knife_defense" -> "הגנות מסכין"
         "knife_rifle_defense" -> "הגנות עם רובה נגד דקירות סכין"
@@ -133,7 +133,7 @@ private fun normalizeHardNavTopic(raw: String): String {
 
         t.contains("מחביקות") ||
                 t.contains("חביקות גוף") ||
-                t.contains("חביקות צוואר") ||
+                t.contains("חביקות צואר") ||
                 t.contains("חביקות צואר") ||
                 t.contains("חביקות זרוע") ->
             "releases_hugs"

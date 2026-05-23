@@ -382,7 +382,7 @@ object ExerciseTitlesEnItems {
 
         "שחרורים" to "Releases",
         "שחרורים מתפיסות ידיים בשכיבה" to "Releases from Wrist Grabs on the Ground",
-        "שחרורים מחביקות צוואר" to "Releases from Neck Holds",
+        "שחרורים מחביקות צואר" to "Releases from Neck Holds",
         "שחרורים מחביקות צואר" to "Releases from Neck Holds",
         "שחרורים מחביקות בשכיבה" to "Releases from Holds on the Ground",
         "שחרורים מחניקות" to "Releases from Chokes",
@@ -409,8 +409,8 @@ object ExerciseTitlesEnItems {
         "הגנה פנימית נגד בעיטת מגל לפנים - בעיטה לאחור" to "Internal Defence Against a Magal (Circular) kick with a Backward Regular",
         "הגנה פנימית באמת ימין נגד בעיטה לצד" to "Internal Defence Against a Side-Kick with Forearms",
         "שחרור תפיסת ידיים בשכיבה" to "Release from Grabbing Both Hands on the Ground with a Pull",
-        "שחרור מחביקת צוואר מהצד והפלה" to "Release from Neck Hold from the Side with Falling",
-        "שחרור מחביקת צוואר מאחור עם נעילה" to "Release from Neck Hold from Behind with Lock",
+        "שחרור מחביקת צואר מהצד והפלה" to "Release from Neck Hold from the Side with Falling",
+        "שחרור מחביקת צואר מאחור עם נעילה" to "Release from Neck Hold from Behind with Lock",
         "שחרור מחביקת צואר בשכיבה ברכיבה צמודה" to "Release From a Mounted Neckhold",
         "שחרור מחניקה לקיר - מלפנים לא צמודה" to "Release From a Front Choke Against the Wall",
         "שחרור מחניקה לקיר - צמודה מלפנים" to "Release From a Front Choke Pressed Tightly Against the Wall",
@@ -440,8 +440,8 @@ object ExerciseTitlesEnItems {
 
 
         //----------------------------------------------
-// Brown belt — exact English titles from the PDF
-//---------------------------------------------------
+        // Brown belt — exact English titles from the PDF
+        //---------------------------------------------------
         "בעיטה רגילה ובעיטת מגל בניתור" to "Jumping Regular Kick and a Magal (Circular) kick",
         "בעיטת מגל בניתור" to "Jumping Magal (Circular) kick",
         "בעיטת מגל כפולה בניתור" to "Jumping Double Magal (Circular) kick",
@@ -457,7 +457,7 @@ object ExerciseTitlesEnItems {
         "הגנה חיצונית נגד מגל לפנים – טאטוא" to "External Defence Against a Front Magal (Circular) kick with a Sweep",
         "הגנה נגד בעיטת מגל לאחור – פריצה" to "Defence Against a Reverse Magal (Circular) kick with Bursting",
 
-        "חביקת צוואר מאחור – בריח על העורף, המגן כפוף לפנים" to "Release From a Neck Hold From the Back with leverage - Defender is bent",
+        "חביקת צואר מאחור – בריח על העורף, המגן כפוף לפנים" to "Release From a Neck Hold From the Back with leverage - Defender is bent",
         "הגנה נגד מקל בסיבוב – צד חי" to "Defence Against a Stick with a Spin to the Live Side",
         "הגנה נגד מקל עם קוואלר – צד מת" to "Defence Against a Stick with a Cavalier to the Blind Side",
         "הגנה נגד מקל נקודת תורפה – לצד המת" to "Defence Against a Stick to the Blind Side using a Vital Spot on the Attacker's Head",
@@ -552,7 +552,7 @@ object ExerciseTitlesEnItems {
 
     "מכת מקל לראש" to "Stick Strike to the Head",
     "מכת מקל לרקה" to "Stick Strike to the Temple",
-    "מכת מקל ללסת / צוואר" to "Stick Strike to the Jaw or Neck",
+    "מכת מקל ללסת / צואר" to "Stick Strike to the Jaw or Neck",
     "מכת מקל לפרקי האצבעות" to "Stick Strike to the Knuckles",
         "מכת מקל לעצם הבריח" to "Stick Strike to the Clavicle Bone",
         "מכת מקל למרפק" to "Stick Strike to the Elbow",
@@ -563,7 +563,7 @@ object ExerciseTitlesEnItems {
         "דקירת מקל חיצונית לצלעות" to "External Stick Stab to the Ribs",
         "דקירת מקל ישרה לבטן / לגרון" to "Straight Stick Stab to the Abdominal or Throat",
         "דקירת מקל הפוכה" to "Reversed Stick Stab",
-        "מכה אופקית לצוואר" to "Horizontal Strike to the Neck",
+        "מכה אופקית לצואר" to "Horizontal Strike to the Neck",
         "דקירה" to "Stab", "מכת מגל" to "Magal (Circular) Strike",
         "שיסוף" to "Slash", "מכה למפשעה" to "Groin Strike",
         "מכה לצד" to "Side Strike",

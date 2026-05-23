@@ -97,7 +97,7 @@ object HardSectionsCatalog {
                     t == "שחרורים מחביקות" ||
                     t.contains("מחביקות") ||
                     t.contains("חביקות גוף") ||
-                    t.contains("חביקות צוואר") ||
+                    t.contains("חביקות צואר") ||
                     t.contains("חביקות צואר") ||
                     t.contains("חביקות זרוע") ->
                 "releases_hugs"
@@ -1039,7 +1039,7 @@ object HardSectionsCatalog {
                         "מכות במקל קצר - דקירת מקל הפוכה",
 
                         "מכות במקל / רובה - התקפה עם מקל לנקודות תורפה",
-                        "מכות במקל / רובה - מכה אופקית לצוואר",
+                        "מכות במקל / רובה - מכה אופקית לצואר",
                         "מכות במקל / רובה - דקירה",
                         "מכות במקל / רובה - מכת מגל",
                         "מכות במקל / רובה - שיסוף",
@@ -1412,7 +1412,7 @@ object HardSectionsCatalog {
 
                 Section(
                     id = "releases_hugs_neck",
-                    title = "חביקות צוואר",
+                    title = "חביקות צואר",
                     beltGroups = listOf(
                         BeltGroup(
                             belt = Belt.YELLOW,
@@ -1437,15 +1437,15 @@ object HardSectionsCatalog {
                         BeltGroup(
                             belt = Belt.BLUE,
                             items = listOf(
-                                "שחרור מחביקת צוואר מהצד והפלה",
-                                "שחרור מחביקת צוואר מאחור עם נעילה",
+                                "שחרור מחביקת צואר מהצד והפלה",
+                                "שחרור מחביקת צואר מאחור עם נעילה",
                                 "שחרור מחביקת צואר בשכיבה ברכיבה צמודה"
                             )
                         ),
                         BeltGroup(
                             belt = Belt.BROWN,
                             items = listOf(
-                                "חביקת צוואר מאחור – בריח על העורף, המגן כפוף לפנים"
+                                "חביקת צואר מאחור – בריח על העורף, המגן כפוף לפנים"
                             )
                         ),
                         BeltGroup(

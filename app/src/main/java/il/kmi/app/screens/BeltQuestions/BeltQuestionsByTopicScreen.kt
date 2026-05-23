@@ -81,7 +81,7 @@ private fun releasesSectionIdFor(raw: String): String? {
         "שחרור מחניקות" -> "releases_chokes"
         "שחרור מחביקות" -> "releases_hugs"
         "חביקות גוף" -> "releases_hugs_body"
-        "חביקות צוואר" -> "releases_hugs_neck"
+        "חביקות צואר" -> "releases_hugs_neck"
         "חביקות זרוע" -> "releases_hugs_arm"
         else -> null
     }
@@ -946,6 +946,15 @@ internal fun TopicsBySubjectCard(
         onSubjectClick(action.chosenBelt, subject)
     }
 
+    fun isReleasesRootCard(card: SubjectTopicsUiLogic.SubjectCardModel): Boolean {
+        val cleanId = card.id.trim().lowercase()
+        val cleanTitle = normText(stripLockSuffix(card.title))
+
+        return cleanId == "releases" ||
+                cleanTitle == "שחרורים" ||
+                cleanTitle == "releases"
+    }
+
     val visibleSubjectsSplit = remember(subjects, uiSectionCounts) {
         SubjectTopicsUiLogic.splitVisibleSubjects(
             subjects = subjects,
@@ -974,8 +983,16 @@ internal fun TopicsBySubjectCard(
             )
 
             val titleWithLock =
-                if (LockedContentPolicy.shouldShowLock(accessMode, baseTitle)) "$baseTitle 🔒"
-                else baseTitle
+                if (
+                    card.id == "releases" &&
+                    accessMode != AccessMode.OPEN
+                ) {
+                    "$baseTitle 🔒"
+                } else if (LockedContentPolicy.shouldShowLock(accessMode, baseTitle)) {
+                    "$baseTitle 🔒"
+                } else {
+                    baseTitle
+                }
 
             card.copy(
                 title = titleWithLock,
@@ -992,14 +1009,6 @@ internal fun TopicsBySubjectCard(
                 }
             }
         )
-    }
-
-    val releasesRootCard = remember(subjectsWithSubTopicsCards) {
-        subjectsWithSubTopicsCards.firstOrNull { it.id == "releases" }
-    }
-
-    val otherSubjectsWithSubTopicsCards = remember(subjectsWithSubTopicsCards) {
-        subjectsWithSubTopicsCards.filter { it.id != "releases" }
     }
 
     val subjectsWithoutSubTopicsCards = remember(
@@ -1023,14 +1032,57 @@ internal fun TopicsBySubjectCard(
             )
 
             val titleWithLock =
-                if (LockedContentPolicy.shouldShowLock(accessMode, baseTitle)) "$baseTitle 🔒"
-                else baseTitle
+                if (
+                    card.id == "releases" &&
+                    accessMode != AccessMode.OPEN
+                ) {
+                    "$baseTitle 🔒"
+                } else if (LockedContentPolicy.shouldShowLock(accessMode, baseTitle)) {
+                    "$baseTitle 🔒"
+                } else {
+                    baseTitle
+                }
 
             card.copy(
                 title = titleWithLock,
                 countText = translateCardCountText(card.countText)
             )
         }
+    }
+
+    // ✅ Releases יכול להגיע בשתי צורות:
+    // 1. כנושא עם תתי־נושאים — ברוב החגורות
+    // 2. כנושא ישיר בלי תתי־נושאים — למשל חגורה חומה
+    // לכן מחפשים אותו גם ב-withSubTopics וגם ב-withoutSubTopics.
+    val releasesRootCard = remember(
+        subjectsWithSubTopicsCards,
+        subjectsWithoutSubTopicsCards,
+        isEnglish,
+        hasAccess
+    ) {
+        val card = subjectsWithSubTopicsCards.firstOrNull { isReleasesRootCard(it) }
+            ?: subjectsWithoutSubTopicsCards.firstOrNull { isReleasesRootCard(it) }
+
+        card?.let {
+            val baseTitle = subjectTitleForUi(
+                subjectId = "releases",
+                fallbackHeb = stripLockSuffix(it.title),
+                isEnglish = isEnglish
+            )
+
+            it.copy(
+                id = "releases",
+                title = if (hasAccess) baseTitle else "$baseTitle 🔒"
+            )
+        }
+    }
+
+    val otherSubjectsWithSubTopicsCards = remember(subjectsWithSubTopicsCards) {
+        subjectsWithSubTopicsCards.filterNot { isReleasesRootCard(it) }
+    }
+
+    val otherSubjectsWithoutSubTopicsCards = remember(subjectsWithoutSubTopicsCards) {
+        subjectsWithoutSubTopicsCards.filterNot { isReleasesRootCard(it) }
     }
 
     val defenseRootCard = remember(totalDefense, defenseDialogCountsMap, isEnglish, hasAccess) {
@@ -1149,7 +1201,7 @@ internal fun TopicsBySubjectCard(
                         releasesRootCard?.let { releasesCard ->
                             add(
                                 Triple(
-                                    releasesCard.id,
+                                    "releases",
                                     releasesCard.title,
                                     releasesCard.countText
                                 )
@@ -1168,7 +1220,11 @@ internal fun TopicsBySubjectCard(
                             onClick = {
                                 when (card.first) {
                                     "defense_root" -> {
-                                        askDefense = true
+                                        if (!hasAccess) {
+                                            onOpenSubscription()
+                                        } else {
+                                            askDefense = true
+                                        }
                                     }
 
                                     "releases" -> {
@@ -1243,8 +1299,9 @@ internal fun TopicsBySubjectCard(
                             )
                         }
 
-                // ✅ מציגים נושאים בלי תתי־נושאים
-                    subjectsWithoutSubTopicsCards
+                    // ✅ מציגים נושאים בלי תתי־נושאים
+                    // releases כבר מוצג למעלה יחד עם Defenses כדי לקבל מנעול כמו נושא פרימיום.
+                    otherSubjectsWithoutSubTopicsCards
                         .filter { it.id != "defenses" }
                         .forEachIndexed { index, card ->
 
@@ -1275,7 +1332,7 @@ internal fun TopicsBySubjectCard(
                         }
                     )
 
-                    if (index != subjectsWithoutSubTopicsCards.lastIndex) {
+                            if (index != otherSubjectsWithoutSubTopicsCards.lastIndex) {
                         HorizontalDivider(
                             thickness = 0.8.dp,
                             color = if (isDarkMode) {

@@ -366,7 +366,7 @@ fun WeakPointsScreen(
                 isEnglish = isEnglish
             )
             WeakPointRow(
-                place = tr("צוואר", "Neck"),
+                place = tr("צואר", "Neck"),
                 bodyPart = tr("ראש", "Head"),
                 effect = tr(
                     "פגיעה בכלי דם: עד ~5 שניות עילפון; זמן נוסף/חניקה – סכנת חיים.",
