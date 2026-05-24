@@ -574,6 +574,91 @@ object ExerciseTitlesEnItems {
         "מכה אופקית ובעיטה למפשעה" to "Horizontal Strike and a Regular Kick to the Groin",
         "מכה אופקית ובעיטת הגנה" to "Horizontal Strike and a Defensive Kick",
         "מכה לצד ובעיטה לצד" to "Side Strike and a Side Kick",
-        )
+
+        //----------------------------------------------
+        // Audit fixes — exact keys from ContentRepo
+        //---------------------------------------------------
+
+        // Orange belt
+        "שחרור חביקת צואר מלפנים" to "Release from a Front Neck Hold",
+
+        // Green belt — exact ContentRepo keys
+        "גלגול לפנים - קימה לפנים" to "Forward Roll with Getting Up Forward",
+
+        "הגנה חיצונית נגד ימין באגרוף מהופך" to "External Defence Against a Right Punch with an Upside-Down Punch",
+        "הגנה פנימית נגד ימין באמת שמאל" to "Internal Defence Against a Right Punch with the Left Forearm",
+        "הגנה פנימית נגד שמאל באמת שמאל" to "Internal Defence Against a Left Punch with the Left Forearm",
+        "הגנה פנימית נגד ימין - אגרוף שמאל בהחלקה" to "Internal Defence Against a Right Punch with a Sliding Left Punch",
+        "הגנה נגד בעיטת מגל לאחור בסבוב - בעיטה" to "Defence Against a Backward Magal with Spin - Kick",
+
+        "הגנה מאיום סכין - חוד לבטן התחתונה" to "Defence Against a Knife Threat - Tip to the Lower Abdomen",
+
+        "הגנה נגד דקירה רגילה - בעיטה" to "Defence Against a Regular Stab with a Kick",
+        "הגנה נגד דקירה מזרחית - בעיטה" to "Defence Against an Eastern Stab with a Kick",
+        "הגנה נגד דקירה ישרה מלפנים - בעיטה" to "Defence Against a Straight Stab from the Front with a Kick",
+        "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפסעה" to "Defence Against a Straight Stab from the Front - Body Defence and a Magal Kick to the Groin",
+        "הגנה נגד דקירה רגילה מהצד - בעיטה" to "Defence Against a Regular Stab from the Side with a Kick",
+        "הגנה נגד דקירה מזרחית מהצד - בעיטה" to "Defence Against an Eastern Stab from the Side with a Kick",
+
+        "הגנה נגד דקירה מזרחית מהצד לעורף - התוקף בצד שמאל" to "Defence Against an Eastern Stab from the Side to the Back of the Head with Attacker on the Left",
+        "הגנה נגד דקירה מזרחית מהצד לגב - התוקף בצד שמאל" to "Defence Against an Eastern Stab from the Side to the Back with Attacker on the Left",
+        "הגנה נגד דקירה מזרחית מהצד לגרון - התוקף בצד ימין" to "Defence Against an Eastern Stab from the Side to the Throat with Attacker on the Right",
+        "הגנה נגד דקירה מזרחית מהצד לבטן - התוקף בצד ימין" to "Defence Against an Eastern Stab from the Side to the Abdomen with Attacker on the Right",
+
+        "חביקת יד מהצד - ראש התוקף מאחור" to "Arm Hug from the Side - Attacker's Head Behind",
+        "חביקת יד מהצד - ראש התוקף מלפנים" to "Arm Hug from the Side - Attacker's Head in Front",
+        "שחרור מתפיסת ידיים מאחור" to "Release from a Hand Grab from Behind",
+
+        "שחרור מחביקה פתוחה מלפנים בהרמה" to "Release from an Open Body Hug from the Front while Being Lifted",
+        "שחרור מחביקה סגורה מלפנים בהרמה" to "Release from a Closed Body Hug from the Front while Being Lifted",
+        "שחרור מחביקה פתוחה מאחור בהרמה" to "Release from an Open Body Hug from Behind while Being Lifted",
+        "שחרור מחביקה סגורה מאחור בהרמה" to "Release from a Closed Body Hug from Behind while Being Lifted",
+        "שחרור מחביקה פתוחה מאחור עם תפיסת אצבע" to "Release from an Open Body Hug from Behind with a Finger Grab",
+
+        "התקפה עם מקל לנקודות תורפה" to "Stick Attack to Vital Points",
+
+        // Black belt — exact ContentRepo keys
+        "מכה למפסעה" to "Groin Strike",
+        "מכה אופקית ובעיטה רגילה למפסעה" to "Horizontal Strike and a Regular Kick to the Groin",
+        "מכה אופקית ובעיטת הגנה לפנים" to "Horizontal Strike and a Forward Defensive Kick",
+
+        "הגנה נגד איום אקדח לראש מהצד מאחור – צד שמאל" to "Defence from a Gun Threat to the Head from the Rear Side - Left Side",
+        "הגנה מאיום אקדח בהובלה" to "Defence Against a Gun Threat while Being Led",
+        "הגנה נגד מגל לפנים לראש – התחמקות גוף בסיבוב וגזיזה" to "Defence Against a Front Magal Kick to the Head - Body Evasion with Spin and Cutting Kick",
+
+        "הגנה נגד מקל ארוך – התקפה לצד ימין מגן" to "Defence Against a Long Stick Attack to the Defender's Right Side",
+        "הגנה נגד מקל ארוך – התקפה לצד שמאל מגן" to "Defence Against a Long Stick Attack to the Defender's Left Side",
+        "הגנה נגד דקירה במקל ארוך – הצד החי" to "Defence Against a Long Stick Stab - Live Side",
+        "הגנה נגד דקירה במקל ארוך – הצד המת" to "Defence Against a Long Stick Stab - Blind Side",
+
+        "הגנה נגד סכין שיסוף מהצד החי – בצד ימין" to "Defence Against a Knife Slash from the Live Side - Right Side",
+        "הגנה נגד סכין שיסוף מהצד החי – בצד שמאל" to "Defence Against a Knife Slash from the Live Side - Left Side",
+        "הגנה נגד סכין שיסוף מהצד המת – בצד ימין" to "Defence Against a Knife Slash from the Blind Side - Right Side",
+        "הגנה נגד סכין שיסוף מהצד המת – בצד שמאל" to "Defence Against a Knife Slash from the Blind Side - Left Side",
+
+        "הגנת מקל נגד סכין בתפיסה רגילה" to "Stick Defence Against a Knife in a Regular Grip",
+        "הגנת מקל נגד סכין בתפיסה מזרחית" to "Stick Defence Against a Knife in an Eastern Grip",
+        "הגנת מקל נגד סכין בתפיסה ישרה" to "Stick Defence Against a Knife in a Straight Grip",
+        "הגנת מקל נגד סכין בתפיסה רגילה – צד ימין" to "Stick Defence Against a Knife in a Regular Grip - Right Side",
+        "הגנת מקל נגד סכין בתפיסה רגילה – צד שמאל" to "Stick Defence Against a Knife in a Regular Grip - Left Side",
+        "הגנת מקל נגד סכין בתפיסה מזרחית – צד ימין" to "Stick Defence Against a Knife in an Eastern Grip - Right Side",
+        "הגנת מקל נגד סכין בתפיסה מזרחית – צד שמאל" to "Stick Defence Against a Knife in an Eastern Grip - Left Side",
+        "הגנה פנימית במקל נגד סכין בתפיסה ישרה – צד ימין" to "Internal Stick Defence Against a Knife in a Straight Grip - Right Side",
+        "הגנה חיצונית במקל נגד סכין בתפיסה ישרה – צד ימין" to "External Stick Defence Against a Knife in a Straight Grip - Right Side",
+        "הגנה פנימית במקל נגד סכין בתפיסה ישרה – צד שמאל" to "Internal Stick Defence Against a Knife in a Straight Grip - Left Side",
+        "הגנה חיצונית במקל נגד סכין בתפיסה ישרה – צד שמאל" to "External Stick Defence Against a Knife in a Straight Grip - Left Side",
+
+        "מקל בתנועה" to "Stick in Motion",
+        "שימוש בסכין" to "Using a Knife",
+
+        "רובה נגד דקירה ישירה גבוהה" to "Rifle Defence Against a High Straight Stab",
+        "רובה נגד דקירה ישירה נמוכה" to "Rifle Defence Against a Low Straight Stab",
+        "רובה נגד דקירה רגילה" to "Rifle Defence Against a Regular Stab",
+        "רובה נגד דקירה מזרחית מימין" to "Rifle Defence Against an Eastern Stab from the Right",
+        "רובה נגד דקירה מזרחית משמאל" to "Rifle Defence Against an Eastern Stab from the Left",
+        "רובה נגד דקירה מזרחית מלמטה" to "Rifle Defence Against an Eastern Stab from Below",
+
+        "הגנה נגד איום תת־מקלע" to "Defence Against a Submachine Gun Threat",
+    )
 
 }

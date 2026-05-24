@@ -44,6 +44,8 @@ import il.kmi.app.auth.GoogleAuthManager
 import il.kmi.app.auth.UserProfileCompletion
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import il.kmi.app.FcmTokenManager
+import il.kmi.app.debug.KmiEnglishContentAudit
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -352,6 +354,10 @@ fun IntroScreen(
     LaunchedEffect(Unit) {
         startAnim = true
         KmiAccess.ensureTrialStarted(userSp)
+
+        // ✅ בדיקה זמנית לפני פרסום גרסה:
+        // ב-Logcat לסנן לפי KMI_EN_AUDIT.
+        KmiEnglishContentAudit.run()
     }
 
     // ✅ FIX: משתמשים באותו userSp שממנו אתה מתחיל Trial ושבו נשמר המשתמש
@@ -528,11 +534,37 @@ fun IntroScreen(
                                 val loginResult = GoogleAuthManager.signInWithGoogle(ctx)
 
                                 loginResult
-                                    .onSuccess { googleUser ->
+                                    .onSuccess {
+                                        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+
                                         val profileStatus =
                                             UserProfileCompletion.checkAndPersistProfileStatus(ctx)
 
+                                        FcmTokenManager.refreshTokenForCurrentUser(ctx)
+
+                                        userSp.edit()
+                                            .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                                            .apply()
+
+                                        legacySp.edit()
+                                            .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                                            .apply()
+
                                         isGoogleLoading = false
+                                        googleFlowLocked = false
+
+                                        val debugMessage =
+                                            if (profileStatus.isComplete) {
+                                                "Google OK\nUID: $uid\nProfile complete → entering app"
+                                            } else {
+                                                "Google OK\nUID: $uid\nProfile missing → opening registration\nMissing: ${profileStatus.missingFields.joinToString(", ")}"
+                                            }
+
+                                        Toast.makeText(
+                                            ctx,
+                                            debugMessage,
+                                            Toast.LENGTH_LONG
+                                        ).show()
 
                                         if (profileStatus.isComplete) {
                                             onProfileComplete()
@@ -544,6 +576,8 @@ fun IntroScreen(
                                         isGoogleLoading = false
                                         googleFlowLocked = false
 
+                                        val errorMessage = error.localizedMessage ?: error.toString()
+
                                         googleError =
                                             if (error is androidx.credentials.exceptions.GetCredentialCancellationException) {
                                                 if (isEnglish) {
@@ -553,13 +587,13 @@ fun IntroScreen(
                                                 }
                                             } else {
                                                 if (isEnglish) {
-                                                    "Google sign-in failed. Please try again."
+                                                    "Google sign-in failed: $errorMessage"
                                                 } else {
-                                                    "ההתחברות עם Google נכשלה. נסה שוב."
+                                                    "ההתחברות עם Google נכשלה: $errorMessage"
                                                 }
                                             }
 
-                                        Toast.makeText(ctx, googleError, Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(ctx, googleError, Toast.LENGTH_LONG).show()
                                     }
                             }
                         },

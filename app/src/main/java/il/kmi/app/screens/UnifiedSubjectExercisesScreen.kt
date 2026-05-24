@@ -45,7 +45,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.content.English.ExerciseTitlesEnAliases
+import il.kmi.shared.domain.content.English.ExerciseTitlesEnItems
+import il.kmi.shared.domain.content.English.ExerciseTitlesEnTopics
 import il.kmi.shared.domain.content.HardSectionsResolver
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.LocalizationRuntime
 
 private val subjectScreenGradientTop = Color(0xFFF2F0FA)
 private val subjectScreenGradientMid = Color(0xFFF7F8FC)
@@ -58,6 +63,7 @@ fun UnifiedSubjectExercisesScreen(
     onOpenSection: (subjectId: String, sectionId: String?) -> Unit,
     onBack: () -> Unit
 ) {
+    val isEnglish = LocalizationRuntime.currentLanguage == AppLanguage.ENGLISH
     val result = remember(subjectId, sectionId) {
         HardSectionsResolver.resolve(subjectId, sectionId)
     }
@@ -100,6 +106,7 @@ fun UnifiedSubjectExercisesScreen(
                         subjectId = subjectId,
                         title = result.title,
                         entries = result.entries,
+                        isEnglish = isEnglish,
                         onOpen = onOpenSection,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -109,6 +116,7 @@ fun UnifiedSubjectExercisesScreen(
                     BeltGroupsContent(
                         title = result.title,
                         groups = result.groups,
+                        isEnglish = isEnglish,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -157,6 +165,7 @@ private fun SectionsContent(
     subjectId: String,
     title: String?,
     entries: List<HardSectionsResolver.SectionEntry>,
+    isEnglish: Boolean,
     onOpen: (subjectId: String, sectionId: String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -167,28 +176,29 @@ private fun SectionsContent(
     ) {
         item {
             Text(
-                text = title ?: "נושאים",
+                text = if (isEnglish) translateHardTopicTitle(title ?: "נושאים") else title ?: "נושאים",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.ExtraBold,
-                textAlign = TextAlign.Right,
+                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = "בחר תת־נושא",
+                text = if (isEnglish) "Choose a sub-topic" else "בחר תת־נושא",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF6C6880),
-                textAlign = TextAlign.Right,
+                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
             )
         }
 
         items(entries) { entry ->
             SubjectSectionCard(
-                title = entry.title,
+                title = if (isEnglish) translateHardTopicTitle(entry.title) else entry.title,
                 count = entry.totalItemsCount,
+                isEnglish = isEnglish,
                 onClick = { onOpen(subjectId, entry.id) }
             )
         }
@@ -199,6 +209,7 @@ private fun SectionsContent(
 private fun SubjectSectionCard(
     title: String,
     count: Int,
+    isEnglish: Boolean,
     onClick: () -> Unit
 ) {
     OutlinedCard(
@@ -229,13 +240,13 @@ private fun SubjectSectionCard(
 
             Column(
                 modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.End
+                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.ExtraBold,
-                    textAlign = TextAlign.Right,
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -246,7 +257,11 @@ private fun SubjectSectionCard(
                     color = Color(0xFFF1F4F8)
                 ) {
                     Text(
-                        text = "$count תרגילים",
+                        text = if (isEnglish) {
+                            if (count == 1) "1 exercise" else "$count exercises"
+                        } else {
+                            "$count תרגילים"
+                        },
                         style = MaterialTheme.typography.labelLarge,
                         color = Color(0xFF4E6D73),
                         fontWeight = FontWeight.Bold,
@@ -278,6 +293,7 @@ private fun SubjectSectionCard(
 private fun BeltGroupsContent(
     title: String,
     groups: List<HardSectionsResolver.BeltItems>,
+    isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -287,28 +303,36 @@ private fun BeltGroupsContent(
     ) {
         item {
             Text(
-                text = title,
+                text = if (isEnglish) translateHardTopicTitle(title) else title,
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.ExtraBold
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = "תרגילים לפי חגורות",
-                style = MaterialTheme.typography.bodyMedium
+                text = if (isEnglish) "Exercises by belt" else "תרגילים לפי חגורות",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                modifier = Modifier.fillMaxWidth()
             )
         }
 
         items(groups) { group ->
-            BeltSectionCard(group = group)
+            BeltSectionCard(
+                group = group,
+                isEnglish = isEnglish
+            )
         }
     }
 }
 
 @Composable
 private fun BeltSectionCard(
-    group: HardSectionsResolver.BeltItems
+    group: HardSectionsResolver.BeltItems,
+    isEnglish: Boolean
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -323,7 +347,7 @@ private fun BeltSectionCard(
                 shape = MaterialTheme.shapes.medium
             ) {
                 Text(
-                    text = beltTitle(group.belt),
+                    text = beltTitle(group.belt, isEnglish),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -334,8 +358,10 @@ private fun BeltSectionCard(
 
             group.items.forEachIndexed { index, item ->
                 Text(
-                    text = item,
-                    style = MaterialTheme.typography.bodyLarge
+                    text = if (isEnglish) translateHardExerciseTitle(item) else item,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 if (index != group.items.lastIndex) {
@@ -348,13 +374,62 @@ private fun BeltSectionCard(
     }
 }
 
-private fun beltTitle(belt: Belt): String =
-    when (belt) {
-        Belt.YELLOW -> "חגורה צהובה"
-        Belt.ORANGE -> "חגורה כתומה"
-        Belt.GREEN -> "חגורה ירוקה"
-        Belt.BLUE -> "חגורה כחולה"
-        Belt.BROWN -> "חגורה חומה"
-        Belt.BLACK -> "חגורה שחורה"
-        else -> belt.name
+private fun beltTitle(belt: Belt, isEnglish: Boolean): String =
+    if (isEnglish) {
+        when (belt) {
+            Belt.YELLOW -> "Yellow Belt"
+            Belt.ORANGE -> "Orange Belt"
+            Belt.GREEN -> "Green Belt"
+            Belt.BLUE -> "Blue Belt"
+            Belt.BROWN -> "Brown Belt"
+            Belt.BLACK -> "Black Belt"
+            else -> belt.name
+        }
+    } else {
+        when (belt) {
+            Belt.YELLOW -> "חגורה צהובה"
+            Belt.ORANGE -> "חגורה כתומה"
+            Belt.GREEN -> "חגורה ירוקה"
+            Belt.BLUE -> "חגורה כחולה"
+            Belt.BROWN -> "חגורה חומה"
+            Belt.BLACK -> "חגורה שחורה"
+            else -> belt.name
+        }
     }
+
+private fun translateHardExerciseTitle(raw: String): String {
+    val clean = normalizeHardTitle(raw)
+
+    ExerciseTitlesEnItems.map[clean]?.let { return it }
+    ExerciseTitlesEnAliases.map[clean]?.let { return it }
+
+    val normalizedItemsMap = ExerciseTitlesEnItems.map.entries.associateBy { normalizeHardTitle(it.key) }
+    normalizedItemsMap[clean]?.value?.let { return it }
+
+    val normalizedAliasesMap = ExerciseTitlesEnAliases.map.entries.associateBy { normalizeHardTitle(it.key) }
+    normalizedAliasesMap[clean]?.value?.let { return it }
+
+    return raw
+}
+
+private fun translateHardTopicTitle(raw: String): String {
+    val clean = normalizeHardTitle(raw)
+
+    ExerciseTitlesEnTopics.map[clean]?.let { return it }
+
+    val normalizedTopicsMap = ExerciseTitlesEnTopics.map.entries.associateBy { normalizeHardTitle(it.key) }
+    normalizedTopicsMap[clean]?.value?.let { return it }
+
+    return raw
+}
+
+private fun normalizeHardTitle(raw: String): String {
+    return raw
+        .trim()
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace(Regex("\\s+"), " ")
+}

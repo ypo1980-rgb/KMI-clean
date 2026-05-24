@@ -30,6 +30,41 @@ function chunkArray(arr, size) {
   return chunks;
 }
 
+function extractFcmTokensFromUser(user) {
+  const tokens = [];
+
+  const singleToken = (user.fcmToken || "").toString().trim();
+  if (singleToken) {
+    tokens.push(singleToken);
+  }
+
+  const fcmTokens = user.fcmTokens;
+
+  // תמיכה במבנה ישן: fcmTokens: ["token1", "token2"]
+  if (Array.isArray(fcmTokens)) {
+    fcmTokens.forEach((entry) => {
+      const clean = (entry || "").toString().trim();
+      if (clean) tokens.push(clean);
+    });
+  }
+
+  // תמיכה במבנה החדש של Android:
+  // fcmTokens: { tokenKey: { token: "...", platform: "android" } }
+  if (fcmTokens && typeof fcmTokens === "object" && !Array.isArray(fcmTokens)) {
+    Object.values(fcmTokens).forEach((entry) => {
+      if (typeof entry === "string") {
+        const clean = entry.trim();
+        if (clean) tokens.push(clean);
+      } else if (entry && typeof entry === "object") {
+        const clean = (entry.token || "").toString().trim();
+        if (clean) tokens.push(clean);
+      }
+    });
+  }
+
+  return [...new Set(tokens)];
+}
+
 /**
  * ====================================================
  * 1. טריגר לפורום – הודעה חדשה בחדר קבוצה אמיתי
@@ -172,19 +207,7 @@ exports.onForumMessageCreated = functions.firestore
           }
 
           const user = userDoc.data() || {};
-          const tokens = [];
-
-          const singleToken = (user.fcmToken || "").toString().trim();
-          if (singleToken) tokens.push(singleToken);
-
-          if (Array.isArray(user.fcmTokens)) {
-            user.fcmTokens.forEach((token) => {
-              const clean = (token || "").toString().trim();
-              if (clean) tokens.push(clean);
-            });
-          }
-
-          return tokens;
+          return extractFcmTokensFromUser(user);
         } catch (e) {
           console.error("Failed reading forum target user", {
             uid,
@@ -382,19 +405,7 @@ exports.onCoachBroadcastCreated = functions.firestore
           }
 
           const user = userDoc.data() || {};
-          const tokens = [];
-
-          const singleToken = (user.fcmToken || "").toString().trim();
-          if (singleToken) tokens.push(singleToken);
-
-          if (Array.isArray(user.fcmTokens)) {
-            user.fcmTokens.forEach((token) => {
-              const clean = (token || "").toString().trim();
-              if (clean) tokens.push(clean);
-            });
-          }
-
-          return tokens;
+          return extractFcmTokensFromUser(user);
         } catch (e) {
           console.error("Failed reading target user for coach broadcast", {
             uid,
