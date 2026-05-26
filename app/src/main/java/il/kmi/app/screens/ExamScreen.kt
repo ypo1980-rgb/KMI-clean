@@ -24,6 +24,7 @@ import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
+import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import kotlinx.coroutines.delay
@@ -85,29 +86,40 @@ private fun saveExerciseNote(
 
 private fun findExplanationForExam(
     belt: Belt,
-    rawItem: String
+    rawItem: String,
+    topic: String = ""
 ): String {
     val display = il.kmi.shared.questions.model.util.ExerciseTitleFormatter
         .displayName(rawItem)
         .ifBlank { rawItem }
         .trim()
 
-    fun String.clean(): String =
-        this.replace('-', ' ')
-            .replace("־", " ")
-            .replace("  ", " ")
-            .trim()
+    val resolved = ExerciseExplanationResolver.get(
+        belt = belt,
+        topic = topic,
+        item = display,
+        isEnglish = false
+    ).trim()
 
-    val candidates = listOf(
-        rawItem,
-        display,
-        display.clean(),
-        display.substringBefore("(").trim().clean()
-    ).distinct()
+    val cleaned = if ("::" in resolved) {
+        resolved
+            .split("::")
+            .map { it.trim() }
+            .lastOrNull { it.isNotBlank() }
+            ?: resolved
+    } else {
+        resolved
+    }.trim()
 
-    for (candidate in candidates) {
-        val got = il.kmi.app.domain.Explanations.get(belt, candidate).trim()
-        if (got.isNotBlank()) return got
+    val isFallback =
+        cleaned.isBlank() ||
+                cleaned.startsWith("הסבר מפורט על") ||
+                cleaned.startsWith("אין כרגע") ||
+                cleaned.startsWith("Detailed explanation for:") ||
+                cleaned.startsWith("There is currently no explanation")
+
+    if (!isFallback) {
+        return cleaned
     }
 
     return "אין כרגע הסבר לתרגיל הזה."
@@ -484,7 +496,11 @@ fun ExamScreen(
             val (b, topic, item) = il.kmi.app.screens.parseSearchKey(key)
 
             val explanation = remember(b, item, topic) {
-                findExplanationForExam(b, item)
+                findExplanationForExam(
+                    belt = b,
+                    rawItem = item,
+                    topic = topic
+                )
             }
 
             val favId = remember(item) { normalizeFavoriteId(item) }
@@ -569,7 +585,11 @@ fun ExamScreen(
             val displayItem = displayItems[currentIndex]
 
             val explanation = remember(belt, rawItem) {
-                findExplanationForExam(belt, rawItem)
+                findExplanationForExam(
+                    belt = belt,
+                    rawItem = rawItem,
+                    topic = ""
+                )
             }
 
             val favId = remember(rawItem) { normalizeFavoriteId(rawItem) }

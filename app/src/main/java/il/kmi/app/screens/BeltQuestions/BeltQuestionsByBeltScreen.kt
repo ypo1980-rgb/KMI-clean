@@ -88,6 +88,7 @@ import il.kmi.app.subscription.AccessMode
 import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.LockedContentPolicy
 import il.kmi.app.subscription.KmiAccess
+import il.kmi.app.domain.ExerciseExplanationResolver
 
 /* ------------------------------ Helpers מקומיים למסך ------------------------------ */
 
@@ -125,33 +126,45 @@ internal fun findExplanationForHit(
     topic: String,
     lang: AppLanguage
 ): String {
-    val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
+    val isEnglish = lang == AppLanguage.ENGLISH
 
-    fun String.clean(): String = this
-        .replace('–', '-')
-        .replace('־', '-')
-        .replace("  ", " ")
+    val display = ExerciseTitleFormatter
+        .displayName(rawItem)
+        .ifBlank { rawItem }
         .trim()
 
-    val candidates = buildList {
-        add(rawItem)
-        add(display)
-        add(display.clean())
-        add(display.substringBefore("(").trim().clean())
-    }.distinct()
+    val resolved = ExerciseExplanationResolver.get(
+        belt = belt,
+        topic = topic,
+        item = display,
+        isEnglish = isEnglish
+    ).trim()
 
-    for (candidate in candidates) {
-        val got = il.kmi.app.domain.Explanations.get(belt, candidate).trim()
-        if (
-            got.isNotBlank() &&
-            !got.startsWith("הסבר מפורט על") &&
-            !got.startsWith("אין כרגע")
-        ) {
-            return if ("::" in got) got.substringAfter("::").trim() else got
-        }
+    val cleaned = if ("::" in resolved) {
+        resolved
+            .split("::")
+            .map { it.trim() }
+            .lastOrNull { it.isNotBlank() }
+            ?: resolved
+    } else {
+        resolved
+    }.trim()
+
+    val isFallback = if (isEnglish) {
+        cleaned.isBlank() ||
+                cleaned.startsWith("Detailed explanation for:") ||
+                cleaned.startsWith("There is currently no explanation")
+    } else {
+        cleaned.isBlank() ||
+                cleaned.startsWith("הסבר מפורט על") ||
+                cleaned.startsWith("אין כרגע")
     }
 
-    return if (lang == AppLanguage.ENGLISH) {
+    if (!isFallback) {
+        return cleaned
+    }
+
+    return if (isEnglish) {
         "There is currently no explanation for this exercise."
     } else {
         "אין כרגע הסבר לתרגיל הזה."

@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import il.kmi.app.KmiViewModel
 import il.kmi.app.domain.Explanations
+import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.SubjectTopic as AppSubjectTopic
 import il.kmi.app.domain.TopicsBySubjectRegistry
 import il.kmi.app.ui.KmiTtsManager
@@ -908,12 +909,42 @@ fun SubjectExercisesScreen(
             selectedRow?.let { row ->
     val isFavorite = row.canonicalId in favIds
 
-                val explanation = remember(row.canonicalId) {
-                    val raw = Explanations.get(row.belt, row.rawItem).trim()
-                    if (raw.isBlank()) {
-                        "אין כרגע הסבר לתרגיל הזה."
+                val explanation = remember(row.canonicalId, row.belt, row.topic, row.rawItem, isEnglish) {
+                    val resolved = ExerciseExplanationResolver.get(
+                        belt = row.belt,
+                        topic = row.topic,
+                        item = row.rawItem,
+                        isEnglish = isEnglish
+                    ).trim()
+
+                    val cleaned = if ("::" in resolved) {
+                        resolved
+                            .split("::")
+                            .map { it.trim() }
+                            .lastOrNull { it.isNotBlank() }
+                            ?: resolved
                     } else {
-                        if ("::" in raw) raw.substringAfter("::").trim() else raw
+                        resolved
+                    }.trim()
+
+                    val isFallback = if (isEnglish) {
+                        cleaned.isBlank() ||
+                                cleaned.startsWith("Detailed explanation for:") ||
+                                cleaned.startsWith("There is currently no explanation")
+                    } else {
+                        cleaned.isBlank() ||
+                                cleaned.startsWith("הסבר מפורט על") ||
+                                cleaned.startsWith("אין כרגע")
+                    }
+
+                    if (!isFallback) {
+                        cleaned
+                    } else {
+                        if (isEnglish) {
+                            "There is currently no explanation for this exercise."
+                        } else {
+                            "אין כרגע הסבר לתרגיל הזה."
+                        }
                     }
                 }
 

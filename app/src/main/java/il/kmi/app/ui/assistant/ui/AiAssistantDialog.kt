@@ -99,7 +99,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import il.kmi.shared.domain.Belt
-import il.kmi.app.domain.Explanations
+import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.assistant.core.AssistantBrain
@@ -231,14 +231,12 @@ private fun buildExplanationWithStanceHighlight(
 private fun findExplanationForHit(
     belt: Belt,
     rawItem: String,
-    topic: String
+    topic: String,
+    isEnglish: Boolean = false
 ): String {
-    val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
-
-    fun String.clean(): String = this
-        .replace('–', '-')
-        .replace('־', '-')
-        .replace("  ", " ")
+    val display = ExerciseTitleFormatter
+        .displayName(rawItem)
+        .ifBlank { rawItem }
         .trim()
 
     val normalizedRaw = normalizeExerciseQuery(rawItem)
@@ -247,18 +245,15 @@ private fun findExplanationForHit(
     val candidates = buildList {
         add(rawItem)
         add(display)
-        add(display.clean())
-        add(display.substringBefore("(").trim().clean())
-
         add(normalizedRaw)
         add(normalizedDisplay)
         add(normalizedRaw.substringBefore("(").trim())
         add(normalizedDisplay.substringBefore("(").trim())
 
-        // וריאציות קצרות יותר
         if (" " in normalizedRaw) {
             add(normalizedRaw.substringAfterLast(" ").trim())
         }
+
         if (" " in normalizedDisplay) {
             add(normalizedDisplay.substringAfterLast(" ").trim())
         }
@@ -268,17 +263,43 @@ private fun findExplanationForHit(
         .distinct()
 
     for (candidate in candidates) {
-        val got = Explanations.get(belt, candidate).trim()
-        if (
-            got.isNotBlank() &&
-            !got.startsWith("הסבר מפורט על") &&
-            !got.startsWith("אין כרגע")
-        ) {
-            return if ("::" in got) got.substringAfter("::").trim() else got
+        val resolved = ExerciseExplanationResolver.get(
+            belt = belt,
+            topic = topic,
+            item = candidate,
+            isEnglish = isEnglish
+        ).trim()
+
+        val cleaned = if ("::" in resolved) {
+            resolved
+                .split("::")
+                .map { it.trim() }
+                .lastOrNull { it.isNotBlank() }
+                ?: resolved
+        } else {
+            resolved
+        }.trim()
+
+        val isFallback = if (isEnglish) {
+            cleaned.isBlank() ||
+                    cleaned.startsWith("Detailed explanation for:") ||
+                    cleaned.startsWith("There is currently no explanation")
+        } else {
+            cleaned.isBlank() ||
+                    cleaned.startsWith("הסבר מפורט על") ||
+                    cleaned.startsWith("אין כרגע")
+        }
+
+        if (!isFallback) {
+            return cleaned
         }
     }
 
-    return "אין כרגע הסבר מפורט לתרגיל הזה במאגר."
+    return if (isEnglish) {
+        "There is currently no detailed explanation for this exercise in the database."
+    } else {
+        "אין כרגע הסבר מפורט לתרגיל הזה במאגר."
+    }
 }
 
 private fun normalizeExerciseQuery(text: String): String {
@@ -475,7 +496,8 @@ private fun getExerciseAnswerWithFallback(
         val local = findExplanationForHit(
             belt = belt,
             rawItem = rawExercise,
-            topic = ""
+            topic = "",
+            isEnglish = isEnglish
         ).trim()
 
         if (

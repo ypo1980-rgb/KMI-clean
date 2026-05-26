@@ -25,7 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
-import il.kmi.app.domain.Explanations
+import il.kmi.app.domain.ExerciseExplanationResolver
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -623,31 +623,46 @@ fun ExercisesTabsScreen(
             rawItem: String,
             topicHit: String
         ): String {
-            val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
-
-            fun String.clean(): String = this
-                .replace('–', '-')    // en dash
-                .replace('־', '-')    // maqaf
-                .replace("  ", " ")
+            val display = ExerciseTitleFormatter
+                .displayName(rawItem)
+                .ifBlank { rawItem }
                 .trim()
 
-            val candidates = buildList {
-                add(rawItem)
-                add(display)
-                add(display.clean())
-                add(display.substringBefore("(").trim().clean())
-            }.distinct()
+            val resolved = ExerciseExplanationResolver.get(
+                belt = beltHit,
+                topic = topicHit,
+                item = display,
+                isEnglish = isEnglish
+            ).trim()
 
-            for (candidate in candidates) {
-                val got = Explanations.get(beltHit, candidate).trim()
-                if (got.isNotBlank()
-                    && !got.startsWith("הסבר מפורט על")
-                    && !got.startsWith("אין כרגע")
-                ) {
-                    return if ("::" in got) got.substringAfter("::").trim() else got
-                }
+            val cleaned = if ("::" in resolved) {
+                resolved
+                    .split("::")
+                    .map { it.trim() }
+                    .lastOrNull { it.isNotBlank() }
+                    ?: resolved
+            } else {
+                resolved
+            }.trim()
+
+            val isFallback = if (isEnglish) {
+                cleaned.isBlank() ||
+                        cleaned.startsWith("Detailed explanation for:") ||
+                        cleaned.startsWith("There is currently no explanation")
+            } else {
+                cleaned.isBlank() ||
+                        cleaned.startsWith("הסבר מפורט על") ||
+                        cleaned.startsWith("אין כרגע")
             }
-            return tr("אין כרגע הסבר לתרגיל הזה.", "There is currently no explanation for this exercise.")
+
+            if (!isFallback) {
+                return cleaned
+            }
+
+            return tr(
+                "אין כרגע הסבר לתרגיל הזה.",
+                "There is currently no explanation for this exercise."
+            )
         }
 
         // ===== טאבים "מקצה-לקצה" =====
@@ -902,9 +917,45 @@ fun ExercisesTabsScreen(
                 onDispose { KmiTtsManager.stop() }
             }
 
-            val explanation = Explanations.get(belt, displayName)
-                .ifBlank { Explanations.get(belt, item) }
-                .ifBlank { tr("לא נמצא הסבר עבור \"$displayName\".", "No explanation found for \"$displayName\".") }
+            val explanation = remember(belt, topic, item, displayName, isEnglish) {
+                val itemTopic = topicForRawItem(item)
+
+                val resolved = ExerciseExplanationResolver.get(
+                    belt = belt,
+                    topic = itemTopic,
+                    item = displayName,
+                    isEnglish = isEnglish
+                ).trim()
+
+                val cleaned = if ("::" in resolved) {
+                    resolved
+                        .split("::")
+                        .map { it.trim() }
+                        .lastOrNull { it.isNotBlank() }
+                        ?: resolved
+                } else {
+                    resolved
+                }.trim()
+
+                val isFallback = if (isEnglish) {
+                    cleaned.isBlank() ||
+                            cleaned.startsWith("Detailed explanation for:") ||
+                            cleaned.startsWith("There is currently no explanation")
+                } else {
+                    cleaned.isBlank() ||
+                            cleaned.startsWith("הסבר מפורט על") ||
+                            cleaned.startsWith("אין כרגע")
+                }
+
+                if (!isFallback) {
+                    cleaned
+                } else {
+                    tr(
+                        "לא נמצא הסבר עבור \"$displayName\".",
+                        "No explanation found for \"$displayName\"."
+                    )
+                }
+            }
 
             val isFav = favorites.contains(normalizeItemId(item))
             val noteText = remember(item, notesRefreshKey) {

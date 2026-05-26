@@ -63,7 +63,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import il.kmi.app.domain.Explanations
 
+//-----------------------------------------------------------------------
 private data class LoadingStage(
     val titleHe: String,
     val titleEn: String,

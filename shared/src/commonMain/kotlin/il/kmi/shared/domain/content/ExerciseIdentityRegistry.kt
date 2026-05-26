@@ -789,6 +789,9 @@ object ExerciseIdentityRegistry {
                 "הגנות חיצוניות נגד מכות",
                 "defenses_root",
                 "def_external_punch"
+            ),
+            aliases = setOf(
+                "הגנות חיצוניות רפלקסיבית 360 מעלות"
             )
         ),
 

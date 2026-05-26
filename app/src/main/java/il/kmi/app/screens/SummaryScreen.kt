@@ -55,6 +55,7 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
+import il.kmi.app.domain.ExerciseExplanationResolver
 
 /* ------------------------------ MarkState (3 states) ------------------------------ */
 
@@ -836,22 +837,42 @@ fun SummaryScreen(
         explainFromSearch?.let { (b, t, iRaw) ->
             val canonical = resolveCanonicalIdForExplanation(b, t, iRaw)
 
-            val explanation = if (isEnglish) {
-                il.kmi.shared.domain.content.English.ExerciseExplanationsEn.get(b, canonical).let { main ->
-                    if (main.startsWith("Detailed explanation for:")) {
-                        val alt = canonical.substringAfter(":", canonical).trim()
-                        il.kmi.shared.domain.content.English.ExerciseExplanationsEn.get(b, alt)
-                    } else {
-                        main
-                    }
+            val explanation = remember(b, t, iRaw, canonical, isEnglish) {
+                val resolved = ExerciseExplanationResolver.get(
+                    belt = b,
+                    topic = t,
+                    item = iRaw,
+                    isEnglish = isEnglish
+                ).trim()
+
+                val cleaned = if ("::" in resolved) {
+                    resolved
+                        .split("::")
+                        .map { it.trim() }
+                        .lastOrNull { it.isNotBlank() }
+                        ?: resolved
+                } else {
+                    resolved
+                }.trim()
+
+                val isFallback = if (isEnglish) {
+                    cleaned.isBlank() ||
+                            cleaned.startsWith("Detailed explanation for:") ||
+                            cleaned.startsWith("There is currently no explanation")
+                } else {
+                    cleaned.isBlank() ||
+                            cleaned.startsWith("הסבר מפורט על") ||
+                            cleaned.startsWith("אין כרגע")
                 }
-            } else {
-                il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
-                    val alt = canonical.substringAfter(":", canonical).trim()
-                    il.kmi.app.domain.Explanations.get(b, alt)
+
+                if (!isFallback) {
+                    cleaned
+                } else {
+                    tr(
+                        "לא נמצא הסבר עבור \"$canonical\".",
+                        "No explanation was found for \"$canonical\"."
+                    )
                 }
-            }.ifBlank {
-                tr("לא נמצא הסבר עבור \"$canonical\".", "No explanation was found for \"$canonical\".")
             }
 
             val cleanFavId = cleanItem(t, canonical)

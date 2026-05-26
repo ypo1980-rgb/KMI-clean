@@ -1,7 +1,7 @@
 package il.kmi.app.domain
 
 import il.kmi.shared.domain.Belt
-
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 
 object Explanations {
 
@@ -58,11 +58,211 @@ object Explanations {
         return t
     }
 
+    private fun isRealExplanation(text: String): Boolean {
+        val clean = text.trim()
+
+        return clean.isNotBlank() &&
+                !clean.startsWith(FALLBACK_PREFIX) &&
+                !clean.startsWith("אין כרגע") &&
+                !clean.startsWith("Detailed explanation for:") &&
+                !clean.startsWith("There is currently no explanation")
+    }
+
+    data class ExplanationAuditRow(
+        val exerciseId: String,
+        val belt: Belt,
+        val title: String,
+        val hasExplanation: Boolean,
+        val explanationPreview: String
+    )
+
+    fun auditKnownExerciseExplanations(): List<ExplanationAuditRow> {
+        return ExerciseIdentityRegistry.knownExercises.map { identity ->
+            val explanation = getByExerciseId(
+                exerciseId = identity.id,
+                fallbackBelt = identity.belt,
+                fallbackItem = identity.hebrewTitle
+            ).trim()
+
+            val real = isRealExplanation(explanation)
+
+            ExplanationAuditRow(
+                exerciseId = identity.id,
+                belt = identity.belt,
+                title = identity.hebrewTitle,
+                hasExplanation = real,
+                explanationPreview = if (explanation.length > 120) {
+                    explanation.take(120) + "..."
+                } else {
+                    explanation
+                }
+            )
+        }
+    }
+
+    fun missingKnownExerciseExplanations(): List<ExplanationAuditRow> {
+        return auditKnownExerciseExplanations()
+            .filterNot { it.hasExplanation }
+    }
+
+    fun duplicateKnownExplanationGroups(): List<List<ExplanationAuditRow>> {
+        data class FullAuditRow(
+            val row: ExplanationAuditRow,
+            val fullExplanationKey: String
+        )
+
+        val fullRows = ExerciseIdentityRegistry.knownExercises.map { identity ->
+            val explanation = getByExerciseId(
+                exerciseId = identity.id,
+                fallbackBelt = identity.belt,
+                fallbackItem = identity.hebrewTitle
+            ).trim()
+
+            val row = ExplanationAuditRow(
+                exerciseId = identity.id,
+                belt = identity.belt,
+                title = identity.hebrewTitle,
+                hasExplanation = isRealExplanation(explanation),
+                explanationPreview = if (explanation.length > 120) {
+                    explanation.take(120) + "..."
+                } else {
+                    explanation
+                }
+            )
+
+            FullAuditRow(
+                row = row,
+                fullExplanationKey = explanation
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+            )
+        }
+
+        return fullRows
+            .filter { it.row.hasExplanation }
+            .groupBy { it.fullExplanationKey }
+            .values
+            .filter { it.size > 1 }
+            .map { group ->
+                group
+                    .map { it.row }
+                    .sortedWith(
+                        compareBy<ExplanationAuditRow>(
+                            { Belt.order.indexOf(it.belt).let { idx -> if (idx >= 0) idx else 999 } },
+                            { it.exerciseId }
+                        )
+                    )
+            }
+    }
+
+    fun logKnownExerciseExplanationsAudit(
+        tag: String = "KMI_EXPLANATIONS_AUDIT",
+        maxRows: Int = 80
+    ) {
+        val allRows = auditKnownExerciseExplanations()
+        val missingRows = allRows.filterNot { it.hasExplanation }
+        val duplicateGroups = duplicateKnownExplanationGroups()
+
+        fun log(message: String) {
+            println("$tag: $message")
+        }
+
+        log("========== Explanations audit started ==========")
+        log("Known exercises: ${allRows.size}")
+        log("Missing explanations: ${missingRows.size}")
+        log("Duplicate explanation groups: ${duplicateGroups.size}")
+
+        if (missingRows.isNotEmpty()) {
+            log("----- Missing explanations -----")
+
+            missingRows
+                .take(maxRows)
+                .forEach { row ->
+                    log(
+                        "MISSING | ${row.exerciseId} | ${row.belt.name} | ${row.title} | ${row.explanationPreview}"
+                    )
+                }
+
+            if (missingRows.size > maxRows) {
+                log("MISSING | ... and ${missingRows.size - maxRows} more")
+            }
+        }
+
+        if (duplicateGroups.isNotEmpty()) {
+            log("----- Duplicate explanation groups -----")
+
+            duplicateGroups
+                .take(25)
+                .forEachIndexed { groupIndex, group ->
+                    log(
+                        "DUP_GROUP #${groupIndex + 1} | size=${group.size} | preview=${group.firstOrNull()?.explanationPreview.orEmpty()}"
+                    )
+
+                    group
+                        .take(10)
+                        .forEach { row ->
+                            log(
+                                "DUP_ITEM  #${groupIndex + 1} | ${row.exerciseId} | ${row.belt.name} | ${row.title}"
+                            )
+                        }
+
+                    if (group.size > 10) {
+                        log("DUP_ITEM  #${groupIndex + 1} | ... and ${group.size - 10} more")
+                    }
+                }
+
+            if (duplicateGroups.size > 25) {
+                log("DUP_GROUP | ... and ${duplicateGroups.size - 25} more groups")
+            }
+        }
+
+        log("========== Explanations audit finished ==========")
+    }
+
+    private fun registryKeysToTry(
+        belt: Belt,
+        raw: String
+    ): List<String> {
+        val baseKeys = linkedSetOf(
+            normKey(raw),
+            stripDefTagIfAny(raw),
+            stripCommonPrefixes(stripDefTagIfAny(raw))
+        )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        val out = linkedSetOf<String>()
+
+        baseKeys.forEach { key ->
+            val resolved = ExerciseIdentityRegistry.resolve(
+                belt = belt,
+                hebrewTitle = key,
+                topicKey = null
+            )
+
+            if (resolved.isKnown) {
+                val identity = ExerciseIdentityRegistry.knownById(resolved.id)
+
+                if (identity != null) {
+                    out.add(identity.hebrewTitle)
+                    out.addAll(identity.aliases)
+                }
+            }
+        }
+
+        return out
+            .map { normKey(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
     private fun aliasKey(s: String): String {
         val t = normKey(s)
 
         return when (t) {
-            // ───── בלימות וגלגולים - צהובה / כתומה ─────
+
+            // ───── בלימות וגלגולים - שמות ישנים / וריאציות כתיב ─────
             "גלגול לפנים - ימין" -> "גלגול לפנים – צד ימין"
             "גלגול לפנים - צד ימין" -> "גלגול לפנים – צד ימין"
             "גלגול לפנים - שמאל" -> "גלגול לפנים צד שמאל"
@@ -70,13 +270,12 @@ object Explanations {
             "גלגול לאחור שמאל" -> "גלגול לאחור צד שמאל"
             "גלגול לפנים קימה לפנים" -> "גלגול לפנים - קימה לפנים"
 
-            // ───── צהובה - שמות שנותרו ב-Audit ─────
+            // ───── צהובה - שמות שנותרו מ-Audit / PDF ─────
             "הוצאות אגן, הרמת אגן והפניית גוף למעלה" -> "הוצאות אגן, הרמת אגן והפניית גוף למעלה "
             "מכת קשת האגודל והאצבע" -> "מכת קשת האצבע והאגודל"
             "מכת קשת האגודל והאצבע לקנה הנשימה" -> "מכת קשת האצבע והאגודל"
-            "שחרור מחביקת צואר מהצד" -> "שחרור מחביקת צואר מהצד"
 
-            // ───── כחולה - וריאציות ימין/שמאל מרוכזות ─────
+            // ───── כחולה / ירוקה - וריאציות ימין/שמאל מרוכזות ─────
             "גלגול לצד - ימין" -> "גלגול לצד - ימין/שמאל"
             "גלגול לצד - שמאל" -> "גלגול לצד - ימין/שמאל"
             "גלגול לצד - ימין/שמאל" -> "גלגול לצד – ימין/שמאל"
@@ -90,39 +289,41 @@ object Explanations {
             "גלגול ללא ידיים - ימין" -> "גלגול ללא ידיים - ימין/שמאל"
             "גלגול ללא ידיים - שמאל" -> "גלגול ללא ידיים - ימין/שמאל"
 
-            // ───── ירוקה - וריאציות ימין/שמאל מרוכזות ─────
             "גלגול ביד אחת - ימין/שמאל" -> "גלגול ביד אחת - ימין"
             "גלגול לפנים ובלימה לאחור - ימין/שמאל" -> "גלגול לפנים ובלימה לאחור - ימין"
             "גלגול לפנים ולאחור - ימין/שמאל" -> "גלגול לפנים ולאחור - ימין"
 
-            // ───── קאוולר / קוואלר ─────
+            // ───── קאוולר / קוואלר - וריאציות מקף וכתיב ─────
             "קוואלר - הליכה לאחור" -> "קוואלר – הליכה לאחור"
             "קוואלר נגד התנגדות - הליכה לפנים" -> "קוואלר נגד ההתנגדות - הליכה לפנים"
             "קוואלר נגד ההתנגדות - הליכה לפנים" -> "קוואלר נגד ההתנגדות – הליכה לפנים"
             "קוואלר - אגודלים" -> "קוואלר – אגודלים"
             "קוואלר - מרפק" -> "קוואלר – מרפק"
 
-            // ───── הגנות / בעיטות - וריאציות מקף ─────
+            // ───── הגנות / בעיטות - וריאציות מקף / כתיב PDF ─────
             "הגנה נגד בעיטה רגילה - טיימינג לצד החי" -> "הגנה נגד בעיטה רגילה – טיימינג לצד חי"
             "הגנה פנימית נגד בעיטת מגל לפנים - בעיטה לצד" -> "הגנה פנימית נגד בעיטת מגל לפנים — בעיטה לצד"
             "הגנה פנימית נגד בעיטת מגל לפנים - בעיטה לאחור" -> "הגנה פנימית נגד בעיטת מגל לפנים — בעיטה לאחור"
-
             "הגנה נגד בעיטת מגל לאחור בסיבוב - בעיטה" -> "הגנה נגד בעיטת מגל לאחור בסבוב - בעיטה"
             "הגנה נגד בעיטת מגל לאחור - בעיטה בשמאל" -> "הגנה נגד בעיטת מגל לאחור - בעיטה שמאל"
 
             // ───── סכין / גרוגרת / גורגרת ─────
             "הגנה מאיום סכין מאחור - להב לגורגרת" -> "הגנה מאיום סכין מאחור – להב לגורגרת"
             "הגנה מאיום סכין - להב לגורגרת" -> "הגנה מאיום סכין – להב לגורגרת"
-            "הגנה מאיום סכין - להב לגורגרת" -> "הגנה מאיום סכין – להב לגורגרת"
             "הגנה מאיום סכין להב לגורגרת" -> "הגנה מאיום סכין – להב לגורגרת"
 
-            // ───── אקדח - שחורה ─────
+            // ───── אקדח / נשק - שחורה ─────
             "הגנה נגד איום אקדח לראש - צד ימין" -> "הגנה נגד איום אקדח לראש – צד ימין"
             "הגנה נגד איום אקדח לראש - צד שמאל" -> "הגנה נגד איום אקדח לראש – צד שמאל"
             "הגנה נגד איום אקדח לראש מהצד מאחור - צד שמאל" -> "הגנה נגד איום אקדח לראש מהצד מאחור – צד שמאל"
             "הגנה נגד איום אקדח מלפנים - קנה קצר" -> "הגנה נגד איום אקדח מלפנים – קנה קצר"
 
-            // ───── שחרורים - וריאציות כתיב ─────
+            "הגנה נגד איום תת-מקלע" -> "הגנה נגד איום תת־מקלע"
+            "הגנות עם רובה נגד דקירות סכין" -> "רובה נגד דקירה רגילה"
+            "רובה נגד דקירה ישירה גבוהה" -> "רובה נגד דקירה ישרה גבוהה"
+            "רובה נגד דקירה ישירה נמוכה" -> "רובה נגד דקירה ישרה נמוכה"
+
+            // ───── שחרורים - וריאציות כתיב שנשאיר כגיבוי ─────
             "חביקת צואר מאחור - בריח על העורף, המגן כפוף לפנים" -> "חביקת צואר מאחור – בריח על העורף, המגן כפוף לפנים"
             "חביקת צואר מאחור - בריח על השורף, המגן כפוף לפנים" -> "חביקת צואר מאחור – בריח על השורף, המגן כפוף לפנים"
 
@@ -130,24 +331,7 @@ object Explanations {
             "חביקת יד מהצד - ראש התוקף מאחור" -> "חביקות יד מצד - ראש התוקף מאחור"
             "חביקת יד מהצד - ראש התוקף מלפנים" -> "חביקות יד מצד - ראש התוקף מלפנים"
 
-            // ───── שחורה - התאמות אחרונות ─────
-            "הגנה נגד איום תת־מקלע" -> "הגנה נגד איום תת־מקלע"
-            "הגנה נגד איום תת-מקלע" -> "הגנה נגד איום תת־מקלע"
-            "הגנות עם רובה נגד דקירות סכין" -> "רובה נגד דקירה רגילה"
-            "רובה נגד דקירה ישירה גבוהה" -> "רובה נגד דקירה ישרה גבוהה"
-            "רובה נגד דקירה ישירה נמוכה" -> "רובה נגד דקירה ישרה נמוכה"
-
-            // ───── כחולה - שחרורים / צואר ─────
-            "שחרור מחביקת צואר מאחור עם נעילה" -> "שחרור מחביקת צואר מאחור עם נעילה"
-            "שחרור מחביקת צואר מהצד והפלה" -> "שחרור מחביקת צואר מהצד והפלה"
-
-            // ───── ירוקה - שמות חופפים ─────
-            "שחרור מחביקת צואר מאחור" -> "שחרור חביקת צואר מאחור"
-            "שחרור מחביקת צואר מאחור" -> "שחרור חביקת צואר מאחור"
-            "חביקת יד מהצד - ראש התוקף מאחור" -> "חביקות יד מצד - ראש התוקף מאחור"
-            "חביקת יד מהצד - ראש התוקף מלפנים" -> "חביקות יד מצד - ראש התוקף מלפנים"
-
-            // ───── כתומה - כותרות HardSectionsCatalog לעבודת ידיים ─────
+            // ───── כתומה - כותרות קצרות מ-HardSectionsCatalog לעבודת ידיים ─────
             "גב יד" -> "מכת גב יד בהצלפה"
             "מכת פטיש בסיבוב" -> "מכת גב יד בהצלפה בסיבוב"
             "מכת פטיש יד שמאל" -> "מכת פטיש"
@@ -158,26 +342,109 @@ object Explanations {
         }
     }
 
-    private fun keysToTry(raw: String): List<String> {
+    private fun keysToTry(
+        belt: Belt,
+        raw: String
+    ): List<String> {
         val raw0 = normKey(raw)
         val noTag = stripDefTagIfAny(raw0)
         val noPrefix = stripCommonPrefixes(noTag)
+
         val aliasRaw = aliasKey(raw0)
         val aliasNoTag = aliasKey(noTag)
         val aliasNoPrefix = aliasKey(noPrefix)
 
-        return linkedSetOf(
-            raw0,
-            noTag,
-            noPrefix,
-            aliasRaw,
-            aliasNoTag,
-            aliasNoPrefix
-        ).filter { it.isNotBlank() }.toList()
+        val registryKeys = registryKeysToTry(
+            belt = belt,
+            raw = raw
+        )
+
+        return linkedSetOf<String>().apply {
+            // ✅ קודם מזהים רשמיים מ־ExerciseIdentityRegistry
+            addAll(registryKeys)
+
+            // ✅ אחר כך fallback ישן לפי שמות קיימים
+            add(raw0)
+            add(noTag)
+            add(noPrefix)
+            add(aliasRaw)
+            add(aliasNoTag)
+            add(aliasNoPrefix)
+        }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+    }
+
+    fun get(
+        belt: Belt,
+        item: String,
+        exerciseId: String?
+    ): String {
+        val id = exerciseId.orEmpty().trim()
+
+        if (id.isNotBlank()) {
+            val byId = getByExerciseId(
+                exerciseId = id,
+                fallbackBelt = belt,
+                fallbackItem = item
+            ).trim()
+
+            if (isRealExplanation(byId)) {
+                return byId
+            }
+        }
+
+        return get(belt, item)
+    }
+
+    fun getByExerciseId(
+        exerciseId: String,
+        fallbackBelt: Belt,
+        fallbackItem: String
+    ): String {
+        val id = exerciseId.trim()
+
+        if (id.isBlank()) {
+            return get(fallbackBelt, fallbackItem)
+        }
+
+        val identity = ExerciseIdentityRegistry.knownById(id)
+
+        if (identity != null) {
+            val titlesToTry = linkedSetOf<String>().apply {
+                add(identity.hebrewTitle)
+                addAll(identity.aliases)
+                add(fallbackItem)
+            }
+
+            titlesToTry.forEach { title ->
+                val resolved = get(
+                    belt = identity.belt,
+                    item = title
+                ).trim()
+
+                if (isRealExplanation(resolved)) {
+                    return resolved
+                }
+            }
+        }
+
+        val fallback = get(fallbackBelt, fallbackItem).trim()
+
+        return if (isRealExplanation(fallback)) {
+            fallback
+        } else {
+            "$FALLBACK_PREFIX $id"
+        }
     }
 
     fun get(belt: Belt, item: String): String {
-        val tries = keysToTry(item)
+        val tries = keysToTry(
+            belt = belt,
+            raw = item
+        )
 
         for (k in tries) {
             val r = when (belt) {

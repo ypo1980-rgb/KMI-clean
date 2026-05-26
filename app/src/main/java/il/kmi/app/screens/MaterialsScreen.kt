@@ -43,6 +43,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import il.kmi.app.R
 import il.kmi.app.domain.CanonicalIds
+import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.highlightItem
 import android.app.Activity
 import androidx.compose.animation.core.tween
@@ -53,7 +54,6 @@ import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
-import il.kmi.shared.domain.content.English.ExerciseExplanationsEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.subscription.KmiAccess
 
@@ -905,116 +905,86 @@ fun MaterialsScreen(
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
 
-            // ===== דיאלוג הסבר בעקבות חיפוש =====
-            explainTriple?.let { (b, t, iRaw) ->
-                fun norm2(s: String) = s.replace("\u200F","").replace("\u200E","").replace("\u00A0"," ")
-                    .replace(Regex("[\u0591-\u05C7]"), "")
-                    .replace("[\\-–—:_]".toRegex(), " ")
-                    .replace(Regex("\\s+"), " ")
-                    .trim().lowercase()
+        // ===== דיאלוג הסבר בעקבות חיפוש / מידע =====
+        explainTriple?.let { (b, t, iRaw) ->
 
-                fun cleanItem2(topic2: String, item2: String): String {
-                    var s = item2.trim()
+            val cleanItemForResolver = remember(t, iRaw) {
+                cleanItem(t, iRaw).trim()
+            }
 
-                    // ✅ מסירים רק prefix של topic2::
-                    if (topic2.isNotBlank() && s.startsWith("$topic2::")) {
-                        s = s.removePrefix("$topic2::").trim()
-                    }
-
-                    // ✅ חשוב: לא לחתוך substringAfterLast("::")
-
-                    s = s.replace(Regex("\\s+"), " ").trim()
-                    return s
-                }
-
-                fun findCanonicalItem2(belt2: Belt, topic2: String, displayItem2: String): String? {
-                    val wanted = norm2(displayItem2)
-                    val topicTrim2 = topic2.trim()
-
-                    val all = SharedContentRepo.getAllItemsFor(
-                        belt = belt2,
-                        topicTitle = topicTrim2,
-                        subTopicTitle = null
-                    )
-
-                    all.firstOrNull { raw ->
-                        val disp = ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim()
-                        norm2(disp) == wanted || norm2(raw) == wanted
-                    }?.let { return it }
-
-                    val subs = SharedContentRepo.getSubTopicsFor(belt2, topicTrim2)
-                    subs.forEach { st ->
-                        st.items.firstOrNull { raw ->
-                            val disp = ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim()
-                            norm2(disp) == wanted || norm2(raw) == wanted
-                        }?.let { return it }
-                    }
-
-                    return null
-                }
-
-                val canonical = CanonicalIds.resolveCanonicalForExplanation(b, t, iRaw)
-
-                val explanation = remember(b, canonical, isEnglish) {
-                    val alt = canonical.substringAfter(":", canonical).trim()
-
-                    if (isEnglish) {
-                        ExerciseExplanationsEn.get(b, canonical).let { main ->
-                            if (main.startsWith("Detailed explanation for:")) {
-                                ExerciseExplanationsEn.get(b, alt)
-                            } else {
-                                main
-                            }
-                        }
-                    } else {
-                        il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
-                            il.kmi.app.domain.Explanations.get(b, alt)
-                        }
-                    }
-                }.ifBlank {
-                    if (isEnglish) {
-                        "No explanation found for \"$canonical\"."
-                    } else {
-                        "לא נמצא הסבר עבור \"$canonical\"."
-                    }
-                }
-
-                val dialogTitle = itemTitleForUi(
-                    topic = t,
-                    rawItem = canonical,
-                    lang = currentLang
-                )
-
-                val dialogBeltLabel = if (isEnglish) {
-                    "(${b.en} belt)"
-                } else {
-                    "(${b.heb})"
-                }
-
-                val dialogNoteText = remember(canonical, notesRefreshKey) {
-                    loadNote(canonical)
-                }
-
-                ExerciseExplanationDialog(
-                    title = dialogTitle,
-                    beltLabel = dialogBeltLabel,
-                    explanation = explanation,
-                    noteText = dialogNoteText,
-                    isFavorite = favorites.contains(canonical),
-                    accentColor = b.color,
-                    isEnglish = isEnglish,
-                    onDismiss = { explainTriple = null },
-                    onEditNote = {
-                        noteEditorFor = canonical
-                        noteDraft = loadNote(canonical)
-                    },
-                    onDeleteNote = {
-                        noteDraft = ""
-                        saveNote(canonical, "")
-                    },
-                    onToggleFavorite = { toggleFavorite(canonical) }
+            val resolvedIdentity = remember(b, t, cleanItemForResolver) {
+                ExerciseIdentityRegistry.resolve(
+                    belt = b,
+                    hebrewTitle = cleanItemForResolver,
+                    topicKey = t.trim().ifBlank { null }
                 )
             }
+
+            val dialogActionId = remember(b, t, iRaw, cleanItemForResolver, resolvedIdentity.id) {
+                if (resolvedIdentity.isKnown) {
+                    resolvedIdentity.id
+                } else {
+                    CanonicalIds.resolveCanonicalForExplanation(
+                        belt = b,
+                        topicTitle = t,
+                        rawItemFromRepo = iRaw
+                    )
+                }
+            }
+
+            val explanation = remember(b, t, cleanItemForResolver, isEnglish) {
+                ExerciseExplanationResolver.get(
+                    belt = b,
+                    topic = t,
+                    item = cleanItemForResolver,
+                    isEnglish = isEnglish
+                ).trim()
+            }.ifBlank {
+                if (isEnglish) {
+                    "No explanation found for \"$cleanItemForResolver\"."
+                } else {
+                    "לא נמצא הסבר עבור \"$cleanItemForResolver\"."
+                }
+            }
+
+            val dialogTitle = itemTitleForUi(
+                topic = t,
+                rawItem = cleanItemForResolver,
+                lang = currentLang
+            )
+
+            val dialogBeltLabel = if (isEnglish) {
+                "(${b.en} belt)"
+            } else {
+                "(${b.heb})"
+            }
+
+            val dialogNoteText = remember(dialogActionId, notesRefreshKey) {
+                loadNote(dialogActionId)
+            }
+
+            ExerciseExplanationDialog(
+                title = dialogTitle,
+                beltLabel = dialogBeltLabel,
+                explanation = explanation,
+                noteText = dialogNoteText,
+                isFavorite = favorites.contains(dialogActionId),
+                accentColor = b.color,
+                isEnglish = isEnglish,
+                onDismiss = { explainTriple = null },
+                onEditNote = {
+                    noteEditorFor = dialogActionId
+                    noteDraft = loadNote(dialogActionId)
+                },
+                onDeleteNote = {
+                    noteDraft = ""
+                    saveNote(dialogActionId, "")
+                },
+                onToggleFavorite = {
+                    toggleFavorite(dialogActionId)
+                }
+            )
+        }
         // ===== סוף הדיאלוג =====
 
         noteEditorFor?.let { itemId ->
@@ -1290,7 +1260,15 @@ fun MaterialsScreen(
                                         onToggleExclude = { toggleExclude(canonicalId) },
                                         onInfo = {
                                             pressed = true
-                                            explainTriple = Triple(belt, topicUi, canonicalId)
+
+                                            // ✅ להסברים שולחים את שם התרגיל המקורי.
+                                            // ה-Resolver כבר יפתור אותו ל-ex_... דרך ExerciseIdentityRegistry.
+                                            explainTriple = Triple(
+                                                belt,
+                                                materialRootTopic,
+                                                item
+                                            )
+
                                             scope.launch {
                                                 kotlinx.coroutines.delay(150)
                                                 pressed = false

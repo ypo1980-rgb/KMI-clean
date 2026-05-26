@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import il.kmi.app.domain.Explanations
+import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.shared.domain.Belt
@@ -247,14 +247,39 @@ fun FavoritesScreen(
             val belt = hit?.belt
             val topic = hit?.topic.orEmpty()
 
-            val explanation = remember(belt, display, hit, favId) {
+            val explanation = remember(belt, topic, display, hit, favId) {
                 if (belt == null) {
                     "לא הצלחתי למפות את המועדף הזה לחגורה/נושא.\nID: $favId"
                 } else {
-                    // קודם לפי display (כי ככה לרוב שמור ב-Explanations), ואז fallback ל-raw
-                    Explanations.get(belt, display)
-                        .ifBlank { hit?.rawItem?.let { Explanations.get(belt, it) }.orEmpty() }
-                        .ifBlank { "אין כרגע הסבר לתרגיל הזה." }
+                    val resolved = ExerciseExplanationResolver.get(
+                        belt = belt,
+                        topic = topic,
+                        item = hit?.rawItem ?: display,
+                        isEnglish = false
+                    ).trim()
+
+                    val cleaned = if ("::" in resolved) {
+                        resolved
+                            .split("::")
+                            .map { it.trim() }
+                            .lastOrNull { it.isNotBlank() }
+                            ?: resolved
+                    } else {
+                        resolved
+                    }.trim()
+
+                    val isFallback =
+                        cleaned.isBlank() ||
+                                cleaned.startsWith("הסבר מפורט על") ||
+                                cleaned.startsWith("אין כרגע") ||
+                                cleaned.startsWith("Detailed explanation for:") ||
+                                cleaned.startsWith("There is currently no explanation")
+
+                    if (!isFallback) {
+                        cleaned
+                    } else {
+                        "אין כרגע הסבר לתרגיל הזה."
+                    }
                 }
             }
 

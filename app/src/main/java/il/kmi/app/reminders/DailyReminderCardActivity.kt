@@ -5,7 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import il.kmi.app.MainActivity
-import il.kmi.app.domain.Explanations
+import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.reminders.DailyExercisePicker
 import il.kmi.app.favorites.FavoritesStore
@@ -124,6 +124,7 @@ class DailyReminderCardActivity : ComponentActivity() {
 
         val explanation = resolveDailyReminderExplanation(
             beltId = belt,
+            topic = topic,
             item = item,
             explanationFromIntent = explanationFromIntent,
             isEnglish = isEnglishForContent
@@ -176,13 +177,11 @@ class DailyReminderCardActivity : ComponentActivity() {
                         )
 
                         if (nextPicked != null) {
-                            val nextRawExplanation =
-                                Explanations.get(nextPicked.belt, nextPicked.item).trim()
-
                             val nextExplanation = resolveDailyReminderExplanation(
                                 beltId = nextPicked.belt.id,
+                                topic = nextPicked.topic,
                                 item = nextPicked.item,
-                                explanationFromIntent = nextRawExplanation,
+                                explanationFromIntent = "",
                                 isEnglish = isEnglish
                             )
 
@@ -704,6 +703,7 @@ private fun PremiumOutlinedActionButton(
 
 private fun resolveDailyReminderExplanation(
     beltId: String,
+    topic: String,
     item: String,
     explanationFromIntent: String,
     isEnglish: Boolean = false
@@ -719,41 +719,23 @@ private fun resolveDailyReminderExplanation(
 
     val belt = Belt.fromId(beltId) ?: return reminderFallbackExplanation(isEnglish)
 
-    fun String.cleanExerciseName(): String {
-        return this
-            .replace('–', '-')
-            .replace('—', '-')
-            .replace('־', '-')
-            .replace("  ", " ")
-            .trim()
-    }
+    val cleanTopic = topic.trim()
+    val cleanItem = item.trim()
 
-    val baseItem = item.trim()
+    val resolved = ExerciseExplanationResolver.get(
+        belt = belt,
+        topic = cleanTopic,
+        item = cleanItem,
+        isEnglish = isEnglish
+    ).trim()
 
-    val candidates = buildList {
-        add(baseItem)
-        add(baseItem.cleanExerciseName())
-        add(baseItem.substringBefore("(").trim())
-        add(baseItem.substringBefore("(").trim().cleanExerciseName())
-        add(baseItem.replace("-", "–").trim())
-        add(baseItem.replace("–", "-").trim())
-        add(baseItem.replace("'", "׳").trim())
-        add(baseItem.replace("׳", "'").trim())
-    }
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
+    val cleanedResolved = cleanupDailyReminderExplanation(resolved)
 
-    candidates.forEach { candidate ->
-        val raw = Explanations.get(belt, candidate).trim()
-        val cleaned = cleanupDailyReminderExplanation(raw)
-
-        if (
-            cleaned.isNotBlank() &&
-            !isDailyReminderFallbackExplanation(cleaned)
-        ) {
-            return cleaned
-        }
+    if (
+        cleanedResolved.isNotBlank() &&
+        !isDailyReminderFallbackExplanation(cleanedResolved)
+    ) {
+        return cleanedResolved
     }
 
     return reminderFallbackExplanation(isEnglish)
@@ -781,7 +763,8 @@ private fun isDailyReminderFallbackExplanation(text: String): Boolean {
     return clean.isBlank() ||
             clean.startsWith("הסבר מפורט על") ||
             clean.startsWith("אין כרגע") ||
-            clean.startsWith("Detailed explanation for:")
+            clean.startsWith("Detailed explanation for:") ||
+            clean.startsWith("There is currently no explanation")
 }
 
 private fun previousBeltForTarget(targetBelt: Belt): Belt {

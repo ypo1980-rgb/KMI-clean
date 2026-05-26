@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.ContentRepo
+import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.openBeltPdf
 import android.content.SharedPreferences
 import il.kmi.app.ui.KmiLightTheme
@@ -232,32 +233,40 @@ private fun findExplanationForHit(
     topic: String,
     isEnglish: Boolean
 ): String {
-    val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
-
-    fun String.clean(): String = this
-        .replace('–', '-')
-        .replace('־', '-')
-        .replace("  ", " ")
+    val display = ExerciseTitleFormatter
+        .displayName(rawItem)
+        .ifBlank { rawItem }
         .trim()
 
-    val candidates = buildList {
-        add(rawItem)
-        add(display)
-        add(display.clean())
-        add(display.substringBefore("(").trim().clean())
-    }.distinct()
+    val resolved = ExerciseExplanationResolver.get(
+        belt = belt,
+        topic = topic,
+        item = display,
+        isEnglish = isEnglish
+    ).trim()
 
-    for (candidate in candidates) {
-        val got = il.kmi.app.domain.Explanations.get(belt, candidate).trim()
-        if (got.isNotBlank()
-            && !got.startsWith("הסבר מפורט על")
-            && !got.startsWith("אין כרגע")
-        ) {
-            return got.split("::")
-                .map { it.trim() }
-                .lastOrNull { it.isNotBlank() }
-                ?: got.trim()
-        }
+    val cleaned = if ("::" in resolved) {
+        resolved
+            .split("::")
+            .map { it.trim() }
+            .lastOrNull { it.isNotBlank() }
+            ?: resolved
+    } else {
+        resolved
+    }.trim()
+
+    val isFallback = if (isEnglish) {
+        cleaned.isBlank() ||
+                cleaned.startsWith("Detailed explanation for:") ||
+                cleaned.startsWith("There is currently no explanation")
+    } else {
+        cleaned.isBlank() ||
+                cleaned.startsWith("הסבר מפורט על") ||
+                cleaned.startsWith("אין כרגע")
+    }
+
+    if (!isFallback) {
+        return cleaned
     }
 
     return topicsTr(

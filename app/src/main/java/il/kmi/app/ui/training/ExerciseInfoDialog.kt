@@ -24,9 +24,37 @@ fun ExerciseInfoDialog(
     onDismiss: () -> Unit
 ) {
     val ctx = LocalContext.current
-    val explanation = Explanations.get(belt, canonicalId).ifBlank {
-        "לא נמצא הסבר עבור \"$canonicalId\"."
-    }
+
+    val explanation = Explanations.getByExerciseId(
+        exerciseId = canonicalId,
+        fallbackBelt = belt,
+        fallbackItem = canonicalId
+    )
+        .trim()
+        .let { resolved ->
+            val clean = if ("::" in resolved) {
+                resolved
+                    .split("::")
+                    .map { it.trim() }
+                    .lastOrNull { it.isNotBlank() }
+                    ?: resolved
+            } else {
+                resolved
+            }.trim()
+
+            val isFallback =
+                clean.isBlank() ||
+                        clean.startsWith("הסבר מפורט על") ||
+                        clean.startsWith("אין כרגע") ||
+                        clean.startsWith("Detailed explanation for:") ||
+                        clean.startsWith("There is currently no explanation")
+
+            if (isFallback) {
+                "לא נמצא הסבר עבור \"$canonicalId\"."
+            } else {
+                clean
+            }
+        }
 
     LaunchedEffect(Unit) { KmiTtsManager.init(ctx) }
 

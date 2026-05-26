@@ -48,6 +48,7 @@ import il.kmi.shared.platform.PlatformSoundPlayer
 import java.net.URLDecoder   // ✅ נשאר רק זה
 import il.kmi.app.KmiViewModel
 import il.kmi.app.domain.CanonicalIds
+import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import android.app.Activity
@@ -70,31 +71,46 @@ private const val TOPICS_PICK_TOKEN = "__TOPICS_PICK__"
 
 private fun findExplanationForPractice(
     belt: Belt,
+    topic: String,
     rawItem: String,
     isEnglish: Boolean = false
 ): String {
+    val cleanTopic = topic.trim()
 
-    val display = il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+    val cleanItem = il.kmi.shared.questions.model.util.ExerciseTitleFormatter
         .displayName(rawItem)
         .ifBlank { rawItem }
         .trim()
 
-    fun String.clean(): String =
-        this.replace('-', ' ')
-            .replace("־", " ")
-            .replace("  ", " ")
-            .trim()
+    val resolved = ExerciseExplanationResolver.get(
+        belt = belt,
+        topic = cleanTopic,
+        item = cleanItem,
+        isEnglish = isEnglish
+    ).trim()
 
-    val candidates = listOf(
-        rawItem,
-        display,
-        display.clean(),
-        display.substringBefore("(").trim().clean()
-    ).distinct()
+    val cleaned = if ("::" in resolved) {
+        resolved
+            .split("::")
+            .map { it.trim() }
+            .lastOrNull { it.isNotBlank() }
+            ?: resolved
+    } else {
+        resolved
+    }.trim()
 
-    for (candidate in candidates) {
-        val got = il.kmi.app.domain.Explanations.get(belt, candidate).trim()
-        if (got.isNotBlank()) return got
+    val isFallback = if (isEnglish) {
+        cleaned.isBlank() ||
+                cleaned.startsWith("Detailed explanation for:") ||
+                cleaned.startsWith("There is currently no explanation")
+    } else {
+        cleaned.isBlank() ||
+                cleaned.startsWith("הסבר מפורט על") ||
+                cleaned.startsWith("אין כרגע")
+    }
+
+    if (!isFallback) {
+        return cleaned
     }
 
     return if (isEnglish) {
@@ -1320,9 +1336,10 @@ fun RandomPracticeScreen(
             pickedSearchHit != null -> {
                 val (b, t, item) = pickedSearchHit!!
 
-                val explanation = remember(b, item, t, isEnglish) {
+                val explanation = remember(b, t, item, isEnglish) {
                     findExplanationForPractice(
                         belt = b,
+                        topic = t,
                         rawItem = item,
                         isEnglish = isEnglish
                     )
@@ -1422,6 +1439,7 @@ fun RandomPracticeScreen(
                     } else {
                         findExplanationForPractice(
                             belt = belt,
+                            topic = currentHelpItem?.topicTitle.orEmpty(),
                             rawItem = rawItemForHelp,
                             isEnglish = isEnglish
                         )

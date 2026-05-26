@@ -37,6 +37,9 @@ import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.ui.graphics.Color
 import il.kmi.app.subscription.KmiAccess
+import il.kmi.app.domain.ExerciseExplanationResolver
+
+//-----------------------------------------------------------------------------------
 
 const val TOPICS_PICK_TOKEN = "__TOPICS_PICK__"
 
@@ -231,10 +234,37 @@ fun NavGraphBuilder.homeNavGraph(
                     itemRaw = iRaw
                 )
 
-                val explanation = il.kmi.app.domain.Explanations.get(b, canonical).ifBlank {
-                    val alt = canonical.substringAfter(":", canonical).trim()
-                    il.kmi.app.domain.Explanations.get(b, alt)
-                }.ifBlank { "לא נמצא הסבר עבור \"$canonical\"." }
+                val explanation = ExerciseExplanationResolver.get(
+                    belt = b,
+                    topic = t,
+                    item = canonical,
+                    isEnglish = false
+                )
+                    .trim()
+                    .let { resolved ->
+                        val clean = if ("::" in resolved) {
+                            resolved
+                                .split("::")
+                                .map { it.trim() }
+                                .lastOrNull { it.isNotBlank() }
+                                ?: resolved
+                        } else {
+                            resolved
+                        }.trim()
+
+                        val isFallback =
+                            clean.isBlank() ||
+                                    clean.startsWith("הסבר מפורט על") ||
+                                    clean.startsWith("אין כרגע") ||
+                                    clean.startsWith("Detailed explanation for:") ||
+                                    clean.startsWith("There is currently no explanation")
+
+                        if (isFallback) {
+                            "לא נמצא הסבר עבור \"$canonical\"."
+                        } else {
+                            clean
+                        }
+                    }
 
                 ExplanationDialogWithFavorite(
                     belt = b,
@@ -268,10 +298,37 @@ fun NavGraphBuilder.homeNavGraph(
         }
 
         val explanation = remember(itemTitle, belt) {
-            il.kmi.app.domain.Explanations.get(belt, itemTitle).ifBlank {
-                val alt = itemTitle.substringAfter(":", itemTitle).trim()
-                il.kmi.app.domain.Explanations.get(belt, alt)
-            }.ifBlank { "לא נמצא הסבר עבור \"$itemTitle\"." }
+            ExerciseExplanationResolver.get(
+                belt = belt,
+                topic = "",
+                item = itemTitle,
+                isEnglish = false
+            )
+                .trim()
+                .let { resolved ->
+                    val clean = if ("::" in resolved) {
+                        resolved
+                            .split("::")
+                            .map { it.trim() }
+                            .lastOrNull { it.isNotBlank() }
+                            ?: resolved
+                    } else {
+                        resolved
+                    }.trim()
+
+                    val isFallback =
+                        clean.isBlank() ||
+                                clean.startsWith("הסבר מפורט על") ||
+                                clean.startsWith("אין כרגע") ||
+                                clean.startsWith("Detailed explanation for:") ||
+                                clean.startsWith("There is currently no explanation")
+
+                    if (isFallback) {
+                        "לא נמצא הסבר עבור \"$itemTitle\"."
+                    } else {
+                        clean
+                    }
+                }
         }
 
         ExplanationDialogWithFavorite(

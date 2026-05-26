@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
+import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
 import il.kmi.shared.domain.content.HardSectionsCatalog.totalItemsCount
 import il.kmi.app.KmiViewModel
@@ -45,7 +46,6 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.localization.AppLanguage
 import androidx.compose.ui.platform.LocalContext
-import il.kmi.shared.domain.content.English.ExerciseExplanationsEn
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 
@@ -1494,47 +1494,32 @@ private fun findExplanationForHitLocal(
     topic: String,
     isEnglish: Boolean
 ): String {
-    val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
+    val resolved = ExerciseExplanationResolver.get(
+        belt = belt,
+        topic = topic,
+        item = rawItem,
+        isEnglish = isEnglish
+    ).trim()
 
-    fun String.clean() = this
-        .replace('–', '-')
-        .replace('—', '-')
-        .replace('־', '-')
-        .replace("  ", " ")
-        .trim()
+    val isFallback = if (isEnglish) {
+        resolved.startsWith("Detailed explanation for:") ||
+                resolved.startsWith("There is currently no explanation")
+    } else {
+        resolved.startsWith("הסבר מפורט על") ||
+                resolved.startsWith("אין כרגע")
+    }
 
-    val candidates = buildList {
-        add(rawItem)
-        add(display)
-        add(display.clean())
-        add(display.substringBefore("(").trim().clean())
-    }.distinct()
-
-    for (c in candidates) {
-        val got = if (isEnglish) {
-            ExerciseExplanationsEn.get(belt, c).trim()
-        } else {
-            il.kmi.app.domain.Explanations.get(belt, c).trim()
-        }
-
-        val isFallback = if (isEnglish) {
-            got.startsWith("Detailed explanation for:")
-        } else {
-            got.startsWith("הסבר מפורט על") || got.startsWith("אין כרגע")
-        }
-
-        if (got.isNotBlank() && !isFallback) {
-            return got.split("::")
-                .map { it.trim() }
-                .lastOrNull { it.isNotBlank() }
-                ?: got.trim()
-        }
+    if (resolved.isNotBlank() && !isFallback) {
+        return resolved.split("::")
+            .map { it.trim() }
+            .lastOrNull { it.isNotBlank() }
+            ?: resolved
     }
 
     return if (isEnglish) {
         "There is currently no explanation for this exercise."
     } else {
-        "אין כרגע הסבר לתרגיל הזה."
+        "אין כרגע הסבר לתרגיל זה."
     }
 }
 
