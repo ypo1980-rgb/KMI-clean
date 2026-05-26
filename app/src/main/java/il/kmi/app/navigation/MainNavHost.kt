@@ -53,9 +53,11 @@ import il.kmi.app.screens.payments.PaymentScreen
 import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.screens.InitialLanguageScreen
 import com.google.firebase.auth.FirebaseAuth
+import il.kmi.app.screens.registration.RegistrationFormScreen
 
 private const val APP_ENTRY_ROUTE = "app_entry"
 private const val GOOGLE_PROFILE_COMPLETION_ROUTE = "google_profile_completion"
+private const val PROFILE_EDIT_ROUTE = "profile_edit"
 
 private fun NavHostController.openIntroCleanFrom(sourceRoute: String) {
     val currentRoute = currentBackStackEntry?.destination?.route
@@ -716,6 +718,26 @@ fun MainNavHost(
                 )
             }
 
+            // --- עריכת פרופיל מתוך מסך "הפרופיל שלי" ---
+            composable(PROFILE_EDIT_ROUTE) {
+                RegistrationFormScreen(
+                    initial = "trainee",
+                    onBack = { nav.popBackStack() },
+                    onRegistrationComplete = {
+                        nav.popBackStack()
+                    },
+                    onOpenLegal = { nav.navigate(Route.Legal.route) },
+                    onOpenTerms = { nav.navigate(Route.Legal.route) },
+                    vm = vm,
+                    onOpenDrawer = {
+                        DrawerBridge.open()
+                    },
+                    sp = sp,
+                    kmiPrefs = kmiPrefs,
+                    startAtProfile = true
+                )
+            }
+
             // --- NEW: Legal graph ---
             legalNavGraph(nav = nav)
 
@@ -801,7 +823,13 @@ fun MainNavHost(
                 MyProfileScreen(
                     sp = userPrefsForEntry,
                     kmiPrefs = kmiPrefs,
-                    onClose = { nav.popBackStack() }
+                    onClose = { nav.popBackStack() },
+                    onEditProfile = {
+                        nav.navigate(PROFILE_EDIT_ROUTE) {
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    }
                 )
             }
 

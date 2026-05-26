@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -62,6 +61,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private data class LoadingStage(
     val titleHe: String,
@@ -74,6 +75,8 @@ fun KmiStartupLoadingScreen(
     isEnglish: Boolean,
     onFinished: () -> Unit
 ) {
+    val context = LocalContext.current
+
     val stages = remember {
         listOf(
             LoadingStage(
@@ -109,6 +112,12 @@ fun KmiStartupLoadingScreen(
     var progress by remember { mutableFloatStateOf(0f) }
 
     LaunchedEffect(Unit) {
+        val preloadJob = launch {
+            runCatching {
+                KmiStartupPreloader.preload(context)
+            }
+        }
+
         val totalDuration = 10_000L
         val tick = 100L
         val totalSteps = (totalDuration / tick).toInt()
@@ -128,6 +137,12 @@ fun KmiStartupLoadingScreen(
         currentStageIndex = stages.lastIndex
         completedStagesInCycle = stages.size
         progress = 1f
+
+        // נותן לטעינות אמת עוד רגע קצר להסתיים,
+        // אבל לא תוקע את מסך הכניסה לזמן ארוך אם Firestore איטי.
+        withTimeoutOrNull(2_500L) {
+            preloadJob.join()
+        }
 
         onFinished()
     }
@@ -353,15 +368,19 @@ fun KmiStartupLoadingScreen(
 
                     Spacer(modifier = Modifier.height(18.dp))
 
-                    LinearProgressIndicator(
-                        progress = { progressAnimated },
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(10.dp)
-                            .clip(RoundedCornerShape(999.dp)),
-                        color = accent,
-                        trackColor = Color.White.copy(alpha = 0.10f)
-                    )
+                            .height(8.dp)
+                            .background(Color.White.copy(alpha = 0.10f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progressAnimated.coerceIn(0f, 1f))
+                                .fillMaxHeight()
+                                .background(Color(0xFF0FA36B))
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 

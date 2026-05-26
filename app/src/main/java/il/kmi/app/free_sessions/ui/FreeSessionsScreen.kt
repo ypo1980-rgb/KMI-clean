@@ -142,10 +142,11 @@ fun FreeSessionsScreen(
                 title = "אימונים חופשיים",
                 showTopHome = false,
                 showTopSearch = false,
-                showBottomActions = false,
+                showBottomActions = true,
                 lockSearch = true,
-                lockHome = true,
-                centerTitle = true
+                lockHome = false,
+                centerTitle = true,
+                onHome = onBack
             )
         },
         floatingActionButton = {

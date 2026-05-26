@@ -465,37 +465,50 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
     )
 }
 
-// ===========================
-//   מסך ניהול משתמשים
-// ===========================
-@Composable
-fun AdminUsersScreen(
-    onBack: () -> Unit
-) {
-    val contextLang = LocalContext.current
-    val langManager = remember { AppLanguageManager(contextLang) }
-    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-    val screenTextAlign = adminTextAlign(isEnglish)
-    val gradient = remember {
-        Brush.verticalGradient(
-            listOf(
-                Color(0xFF0F172A),
-                Color(0xFF1E293B),
-                Color(0xFF0EA5E9)
+data class AdminUsersPreloadResult(
+    val users: List<AdminUserRecord>,
+    val unlikeQuestions: List<AdminUserRecord.AssistantQuestionRecord>,
+    val errorMessage: String?
+)
+
+object AdminUsersPreloadCache {
+
+    private const val FRESH_WINDOW_MILLIS = 5 * 60 * 1000L
+
+    private var loadedAtMillis: Long = 0L
+    private var hasLoadedOnce: Boolean = false
+
+    var usersSnapshot: List<AdminUserRecord> = emptyList()
+        private set
+
+    var unlikeQuestionsSnapshot: List<AdminUserRecord.AssistantQuestionRecord> = emptyList()
+        private set
+
+    var errorMessageSnapshot: String? = null
+        private set
+
+    val hasFreshData: Boolean
+        get() = hasLoadedOnce &&
+                loadedAtMillis > 0L &&
+                System.currentTimeMillis() - loadedAtMillis <= FRESH_WINDOW_MILLIS
+
+    suspend fun preload(isEnglish: Boolean): AdminUsersPreloadResult {
+        if (hasFreshData) {
+            return AdminUsersPreloadResult(
+                users = usersSnapshot,
+                unlikeQuestions = unlikeQuestionsSnapshot,
+                errorMessage = errorMessageSnapshot
             )
-        )
+        }
+
+        return refresh(isEnglish)
     }
 
-    // --- מצב נתונים מ-Firestore ---
-    var users by remember { mutableStateOf<List<AdminUserRecord>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var errorMsg by remember { mutableStateOf<String?>(null) }
-// 👇 שאלות שסומנו UNLIKE בעוזר הקולי
-    var unlikeQuestions by remember { mutableStateOf<List<AdminUserRecord.AssistantQuestionRecord>>(emptyList()) }
+    suspend fun refresh(isEnglish: Boolean): AdminUsersPreloadResult {
+        var loadedUsers: List<AdminUserRecord> = emptyList()
+        var loadedUnlikeQuestions: List<AdminUserRecord.AssistantQuestionRecord> = emptyList()
+        var errorMsg: String? = null
 
-    LaunchedEffect(Unit) {
-        loading = true
-        errorMsg = null
         try {
             val snap = Firebase.firestore
                 .collection("users")
@@ -510,7 +523,7 @@ fun AdminUsersScreen(
                     user.hasRealAdminUserContent()
                 }
 
-            users = raw
+            loadedUsers = raw
                 .groupBy { it.dedupeKey() }
                 .map { (_, list) ->
                     list.maxByOrNull { it.createdAtMillis ?: 0L } ?: list.first()
@@ -536,24 +549,23 @@ fun AdminUsersScreen(
                     "אין לך הרשאה לצפות ברשימת המשתמשים. בדוק את הגדרות ההרשאות או פנה למנהל המערכת.",
                     "You do not have permission to view the users list. Check the permission settings or contact the system administrator."
                 )
-            } else rawErr
-
-        } finally {
-            loading = false
+            } else {
+                rawErr
+            }
         }
 
-        // --- טעינת שאלות UNLIKE מהעוזר הקולי (לא משפיע על errorMsg) ---
         try {
             val feedbackSnap = Firebase.firestore
                 .collection("assistantFeedback")
-                .whereEqualTo("liked", false)              // רק UNLIKE
+                .whereEqualTo("liked", false)
                 .orderBy("createdAt", Query.Direction.DESCENDING)
                 .limit(50)
                 .get()
                 .await()
 
-            unlikeQuestions = feedbackSnap.documents.mapNotNull { doc ->
+            loadedUnlikeQuestions = feedbackSnap.documents.mapNotNull { doc ->
                 val qText = doc.getString("question") ?: return@mapNotNull null
+
                 AdminUserRecord.AssistantQuestionRecord(
                     id = doc.id,
                     question = qText,
@@ -566,9 +578,78 @@ fun AdminUsersScreen(
                 )
             }
         } catch (_: Throwable) {
-            // לא מציגים שגיאה למשתמש – פשוט לא יהיו שאלות ברשימה
-            unlikeQuestions = emptyList()
+            loadedUnlikeQuestions = emptyList()
         }
+
+        usersSnapshot = loadedUsers
+        unlikeQuestionsSnapshot = loadedUnlikeQuestions
+        errorMessageSnapshot = errorMsg
+        loadedAtMillis = System.currentTimeMillis()
+        hasLoadedOnce = true
+
+        return AdminUsersPreloadResult(
+            users = usersSnapshot,
+            unlikeQuestions = unlikeQuestionsSnapshot,
+            errorMessage = errorMessageSnapshot
+        )
+    }
+}
+
+// ===========================
+//   מסך ניהול משתמשים
+// ===========================
+@Composable
+fun AdminUsersScreen(
+    onBack: () -> Unit
+) {
+    val contextLang = LocalContext.current
+    val langManager = remember { AppLanguageManager(contextLang) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val screenTextAlign = adminTextAlign(isEnglish)
+    val gradient = remember {
+        Brush.verticalGradient(
+            listOf(
+                Color(0xFF0F172A),
+                Color(0xFF1E293B),
+                Color(0xFF0EA5E9)
+            )
+        )
+    }
+
+    // --- מצב נתונים מ-Firestore / Cache מוקדם ממסך הטעינה ---
+    var users by remember {
+        mutableStateOf(AdminUsersPreloadCache.usersSnapshot)
+    }
+
+    var loading by remember {
+        mutableStateOf(!AdminUsersPreloadCache.hasFreshData)
+    }
+
+    var errorMsg by remember {
+        mutableStateOf(AdminUsersPreloadCache.errorMessageSnapshot)
+    }
+
+    // 👇 שאלות שסומנו UNLIKE בעוזר הקולי
+    var unlikeQuestions by remember {
+        mutableStateOf(AdminUsersPreloadCache.unlikeQuestionsSnapshot)
+    }
+
+    LaunchedEffect(isEnglish) {
+        if (AdminUsersPreloadCache.hasFreshData) {
+            users = AdminUsersPreloadCache.usersSnapshot
+            unlikeQuestions = AdminUsersPreloadCache.unlikeQuestionsSnapshot
+            errorMsg = AdminUsersPreloadCache.errorMessageSnapshot
+            loading = false
+        } else {
+            loading = true
+        }
+
+        val result = AdminUsersPreloadCache.refresh(isEnglish)
+
+        users = result.users
+        unlikeQuestions = result.unlikeQuestions
+        errorMsg = result.errorMessage
+        loading = false
     }
 
     // -------- פילטרים --------

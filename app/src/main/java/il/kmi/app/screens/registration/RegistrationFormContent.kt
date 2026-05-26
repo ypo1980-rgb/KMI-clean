@@ -205,6 +205,24 @@ fun RegistrationFormContent(
     val fieldTextDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
     val screenLayoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
 
+    val missingFieldBackground = Color(0xFFFFE4E6)
+    val normalFieldBackground = Color.White
+
+    // ✅ בכניסה עם Google מציגים מיד שדות חובה חסרים,
+    // גם לפני שהמשתמש לחץ על סיום רישום.
+    val highlightMissingRequired = isGoogleAuth
+
+    val showFullNameMissing = (fullNameError || highlightMissingRequired) && fullName.isBlank()
+    val showPhoneMissing = (phoneError || highlightMissingRequired) && phone.isBlank()
+    val showEmailMissing = (emailError || highlightMissingRequired) && email.isBlank()
+    val showGenderMissing = (genderError || highlightMissingRequired) && gender.isBlank()
+    val showRegionMissing = (regionError || highlightMissingRequired) && selectedRegion.isBlank()
+    val showBranchMissing = (branchError || highlightMissingRequired) && selectedBranches.isEmpty()
+    val showGroupMissing = (groupError || highlightMissingRequired) &&
+            branchType == "israel" &&
+            selectedBranches.isNotEmpty() &&
+            selectedGroups.isEmpty()
+
     val allGroupsAcrossBranches by remember(ctx, selectedBranches) {
         derivedStateOf {
             selectedBranches
@@ -260,18 +278,15 @@ fun RegistrationFormContent(
                         textDirection = fieldTextDirection
                     ),
                     modifier = Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = 46.dp)
-                    .background(Color.White, shape = MaterialTheme.shapes.medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    errorBorderColor = MaterialTheme.colorScheme.error
-                )
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 46.dp)
+                        .background(
+                            if (showFullNameMissing) missingFieldBackground else normalFieldBackground,
+                            shape = MaterialTheme.shapes.medium
+                        ),
+                    colors = registrationRequiredFieldColors(
+                        showMissing = showFullNameMissing
+                    )
             )
             if (fullNameError) {
                 Text(tr("שדה חובה", "Required field"), color = MaterialTheme.colorScheme.error)
@@ -287,19 +302,16 @@ fun RegistrationFormContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 46.dp)
-                    .background(Color.White, shape = MaterialTheme.shapes.medium),
+                    .background(
+                        if (showPhoneMissing) missingFieldBackground else normalFieldBackground,
+                        shape = MaterialTheme.shapes.medium
+                    ),
                 textStyle = LocalTextStyle.current.copy(
                     textDirection = TextDirection.Ltr,
                     textAlign = TextAlign.Left
                 ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    errorBorderColor = MaterialTheme.colorScheme.error
+                colors = registrationRequiredFieldColors(
+                    showMissing = showPhoneMissing
                 )
             )
             if (phoneError) {
@@ -320,15 +332,12 @@ fun RegistrationFormContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = 46.dp)
-                    .background(Color.White, shape = MaterialTheme.shapes.medium),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedTextColor = Color.Black,
-                    unfocusedTextColor = Color.Black,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    errorBorderColor = MaterialTheme.colorScheme.error
+                    .background(
+                        if (showEmailMissing) missingFieldBackground else normalFieldBackground,
+                        shape = MaterialTheme.shapes.medium
+                    ),
+                colors = registrationRequiredFieldColors(
+                    showMissing = showEmailMissing
                 )
             )
             if (emailError) {
@@ -347,11 +356,17 @@ fun RegistrationFormContent(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = if (showGenderMissing) missingFieldBackground else Color.Transparent,
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .padding(if (showGenderMissing) 6.dp else 0.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 FilterChip(
                     selected = gender == "male",
                     onClick = { onGenderChange("male") },
@@ -456,15 +471,12 @@ fun RegistrationFormContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 46.dp)
-                        .background(Color.White, shape = MaterialTheme.shapes.medium),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                        focusedTextColor = Color.Black,
-                        unfocusedTextColor = Color.Black,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        errorBorderColor = MaterialTheme.colorScheme.error
+                        .background(
+                            if (usernameError && username.isBlank()) missingFieldBackground else normalFieldBackground,
+                            shape = MaterialTheme.shapes.medium
+                        ),
+                    colors = registrationRequiredFieldColors(
+                        showMissing = usernameError && username.isBlank()
                     )
                 )
                 if (usernameError) {
@@ -497,15 +509,12 @@ fun RegistrationFormContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .defaultMinSize(minHeight = 46.dp)
-                        .background(Color.White, shape = MaterialTheme.shapes.medium),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                        focusedTextColor = Color.Black,
-                        unfocusedTextColor = Color.Black,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        errorBorderColor = MaterialTheme.colorScheme.error
+                        .background(
+                            if (passwordError && password.isBlank()) missingFieldBackground else normalFieldBackground,
+                            shape = MaterialTheme.shapes.medium
+                        ),
+                    colors = registrationRequiredFieldColors(
+                        showMissing = passwordError && password.isBlank()
                     )
                 )
                 if (passwordError) {
@@ -610,6 +619,7 @@ fun RegistrationFormContent(
                     onGroupsChange = onGroupsChange,
                     regionError = regionError,
                     branchError = branchError,
+                    highlightMissingRequired = highlightMissingRequired,
                     isEnglish = isEnglish
                 )
 
@@ -619,6 +629,7 @@ fun RegistrationFormContent(
                     selectedGroups = selectedGroups,
                     onGroupsChange = onGroupsChange,
                     groupError = groupError,
+                    highlightMissingRequired = highlightMissingRequired,
                     isEnglish = isEnglish
                 )
             }
@@ -770,6 +781,37 @@ fun RegistrationFormContent(
 }
 
 @Composable
+private fun registrationRequiredFieldColors(
+    showMissing: Boolean
+) = OutlinedTextFieldDefaults.colors(
+    focusedContainerColor = if (showMissing) Color(0xFFFFE4E6) else Color.White,
+    unfocusedContainerColor = if (showMissing) Color(0xFFFFE4E6) else Color.White,
+    disabledContainerColor = if (showMissing) Color(0xFFFFE4E6) else Color.White,
+    errorContainerColor = if (showMissing) Color(0xFFFFE4E6) else Color.White,
+
+    focusedTextColor = Color.Black,
+    unfocusedTextColor = Color.Black,
+    disabledTextColor = Color.Black.copy(alpha = 0.78f),
+    errorTextColor = Color.Black,
+
+    focusedLabelColor = if (showMissing) Color(0xFF991B1B) else Color(0xFF374151),
+    unfocusedLabelColor = if (showMissing) Color(0xFF991B1B) else Color(0xFF475569),
+    disabledLabelColor = Color(0xFF64748B),
+    errorLabelColor = Color(0xFF991B1B),
+
+    focusedPlaceholderColor = Color(0xFF64748B),
+    unfocusedPlaceholderColor = Color(0xFF64748B),
+    disabledPlaceholderColor = Color(0xFF94A3B8),
+
+    focusedBorderColor = if (showMissing) Color(0xFFE11D48) else Color(0xFF7C4DFF),
+    unfocusedBorderColor = if (showMissing) Color(0xFFE11D48) else Color(0xFFD2C4E3),
+    disabledBorderColor = if (showMissing) Color(0xFFE11D48) else Color(0xFFD2C4E3),
+    errorBorderColor = Color(0xFFE11D48),
+
+    cursorColor = Color(0xFF7C4DFF)
+)
+
+@Composable
 private fun registrationLightFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = Color.White,
     unfocusedContainerColor = Color.White,
@@ -841,11 +883,53 @@ private fun BirthDatePicker(
         Calendar.getInstance().get(Calendar.YEAR)
     }
 
-    // מציגים דו-ספרתי/ארבע-ספרתי
-    var dayText by remember(day) { mutableStateOf(day.coerceIn(1, 31).toString().padStart(2, '0')) }
-    var monthText by remember(month) { mutableStateOf(month.coerceIn(1, 12).toString().padStart(2, '0')) }
-    var yearText by remember(year, currentYear) {
-        mutableStateOf(year.coerceIn(1950, currentYear).toString().padStart(4, '0'))
+    // ✅ 01/01/2000 הוא תאריך ברירת מחדל פנימי בלבד,
+    // ולכן לא מציגים אותו למשתמש כתאריך שכבר מולא.
+    val startsFromDefaultBirthDate = remember {
+        day == 1 && month == 1 && year == 2000
+    }
+
+    fun displayDayValue(): String =
+        day.coerceIn(1, 31).toString().padStart(2, '0')
+
+    fun displayMonthValue(): String =
+        month.coerceIn(1, 12).toString().padStart(2, '0')
+
+    fun displayYearValue(): String =
+        year.coerceIn(1950, currentYear).toString().padStart(4, '0')
+
+    // ✅ כל שדה נשמר בנפרד.
+    // מילוי יום לא גורם לחודש/שנה לקבל שוב 01/2000.
+    var dayText by remember {
+        mutableStateOf(
+            if (startsFromDefaultBirthDate) "" else displayDayValue()
+        )
+    }
+
+    var monthText by remember {
+        mutableStateOf(
+            if (startsFromDefaultBirthDate) "" else displayMonthValue()
+        )
+    }
+
+    var yearText by remember {
+        mutableStateOf(
+            if (startsFromDefaultBirthDate) "" else displayYearValue()
+        )
+    }
+
+    // ✅ אם בעתיד ייטען תאריך אמיתי מבחוץ, למשל מפרופיל קיים,
+    // נמלא אותו רק אם המשתמש עדיין לא התחיל למלא שום שדה.
+    LaunchedEffect(day, month, year) {
+        val incomingIsDefault = day == 1 && month == 1 && year == 2000
+        val userHasNotStartedTyping =
+            dayText.isBlank() && monthText.isBlank() && yearText.isBlank()
+
+        if (!incomingIsDefault && userHasNotStartedTyping) {
+            dayText = displayDayValue()
+            monthText = displayMonthValue()
+            yearText = displayYearValue()
+        }
     }
 
     // צבעים קבועים כדי שהשדות יהיו קריאים גם במצב כהה
@@ -856,7 +940,7 @@ private fun BirthDatePicker(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
 
@@ -870,12 +954,18 @@ private fun BirthDatePicker(
                     if (v in 1..31) onDayChange(v)
                 }
             },
-            label = { Text(if (isEnglish) "Day" else "יום") },
+            label = {
+                Text(
+                    text = if (isEnglish) "Day" else "יום",
+                    maxLines = 1,
+                    softWrap = false
+                )
+            },
             singleLine = true,
             shape = shape,
             colors = fieldColors,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(0.90f)
         )
 
         Text(
@@ -884,7 +974,7 @@ private fun BirthDatePicker(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        // חודש (2 ספרות)
+        // חודש (2 ספרות) — מקבל יותר רוחב כדי שלא ייחתך
         OutlinedTextField(
             value = monthText,
             onValueChange = { raw ->
@@ -905,7 +995,7 @@ private fun BirthDatePicker(
             shape = shape,
             colors = fieldColors,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1.15f)
         )
 
         Text(
@@ -924,12 +1014,18 @@ private fun BirthDatePicker(
                     if (v in 1950..currentYear) onYearChange(v)
                 }
             },
-            label = { Text(if (isEnglish) "Year" else "שנה") },
+            label = {
+                Text(
+                    text = if (isEnglish) "Year" else "שנה",
+                    maxLines = 1,
+                    softWrap = false
+                )
+            },
             singleLine = true,
             shape = shape,
             colors = fieldColors,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(1.3f)
+            modifier = Modifier.weight(1.05f)
         )
     }
 }
@@ -944,12 +1040,22 @@ private fun RegionAndMultiBranchPicker(
     onGroupsChange: (List<String>) -> Unit,
     regionError: Boolean,
     branchError: Boolean,
+    highlightMissingRequired: Boolean = false,
     isEnglish: Boolean = false,
     fieldHeight: Dp = 52.dp
 ) {
     val ctx = LocalContext.current
-    val fieldColors = registrationLightFieldColors()
     val fieldShape = RoundedCornerShape(14.dp)
+
+    val showRegionMissing = (regionError || highlightMissingRequired) && selectedRegion.isBlank()
+    val showBranchMissing = (branchError || highlightMissingRequired) && selectedBranches.isEmpty()
+
+    val regionFieldColors = registrationRequiredFieldColors(
+        showMissing = showRegionMissing
+    )
+    val branchFieldColors = registrationRequiredFieldColors(
+        showMissing = showBranchMissing
+    )
 
     fun trLocal(he: String, en: String): String = if (isEnglish) en else he
     val align = if (isEnglish) TextAlign.Left else TextAlign.Right
@@ -1044,8 +1150,11 @@ private fun RegionAndMultiBranchPicker(
                 .menuAnchor()
                 .fillMaxWidth()
                 .heightIn(min = fieldHeight)
-                .background(Color.White, shape = fieldShape),
-            colors = fieldColors,
+                .background(
+                    if (showRegionMissing) Color(0xFFFFE4E6) else Color.White,
+                    shape = fieldShape
+                ),
+            colors = regionFieldColors,
             shape = fieldShape,
             textStyle = LocalTextStyle.current.copy(
                 color = Color.Black,
@@ -1131,8 +1240,11 @@ private fun RegionAndMultiBranchPicker(
                 .menuAnchor()
                 .fillMaxWidth()
                 .heightIn(min = fieldHeight)
-                .background(Color.White, shape = fieldShape),
-            colors = fieldColors,
+                .background(
+                    if (showBranchMissing) Color(0xFFFFE4E6) else Color.White,
+                    shape = fieldShape
+                ),
+            colors = branchFieldColors,
             shape = fieldShape,
             textStyle = LocalTextStyle.current.copy(
                 color = Color.Black,
@@ -1250,6 +1362,7 @@ private fun MultiGroupsPicker(
     selectedGroups: List<String>,
     onGroupsChange: (List<String>) -> Unit,
     groupError: Boolean,
+    highlightMissingRequired: Boolean = false,
     isEnglish: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1260,6 +1373,8 @@ private fun MultiGroupsPicker(
 
     fun trLocal(he: String, en: String): String = if (isEnglish) en else he
     val align = if (isEnglish) TextAlign.Left else TextAlign.Right
+
+    val showGroupMissing = (groupError || highlightMissingRequired) && selectedGroups.isEmpty()
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -1300,19 +1415,16 @@ private fun MultiGroupsPicker(
             modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth()
-                .background(Color.White, shape = MaterialTheme.shapes.medium),
+                .background(
+                    if (showGroupMissing) Color(0xFFFFE4E6) else Color.White,
+                    shape = MaterialTheme.shapes.medium
+                ),
             textStyle = LocalTextStyle.current.copy(
                 color = Color.Black,
                 textAlign = align
             ),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                errorBorderColor = MaterialTheme.colorScheme.error
+            colors = registrationRequiredFieldColors(
+                showMissing = showGroupMissing
             ),
             placeholder = {
                 Text(

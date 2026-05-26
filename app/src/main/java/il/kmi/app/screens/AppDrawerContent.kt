@@ -421,6 +421,12 @@ fun AppDrawerContent(
     CompositionLocalProvider(LocalLayoutDirection provides drawerLayoutDirection) {
         val scroll = rememberScrollState()
 
+        // ✅ כשמחליפים שפה או מרעננים את הסרגל,
+        // פותחים את התפריט מההתחלה ולא מאמצע הרשימה.
+        LaunchedEffect(isEnglish, languageRefreshKey, isCoach, effectiveIsAdmin) {
+            scroll.scrollTo(0)
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -780,7 +786,12 @@ fun AppDrawerContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .verticalScroll(scroll)
-                            .padding(start = 6.dp, end = 18.dp, top = 12.dp, bottom = 12.dp),
+                            .padding(
+                                start = 8.dp,
+                                end = 8.dp,
+                                top = 12.dp,
+                                bottom = 92.dp
+                            ),
                         horizontalAlignment = Alignment.Start
                     ) {
                         // ←—— כותרת + כפתור X באותה שורה, ממוקמים מעט נמוך מה-status bar ——→
@@ -991,6 +1002,41 @@ fun AppDrawerContent(
                             Spacer(Modifier.height(8.dp))
                         }
 
+                        // ✅ הפרופיל שלי — מסך אמת שמציג נתונים מהמשתמש / Firestore / Preferences
+                        if (isEnglish) {
+                            DrawerLineItemEn(
+                                leading = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Person,
+                                        contentDescription = null,
+                                        tint = Color.White
+                                    )
+                                },
+                                title = "My Profile",
+                                subtitle = "View your personal K.M.I details",
+                                onClick = {
+                                    onClose()
+                                    onOpenMyProfile()
+                                }
+                            )
+                        } else {
+                            DrawerLineItemHe(
+                                leading = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Person,
+                                        contentDescription = null,
+                                        tint = Color.White
+                                    )
+                                },
+                                title = "הפרופיל שלי",
+                                subtitle = "צפייה בפרטים האישיים שלך",
+                                onClick = {
+                                    onClose()
+                                    onOpenMyProfile()
+                                }
+                            )
+                        }
+
                         // ===== כפתור ראשון: אודות אבי אביסידון =====
                         if (isEnglish) {
                             DrawerLineItemEn(
@@ -1196,41 +1242,6 @@ fun AppDrawerContent(
                                 onClick = {
                                     onClose()
                                     onOpenForum()
-                                }
-                            )
-                        }
-
-                        // ✅ עריכת פרופיל — אותו מסך שהיה נפתח מכפתור "ערוך פרטים" בהגדרות
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                leading = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Person,
-                                        contentDescription = null,
-                                        tint = Color.White
-                                    )
-                                },
-                                title = "Edit Profile",
-                                subtitle = "Update your personal details",
-                                onClick = {
-                                    onClose()
-                                    onOpenEditProfile()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                leading = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Person,
-                                        contentDescription = null,
-                                        tint = Color.White
-                                    )
-                                },
-                                title = "עריכת פרופיל",
-                                subtitle = "עדכון פרטים אישיים",
-                                onClick = {
-                                    onClose()
-                                    onOpenEditProfile()
                                 }
                             )
                         }

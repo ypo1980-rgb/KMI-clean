@@ -392,7 +392,8 @@ class BillingRepository(
         enabled: Boolean,
         ownedProduct: String?,
         purchaseToken: String?,
-        purchaseTime: Long?
+        purchaseTime: Long?,
+        forceFreshWindow: Boolean = false
     ) {
         val now = System.currentTimeMillis()
 
@@ -420,11 +421,6 @@ class BillingRepository(
                     currentToken.isNotBlank() &&
                     existingToken == currentToken
 
-        val isExpiredPurchaseToken =
-            enabled &&
-                    currentToken.isNotBlank() &&
-                    expiredToken == currentToken
-
         val wasLastTokenAlreadyClosed =
             enabled &&
                     currentToken.isNotBlank() &&
@@ -434,18 +430,16 @@ class BillingRepository(
 
         val accessUntil = if (enabled) {
             when {
-                isExpiredPurchaseToken -> {
+                forceFreshWindow -> {
                     logBilling(
-                        "ACCESS WRITE BLOCKED expired token cannot reopen token=$currentToken"
+                        "ACCESS FRESH WINDOW FORCED because Google Play reports PURCHASED/ITEM_ALREADY_OWNED. " +
+                                "token=$currentToken product=$ownedProduct now=$now"
                     )
-                    0L
-                }
 
-                wasLastTokenAlreadyClosed -> {
-                    logBilling(
-                        "ACCESS WRITE BLOCKED last token was already closed token=$currentToken"
+                    calculateAccessUntilForSubscription(
+                        productId = ownedProduct.orEmpty(),
+                        purchaseTime = now
                     )
-                    0L
                 }
 
                 isSamePurchaseToken && existingAccessUntil > now -> {
@@ -456,16 +450,15 @@ class BillingRepository(
                 }
 
                 isSamePurchaseToken && existingAccessUntil > 0L && existingAccessUntil <= now -> {
-                    closeExpiredAccessForToken(
-                        expiredToken = currentToken,
-                        expiredUntil = existingAccessUntil,
-                        ownedProduct = ownedProduct
+                    logBilling(
+                        "ACCESS SAME TOKEN WAS LOCALLY EXPIRED BUT GOOGLE STILL OWNS IT. Recalculating fresh window. " +
+                                "existingUntil=$existingAccessUntil now=$now token=$currentToken"
                     )
 
-                    logBilling(
-                        "ACCESS WRITE BLOCKED same token expired existingUntil=$existingAccessUntil now=$now"
+                    calculateAccessUntilForSubscription(
+                        productId = ownedProduct.orEmpty(),
+                        purchaseTime = now
                     )
-                    0L
                 }
 
                 else -> {
@@ -592,39 +585,31 @@ class BillingRepository(
                         "wasLastTokenAlreadyClosed=$wasLastTokenAlreadyClosed"
             )
 
+            // ✅ Google Play הוא מקור האמת:
+            // אם Google מחזיר מנוי PURCHASED, לא חוסמים פתיחה בגלל expired_sub_token מקומי.
+            // המצב הקודם יצר תקלה: Play אומר "כבר יש מנוי", אבל KmiAccess נשאר false ולכן התוכן נשאר נעול.
             if (isExpiredSameToken || isAlreadyMarkedExpired || wasLastTokenAlreadyClosed) {
-                val closeUntil = when {
-                    existingAccessUntil > 0L -> existingAccessUntil
-                    expiredUntil > 0L -> expiredUntil
-                    else -> now
-                }
+                sp.edit()
+                    .remove("expired_sub_token")
+                    .remove("expired_sub_access_until")
+                    .remove("expired_sub_product")
+                    .commit()
 
-                closeExpiredAccessForToken(
-                    expiredToken = currentToken,
-                    expiredUntil = closeUntil,
-                    ownedProduct = ownedProduct
-                )
-
-                _state.update {
-                    it.copy(
-                        active = false,
-                        productId = null,
-                        purchaseToken = null,
-                        renewalDate = null,
-                        error = null
-                    )
-                }
-
-                refreshPriceState()
+                userSp.edit()
+                    .remove("expired_sub_token")
+                    .remove("expired_sub_access_until")
+                    .remove("expired_sub_product")
+                    .commit()
 
                 logBilling(
-                    "ACCESS CLOSED AND BLOCKED expired/closed token. " +
+                    "ACCESS RECOVERED FROM LOCAL EXPIRED TOKEN because Google Play reports PURCHASED. " +
                             "token=$currentToken product=$ownedProduct existingUntil=$existingAccessUntil " +
                             "expiredToken=$expiredToken expiredUntil=$expiredUntil lastToken=$lastToken"
                 )
-
-                return
             }
+
+            val shouldForceFreshWindow =
+                isExpiredSameToken || isAlreadyMarkedExpired || wasLastTokenAlreadyClosed
 
             // יש מנוי פעיל חדש/תקף
             acknowledgeIfNeeded(sub)
@@ -635,7 +620,8 @@ class BillingRepository(
                 enabled = true,
                 ownedProduct = ownedProduct,
                 purchaseToken = sub.purchaseToken,
-                purchaseTime = sub.purchaseTime
+                purchaseTime = sub.purchaseTime,
+                forceFreshWindow = shouldForceFreshWindow
             )
 
             val activeAccessUntil = maxOf(

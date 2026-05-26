@@ -29,7 +29,7 @@ import il.kmi.shared.domain.content.HardSectionsCatalog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Info
+import androidx.activity.compose.BackHandler
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.draw.clip
@@ -549,6 +549,221 @@ private fun loadDirectTopicItems(
         .toList()
 }
 
+private data class UiNestedSubTopicLeaf(
+    val title: String,
+    val items: List<String>
+)
+
+private data class UiNestedSubTopicGroup(
+    val title: String,
+    val leaves: List<UiNestedSubTopicLeaf>
+)
+
+private fun normalizeUiNestedTitle(value: String): String =
+    value
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace("־", "-")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+private fun greenDefenseNestedGroups(): List<UiNestedSubTopicGroup> {
+    return listOf(
+        UiNestedSubTopicGroup(
+            title = "הגנות נגד מכות",
+            leaves = listOf(
+                UiNestedSubTopicLeaf(
+                    title = "הגנות חיצוניות נגד מכות",
+                    items = listOf(
+                        "הגנה חיצונית נגד ימין באגרוף מהופך",
+                        "הגנה חיצונית נגד שמאל",
+                        "הגנה חיצונית נגד שמאל בהתקדמות"
+                    )
+                ),
+                UiNestedSubTopicLeaf(
+                    title = "הגנות פנימיות נגד מכות",
+                    items = listOf(
+                        "הגנה פנימית נגד ימין באמת שמאל",
+                        "הגנה פנימית נגד שמאל באמת שמאל",
+                        "הגנה פנימית נגד ימין - אגרוף שמאל בהחלקה"
+                    )
+                )
+            )
+        ),
+
+        UiNestedSubTopicGroup(
+            title = "הגנות נגד בעיטות",
+            leaves = listOf(
+                UiNestedSubTopicLeaf(
+                    title = "הגנות נגד בעיטות רגילות",
+                    items = listOf(
+                        "הגנה נגד בעיטה רגילה - בעיטה לצד",
+                        "הגנה נגד בעיטה רגילה - טיימינג לצד החי",
+                        "הגנה חיצונית באמת שמאל נגד בעיטה רגילה"
+                    )
+                ),
+                UiNestedSubTopicLeaf(
+                    title = "הגנות נגד בעיטות מגל לפנים",
+                    items = listOf(
+                        "הגנה נגד בעיטת מגל לפנים - בעיטה לצד",
+                        "הגנה נגד בעיטת מגל נמוכה"
+                    )
+                ),
+                UiNestedSubTopicLeaf(
+                    title = "הגנות נגד בעיטות מגל לאחור",
+                    items = listOf(
+                        "הגנה נגד בעיטת מגל לאחור - בעיטה בימין",
+                        "הגנה נגד בעיטת מגל לאחור - בעיטה בשמאל",
+                        "הגנה נגד בעיטת מגל לאחור - אגרוף שמאל",
+                        "הגנה נגד בעיטת מגל לאחור בסבוב - בעיטה"
+                    )
+                ),
+                UiNestedSubTopicLeaf(
+                    title = "הגנות נגד בעיטות לצד",
+                    items = listOf(
+                        "הגנה חיצונית באמת ימין נגד בעיטה לצד",
+                        "הגנה חיצונית באמת שמאל נגד בעיטה לצד",
+                        "הגנה נגד בעיטה לצד - בעיטת סטירה חיצונית"
+                    )
+                )
+            )
+        ),
+        UiNestedSubTopicGroup(
+            title = "הגנות - סכין",
+            leaves = listOf(
+                UiNestedSubTopicLeaf(
+                    title = "הגנות נגד מקל",
+                    items = listOf(
+                        "הגנה נגד מקל - צד חי",
+                        "הגנה נגד מקל - צד מת"
+                    )
+                ),
+                UiNestedSubTopicLeaf(
+                    title = "הגנות מאיום סכין",
+                    items = listOf(
+                        "הגנה מאיום סכין לעורק שמאל",
+                        "הגנה מאיום סכין לעורק ימין",
+                        "הגנה מאיום סכין להב לגורגרת",
+                        "הגנה מאיום סכין מלפנים - חוד הסכין לגורגרת",
+                        "הגנה מאיום סכין מאחור - להב הסכין לגורגרת",
+                        "הגנה מאיום סכין - חוד לבטן התחתונה",
+                        "הגנה מאיום סכין מאחור - חוד לגב"
+                    )
+                ),
+                UiNestedSubTopicLeaf(
+                    title = "הגנות נגד סכין",
+                    items = listOf(
+                        "הגנה נגד דקירה רגילה - בעיטה",
+                        "הגנה נגד דקירה מזרחית - בעיטה",
+                        "הגנה נגד דקירה ישרה מלפנים - בעיטה",
+                        "הגנה נגד דקירה ישרה נמוכה - בעיטה",
+                        "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפסעה",
+                        "הגנה נגד דקירה רגילה מהצד - בעיטה",
+                        "הגנה נגד דקירה ישרה - בעיטה",
+                        "הגנה נגד דקירה מזרחית מהצד - בעיטה"
+                    )
+                ),
+                UiNestedSubTopicLeaf(
+                    title = "הגנות נגד סכין קרובה מהצד",
+                    items = listOf(
+                        "הגנה נגד דקירה רגילה מהצד - התוקף בצד ימין",
+                        "הגנה נגד דקירה רגילה מהצד - התוקף בצד שמאל",
+                        "הגנה נגד דקירה מזרחית מהצד לעורף - התוקף בצד שמאל",
+                        "הגנה נגד דקירה מזרחית מהצד לגב - התוקף בצד שמאל",
+                        "הגנה נגד דקירה מזרחית מהצד לגרון - התוקף בצד ימין",
+                        "הגנה נגד דקירה מזרחית מהצד לבטן - התוקף בצד ימין"
+                    )
+                )
+            )
+        )
+    )
+}
+
+private fun nestedGreenDefenseGroupFor(
+    belt: Belt,
+    topicTitle: String
+): UiNestedSubTopicGroup? {
+    if (belt != Belt.GREEN) return null
+
+    val wanted = normalizeUiNestedTitle(topicTitle)
+
+    return greenDefenseNestedGroups()
+        .firstOrNull { group ->
+            normalizeUiNestedTitle(group.title) == wanted
+        }
+}
+
+private fun nestedGreenDefenseLeafFor(
+    belt: Belt,
+    topicTitle: String
+): UiNestedSubTopicLeaf? {
+    if (belt != Belt.GREEN) return null
+
+    val wanted = normalizeUiNestedTitle(topicTitle)
+
+    return greenDefenseNestedGroups()
+        .asSequence()
+        .flatMap { group -> group.leaves.asSequence() }
+        .firstOrNull { leaf ->
+            normalizeUiNestedTitle(leaf.title) == wanted
+        }
+}
+
+private fun isGreenDefenseNestedNavigationTopic(
+    belt: Belt,
+    topicTitle: String
+): Boolean {
+    if (belt != Belt.GREEN) return false
+
+    val wanted = normalizeUiNestedTitle(topicTitle)
+
+    if (wanted == "הגנות") return true
+
+    val groupTitles = greenDefenseNestedGroups()
+        .map { group -> normalizeUiNestedTitle(group.title) }
+
+    val leafTitles = greenDefenseNestedGroups()
+        .flatMap { group -> group.leaves }
+        .map { leaf -> normalizeUiNestedTitle(leaf.title) }
+
+    return wanted in groupTitles || wanted in leafTitles
+}
+
+private fun visibleGreenDefenseSubTopics(
+    belt: Belt,
+    topicTitle: String,
+    rawSubs: List<String>
+): List<String> {
+    if (belt != Belt.GREEN || normalizeUiNestedTitle(topicTitle) != "הגנות") {
+        return rawSubs
+    }
+
+    val nestedGroups = greenDefenseNestedGroups()
+
+    val nestedGroupTitles = nestedGroups
+        .map { normalizeUiNestedTitle(it.title) }
+        .toSet()
+
+    val nestedLeafTitles = nestedGroups
+        .flatMap { it.leaves }
+        .map { normalizeUiNestedTitle(it.title) }
+        .toSet()
+
+    val otherSubs = rawSubs
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .filter { normalizeUiNestedTitle(it) !in nestedLeafTitles }
+        .filter { normalizeUiNestedTitle(it) !in nestedGroupTitles }
+        .distinctBy { normalizeUiNestedTitle(it) }
+
+    return (
+            nestedGroups.map { it.title } + otherSubs
+            ).distinctBy { normalizeUiNestedTitle(it) }
+}
+
 private val catalogScreenGradientTop = Color(0xFFF3F1FB)
 private val catalogScreenGradientMid = Color(0xFFF8F9FD)
 private val catalogScreenGradientBottom = Color(0xFFFDFDFE)
@@ -587,22 +802,45 @@ fun SubTopicsScreen(
         normalizeHardNavTopic(topicDecoded)
     }
 
-    val hardRootSections = remember(hardNavTopic) {
-        HardSectionsCatalog.sectionsForSubject(hardNavTopic)
+    // ✅ נושאי הגנות בחגורה ירוקה מטופלים מקומית כרמה 1 -> רמה 2 -> תרגילים.
+    // לא נותנים ל-HardSectionsCatalog לבלוע אותם ולהכניס ישר לתרגילים.
+    val isGreenDefenseNestedNavigation = remember(belt, topicDecoded) {
+        isGreenDefenseNestedNavigationTopic(
+            belt = belt,
+            topicTitle = topicDecoded
+        )
     }
 
-    val hardCurrentSection = remember(hardNavTopic, hardRootSections) {
-        if (hardRootSections == null) {
+    val hardRootSections = remember(hardNavTopic, isGreenDefenseNestedNavigation) {
+        if (isGreenDefenseNestedNavigation) {
+            null
+        } else {
+            HardSectionsCatalog.sectionsForSubject(hardNavTopic)
+        }
+    }
+
+    val hardCurrentSection = remember(hardNavTopic, hardRootSections, isGreenDefenseNestedNavigation) {
+        if (isGreenDefenseNestedNavigation) {
+            null
+        } else if (hardRootSections == null) {
             HardSectionsCatalog.findAnySectionById(hardNavTopic)
         } else {
             null
         }
     }
 
-    val isHardFlow = remember(hardNavTopic, hardRootSections, hardCurrentSection) {
-        HardSectionsCatalog.supportsSubject(hardNavTopic) ||
-                hardRootSections != null ||
-                hardCurrentSection != null
+    val isHardFlow = remember(
+        hardNavTopic,
+        hardRootSections,
+        hardCurrentSection,
+        isGreenDefenseNestedNavigation
+    ) {
+        !isGreenDefenseNestedNavigation &&
+                (
+                        HardSectionsCatalog.supportsSubject(hardNavTopic) ||
+                                hardRootSections != null ||
+                                hardCurrentSection != null
+                        )
     }
 
     val hardTitle = remember(hardNavTopic, hardRootSections, hardCurrentSection) {
@@ -743,10 +981,71 @@ fun SubTopicsScreen(
         }
     }
 
+    val localNestedGroup = remember(belt, topicDecoded, isHardFlow) {
+        if (isHardFlow) {
+            null
+        } else {
+            nestedGreenDefenseGroupFor(
+                belt = belt,
+                topicTitle = topicDecoded
+            )
+        }
+    }
+
+    val localNestedLeaf = remember(belt, topicDecoded, isHardFlow) {
+        if (isHardFlow) {
+            null
+        } else {
+            nestedGreenDefenseLeafFor(
+                belt = belt,
+                topicTitle = topicDecoded
+            )
+        }
+    }
+
+    val visibleRealSubs = remember(belt, topicDecoded, realSubs) {
+        visibleGreenDefenseSubTopics(
+            belt = belt,
+            topicTitle = topicDecoded,
+            rawSubs = realSubs
+        )
+    }
+
     val buttonSpacing = 12.dp
 
 // ===== QUICK MENU STATE =====
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
+
+    // ✅ פתיחת רמה שנייה בתוך אותו מסך:
+    // הגנות -> הגנות נגד מכות / הגנות נגד בעיטות / הגנות - סכין
+    var openedLocalNestedGroupTitle by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+
+    val activeNestedGroup = remember(
+        belt,
+        topicDecoded,
+        localNestedGroup,
+        openedLocalNestedGroupTitle,
+        isHardFlow
+    ) {
+        if (isHardFlow) {
+            null
+        } else {
+            openedLocalNestedGroupTitle
+                ?.let { selectedTitle ->
+                    nestedGreenDefenseGroupFor(
+                        belt = belt,
+                        topicTitle = selectedTitle
+                    )
+                }
+                ?: localNestedGroup
+        }
+    }
+
+    BackHandler(enabled = openedLocalNestedGroupTitle != null) {
+        openedLocalNestedGroupTitle = null
+    }
 
 // ⛔ כרגע חוסמים גישה עד שהמנויים עובדים
     val hasAccess = false
@@ -889,6 +1188,61 @@ fun SubTopicsScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                } else if (activeNestedGroup != null) {
+
+                    activeNestedGroup.leaves.forEach { leaf ->
+                        HardSubTopicCategoryCard(
+                            belt = belt,
+                            title = if (isEnglish) ExerciseTitlesEn.getOrSame(leaf.title) else leaf.title,
+                            count = leaf.items.size,
+                            onClick = {
+                                onOpenSubTopic(leaf.title)
+                            }
+                        )
+                    }
+
+                } else if (localNestedLeaf != null) {
+
+                    var explain by rememberSaveable { mutableStateOf<String?>(null) }
+
+                    localNestedLeaf.items.forEach { itemName ->
+                        ExerciseRowWithInfo(
+                            belt = belt,
+                            itemName = itemName,
+                            accent = MaterialTheme.colorScheme.primary,
+                            onExplain = { _, item -> explain = item },
+                            onOpenExercise = { item ->
+                                openedExerciseRequest = OpenedExerciseRequest(
+                                    belt = belt,
+                                    item = item
+                                )
+                            }
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+
+                    explain?.let { item ->
+                        val explanation = remember(belt, topicDecoded, item) {
+                            findExplanationForHitLocal(
+                                belt = belt,
+                                rawItem = item,
+                                topic = topicDecoded,
+                                isEnglish = isEnglish
+                            )
+                        }
+
+                        ModernExerciseInfoDialog(
+                            title = exerciseTitleForUi(
+                                raw = item,
+                                isEnglish = isEnglish
+                            ),
+                            subtitle = if (isEnglish) belt.en else belt.heb,
+                            explanation = explanation,
+                            accentColor = belt.color,
+                            onDismiss = { explain = null }
+                        )
+                    }
+
                 } else if (!hasRealSubs) {
 
                     val items: List<String> = remember(belt, topicDecoded) {
@@ -946,15 +1300,19 @@ fun SubTopicsScreen(
 
                 } else {
 
-                    realSubs.forEach { subTitleRaw ->
+                    visibleRealSubs.forEach { subTitleRaw ->
                         val subTitle = subTitleRaw.trim()
 
                         val itemCount by remember(belt, topicDecoded, subTitle) {
                             mutableStateOf(
-                                when {
-                                    belt == Belt.BLACK &&
-                                            topicDecoded.trim() == "הגנות" &&
-                                            subTitle == "הגנות עם רובה נגד דקירות סכין" -> {
+                                nestedGreenDefenseGroupFor(
+                                    belt = belt,
+                                    topicTitle = subTitle
+                                )?.leaves?.size
+                                    ?: when {
+                                        belt == Belt.BLACK &&
+                                                topicDecoded.trim() == "הגנות" &&
+                                                subTitle == "הגנות עם רובה נגד דקירות סכין" -> {
                                         HardSectionsCatalog.subjectSubSectionItemsFor(
                                             subjectId = "knife_defense",
                                             subSectionId = "knife_defense_rifle_against_knife_stabs",
@@ -971,18 +1329,18 @@ fun SubTopicsScreen(
                                         ).size
                                     }
 
-                                    else -> {
-                                        AppSubTopicRegistry
-                                            .getItemsFor(belt, topicDecoded, subTitle)
-                                            .takeIf { it.isNotEmpty() }
-                                            ?.size
-                                            ?: ContentRepo.listItemTitles(
-                                                belt = belt,
-                                                topicTitle = topicDecoded,
-                                                subTopicTitle = subTitle
-                                            ).size
+                                        else -> {
+                                            AppSubTopicRegistry
+                                                .getItemsFor(belt, topicDecoded, subTitle)
+                                                .takeIf { it.isNotEmpty() }
+                                                ?.size
+                                                ?: ContentRepo.listItemTitles(
+                                                    belt = belt,
+                                                    topicTitle = topicDecoded,
+                                                    subTopicTitle = subTitle
+                                                ).size
+                                        }
                                     }
-                                }
                             )
                         }
 
@@ -990,7 +1348,18 @@ fun SubTopicsScreen(
                             belt = belt,
                             title = if (isEnglish) ExerciseTitlesEn.getOrSame(subTitle) else subTitle,
                             count = itemCount,
-                            onClick = { onOpenSubTopic(subTitle) }
+                            onClick = {
+                                val nestedGroup = nestedGreenDefenseGroupFor(
+                                    belt = belt,
+                                    topicTitle = subTitle
+                                )
+
+                                if (nestedGroup != null) {
+                                    openedLocalNestedGroupTitle = subTitle
+                                } else {
+                                    onOpenSubTopic(subTitle)
+                                }
+                            }
                         )
                     }
                 }

@@ -3,6 +3,7 @@
 package il.kmi.app.screens
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -48,6 +49,10 @@ import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.app.ui.KmiTopBar
+
+
+//-----------------------------------------------------------------------------
 
 // ----- מודל נתונים להזנה נוחה -----
 data class UserProfileInfo(
@@ -92,6 +97,29 @@ private fun profileHorizontalAlignment(isEnglish: Boolean): Alignment.Horizontal
 
 private fun profileLayoutDirection(isEnglish: Boolean): LayoutDirection {
     return if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+}
+
+private fun shareProfileScreenApp(
+    ctx: Context,
+    isEnglish: Boolean
+) {
+    val text = if (isEnglish) {
+        "K.M.I app"
+    } else {
+        "אפליקציית K.M.I"
+    }
+
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+
+    ctx.startActivity(
+        Intent.createChooser(
+            sendIntent,
+            if (isEnglish) "Share" else "שיתוף"
+        )
+    )
 }
 
 private fun traineeRankDisplayName(rawId: String?): String {
@@ -316,7 +344,8 @@ private fun firestoreProfileFromMap(data: Map<String, Any?>): FirestoreProfileIn
 fun MyProfileScreen(
     sp: SharedPreferences,
     kmiPrefs: KmiPrefs,
-    onClose: () -> Unit   // חובה, לא אופציונלי
+    onClose: () -> Unit,
+    onEditProfile: () -> Unit = {}
 ) {
     // עזר: בוחר מחרוזת לא ריקה מהמקורות הנתונים
     fun prefStr(primary: String?, vararg fallbacks: String?): String {
@@ -685,83 +714,94 @@ fun MyProfileScreen(
             password = password.ifBlank { "••••••••" }
         )
 
-        /// רקע + גלילה + כפתור X לסגירה
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF0E1630),
-                            Color(0xFF1F2A52),
-                            Color(0xFF2575BC)
-                        )
-                    )
-                )
-                .verticalScroll(scroll)   // ✅ מאפשר גלילה
-                .padding(20.dp)
-        ) {
-            val activity = LocalContext.current as? Activity
-            val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+        val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
 
-            Box(modifier = Modifier.fillMaxSize()) {
-                IconButton(
-                    onClick = {
+        Scaffold(
+            topBar = {
+                KmiTopBar(
+                    title = profileTr(
+                        isEnglish,
+                        "הפרופיל שלי",
+                        "My Profile"
+                    ),
+                    onHome = {
                         runCatching { onClose() }.onFailure {
                             backDispatcher?.onBackPressed()
                         }
                     },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .statusBarsPadding()
-                        .padding(start = 6.dp, top = 6.dp)
-                        .size(56.dp)
-                        .zIndex(10f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "סגור",
-                        tint = Color.White
+                    showTopHome = false,
+                    showTopSearch = false,
+                    showBottomActions = true,
+                    lockSearch = true,
+                    centerTitle = true,
+                    currentLang = if (isEnglish) "en" else "he"
+                )
+            },
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0)
+        ) { padding ->
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFF0E1630),
+                                Color(0xFF1F2A52),
+                                Color(0xFF2575BC)
+                            )
+                        )
                     )
-                }
+            ) {
 
-                if (isLoadingFirestoreProfile) {
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .statusBarsPadding()
-                            .padding(top = 10.dp)
-                            .zIndex(11f),
-                        shape = RoundedCornerShape(999.dp),
-                        color = Color.White.copy(alpha = 0.14f),
-                        border = BorderStroke(
-                            1.dp,
-                            Color.White.copy(alpha = 0.24f)
-                        )
-                    ) {
-                        Text(
-                            text = profileTr(
-                                isEnglish,
-                                "מסנכרן פרופיל...",
-                                "Syncing profile..."
-                            ),
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                        )
-                    }
-                }
-
-                Box(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                        .align(Alignment.TopCenter)
+                        .fillMaxSize()
+                        .verticalScroll(scroll)
+                        .padding(
+                            start = 20.dp,
+                            end = 20.dp,
+                            top = 20.dp,
+                            bottom = 20.dp
+                        ),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    if (isLoadingFirestoreProfile) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color.White.copy(alpha = 0.14f),
+                            border = BorderStroke(
+                                1.dp,
+                                Color.White.copy(alpha = 0.24f)
+                            )
+                        ) {
+                            Text(
+                                text = profileTr(
+                                    isEnglish,
+                                    "מסנכרן פרופיל...",
+                                    "Syncing profile..."
+                                ),
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                    }
+
                     UserProfileCard(
                         info = info,
-                        isEnglish = isEnglish
+                        isEnglish = isEnglish,
+                        onEditProfile = onEditProfile,
+                        onClose = {
+                            runCatching { onClose() }.onFailure {
+                                backDispatcher?.onBackPressed()
+                            }
+                        }
                     )
                 }
             }
@@ -776,6 +816,8 @@ fun MyProfileScreen(
 private fun UserProfileCard(
     info: UserProfileInfo,
     isEnglish: Boolean,
+    onEditProfile: () -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(28.dp)
@@ -804,20 +846,69 @@ private fun UserProfileCard(
                 .padding(horizontal = 22.dp, vertical = 22.dp),
             horizontalAlignment = profileHorizontalAlignment(isEnglish)
         ) {
-            // כותרת ראשית – שם המשתמש
-            Text(
-                text = info.userName,
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = (-0.2).sp,
-                    lineHeight = 30.sp
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = Color.White,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = profileTextAlign(isEnglish)
-            )
+            // כותרת ראשית + X באותה שורה
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isEnglish) {
+                        Text(
+                            text = info.userName,
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = (-0.2).sp,
+                                lineHeight = 30.sp
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color.White,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Left
+                        )
+
+                        IconButton(
+                            onClick = onClose,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Close",
+                                tint = Color.White,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    } else {
+                        IconButton(
+                            onClick = onClose,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "סגור",
+                                tint = Color.White,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Text(
+                            text = info.userName,
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = (-0.2).sp,
+                                lineHeight = 30.sp
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color.White,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Right
+                        )
+                    }
+                }
+            }
 
             // תת-כותרת – חגורה
             Spacer(Modifier.height(6.dp))
@@ -830,6 +921,31 @@ private fun UserProfileCard(
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = profileTextAlign(isEnglish)
             )
+
+            Spacer(Modifier.height(14.dp))
+
+            Button(
+                onClick = onEditProfile,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White.copy(alpha = 0.18f),
+                    contentColor = Color.White
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    Color.White.copy(alpha = 0.42f)
+                )
+            ) {
+                Text(
+                    text = profileTr(
+                        isEnglish,
+                        "עריכת פרופיל",
+                        "Edit profile"
+                    ),
+                    fontWeight = FontWeight.Bold
+                )
+            }
 
             // מפריד דק
             Spacer(Modifier.height(16.dp))

@@ -591,10 +591,33 @@ fun CoachTraineesScreen(
                 return@collectLatest
             }
 
-            // יש members, אבל עדיין לא בנינו את traineeProfiles.
-            // לכן ממשיכים להציג טעינה ולא מציגים "לא נמצאו מתאמנים".
-            isProfilesLoading = true
-            didFinishInitialProfilesLoad = false
+            // ✅ יש members בסיסיים מהשרת/DB:
+            // מציגים מיד רשימה חלקית כדי שלא יהיה מסך ריק,
+            // ורק אחר כך ממשיכים ברקע להעשיר גיל/חגורה/נוכחות/הערות.
+            val existingProfilesById = traineeProfiles.associateBy { it.id }
+
+            traineeProfiles = members.map { m ->
+                val existing = existingProfilesById[m.id.toString()]
+
+                existing?.copy(
+                    fullName = m.displayName,
+                    branch = branchDbKey,
+                    groupKey = groupName
+                ) ?: TraineeProfile(
+                    id = m.id.toString(),
+                    fullName = m.displayName,
+                    belt = "",
+                    seniority = "",
+                    age = 0,
+                    attendancePct = 0,
+                    branch = branchDbKey,
+                    groupKey = groupName
+                )
+            }
+
+            isProfilesLoading = false
+            isInitialServerSyncRunning = false
+            didFinishInitialProfilesLoad = true
 
             // 1) אחוז נוכחות מה-DB המקומי
             val today = LocalDate.now()
@@ -1423,6 +1446,42 @@ fun CoachTraineesScreen(
                                         Divider()
                                     }
                                 }
+                            } else if (isProfilesLoading || isInitialServerSyncRunning || !didFinishInitialProfilesLoad) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(18.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    LinearProgressIndicator(
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Text(
+                                        text = coachTr(
+                                            isEnglish,
+                                            "טוען מתאמנים מהשרת...",
+                                            "Loading trainees from the server..."
+                                        ),
+                                        color = Color(0xFF0369A1),
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = coachTr(
+                                        isEnglish,
+                                        "לא נמצאו מתאמנים פעילים לסניף ולקבוצה שנבחרו.",
+                                        "No active trainees were found for the selected branch and group."
+                                    ),
+                                    color = Color(0xFF64748B),
+                                    textAlign = screenTextAlign,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                )
                             }
                         }
                     }
