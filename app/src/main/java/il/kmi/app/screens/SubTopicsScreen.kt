@@ -1022,6 +1022,12 @@ fun SubTopicsScreen(
         mutableStateOf<String?>(null)
     }
 
+    // ✅ פתיחת רמה שלישית בתוך אותו מסך:
+    // הגנות נגד מכות -> הגנות חיצוניות / הגנות פנימיות -> תרגילים
+    var openedLocalNestedLeafTitle by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+
     val activeNestedGroup = remember(
         belt,
         topicDecoded,
@@ -1043,7 +1049,32 @@ fun SubTopicsScreen(
         }
     }
 
-    BackHandler(enabled = openedLocalNestedGroupTitle != null) {
+    val activeNestedLeaf = remember(
+        belt,
+        topicDecoded,
+        localNestedLeaf,
+        openedLocalNestedLeafTitle,
+        isHardFlow
+    ) {
+        if (isHardFlow) {
+            null
+        } else {
+            openedLocalNestedLeafTitle
+                ?.let { selectedTitle ->
+                    nestedGreenDefenseLeafFor(
+                        belt = belt,
+                        topicTitle = selectedTitle
+                    )
+                }
+                ?: localNestedLeaf
+        }
+    }
+
+    BackHandler(enabled = openedLocalNestedLeafTitle != null) {
+        openedLocalNestedLeafTitle = null
+    }
+
+    BackHandler(enabled = openedLocalNestedLeafTitle == null && openedLocalNestedGroupTitle != null) {
         openedLocalNestedGroupTitle = null
     }
 
@@ -1188,24 +1219,11 @@ fun SubTopicsScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                } else if (activeNestedGroup != null) {
-
-                    activeNestedGroup.leaves.forEach { leaf ->
-                        HardSubTopicCategoryCard(
-                            belt = belt,
-                            title = if (isEnglish) ExerciseTitlesEn.getOrSame(leaf.title) else leaf.title,
-                            count = leaf.items.size,
-                            onClick = {
-                                onOpenSubTopic(leaf.title)
-                            }
-                        )
-                    }
-
-                } else if (localNestedLeaf != null) {
+                } else if (activeNestedLeaf != null) {
 
                     var explain by rememberSaveable { mutableStateOf<String?>(null) }
 
-                    localNestedLeaf.items.forEach { itemName ->
+                    activeNestedLeaf.items.forEach { itemName ->
                         ExerciseRowWithInfo(
                             belt = belt,
                             itemName = itemName,
@@ -1240,6 +1258,19 @@ fun SubTopicsScreen(
                             explanation = explanation,
                             accentColor = belt.color,
                             onDismiss = { explain = null }
+                        )
+                    }
+
+                } else if (activeNestedGroup != null) {
+
+                    activeNestedGroup.leaves.forEach { leaf ->
+                        HardSubTopicCategoryCard(
+                            belt = belt,
+                            title = if (isEnglish) ExerciseTitlesEn.getOrSame(leaf.title) else leaf.title,
+                            count = leaf.items.size,
+                            onClick = {
+                                openedLocalNestedLeafTitle = leaf.title
+                            }
                         )
                     }
 
@@ -1355,6 +1386,7 @@ fun SubTopicsScreen(
                                 )
 
                                 if (nestedGroup != null) {
+                                    openedLocalNestedLeafTitle = null
                                     openedLocalNestedGroupTitle = subTitle
                                 } else {
                                     onOpenSubTopic(subTitle)

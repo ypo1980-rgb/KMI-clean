@@ -22,6 +22,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Divider
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
@@ -221,11 +222,122 @@ fun MaterialsScreen(
     // ✅ NEW: נושא לתצוגה/קאנוניקליזציה — כדי ש"" יתנהג בדיוק כמו "כללי"
     val topicUi = remember(topic) { if (topic.isBlank()) "כללי" else topic }
 
-    val topicKey = remember(topicUi, subTopicFilter) {
-        if (subTopicFilter.isNullOrBlank()) {
-            topicUi
+    fun decodeMaterialParam(value: String): String {
+        return try {
+            java.net.URLDecoder.decode(value, "UTF-8")
+        } catch (_: Exception) {
+            value
+        }.trim()
+    }
+
+    val decodedSubTopicFilter = remember(subTopicFilter) {
+        subTopicFilter
+            ?.takeIf { it.isNotBlank() }
+            ?.let { decodeMaterialParam(it) }
+    }
+
+    fun isGreenDefenseLevelOneTitle(value: String): Boolean {
+        val clean = value
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace("־", "-")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        return clean == "הגנות נגד מכות" ||
+                clean == "הגנות נגד בעיטות" ||
+                clean == "הגנות - סכין"
+    }
+
+    // ✅ תיקון חשוב:
+    // לפעמים המסך נפתח עם topic = "הגנות נגד מכות" ו-subTopicFilter = null.
+    // במקרה כזה root הנושא האמיתי הוא "הגנות", וה-topic עצמו הוא רמה 1.
+    val materialRootTopic = remember(belt, topicUi, decodedSubTopicFilter) {
+        if (
+            belt == Belt.GREEN &&
+            decodedSubTopicFilter.isNullOrBlank() &&
+            isGreenDefenseLevelOneTitle(topicUi)
+        ) {
+            "הגנות"
         } else {
-            "${topicUi}__${subTopicFilter}"
+            topicUi
+        }
+    }
+
+    val materialParentSubTopic = remember(belt, topicUi, decodedSubTopicFilter) {
+        when {
+            !decodedSubTopicFilter.isNullOrBlank() -> decodedSubTopicFilter
+
+            belt == Belt.GREEN && isGreenDefenseLevelOneTitle(topicUi) -> topicUi
+
+            else -> null
+        }
+    }
+
+    val nestedSubTopicTitles = remember(belt, materialRootTopic, materialParentSubTopic) {
+        materialParentSubTopic
+            ?.let { sub ->
+                runCatching {
+                    SharedContentRepo.getNestedSubTopicTitles(
+                        belt = belt,
+                        topicTitle = materialRootTopic.trim(),
+                        subTopicTitle = sub.trim()
+                    )
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                }.getOrDefault(emptyList())
+            }
+            .orEmpty()
+    }
+
+    var openedNestedSubTopic by rememberSaveable(
+        belt.id,
+        materialRootTopic,
+        materialParentSubTopic
+    ) {
+        mutableStateOf<String?>(null)
+    }
+
+    val isShowingNestedSubTopicPicker = remember(
+        materialParentSubTopic,
+        openedNestedSubTopic,
+        nestedSubTopicTitles
+    ) {
+        materialParentSubTopic != null &&
+                openedNestedSubTopic == null &&
+                nestedSubTopicTitles.isNotEmpty()
+    }
+
+    val effectiveSubTopicFilter = remember(
+        materialParentSubTopic,
+        openedNestedSubTopic
+    ) {
+        openedNestedSubTopic ?: materialParentSubTopic
+    }
+
+    androidx.activity.compose.BackHandler(
+        enabled = openedNestedSubTopic != null
+    ) {
+        openedNestedSubTopic = null
+    }
+
+    val topicKey = remember(materialRootTopic, materialParentSubTopic, openedNestedSubTopic) {
+        when {
+            materialParentSubTopic.isNullOrBlank() -> {
+                materialRootTopic
+            }
+
+            openedNestedSubTopic.isNullOrBlank() -> {
+                "${materialRootTopic}__${materialParentSubTopic}"
+            }
+
+            else -> {
+                "${materialRootTopic}__${materialParentSubTopic}__${openedNestedSubTopic}"
+            }
         }
     }
 
@@ -295,19 +407,20 @@ fun MaterialsScreen(
     fun itemsCacheKey(): String = buildString {
         append(belt.id)
         append("||")
-        append(topicUi.trim())
+        append(materialRootTopic.trim())
         append("||")
-        append(subTopicFilter?.trim().orEmpty())
+        append(materialParentSubTopic?.trim().orEmpty())
+        append("||")
+        append(openedNestedSubTopic?.trim().orEmpty())
     }
 
     val itemList by produceState<List<String>>(
         initialValue = itemsCache[itemsCacheKey()] ?: emptyList(),
-        key1 = belt.id,
-        key2 = topic,
-        key3 = subTopicFilter
+        belt.id,
+        materialRootTopic,
+        materialParentSubTopic,
+        openedNestedSubTopic
     ) {
-        fun dec(s: String) = try { java.net.URLDecoder.decode(s, "UTF-8") } catch (_: Exception) { s }
-
         val key = itemsCacheKey()
 
         // אם כבר בקאש — חוזרים מיד בלי חישוב
@@ -317,24 +430,45 @@ fun MaterialsScreen(
         }
 
         value = withContext(Dispatchers.Default) {
-            val topicTrim = topicUi.trim()
+            val topicTrim = materialRootTopic.trim()
+            val subTrim = materialParentSubTopic?.trim()
+            val nestedTrim = openedNestedSubTopic?.trim()
 
-            val subTrim = subTopicFilter
-                ?.takeIf { it.isNotBlank() }
-                ?.let { raw -> dec(raw).trim() }
+            val list = when {
+                subTrim != null && nestedTrim != null -> {
+                    SharedContentRepo.getNestedItemsFor(
+                        belt = belt,
+                        topicTitle = topicTrim,
+                        subTopicTitle = subTrim,
+                        nestedSubTopicTitle = nestedTrim
+                    )
+                }
 
-            val list = if (subTrim != null) {
-                SharedContentRepo.getAllItemsFor(
-                    belt = belt,
-                    topicTitle = topicTrim,
-                    subTopicTitle = subTrim
-                )
-            } else {
-                SharedContentRepo.getAllItemsFor(
-                    belt = belt,
-                    topicTitle = topicTrim,
-                    subTopicTitle = null
-                )
+                subTrim != null -> {
+                    val nestedTitles = SharedContentRepo.getNestedSubTopicTitles(
+                        belt = belt,
+                        topicTitle = topicTrim,
+                        subTopicTitle = subTrim
+                    )
+
+                    if (nestedTitles.isNotEmpty()) {
+                        emptyList()
+                    } else {
+                        SharedContentRepo.getAllItemsFor(
+                            belt = belt,
+                            topicTitle = topicTrim,
+                            subTopicTitle = subTrim
+                        )
+                    }
+                }
+
+                else -> {
+                    SharedContentRepo.getAllItemsFor(
+                        belt = belt,
+                        topicTitle = topicTrim,
+                        subTopicTitle = null
+                    )
+                }
             }
 
             list.distinct()
@@ -598,10 +732,18 @@ fun MaterialsScreen(
     Scaffold(
         topBar = {
             val headerTitle =
-                if (subTopicFilter.isNullOrBlank()) {
-                    topicTitleForUi(topic, currentLang)
-                } else {
-                    "${topicTitleForUi(topic, currentLang)} - ${topicTitleForUi(subTopicFilter, currentLang)}"
+                when {
+                    decodedSubTopicFilter.isNullOrBlank() -> {
+                        topicTitleForUi(topic, currentLang)
+                    }
+
+                    openedNestedSubTopic.isNullOrBlank() -> {
+                        "${topicTitleForUi(topic, currentLang)} - ${topicTitleForUi(decodedSubTopicFilter, currentLang)}"
+                    }
+
+                    else -> {
+                        "${topicTitleForUi(decodedSubTopicFilter, currentLang)} - ${topicTitleForUi(openedNestedSubTopic ?: "", currentLang)}"
+                    }
                 }
 
             val contextLang = LocalContext.current
@@ -898,17 +1040,29 @@ fun MaterialsScreen(
                 .fillMaxSize(),
             horizontalAlignment = Alignment.End
         ) {
-            val header = if (subTopicFilter.isNullOrBlank()) {
-                if (isEnglish) {
-                    "Material: ${topicTitleForUi(topicUi, currentLang)}"
-                } else {
-                    "חומר: $topicUi"
+            val header = when {
+                materialParentSubTopic.isNullOrBlank() -> {
+                    if (isEnglish) {
+                        "Material: ${topicTitleForUi(materialRootTopic, currentLang)}"
+                    } else {
+                        "חומר: $materialRootTopic"
+                    }
                 }
-            } else {
-                if (isEnglish) {
-                    "Material: ${topicTitleForUi(topicUi, currentLang)} – ${topicTitleForUi(subTopicFilter, currentLang)}"
-                } else {
-                    "חומר: $topicUi – $subTopicFilter"
+
+                openedNestedSubTopic.isNullOrBlank() -> {
+                    if (isEnglish) {
+                        "Material: ${topicTitleForUi(materialRootTopic, currentLang)} – ${topicTitleForUi(materialParentSubTopic, currentLang)}"
+                    } else {
+                        "חומר: $materialRootTopic – $materialParentSubTopic"
+                    }
+                }
+
+                else -> {
+                    if (isEnglish) {
+                        "Material: ${topicTitleForUi(materialParentSubTopic, currentLang)} – ${topicTitleForUi(openedNestedSubTopic ?: "", currentLang)}"
+                    } else {
+                        "חומר: $materialParentSubTopic – ${openedNestedSubTopic.orEmpty()}"
+                    }
                 }
             }
 
@@ -993,8 +1147,85 @@ fun MaterialsScreen(
                         horizontalAlignment = Alignment.End
                     ) {
 
-                        val filtered = itemList
-                        filtered.forEachIndexed { index, item ->
+                        if (isShowingNestedSubTopicPicker) {
+                            nestedSubTopicTitles.forEach { nestedTitle ->
+                                val count = remember(belt, topicUi, decodedSubTopicFilter, nestedTitle) {
+                                    decodedSubTopicFilter
+                                        ?.let { sub ->
+                                            SharedContentRepo.getNestedItemsFor(
+                                                belt = belt,
+                                                topicTitle = materialRootTopic.trim(),
+                                                subTopicTitle = sub.trim(),
+                                                nestedSubTopicTitle = nestedTitle.trim()
+                                            ).size
+                                        }
+                                        ?: 0
+                                }
+
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(90.dp)
+                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                        .clickable {
+                                            openedNestedSubTopic = nestedTitle
+                                        },
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = Color.White.copy(alpha = 0.92f),
+                                    tonalElevation = 2.dp,
+                                    shadowElevation = 3.dp,
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = belt.color.copy(alpha = 0.35f)
+                                    )
+                                ) {
+                                    CompositionLocalProvider(
+                                        LocalLayoutDirection provides if (isEnglish) {
+                                            LayoutDirection.Ltr
+                                        } else {
+                                            LayoutDirection.Rtl
+                                        }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = topicTitleForUi(nestedTitle, currentLang),
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                color = Color(0xFF1F2937),
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                lineHeight = MaterialTheme.typography.titleSmall.lineHeight,
+                                                modifier = Modifier.weight(1f)
+                                            )
+
+                                            Spacer(Modifier.width(10.dp))
+
+                                            Text(
+                                                text = if (isEnglish) {
+                                                    if (count == 1) "1 exercise" else "$count exercises"
+                                                } else {
+                                                    "$count תרגילים"
+                                                },
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = belt.color,
+                                                textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left,
+                                                maxLines = 1,
+                                                modifier = Modifier.widthIn(min = 74.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            val filtered = itemList
+                            filtered.forEachIndexed { index, item ->
                             var showNoteDialog by remember { mutableStateOf(false) }
 
                             // ✅ מזהה אחיד להסבר / מועדפים / הערות
@@ -1206,12 +1437,13 @@ fun MaterialsScreen(
                                 )
                             }
 
-                            Spacer(Modifier.height(0.dp))
+                                Spacer(Modifier.height(0.dp))
+                            }
                         }
                     }
                 }
-            }
         }
+    }
     }
 }
 

@@ -9,22 +9,44 @@ class DailyExercisePicker {
         registeredBelt: Belt,
         lastItemKey: String? = null
     ): DailyExerciseItem? {
-        val nextBelt = nextBeltAfter(registeredBelt) ?: return null
+        val targetBelts = targetBeltsForDailyExercise(
+            registeredBelt = registeredBelt
+        )
 
-        val allCandidates = buildCandidates(nextBelt)
+        if (targetBelts.isEmpty()) return null
+
+        val allCandidates = targetBelts
+            .flatMap { belt -> buildCandidates(belt) }
+            .filter { it.item.isNotBlank() }
+
         if (allCandidates.isEmpty()) return null
 
-        val filteredCandidates =
-            if (!lastItemKey.isNullOrBlank() && allCandidates.size > 1) {
-                allCandidates.filterNot { candidateKey(it) == lastItemKey }
-            } else {
-                allCandidates
-            }
+        val lastKey = lastItemKey.orEmpty().trim()
+        val lastBeltName = lastKey.substringBefore("|", missingDelimiterValue = "")
+            .trim()
+            .uppercase()
 
-        val pool = if (filteredCandidates.isNotEmpty()) {
-            filteredCandidates
+        val filteredByDifferentBelt = if (
+            registeredBelt == Belt.BLACK &&
+            lastBeltName.isNotBlank() &&
+            allCandidates.map { it.belt.name }.distinct().size > 1
+        ) {
+            allCandidates.filter { it.belt.name != lastBeltName }
         } else {
             allCandidates
+        }
+
+        val filteredByDifferentItem =
+            if (lastKey.isNotBlank() && filteredByDifferentBelt.size > 1) {
+                filteredByDifferentBelt.filterNot { candidateKey(it) == lastKey }
+            } else {
+                filteredByDifferentBelt
+            }
+
+        val pool = when {
+            filteredByDifferentItem.isNotEmpty() -> filteredByDifferentItem
+            filteredByDifferentBelt.isNotEmpty() -> filteredByDifferentBelt
+            else -> allCandidates
         }
 
         return pool.random()
@@ -32,6 +54,25 @@ class DailyExercisePicker {
 
     fun candidateKey(item: DailyExerciseItem): String {
         return "${item.belt.name}|${item.topic}|${item.item}"
+    }
+
+    private fun targetBeltsForDailyExercise(
+        registeredBelt: Belt
+    ): List<Belt> {
+        return when (registeredBelt) {
+            // ✅ כל מי שמוגדר כחגורה שחורה, כולל דאן 1 עד דאן 10,
+            // יקבל בכל יום תרגיל מתוך ירוקה / כחולה / חומה / שחורה.
+            Belt.BLACK -> listOf(
+                Belt.GREEN,
+                Belt.BLUE,
+                Belt.BROWN,
+                Belt.BLACK
+            )
+
+            else -> nextBeltAfter(registeredBelt)
+                ?.let { listOf(it) }
+                .orEmpty()
+        }
     }
 
     private fun buildCandidates(belt: Belt): List<DailyExerciseItem> {

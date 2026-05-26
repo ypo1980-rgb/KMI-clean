@@ -44,7 +44,7 @@ object DailyReminderScheduler {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val reminderPrefs = ReminderPrefs(prefs)
 
-        val isCoach = isCoachUser(prefs)
+        val isCoach = isCoachUser(context, prefs)
         val isEnabled = reminderPrefs.isEnabledForRole(isCoach)
 
         if (!isEnabled) {
@@ -100,7 +100,7 @@ object DailyReminderScheduler {
     fun rescheduleNextDay(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val reminderPrefs = ReminderPrefs(prefs)
-        val isCoach = isCoachUser(prefs)
+        val isCoach = isCoachUser(context, prefs)
         val isEnabled = reminderPrefs.isEnabledForRole(isCoach)
 
         if (!isEnabled) {
@@ -154,10 +154,26 @@ object DailyReminderScheduler {
         }
     }
 
-    private fun isCoachUser(prefs: SharedPreferences): Boolean {
-        val rawRole = prefs.getString(KEY_USER_ROLE, "trainee").orEmpty()
-        return rawRole.trim()
-            .lowercase()
-            .contains("coach")
+    private fun isCoachUser(
+        context: Context,
+        prefs: SharedPreferences
+    ): Boolean {
+        val userPrefs = context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+
+        val rawRole =
+            prefs.getString(KEY_USER_ROLE, null)
+                ?: prefs.getString("user_role", null)
+                ?: prefs.getString("role", null)
+                ?: userPrefs.getString(KEY_USER_ROLE, null)
+                ?: userPrefs.getString("user_role", null)
+                ?: userPrefs.getString("role", null)
+                ?: "trainee"
+
+        val clean = rawRole.trim().lowercase()
+
+        return clean == "coach" ||
+                clean.contains("coach") ||
+                clean.contains("מאמן") ||
+                clean.contains("מדריך")
     }
 }

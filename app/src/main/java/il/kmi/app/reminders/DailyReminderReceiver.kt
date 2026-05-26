@@ -24,7 +24,7 @@ class DailyReminderReceiver : BroadcastReceiver() {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val reminderPrefs = ReminderPrefs(prefs)
 
-        val isCoach = isCoachUser(prefs)
+        val isCoach = isCoachUser(context, prefs)
         val isEnabled = reminderPrefs.isEnabledForRole(isCoach)
 
         if (!isEnabled) {
@@ -34,6 +34,7 @@ class DailyReminderReceiver : BroadcastReceiver() {
         val registeredBelt = getRegisteredBelt(prefs, context)
 
         if (registeredBelt == null) {
+            DailyReminderScheduler.rescheduleNextDay(context)
             return
         }
 
@@ -44,12 +45,14 @@ class DailyReminderReceiver : BroadcastReceiver() {
         )
 
         if (picked == null) {
+            DailyReminderScheduler.rescheduleNextDay(context)
             return
         }
 
         val explanation = Explanations.get(picked.belt, picked.item).trim()
 
         if (explanation.isBlank()) {
+            DailyReminderScheduler.rescheduleNextDay(context)
             return
         }
 
@@ -152,36 +155,101 @@ class DailyReminderReceiver : BroadcastReceiver() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun isCoachUser(prefs: SharedPreferences): Boolean {
-        val rawRole = prefs.getString(KEY_USER_ROLE, "trainee").orEmpty()
-        return rawRole.trim()
-            .lowercase()
-            .contains("coach")
+    private fun isCoachUser(
+        context: Context,
+        prefs: SharedPreferences
+    ): Boolean {
+        val userPrefs = context.getSharedPreferences(USER_PREFS_NAME, Context.MODE_PRIVATE)
+
+        val rawRole =
+            prefs.getString(KEY_USER_ROLE, null)
+                ?: prefs.getString("user_role", null)
+                ?: prefs.getString("role", null)
+                ?: userPrefs.getString(KEY_USER_ROLE, null)
+                ?: userPrefs.getString("user_role", null)
+                ?: userPrefs.getString("role", null)
+                ?: "trainee"
+
+        val clean = rawRole.trim().lowercase()
+
+        return clean == "coach" ||
+                clean.contains("coach") ||
+                clean.contains("מאמן") ||
+                clean.contains("מדריך")
     }
 
-    private fun getRegisteredBelt(prefs: SharedPreferences, context: Context): Belt? {
+    private fun getRegisteredBelt(
+        prefs: SharedPreferences,
+        context: Context
+    ): Belt? {
         val userSp = context.getSharedPreferences(USER_PREFS_NAME, Context.MODE_PRIVATE)
 
-        val fromUserPrefs = userSp.getString(KEY_REGISTERED_BELT, null)
-            ?.trim()
-            ?.lowercase()
-            ?.let { Belt.fromId(it) }
+        fun normalizeBeltId(raw: String): String {
+            val clean = raw
+                .trim()
+                .lowercase()
+                .replace(" ", "_")
+                .replace("-", "_")
 
-        if (fromUserPrefs != null) return fromUserPrefs
+            return when {
+                clean.isBlank() -> ""
 
-        val fromLegacyUserPrefs = userSp.getString("belt", null)
-            ?.trim()
-            ?.lowercase()
-            ?.let { Belt.fromId(it) }
+                // ✅ חגורה שחורה כולל דאן 1 עד דאן 10
+                clean == "black" -> "black"
+                clean == "black_dan_1" -> "black"
+                clean == "black_dan_2" -> "black"
+                clean == "black_dan_3" -> "black"
+                clean == "black_dan_4" -> "black"
+                clean == "black_dan_5" -> "black"
+                clean == "black_dan_6" -> "black"
+                clean == "black_dan_7" -> "black"
+                clean == "black_dan_8" -> "black"
+                clean == "black_dan_9" -> "black"
+                clean == "black_dan_10" -> "black"
 
-        if (fromLegacyUserPrefs != null) return fromLegacyUserPrefs
+                // ✅ תמיכה גם אם נשמר בפורמט כללי יותר
+                clean.startsWith("black_dan_") -> "black"
+                clean.startsWith("blackdan") -> "black"
+                clean.startsWith("dan_") -> "black"
 
-        val fromCurrentPrefs = prefs.getString(KEY_REGISTERED_BELT, null)
-            ?.trim()
-            ?.lowercase()
-            ?.let { Belt.fromId(it) }
+                // ✅ תמיכה בעברית אם נשמר טקסט כזה
+                clean == "שחורה" -> "black"
+                clean == "חגורה_שחורה" -> "black"
+                clean.startsWith("שחורה_דאן") -> "black"
+                clean.startsWith("חגורה_שחורה_דאן") -> "black"
+                clean.startsWith("דאן") -> "black"
 
-        return fromCurrentPrefs
+                else -> clean
+            }
+        }
+
+        fun readBeltFrom(sp: SharedPreferences): Belt? {
+            val keys = listOf(
+                KEY_REGISTERED_BELT,
+                "current_belt",
+                "belt_current",
+                "belt",
+                "registered_belt",
+                "registeredRank",
+                "rank",
+                "rank_id"
+            )
+
+            for (key in keys) {
+                val normalized = normalizeBeltId(
+                    sp.getString(key, null).orEmpty()
+                )
+
+                if (normalized.isBlank()) continue
+
+                Belt.fromId(normalized)?.let { return it }
+            }
+
+            return null
+        }
+
+        return readBeltFrom(userSp)
+            ?: readBeltFrom(prefs)
     }
 
     companion object {
