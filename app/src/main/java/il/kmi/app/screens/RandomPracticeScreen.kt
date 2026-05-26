@@ -61,6 +61,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 
 //==========================================================================
 
@@ -437,14 +438,103 @@ fun RandomPracticeScreen(
         } ?: wantedDisplay
     }
 
-    fun statusCanonicalFor(item: il.kmi.shared.practice.PracticeItem): String {
-        val statusTopic = statusTopicFor(item)
-        val rawItem = statusRawItemFor(item)
+    fun normalizeStatusPart(s: String): String =
+        s.replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
 
-        return CanonicalIds.canonicalFor(
+    fun topicTitleFromStatusKey(statusKey: String): String {
+        return statusKey.substringBefore("__").trim().ifBlank { "כללי" }
+    }
+
+    fun subTopicTitleFromStatusKey(statusKey: String): String? {
+        return statusKey.substringAfter("__", "")
+            .trim()
+            .takeIf { it.isNotBlank() }
+    }
+
+    fun rawAndIndexForStatusKey(
+        item: il.kmi.shared.practice.PracticeItem,
+        statusKey: String
+    ): Pair<String, Int> {
+        val topicTitle = topicTitleFromStatusKey(statusKey)
+        val subTopicTitle = subTopicTitleFromStatusKey(statusKey)
+
+        val wantedDisplay = item.displayTitle.trim()
+        val wantedNorm = wantedDisplay.normHeb()
+
+        val itemsForKey = sharedItemsFor(
+            b = belt,
+            topicTitle = topicTitle,
+            subTopicTitle = subTopicTitle
+        )
+
+        val index = itemsForKey.indexOfFirst { raw ->
+            val rawDisplay = displayName(raw).ifBlank { raw }.trim()
+
+            raw.trim().normHeb() == wantedNorm ||
+                    rawDisplay.normHeb() == wantedNorm
+        }
+
+        if (index >= 0) {
+            return itemsForKey[index] to index
+        }
+
+        // fallback בטוח: אם לא מצאנו ברשימת הנושא/תת־נושא,
+        // משתמשים בשם הגולמי שכבר פתרנו קודם ומיקום 0.
+        return statusRawItemFor(item) to 0
+    }
+
+    fun statusIdForPractice(
+        item: il.kmi.shared.practice.PracticeItem,
+        statusKey: String
+    ): String {
+        val topicTitle = topicTitleFromStatusKey(statusKey)
+        val (rawItem, index) = rawAndIndexForStatusKey(
+            item = item,
+            statusKey = statusKey
+        )
+
+        val cleanOriginal = CanonicalIds
+            .cleanItem(topicTitle, rawItem)
+            .trim()
+
+        val resolved = ExerciseIdentityRegistry.resolve(
             belt = belt,
-            topicTitle = statusTopic,
-            displayItem = rawItem
+            hebrewTitle = cleanOriginal,
+            topicKey = statusKey
+        )
+
+        if (resolved.isKnown) {
+            return resolved.id
+        }
+
+        // חייב להיות זהה ל-MaterialsScreen / SummaryScreen
+        return "${resolved.id}_row_$index"
+    }
+
+    fun legacyStatusIdForPractice(
+        item: il.kmi.shared.practice.PracticeItem,
+        statusKey: String
+    ): String {
+        val (rawItem, index) = rawAndIndexForStatusKey(
+            item = item,
+            statusKey = statusKey
+        )
+
+        val cleanItem = normalizeStatusPart(rawItem)
+
+        return "status_${belt.id}_${statusKey}_${index}_${cleanItem}"
+    }
+
+    fun primaryStatusIdForPractice(
+        item: il.kmi.shared.practice.PracticeItem
+    ): String {
+        return statusIdForPractice(
+            item = item,
+            statusKey = statusTopicFor(item)
         )
     }
 
@@ -520,26 +610,36 @@ fun RandomPracticeScreen(
     ) {
         if (item == null) return
 
-        val statusTopic = statusTopicFor(item)
-        val canonicalId = statusCanonicalFor(item)
         val topicKeys = statusTopicKeysFor(item)
 
-        // ✅ עדכון מיידי במסך התרגול
-        practiceStatusMap[canonicalId] = newStatus
+        val primaryStatusId = primaryStatusIdForPractice(item)
+
+        // ✅ עדכון מיידי במסך התרגול לפי statusId החדש
+        practiceStatusMap[primaryStatusId] = newStatus
 
         // ✅ שמירה לכל מפתחות הסימון האפשריים:
-        // גם לנושא הראשי, גם ל"כללי", וגם לתת־נושא אם קיים.
+        // נושא ראשי / כללי / תת־נושא.
         topicKeys.forEach { key ->
+            val statusId = statusIdForPractice(
+                item = item,
+                statusKey = key
+            )
+
+            val legacyStatusId = legacyStatusIdForPractice(
+                item = item,
+                statusKey = key
+            )
+
+            practiceStatusMap[statusId] = newStatus
+
             vm?.setItemStatusNullable(
                 belt = belt,
                 topic = key,
-                item = canonicalId,
+                item = statusId,
                 value = newStatus
             )
 
-            // ✅ שמירה מקומית תואמת ל-MaterialsScreen
-            // כדי שכאשר חוזרים למסך החומר, הרינדור הראשון כבר יראה וי/איקס
-            // ולא יחכה רק לטעינת ה-VM.
+            // ✅ שמירה מקומית תואמת ל-MaterialsScreen / SummaryScreen
             val masteredKey = "mastered_${belt.id}_${key}"
             val unknownKey = "unknown_${belt.id}_${key}"
 
@@ -548,18 +648,29 @@ fun RandomPracticeScreen(
 
             when (newStatus) {
                 true -> {
-                    masteredSet.add(canonicalId)
-                    unknownSet.remove(canonicalId)
+                    masteredSet.add(statusId)
+                    unknownSet.remove(statusId)
+
+                    // מנקים fallback ישן אם היה
+                    masteredSet.remove(legacyStatusId)
+                    unknownSet.remove(legacyStatusId)
                 }
 
                 false -> {
-                    unknownSet.add(canonicalId)
-                    masteredSet.remove(canonicalId)
+                    unknownSet.add(statusId)
+                    masteredSet.remove(statusId)
+
+                    // מנקים fallback ישן אם היה
+                    masteredSet.remove(legacyStatusId)
+                    unknownSet.remove(legacyStatusId)
                 }
 
                 null -> {
-                    masteredSet.remove(canonicalId)
-                    unknownSet.remove(canonicalId)
+                    masteredSet.remove(statusId)
+                    unknownSet.remove(statusId)
+
+                    masteredSet.remove(legacyStatusId)
+                    unknownSet.remove(legacyStatusId)
                 }
             }
 
@@ -570,8 +681,7 @@ fun RandomPracticeScreen(
         }
 
         // ✅ תאימות למסך "כל הרשימות" / רשימת לא יודע:
-        // false = נכנס ללא יודע
-        // true/null = יוצא מלא יודע
+        // נשאר לפי canonicalKey של PracticeFacade, כי זה מנגנון בחירת תרגילים בלבד.
         when (newStatus) {
             false -> wrongCanonicalKeys.add(item.canonicalKey)
             true, null -> wrongCanonicalKeys.remove(item.canonicalKey)
@@ -614,26 +724,36 @@ fun RandomPracticeScreen(
     var currentIndex by remember { mutableStateOf(0) }
 
     val currentPracticeItem = weightedPracticeItems.getOrNull(currentIndex)
-    val currentStatusCanonical = currentPracticeItem?.let { statusCanonicalFor(it) }
+    val currentStatusId = currentPracticeItem?.let { primaryStatusIdForPractice(it) }
     val currentPracticeStatus: Boolean? =
-        currentStatusCanonical?.let { practiceStatusMap[it] }
+        currentStatusId?.let { practiceStatusMap[it] }
 
     suspend fun readPracticeStatusFromSources(
         safeVm: KmiViewModel?,
-        item: il.kmi.shared.practice.PracticeItem,
-        canonicalId: String
+        item: il.kmi.shared.practice.PracticeItem
     ): Pair<Boolean?, String?> {
         val topicKeys = statusTopicKeysFor(item)
 
-        // ✅ 1. אם יש VM — קוראים קודם מהמקור הראשי
+        // ✅ 1. אם יש VM — קוראים קודם לפי statusId החדש,
+        // ואחריו fallback למפתח status הישן.
         if (safeVm != null) {
             for (key in topicKeys) {
+                val statusId = statusIdForPractice(
+                    item = item,
+                    statusKey = key
+                )
+
+                val legacyStatusId = legacyStatusIdForPractice(
+                    item = item,
+                    statusKey = key
+                )
+
                 val valueFromKey: Boolean? =
                     runCatching {
                         safeVm.getItemStatusNullable(
                             belt = belt,
                             topic = key,
-                            item = canonicalId
+                            item = statusId
                         )
                     }.getOrNull()
                         ?: runCatching {
@@ -641,7 +761,23 @@ fun RandomPracticeScreen(
                                 safeVm.isMastered(
                                     belt = belt,
                                     topic = key,
-                                    item = canonicalId
+                                    item = statusId
+                                )
+                            ) true else null
+                        }.getOrNull()
+                        ?: runCatching {
+                            safeVm.getItemStatusNullable(
+                                belt = belt,
+                                topic = key,
+                                item = legacyStatusId
+                            )
+                        }.getOrNull()
+                        ?: runCatching {
+                            if (
+                                safeVm.isMastered(
+                                    belt = belt,
+                                    topic = key,
+                                    item = legacyStatusId
                                 )
                             ) true else null
                         }.getOrNull()
@@ -654,6 +790,16 @@ fun RandomPracticeScreen(
 
         // ✅ 2. גם אם אין VM — קוראים מהשמירה המקומית ש-MaterialsScreen כותב אליה
         for (key in topicKeys) {
+            val statusId = statusIdForPractice(
+                item = item,
+                statusKey = key
+            )
+
+            val legacyStatusId = legacyStatusIdForPractice(
+                item = item,
+                statusKey = key
+            )
+
             val masteredKey = "mastered_${belt.id}_${key}"
             val unknownKey = "unknown_${belt.id}_${key}"
 
@@ -664,17 +810,17 @@ fun RandomPracticeScreen(
                 sp.getStringSet(unknownKey, emptySet()) ?: emptySet()
 
             val localValue: Boolean? = when {
-                masteredSet.contains(canonicalId) -> true
-                unknownSet.contains(canonicalId) -> false
+                masteredSet.contains(statusId) || masteredSet.contains(legacyStatusId) -> true
+                unknownSet.contains(statusId) || unknownSet.contains(legacyStatusId) -> false
                 else -> null
             }
 
             if (localValue != null) {
-                // ✅ אם יש VM — נרפא גם אותו
+                // ✅ אם יש VM — נרפא גם אותו לפי statusId החדש בלבד
                 safeVm?.setItemStatusNullable(
                     belt = belt,
                     topic = key,
-                    item = canonicalId,
+                    item = statusId,
                     value = localValue
                 )
 
@@ -687,32 +833,30 @@ fun RandomPracticeScreen(
 
     // ✅ טעינה ממוקדת לתרגיל הנוכחי בכל מעבר תרגיל.
     // זה מבטיח שהעיגול העליון יקבל וי/איקס גם אם הסימון נטען אחרי הרינדור הראשון.
-LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
-    val item = currentPracticeItem ?: return@LaunchedEffect
-    val canonicalId = currentStatusCanonical ?: return@LaunchedEffect
+    LaunchedEffect(currentIndex, currentStatusId, marksVersion) {
+        val item = currentPracticeItem ?: return@LaunchedEffect
+        val statusId = currentStatusId ?: return@LaunchedEffect
 
-    val (fromSources, _) = readPracticeStatusFromSources(
-        safeVm = vm,
-        item = item,
-        canonicalId = canonicalId
-    )
+        val (fromSources, _) = readPracticeStatusFromSources(
+            safeVm = vm,
+            item = item
+        )
 
-    practiceStatusMap[canonicalId] = fromSources
-}
+        practiceStatusMap[statusId] = fromSources
+    }
 
     // ✅ טעינת כל הסימונים בתחילת התרגול / אחרי שינוי סימון.
     // חשוב: לא עושים clear למפה, כדי שלא יהיה רגע שבו העיגול חוזר לריק.
     LaunchedEffect(weightedPracticeItems, vm, marksVersion) {
         weightedPracticeItems.forEach { item ->
-            val canonicalId = statusCanonicalFor(item)
+            val statusId = primaryStatusIdForPractice(item)
 
             val (fromSources, _) = readPracticeStatusFromSources(
                 safeVm = vm,
-                item = item,
-                canonicalId = canonicalId
+                item = item
             )
 
-            practiceStatusMap[canonicalId] = fromSources
+            practiceStatusMap[statusId] = fromSources
         }
     }
 
@@ -1103,7 +1247,7 @@ LaunchedEffect(currentIndex, currentStatusCanonical, marksVersion) {
                                     modifier = Modifier.align(Alignment.CenterStart)
                                 )
 
-                                key(currentStatusCanonical, currentPracticeStatus) {
+                                key(currentStatusId, currentPracticeStatus) {
                                     Box(modifier = Modifier.align(Alignment.Center)) {
                                         PracticeStatusCircle(
                                             status = currentPracticeStatus,

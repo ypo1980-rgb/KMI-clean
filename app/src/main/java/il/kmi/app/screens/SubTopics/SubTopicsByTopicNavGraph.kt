@@ -6,6 +6,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.screens.SubTopicsScreen
 import il.kmi.shared.domain.Belt
@@ -79,7 +80,8 @@ private fun buildMaterialsSubRouteByTopic(
 }
 
 fun NavGraphBuilder.subTopicsByTopicNavGraph(
-    nav: NavHostController
+    nav: NavHostController,
+    vm: KmiViewModel
 ) {
     composable(
         route = SubTopicsByTopicRoute.route,
@@ -125,7 +127,8 @@ fun NavGraphBuilder.subTopicsByTopicNavGraph(
                     launchSingleTop = true
                     restoreState = true
                 }
-            }
+            },
+            vm = vm
         )
     }
 }

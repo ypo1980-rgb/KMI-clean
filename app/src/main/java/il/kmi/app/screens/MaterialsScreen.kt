@@ -53,6 +53,7 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.English.ExerciseExplanationsEn
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.subscription.KmiAccess
 
 //=================================================================================
@@ -243,6 +244,28 @@ fun MaterialsScreen(
 
     fun cleanItem(topicTitle: String, item: String): String =
         CanonicalIds.cleanItem(topicTitle, item)
+
+    fun exerciseIdentityIdFor(
+        index: Int,
+        item: String
+    ): String {
+        val cleanOriginal = cleanItem(topicUi, item).trim()
+
+        val resolved = ExerciseIdentityRegistry.resolve(
+            belt = belt,
+            hebrewTitle = cleanOriginal,
+            topicKey = topicKey
+        )
+
+        if (resolved.isKnown) {
+            return resolved.id
+        }
+
+        // עד שנמפה את כל 391 התרגילים ידנית:
+        // fallback עם index מונע סימון כפול בין תרגילים דומים/זהים בשם.
+        return "${resolved.id}_row_$index"
+    }
+
     // ===== סוף canonical =====
 
     val handlePickFromTopBar: (String) -> Unit = { key ->
@@ -320,18 +343,6 @@ fun MaterialsScreen(
         itemsCache[key] = value
     }
 
-    // ✅ אם כמה שורות מקבלות אותו canonicalId, אסור שסימון יודע/לא יודע ישתמש באותו מפתח.
-    // canonicalId נשאר להסברים / מועדפים / הערות.
-    // statusId משמש רק לסימונים.
-    val duplicatedCanonicalIds = remember(itemList, belt.id, topicUi) {
-        itemList
-            .map { item -> canonicalFor(item) }
-            .groupingBy { it }
-            .eachCount()
-            .filterValues { count -> count > 1 }
-            .keys
-    }
-
     fun normalizeStatusPart(s: String): String =
         s.replace("\u200F", "")
             .replace("\u200E", "")
@@ -339,13 +350,19 @@ fun MaterialsScreen(
             .replace(Regex("\\s+"), " ")
             .trim()
 
-    fun statusIdFor(index: Int, item: String): String {
+    fun legacyStatusIdFor(index: Int, item: String): String {
         val cleanItem = normalizeStatusPart(item)
 
-        // ✅ מזהה סימון ייחודי תמיד לפי:
-        // חגורה + נושא/תת־נושא מדויק + מיקום השורה + שם השורה.
-        // לא משתמשים ב-canonicalId לסימונים, כי תרגילים דומים עלולים להידבק דרך נרמול/מפתחות ישנים.
+        // מפתח הסימון הישן לפני המעבר ל-ExerciseIdentityRegistry.
+        // נשאר רק לקריאת fallback כדי לא לאבד סימונים קיימים.
         return "status_${belt.id}_${topicKey}_${index}_${cleanItem}"
+    }
+
+    fun statusIdFor(index: Int, item: String): String {
+        return exerciseIdentityIdFor(
+            index = index,
+            item = item
+        )
     }
 
     // הדגשת תרגיל (✅ בלי Reflection: זה top-level flow)
@@ -469,8 +486,8 @@ fun MaterialsScreen(
         val nextStates = mutableMapOf<String, Boolean?>()
 
         itemList.forEachIndexed { index, item ->
-            val canonicalId = canonicalFor(item)
             val statusId = statusIdFor(index, item)
+            val legacyStatusId = legacyStatusIdFor(index, item)
 
             // ✅ בתת־נושא קוראים רק מהמפתח המדויק.
             // אחרת סימונים ישנים מ־topicUi / כללי עלולים לסמן אוטומטית תרגילים אחרים.
@@ -488,7 +505,6 @@ fun MaterialsScreen(
                 .distinct()
 
             var vFromVm: Boolean? = null
-            var matchedKey: String? = null
 
             for (key in topicKeysToRead) {
                 val valueFromStatusId: Boolean? =
@@ -508,38 +524,37 @@ fun MaterialsScreen(
                                 )
                             ) true else null
                         }.getOrNull()
-
-                val valueFromCanonicalId: Boolean? =
-                    runCatching {
-                        vm.getItemStatusNullable(
-                            belt = belt,
-                            topic = key,
-                            item = canonicalId
-                        )
-                    }.getOrNull()
+                        ?: runCatching {
+                            vm.getItemStatusNullable(
+                                belt = belt,
+                                topic = key,
+                                item = legacyStatusId
+                            )
+                        }.getOrNull()
                         ?: runCatching {
                             if (
                                 vm.isMastered(
                                     belt = belt,
                                     topic = key,
-                                    item = canonicalId
+                                    item = legacyStatusId
                                 )
                             ) true else null
                         }.getOrNull()
 
-                val valueFromKey = valueFromStatusId ?: valueFromCanonicalId
+                // ✅ סימוני וי/איקס נקראים רק לפי statusId.
+                // אסור לקרוא לפי canonicalId, כי הוא עלול להיות משותף לכמה שורות דומות.
+                val valueFromKey = valueFromStatusId
 
                 if (valueFromKey != null) {
                     vFromVm = valueFromKey
-                    matchedKey = key
                     break
                 }
             }
 
             // ✅ fallback לשמירה המקומית הישנה
             val localFallback: Boolean? = when {
-                masteredSet.contains(statusId) || masteredSet.contains(canonicalId) -> true
-                unknowns.contains(statusId) || unknowns.contains(canonicalId) -> false
+                masteredSet.contains(statusId) || masteredSet.contains(legacyStatusId) -> true
+                unknowns.contains(statusId) || unknowns.contains(legacyStatusId) -> false
                 else -> null
             }
 
@@ -566,13 +581,6 @@ fun MaterialsScreen(
                         belt = belt,
                         topic = key,
                         item = statusId,
-                        value = finalValue
-                    )
-
-                    vm.setItemStatusNullable(
-                        belt = belt,
-                        topic = key,
-                        item = canonicalId,
                         value = finalValue
                     )
                 }
@@ -686,14 +694,6 @@ fun MaterialsScreen(
                                 containerColor = Color(0xFFB3261E),
                                 onClick = {
                                     scope.launch {
-                                        vm.clearTopic(belt, topicKey)
-                                        itemList.forEachIndexed { index, item ->
-                                            val statusId = statusIdFor(index, item)
-                                            itemStates[statusId] = null
-                                        }
-
-                                        excludedItems.clear()
-
                                         val keysToClear = if (subTopicFilter.isNullOrBlank()) {
                                             listOf(
                                                 topicKey,
@@ -706,6 +706,23 @@ fun MaterialsScreen(
                                             .map { it.trim() }
                                             .filter { it.isNotBlank() }
                                             .distinct()
+
+                                        // ✅ מנקה את כל המפתחות שבהם MaterialsScreen עשוי היה לשמור סימונים:
+                                        // topicKey / topicUi / כללי.
+                                        // כך סימונים ישנים לא חוזרים אחרי איפוס.
+                                        keysToClear.forEach { key ->
+                                            vm.clearTopic(belt, key)
+                                        }
+
+                                        itemList.forEachIndexed { index, item ->
+                                            val statusId = statusIdFor(index, item)
+                                            val legacyStatusId = legacyStatusIdFor(index, item)
+
+                                            itemStates[statusId] = null
+                                            itemStates[legacyStatusId] = null
+                                        }
+
+                                        excludedItems.clear()
 
                                         val editor = sp.edit()
                                             .remove("excluded_${belt.id}_$excludedKeySuffix")
@@ -985,7 +1002,7 @@ fun MaterialsScreen(
 
                             // ✅ מזהה לסימון יודע/לא יודע בלבד.
                             // אם canonicalId כפול בין כמה שורות, statusId מפריד ביניהן לפי מיקום השורה.
-                            val statusId = remember(index, item, duplicatedCanonicalIds, belt.id, topicKey, topicUi) {
+                            val statusId = remember(index, item, belt.id, topicKey, topicUi) {
                                 statusIdFor(index, item)
                             }
 
@@ -1101,20 +1118,11 @@ fun MaterialsScreen(
                                                         item = statusId,
                                                         value = newVal
                                                     )
-
-                                                    vm.setItemStatusNullable(
-                                                        belt = belt,
-                                                        topic = key,
-                                                        item = canonicalId,
-                                                        value = newVal
-                                                    )
                                                 }
 
                                                 // ✅ שמירה מקומית תואמת לסיכום/מסכים ישנים
                                                 setMasteredLocal(statusId, newVal == true)
-                                                setMasteredLocal(canonicalId, newVal == true)
                                                 setUnknown(statusId, newVal == false)
-                                                setUnknown(canonicalId, newVal == false)
 
                                                 // ✅ בתת־נושא שומרים מקומית רק למפתח המדויק.
                                                 // במסך נושא רגיל נשארת שמירה רחבה לסנכרון עם תרגול.
@@ -1146,26 +1154,17 @@ fun MaterialsScreen(
                                                     when (newVal) {
                                                         true -> {
                                                             masteredSetForPractice.add(statusId)
-                                                            masteredSetForPractice.add(canonicalId)
-
                                                             unknownSetForPractice.remove(statusId)
-                                                            unknownSetForPractice.remove(canonicalId)
                                                         }
 
                                                         false -> {
                                                             unknownSetForPractice.add(statusId)
-                                                            unknownSetForPractice.add(canonicalId)
-
                                                             masteredSetForPractice.remove(statusId)
-                                                            masteredSetForPractice.remove(canonicalId)
                                                         }
 
                                                         null -> {
                                                             masteredSetForPractice.remove(statusId)
-                                                            masteredSetForPractice.remove(canonicalId)
-
                                                             unknownSetForPractice.remove(statusId)
-                                                            unknownSetForPractice.remove(canonicalId)
                                                         }
                                                     }
 

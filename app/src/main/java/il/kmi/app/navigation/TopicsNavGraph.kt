@@ -56,8 +56,22 @@ fun NavGraphBuilder.topicsNavGraph(
             appCtx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
         }
 
+        val subsSp = remember(appCtx) {
+            appCtx.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
+        }
+
+        val legacySp = remember(appCtx) {
+            appCtx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE)
+        }
+
+        fun hasPremiumAccess(): Boolean {
+            return KmiAccess.hasFullAccess(userSp) ||
+                    KmiAccess.hasFullAccess(subsSp) ||
+                    KmiAccess.hasFullAccess(legacySp)
+        }
+
         fun shouldBlockPremiumTopic(raw: String): Boolean {
-            return isLockedPremiumTopic(raw) && !KmiAccess.hasFullAccess(userSp)
+            return isLockedPremiumTopic(raw) && !hasPremiumAccess()
         }
 
         val isCoachFlag = remember(sp, userSp) {
@@ -178,24 +192,13 @@ fun NavGraphBuilder.topicsNavGraph(
             },
 
             onOpenDefenseList = { belt, kind, pick ->
-                val blocked =
-                    shouldBlockPremiumTopic(kind) ||
-                            shouldBlockPremiumTopic(pick) ||
-                            kind.startsWith("def_") ||
-                            kind.startsWith("releases_")
-
-                if (blocked) {
-                    nav.navigate(Route.Subscription.route) {
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                } else {
-                    openChosenSubTopic(
-                        belt = belt,
-                        topic = kind,
-                        subTopic = pick
-                    )
-                }
+                // ✅ המסלול הזה מגיע רק אחרי שהמשתמש עבר את שער הגישה במסך הנושאים.
+                // לא חוסמים כאן שוב, כדי לא להפיל מנוי פעיל בגלל SharedPreferences לא מסונכרנים.
+                openChosenSubTopic(
+                    belt = belt,
+                    topic = kind,
+                    subTopic = pick
+                )
             },
 
             onOpenWeakPoints = { belt ->

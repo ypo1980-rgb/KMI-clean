@@ -767,10 +767,12 @@ fun MainNavHost(
 
             // --- NEW: SubTopics graphs ---
             subTopicsByBeltNavGraph(
-                nav = nav
+                nav = nav,
+                vm = vm
             )
             subTopicsByTopicNavGraph(
-                nav = nav
+                nav = nav,
+                vm = vm
             )
 
             // --- NEW: Materials graph ---

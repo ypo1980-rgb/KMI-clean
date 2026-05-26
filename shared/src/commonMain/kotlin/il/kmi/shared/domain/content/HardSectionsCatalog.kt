@@ -239,6 +239,21 @@ object HardSectionsCatalog {
         }
     }
 
+    private fun hardItemDisplayTitle(
+        raw: String,
+        isEnglish: Boolean
+    ): String {
+        val original = raw.trim()
+        if (original.isBlank()) return original
+
+        if (!isEnglish) return original
+
+        return ExerciseTitlesEn
+            .getOrSame(original)
+            .trim()
+            .ifBlank { original }
+    }
+
     fun subjectItemsFor(subjectId: String, belt: Belt): List<String> {
         val roots = sectionsForSubject(subjectId).orEmpty()
         if (roots.isEmpty()) return emptyList()
@@ -253,6 +268,20 @@ object HardSectionsCatalog {
         }
 
         return seen.toList()
+    }
+
+    fun subjectItemsForDisplay(
+        subjectId: String,
+        belt: Belt,
+        isEnglish: Boolean
+    ): List<Pair<String, String>> {
+        return subjectItemsFor(subjectId, belt)
+            .map { original ->
+                original to hardItemDisplayTitle(
+                    raw = original,
+                    isEnglish = isEnglish
+                )
+            }
     }
 
     fun subjectSubSectionsFor(subjectId: String): List<Section> {
@@ -273,6 +302,24 @@ object HardSectionsCatalog {
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
+    }
+
+    fun subjectSubSectionItemsForDisplay(
+        subjectId: String,
+        subSectionId: String,
+        belt: Belt,
+        isEnglish: Boolean
+    ): List<Pair<String, String>> {
+        return subjectSubSectionItemsFor(
+            subjectId = subjectId,
+            subSectionId = subSectionId,
+            belt = belt
+        ).map { original ->
+            original to hardItemDisplayTitle(
+                raw = original,
+                isEnglish = isEnglish
+            )
+        }
     }
 
     fun findAnySectionById(sectionId: String): Section? {
@@ -1630,6 +1677,24 @@ object HardSectionsCatalog {
         if (kind == "stick_hard") return fromSection(defensesStick.firstOrNull())
 
         return emptyList()
+    }
+
+    fun defenseItemsForDisplay(
+        kindRaw: String,
+        pickRaw: String,
+        isEnglish: Boolean
+    ): List<Pair<Belt, List<Pair<String, String>>>> {
+        return defenseItemsFor(
+            kindRaw = kindRaw,
+            pickRaw = pickRaw
+        ).map { (belt, items) ->
+            belt to items.map { original ->
+                original to hardItemDisplayTitle(
+                    raw = original,
+                    isEnglish = isEnglish
+                )
+            }
+        }
     }
 
     fun defenseScreenTitle(kindRaw: String, pickRaw: String): String {

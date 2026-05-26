@@ -94,8 +94,14 @@ fun NavGraphBuilder.legacyNavGraph(
         onOpenDrawer = {}
     )
     topicsNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
-    subTopicsByBeltNavGraph(nav = nav)
-    subTopicsByTopicNavGraph(nav = nav)
+    subTopicsByBeltNavGraph(
+        nav = nav,
+        vm = vm
+    )
+    subTopicsByTopicNavGraph(
+        nav = nav,
+        vm = vm
+    )
     materialsNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     summaryNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     practiceNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)

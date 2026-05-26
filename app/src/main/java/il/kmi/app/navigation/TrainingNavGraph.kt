@@ -224,10 +224,13 @@ fun NavGraphBuilder.trainingNavGraph(
                 val pickedSubTopic = parts.getOrNull(1)?.trim().orEmpty()
 
                 if (
-                    shouldBlockPremiumTopic(cleanTopic) ||
-                    shouldBlockPremiumTopic(parentTopic) ||
-                    shouldBlockPremiumTopic(pickedSubTopic) ||
-                    isLockedPremiumDefenseRoute(parentTopic, pickedSubTopic)
+                    !hasPremiumAccessNow() &&
+                    (
+                            shouldBlockPremiumTopic(cleanTopic) ||
+                                    shouldBlockPremiumTopic(parentTopic) ||
+                                    shouldBlockPremiumTopic(pickedSubTopic) ||
+                                    isLockedPremiumDefenseRoute(parentTopic, pickedSubTopic)
+                            )
                 ) {
                     nav.navigate(Route.Subscription.route) {
                         launchSingleTop = true
@@ -460,12 +463,32 @@ fun NavGraphBuilder.trainingNavGraph(
             onOpenDefenseList = { belt, kind, pick ->
                 vm.setSelectedBelt(belt)
 
-                if (
-                    shouldBlockPremiumTopic(kind) ||
-                    shouldBlockPremiumTopic(pick) ||
-                    isLockedPremiumDefenseRoute(kind, pick)
-                ) {
+                if (!hasPremiumAccessNow()) {
                     nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                    return@BeltQuestionsByTopicScreen
+                }
+
+                val kindNorm = kind.trim().lowercase()
+                val pickNorm = pick.trim().lowercase()
+
+                val hardSubjectId = when {
+                    kindNorm == "internal" && pickNorm == "punch" -> "def_internal_punch"
+                    kindNorm == "internal" && pickNorm == "kick" -> "def_internal_kick"
+                    kindNorm == "external" && pickNorm == "punch" -> "def_external_punch"
+                    kindNorm == "external" && pickNorm == "kick" -> "def_external_kick"
+                    else -> null
+                }
+
+                if (hardSubjectId != null) {
+                    nav.navigate(
+                        il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
+                            belt = belt,
+                            topic = hardSubjectId
+                        )
+                    ) {
                         launchSingleTop = true
                         restoreState = true
                     }

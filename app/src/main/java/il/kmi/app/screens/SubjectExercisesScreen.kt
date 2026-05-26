@@ -11,8 +11,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.StarBorder
@@ -29,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import il.kmi.app.KmiViewModel
 import il.kmi.app.domain.Explanations
 import il.kmi.app.domain.SubjectTopic as AppSubjectTopic
 import il.kmi.app.domain.TopicsBySubjectRegistry
@@ -43,6 +48,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.shared.domain.content.HardSectionsCatalog
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
+
 private fun toSharedBeltOrNull(rawId: String?): Belt? {
     val s = rawId?.trim().orEmpty()
     if (s.isBlank()) return null
@@ -76,7 +83,8 @@ fun SubjectExercisesScreen(
     onBack: () -> Unit,
     onOpenHome: () -> Unit,
     onExerciseClick: (belt: Belt, topic: String, rawItem: String) -> Unit,
-    screenTitle: String = "" // ✅ NEW
+    screenTitle: String = "", // ✅ NEW
+    vm: KmiViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     // ✅ normalize: לפעמים מגיע subjectId בעברית (תת־נושא) ולא id אמיתי -> לא לקרוס
     val normalizedSubjectId = remember(subjectId, screenTitle) {
@@ -474,6 +482,180 @@ fun SubjectExercisesScreen(
         prefs.edit().putString(KEY_RECENTS, list.joinToString(SEP)).apply()
     }
 
+    val marksVersion by vm.marksVersion.collectAsState()
+    val subjectItemStates = remember(subjectId) { mutableStateMapOf<String, Boolean?>() }
+
+    fun normalizeStatusPart(s: String): String =
+        s.replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    fun subjectStatusIdFor(row: RowData): String {
+        val cleanTitle = normalizeStatusPart(row.rawItem)
+
+        val resolved = ExerciseIdentityRegistry.resolve(
+            belt = row.belt,
+            hebrewTitle = cleanTitle,
+            topicKey = row.topic
+        )
+
+        if (resolved.isKnown) {
+            return resolved.id
+        }
+
+        // fallback בטוח בלבד — אחרי ה-audit אמור כמעט לא לקרות
+        return resolved.id
+    }
+
+    fun subjectLegacyStatusIdFor(index: Int, row: RowData): String {
+        val cleanItem = normalizeStatusPart(row.rawItem)
+        val cleanTopic = normalizeStatusPart(row.topic).ifBlank { "כללי" }
+
+        return "status_${row.belt.id}_${cleanTopic}_${index}_${cleanItem}"
+    }
+
+    fun subjectStatusKeysFor(row: RowData): List<String> {
+        val statusId = subjectStatusIdFor(row)
+
+        val identityKeys = ExerciseIdentityRegistry
+            .allKnown()
+            .firstOrNull { it.id == statusId && it.belt == row.belt }
+            ?.topicKeys
+            .orEmpty()
+
+        return (
+                identityKeys +
+                        row.topic +
+                        "כללי"
+                )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    fun setSubjectLocalStatus(
+        row: RowData,
+        statusId: String,
+        value: Boolean?
+    ) {
+        subjectStatusKeysFor(row).forEach { key ->
+            val masteredKey = "mastered_${row.belt.id}_${key}"
+            val unknownKey = "unknown_${row.belt.id}_${key}"
+
+            val masteredSet =
+                (prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()).toMutableSet()
+
+            val unknownSet =
+                (prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()).toMutableSet()
+
+            when (value) {
+                true -> {
+                    masteredSet.add(statusId)
+                    unknownSet.remove(statusId)
+                }
+
+                false -> {
+                    unknownSet.add(statusId)
+                    masteredSet.remove(statusId)
+                }
+
+                null -> {
+                    masteredSet.remove(statusId)
+                    unknownSet.remove(statusId)
+                }
+            }
+
+            prefs.edit()
+                .putStringSet(masteredKey, masteredSet)
+                .putStringSet(unknownKey, unknownSet)
+                .apply()
+        }
+    }
+
+    LaunchedEffect(rows, marksVersion) {
+        rows.forEachIndexed { index, row ->
+            val statusId = subjectStatusIdFor(row)
+            val legacyStatusId = subjectLegacyStatusIdFor(index, row)
+
+            var valueFromVm: Boolean? = null
+
+            for (key in subjectStatusKeysFor(row)) {
+                val valueFromKey: Boolean? =
+                    runCatching {
+                        vm.getItemStatusNullable(
+                            belt = row.belt,
+                            topic = key,
+                            item = statusId
+                        )
+                    }.getOrNull()
+                        ?: runCatching {
+                            if (
+                                vm.isMastered(
+                                    belt = row.belt,
+                                    topic = key,
+                                    item = statusId
+                                )
+                            ) true else null
+                        }.getOrNull()
+                        ?: runCatching {
+                            vm.getItemStatusNullable(
+                                belt = row.belt,
+                                topic = key,
+                                item = legacyStatusId
+                            )
+                        }.getOrNull()
+                        ?: runCatching {
+                            if (
+                                vm.isMastered(
+                                    belt = row.belt,
+                                    topic = key,
+                                    item = legacyStatusId
+                                )
+                            ) true else null
+                        }.getOrNull()
+
+                if (valueFromKey != null) {
+                    valueFromVm = valueFromKey
+                    break
+                }
+            }
+
+            if (valueFromVm == null) {
+                for (key in subjectStatusKeysFor(row)) {
+                    val masteredKey = "mastered_${row.belt.id}_${key}"
+                    val unknownKey = "unknown_${row.belt.id}_${key}"
+
+                    val masteredSet = prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()
+                    val unknownSet = prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()
+
+                    val localValue: Boolean? = when {
+                        masteredSet.contains(statusId) || masteredSet.contains(legacyStatusId) -> true
+                        unknownSet.contains(statusId) || unknownSet.contains(legacyStatusId) -> false
+                        else -> null
+                    }
+
+                    if (localValue != null) {
+                        valueFromVm = localValue
+
+                        // ריפוי VM לפי statusId החדש
+                        vm.setItemStatusNullable(
+                            belt = row.belt,
+                            topic = key,
+                            item = statusId,
+                            value = localValue
+                        )
+
+                        break
+                    }
+                }
+            }
+
+            subjectItemStates[statusId] = valueFromVm
+        }
+    }
+
     val favIds: Set<String> by FavoritesStore
         .favoritesFlow
         .collectAsState(initial = emptySet())
@@ -590,18 +772,46 @@ fun SubjectExercisesScreen(
                                 items = filteredRows,
                                 key = { index, row -> "recent_${index}_${row.canonicalId}" }
                             ) { _, row ->
+                                val statusId = subjectStatusIdFor(row)
+                                val mastered = subjectItemStates[statusId]
+
                                 ExerciseRowCardModern(
                                     belt = row.belt,
                                     topic = row.topic,
                                     item = row.displayItem,
+                                    mastered = mastered,
                                     isFavorite = row.canonicalId in favIds,
                                     isEnglish = isEnglish,
                                     isDarkMode = isDarkMode,
                                     showMeta = (effectiveAppSubject.id != "releases"),
+                                    onStatusClick = {
+                                        val nextValue = when (subjectItemStates[statusId]) {
+                                            null -> true
+                                            true -> false
+                                            false -> null
+                                        }
+
+                                        subjectItemStates[statusId] = nextValue
+
+                                        subjectStatusKeysFor(row).forEach { key ->
+                                            vm.setItemStatusNullable(
+                                                belt = row.belt,
+                                                topic = key,
+                                                item = statusId,
+                                                value = nextValue
+                                            )
+                                        }
+
+                                        setSubjectLocalStatus(
+                                            row = row,
+                                            statusId = statusId,
+                                            value = nextValue
+                                        )
+                                    },
                                     onToggleFavorite = {
                                         FavoritesStore.toggle(row.canonicalId)
                                     },
-                                    onClick = {
+                                    onInfoClick = {
                                         clickSound()
                                         haptic(true)
 
@@ -631,18 +841,46 @@ fun SubjectExercisesScreen(
                                         isDarkMode = isDarkMode
                                     ) {
                                         beltRows.forEach { row ->
+                                            val statusId = subjectStatusIdFor(row)
+                                            val mastered = subjectItemStates[statusId]
+
                                             ExerciseRowCardModern(
                                                 belt = belt,
                                                 topic = row.topic,
                                                 item = row.displayItem,
+                                                mastered = mastered,
                                                 isFavorite = row.canonicalId in favIds,
                                                 isEnglish = isEnglish,
                                                 isDarkMode = isDarkMode,
                                                 showMeta = (effectiveAppSubject.id != "releases"),
+                                                onStatusClick = {
+                                                    val nextValue = when (subjectItemStates[statusId]) {
+                                                        null -> true
+                                                        true -> false
+                                                        false -> null
+                                                    }
+
+                                                    subjectItemStates[statusId] = nextValue
+
+                                                    subjectStatusKeysFor(row).forEach { key ->
+                                                        vm.setItemStatusNullable(
+                                                            belt = row.belt,
+                                                            topic = key,
+                                                            item = statusId,
+                                                            value = nextValue
+                                                        )
+                                                    }
+
+                                                    setSubjectLocalStatus(
+                                                        row = row,
+                                                        statusId = statusId,
+                                                        value = nextValue
+                                                    )
+                                                },
                                                 onToggleFavorite = {
                                                     FavoritesStore.toggle(row.canonicalId)
                                                 },
-                                                onClick = {
+                                                onInfoClick = {
                                                     clickSound()
                                                     haptic(true)
 
@@ -981,12 +1219,14 @@ private fun ExerciseRowCardModern(
     belt: Belt,
     topic: String,
     item: String,
+    mastered: Boolean?,
     isFavorite: Boolean,
     isEnglish: Boolean,
     isDarkMode: Boolean = false,
     showMeta: Boolean = false,
+    onStatusClick: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onClick: () -> Unit
+    onInfoClick: () -> Unit
 ) {
     val rowBgColor = if (isDarkMode) {
         Color(0xFF1E293B)
@@ -1006,12 +1246,6 @@ private fun ExerciseRowCardModern(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    val starEmptyColor = if (isDarkMode) {
-        Color.White.copy(alpha = 0.72f)
-    } else {
-        Color(0xFF9CA3AF)
-    }
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1023,15 +1257,81 @@ private fun ExerciseRowCardModern(
             if (isDarkMode) belt.color.copy(alpha = 0.55f) else belt.color.copy(alpha = 0.35f)
         )
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                SubjectMasterToggle(
+                    mastered = mastered,
+                    onClick = onStatusClick
+                )
+
+                Spacer(Modifier.width(10.dp))
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onInfoClick() }
+                        .padding(vertical = 2.dp),
+                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                ) {
+                    Text(
+                        text = item,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = rowTextColor,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (showMeta) {
+                        Spacer(Modifier.height(3.dp))
+
+                        val meta = topic.trim()
+                        if (meta.isNotBlank() && meta != "כללי" && meta != "שחרורים") {
+                            Text(
+                                text = meta,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = rowMetaColor,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                IconButton(
+                    onClick = onInfoClick,
+                    modifier = Modifier.size(42.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = if (isEnglish) "Exercise information" else "מידע על התרגיל",
+                        tint = if (isDarkMode) {
+                            Color.White.copy(alpha = 0.78f)
+                        } else {
+                            Color(0xFF607D8B)
+                        }
+                    )
+                }
+
+                Spacer(Modifier.width(6.dp))
+
                 val scale by animateFloatAsState(
-                    targetValue = if (isFavorite) 1.25f else 1f,
+                    targetValue = if (isFavorite) 1.18f else 1f,
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioMediumBouncy,
                         stiffness = Spring.StiffnessMedium
@@ -1040,11 +1340,9 @@ private fun ExerciseRowCardModern(
                 )
 
                 IconButton(
-                    onClick = {
-                        onToggleFavorite()
-                    },
+                    onClick = onToggleFavorite,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(38.dp)
                         .graphicsLayer {
                             scaleX = scale
                             scaleY = scale
@@ -1053,60 +1351,15 @@ private fun ExerciseRowCardModern(
                     Icon(
                         imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                         contentDescription = if (isFavorite) "הסר ממועדפים" else "הוסף למועדפים",
-                        tint = if (isFavorite) Color(0xFFFFC107) else starEmptyColor
+                        tint = if (isFavorite) {
+                            Color(0xFFFFC107)
+                        } else {
+                            if (isDarkMode) Color.White.copy(alpha = 0.62f) else Color(0xFF9CA3AF)
+                        }
                     )
                 }
 
-                Spacer(Modifier.width(8.dp))
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable {
-                            onClick()
-                        }
-                        .padding(vertical = 2.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                    ) {
-                        CompositionLocalProvider(
-                            LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
-                        ) {
-                            Text(
-                                text = item,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = rowTextColor,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            if (showMeta) {
-                                Spacer(Modifier.height(3.dp))
-
-                                val meta = topic.trim()
-                                if (meta.isNotBlank() && meta != "כללי" && meta != "שחרורים") {
-                                    Text(
-                                        text = meta,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = rowMetaColor,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(6.dp))
 
                 Box(
                     modifier = Modifier
@@ -1115,6 +1368,63 @@ private fun ExerciseRowCardModern(
                         .clip(RoundedCornerShape(999.dp))
                         .background(belt.color.copy(alpha = 0.9f))
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubjectMasterToggle(
+    mastered: Boolean?,
+    onClick: () -> Unit
+) {
+    val bg = when (mastered) {
+        true -> Color(0xFF2E7D32)
+        false -> Color(0xFFC62828)
+        null -> Color.White
+    }
+
+    val border = when (mastered) {
+        true -> Color(0xFF1B5E20)
+        false -> Color(0xFF8E1B1B)
+        null -> Color(0xFFCBD5E1)
+    }
+
+    val iconTint = when (mastered) {
+        true, false -> Color.White
+        null -> Color.Transparent
+    }
+
+    Surface(
+        modifier = Modifier
+            .size(42.dp)
+            .clickable(onClick = onClick),
+        shape = CircleShape,
+        color = bg,
+        border = BorderStroke(1.5.dp, border),
+        tonalElevation = 2.dp,
+        shadowElevation = 4.dp
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            when (mastered) {
+                true -> Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = "יודע",
+                    tint = iconTint,
+                    modifier = Modifier.size(28.dp)
+                )
+
+                false -> Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "לא יודע",
+                    tint = iconTint,
+                    modifier = Modifier.size(28.dp)
+                )
+
+                null -> Spacer(Modifier.size(1.dp))
             }
         }
     }

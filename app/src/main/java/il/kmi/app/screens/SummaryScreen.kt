@@ -52,6 +52,7 @@ import androidx.compose.foundation.border
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 
@@ -100,7 +101,7 @@ private fun normalizeStatusPart(s: String): String =
         .replace(Regex("\\s+"), " ")
         .trim()
 
-private fun summaryStatusIdFor(
+private fun summaryLegacyStatusIdFor(
     belt: Belt,
     topicKey: String,
     index: Int,
@@ -108,8 +109,31 @@ private fun summaryStatusIdFor(
 ): String {
     val cleanItem = normalizeStatusPart(item)
 
-    // חייב להיות זהה ל-statusIdFor ב-MaterialsScreen
+    // מפתח ישן — נשאר רק כ-fallback זמני לסימונים ישנים
     return "status_${belt.id}_${topicKey}_${index}_${cleanItem}"
+}
+
+private fun summaryExerciseIdentityIdFor(
+    belt: Belt,
+    topicKey: String,
+    topicTitle: String,
+    index: Int,
+    item: String
+): String {
+    val cleanOriginal = cleanItem(topicTitle, item).trim()
+
+    val resolved = ExerciseIdentityRegistry.resolve(
+        belt = belt,
+        hebrewTitle = cleanOriginal,
+        topicKey = topicKey
+    )
+
+    if (resolved.isKnown) {
+        return resolved.id
+    }
+
+    // חייב להיות זהה ל-fallback שהגדרנו ב-MaterialsScreen
+    return "${resolved.id}_row_$index"
 }
 
 private fun findCanonicalItem(b: Belt, t: String, displayItem: String): String? {
@@ -273,15 +297,22 @@ fun ProgressMeter(
             val topicSnap = vm.getTopicStatusSnapshot(belt, tp)
 
             items.forEachIndexed { index, raw ->
-                val canonicalId = canonicalFromRepo(tp, raw)
-                val statusId = summaryStatusIdFor(
+                val statusId = summaryExerciseIdentityIdFor(
+                    belt = belt,
+                    topicKey = tp.trim(),
+                    topicTitle = tp,
+                    index = index,
+                    item = raw
+                )
+
+                val legacyStatusId = summaryLegacyStatusIdFor(
                     belt = belt,
                     topicKey = tp.trim(),
                     index = index,
                     item = raw
                 )
 
-                if ((topicSnap[statusId] ?: topicSnap[canonicalId]) == true) d++
+                if ((topicSnap[statusId] ?: topicSnap[legacyStatusId]) == true) d++
             }
         }
 
@@ -388,6 +419,20 @@ fun SummaryScreen(
         }
     }
 
+    fun statusTopicKeyFor(topicTitle: String): String {
+        val cleanTopic = topicTitle.trim().ifBlank { "כללי" }
+
+        return if (
+            topic.isNotBlank() &&
+            !subTopicFilter.isNullOrBlank() &&
+            norm(cleanTopic) == norm(topic)
+        ) {
+            "${topic.trim()}__${subTopicFilter.trim()}"
+        } else {
+            cleanTopic
+        }
+    }
+
     fun noteKeyFor(topicTitle: String, itemId: String): String {
         return "note_${belt.id}_${noteSuffixFor(topicTitle)}_${cleanItem(topicTitle, itemId)}"
     }
@@ -461,8 +506,10 @@ fun SummaryScreen(
     }
 
     /**
-     * ✅ masteredMap נשמר לפי (topicTitle, itemKey) כאשר itemKey = canonicalFromRepo(...)
-     * זה מיישר 1:1 למסך התרגילים, וחוסך סריקות כבדות של findCanonicalItem לכל פריט.
+     * ✅ masteredMap נשמר לפי (topicTitle, statusId)
+     * statusId חייב להיות זהה ל-MaterialsScreen:
+     * ExerciseIdentityRegistry / fallback legacy_row_index.
+     * לא משתמשים כאן ב-canonicalId כדי למנוע הדבקת סימונים בין תרגילים דומים.
      */
     var masteredMap by remember(belt, itemsByTopic) {
         mutableStateOf<Map<Pair<String, String>, MarkState>>(emptyMap())
@@ -493,17 +540,24 @@ fun SummaryScreen(
                     items.forEachIndexed { index, itemRaw ->
                         val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
 
-                        // ✅ אותו מפתח בדיוק כמו MaterialsScreen
-                        val statusId = summaryStatusIdFor(
+                        // ✅ אותו מפתח בדיוק כמו MaterialsScreen אחרי המעבר ל-ExerciseIdentityRegistry
+                        val statusId = summaryExerciseIdentityIdFor(
+                            belt = belt,
+                            topicKey = statusTopicKey,
+                            topicTitle = topicTitle,
+                            index = index,
+                            item = itemRaw
+                        )
+
+                        // fallback זמני רק למפתח status הישן — לא ל-canonicalId
+                        val legacyStatusId = summaryLegacyStatusIdFor(
                             belt = belt,
                             topicKey = statusTopicKey,
                             index = index,
                             item = itemRaw
                         )
 
-                        // ✅ קוראים קודם את המפתח החדש.
-                        // fallback ל-canonicalId רק כדי לא לאבד סימונים ישנים שכבר נשמרו בעבר.
-                        val v: Boolean? = topicSnap[statusId] ?: topicSnap[canonicalId]
+                        val v: Boolean? = topicSnap[statusId] ?: topicSnap[legacyStatusId]
 
                         val state = when (v) {
                             true  -> MarkState.YES
@@ -511,7 +565,8 @@ fun SummaryScreen(
                             null  -> MarkState.NONE
                         }
 
-                        map[topicTitle to canonicalId] = state
+                        // ✅ שומרים לפי statusId, לא לפי canonicalId
+                        map[topicTitle to statusId] = state
                     }
                 }
 
@@ -526,13 +581,28 @@ fun SummaryScreen(
     }
 
     // ✅ סטטיסטיקות לפי נושא (מבוסס canonicalFromRepo)
-    val topicStats: Map<String, Pair<Int, Int>> = remember(masteredMap, itemsByTopic) {
+    val topicStats: Map<String, Pair<Int, Int>> = remember(
+        masteredMap,
+        itemsByTopic,
+        topic,
+        subTopicFilter
+    ) {
         itemsByTopic.mapValues { (topicTitle, items) ->
             val total = items.size
-            val done = items.count { itemRaw ->
-                val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
-                masteredMap[topicTitle to canonicalId] == MarkState.YES
+            val statusTopicKey = statusTopicKeyFor(topicTitle)
+
+            val done = items.withIndex().count { indexed ->
+                val statusId = summaryExerciseIdentityIdFor(
+                    belt = belt,
+                    topicKey = statusTopicKey,
+                    topicTitle = topicTitle,
+                    index = indexed.index,
+                    item = indexed.value
+                )
+
+                masteredMap[topicTitle to statusId] == MarkState.YES
             }
+
             done to total
         }
     }
@@ -576,7 +646,15 @@ fun SummaryScreen(
     val sharePdf: (String?) -> Unit = { targetPackage ->
         runCatching {
             val dir = File(ctx.cacheDir, "pdfs").apply { mkdirs() }
-            val pdf = createSummaryPdf(dir, belt, itemsByTopic, masteredMap, isEnglish = isEnglish)
+            val pdf = createSummaryPdf(
+                dir = dir,
+                belt = belt,
+                itemsByTopic = itemsByTopic,
+                masteredMap = masteredMap,
+                isEnglish = isEnglish,
+                topic = topic,
+                subTopicFilter = subTopicFilter
+            )
             val uri = androidx.core.content.FileProvider.getUriForFile(
                 ctx, "${ctx.packageName}.fileprovider", pdf
             )
@@ -1136,9 +1214,18 @@ fun SummaryScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     } else {
-                                        items.forEach { itemRaw ->
+                                        items.forEachIndexed { index, itemRaw ->
                                             val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
-                                            val state = masteredMap[topicTitle to canonicalId] ?: MarkState.NONE
+
+                                            val statusId = summaryExerciseIdentityIdFor(
+                                                belt = belt,
+                                                topicKey = statusTopicKeyFor(topicTitle),
+                                                topicTitle = topicTitle,
+                                                index = index,
+                                                item = itemRaw
+                                            )
+
+                                            val state = masteredMap[topicTitle to statusId] ?: MarkState.NONE
 
                                             val (bg, fg, mark) = when (state) {
                                                 MarkState.YES  -> Triple(Color(0xFF4CAF50), Color.White, "✓")
@@ -1366,7 +1453,9 @@ private fun createSummaryPdf(
     belt: Belt,
     itemsByTopic: Map<String, List<String>>,
     masteredMap: Map<Pair<String, String>, MarkState>,
-    isEnglish: Boolean = false
+    isEnglish: Boolean = false,
+    topic: String = "",
+    subTopicFilter: String? = null
 ): File {
     val document = PdfDocument()
     val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
@@ -1405,12 +1494,27 @@ private fun createSummaryPdf(
         y += 22f
 
         paint.textSize = 13.5f
-        items.forEach { itemRaw ->
-            // ✅ מהיר: itemRaw מגיע מה-Repo -> אין צורך ב-canonicalFor (שסורק)
-            val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
+        items.forEachIndexed { index, itemRaw ->
+            val statusTopicKey = if (
+                topic.isNotBlank() &&
+                !subTopicFilter.isNullOrBlank() &&
+                norm(topicTitle) == norm(topic)
+            ) {
+                "${topic.trim()}__${subTopicFilter.trim()}"
+            } else {
+                topicTitle.trim()
+            }
 
-            // ✅ אותו מפתח בדיוק כמו ב-SummaryScreen
-            val state = masteredMap[topicTitle to canonicalId] ?: MarkState.NONE
+            val statusId = summaryExerciseIdentityIdFor(
+                belt = belt,
+                topicKey = statusTopicKey,
+                topicTitle = topicTitle,
+                index = index,
+                item = itemRaw
+            )
+
+            // ✅ אותו מפתח בדיוק כמו ב-SummaryScreen / MaterialsScreen
+            val state = masteredMap[topicTitle to statusId] ?: MarkState.NONE
 
             val circleX = if (isEnglish) pageWidth - 60f else 60f
             val circleY = y - 7f

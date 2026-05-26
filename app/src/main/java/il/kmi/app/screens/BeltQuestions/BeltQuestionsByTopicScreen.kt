@@ -60,6 +60,10 @@ import il.kmi.app.subscription.AccessMode
 import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.LockedContentPolicy
 import androidx.compose.ui.graphics.luminance
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+
 
 // ✅ FIX: פונקציית נרמול אחת בלבד, ברמת קובץ (נראית לכולם, אין forward-ref ואין אמביגיוטי)
 private fun normText(raw: String): String =
@@ -99,10 +103,52 @@ private fun handsSectionIdFor(raw: String): String? {
 }
 
 private fun subTopicTitleForUi(title: String, isEnglish: Boolean): String {
-    return if (isEnglish) {
-        ExerciseTitlesEn.getOrSame(title.trim())
-    } else {
-        title
+    val clean = title
+        .trim()
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace(Regex("\\s+"), " ")
+
+    if (!isEnglish) return clean
+
+    val translated = ExerciseTitlesEn.getOrSame(clean).trim()
+    if (translated.isNotBlank() && translated != clean) {
+        return translated
+    }
+
+    return when (clean) {
+        "מכות יד" -> "Hand Strikes"
+        "מכות מרפק" -> "Elbow Strikes"
+        "מכות במקל / רובה" -> "Stick / Rifle Strikes"
+
+        "שחרור מתפיסות ידיים / שיער / חולצה" ->
+            "Releases from Hand / Hair / Shirt Grabs"
+
+        "שחרור מחניקות" ->
+            "Choke Releases"
+
+        "שחרור מחביקות" ->
+            "Hug Releases"
+
+        "חביקות גוף" ->
+            "Body Hugs"
+
+        "חביקות צואר" ->
+            "Neck Hugs"
+
+        "חביקות זרוע" ->
+            "Arm Hugs"
+
+        "הגנות עם רובה נגד דקירות סכין" ->
+            "Rifle Defenses Against Knife Stabs"
+
+        "הגנות נגד מספר תוקפים" ->
+            "Multiple Attackers Defense"
+
+        else -> translated.ifBlank { clean }
     }
 }
 
@@ -145,9 +191,21 @@ private fun subjectTitleForUi(
     }
 }
 
-private fun isPremiumRootSubject(subjectId: String): Boolean {
+private fun isDefenseRootSubjectId(subjectId: String): Boolean {
     return when (subjectId.trim().lowercase()) {
-        "releases", "defense_root", "defenses_root" -> true
+        "defense_root",
+        "defenses_root",
+        "defenses",
+        "הגנות" -> true
+
+        else -> false
+    }
+}
+
+private fun isPremiumRootSubject(subjectId: String): Boolean {
+    return when {
+        subjectId.trim().lowercase() == "releases" -> true
+        isDefenseRootSubjectId(subjectId) -> true
         else -> false
     }
 }
@@ -268,6 +326,23 @@ fun BeltQuestionsByTopicScreen(
     }
 
     var accessRefreshTick by remember { mutableIntStateOf(0) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // ✅ מרענן גישה מיד כשחוזרים ממסך רכישה / מנוי
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                accessRefreshTick++
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     // מרענן מצב גישה גם בלי שינוי ב-SharedPreferences.
     LaunchedEffect(Unit) {
@@ -955,6 +1030,15 @@ internal fun TopicsBySubjectCard(
                 cleanTitle == "releases"
     }
 
+    fun isDefenseRootCard(card: SubjectTopicsUiLogic.SubjectCardModel): Boolean {
+        val cleanId = card.id.trim().lowercase()
+        val cleanTitle = normText(stripLockSuffix(card.title))
+
+        return isDefenseRootSubjectId(cleanId) ||
+                cleanTitle == "הגנות" ||
+                cleanTitle == "defenses"
+    }
+
     val visibleSubjectsSplit = remember(subjects, uiSectionCounts) {
         SubjectTopicsUiLogic.splitVisibleSubjects(
             subjects = subjects,
@@ -1078,11 +1162,15 @@ internal fun TopicsBySubjectCard(
     }
 
     val otherSubjectsWithSubTopicsCards = remember(subjectsWithSubTopicsCards) {
-        subjectsWithSubTopicsCards.filterNot { isReleasesRootCard(it) }
+        subjectsWithSubTopicsCards.filterNot {
+            isReleasesRootCard(it) || isDefenseRootCard(it)
+        }
     }
 
     val otherSubjectsWithoutSubTopicsCards = remember(subjectsWithoutSubTopicsCards) {
-        subjectsWithoutSubTopicsCards.filterNot { isReleasesRootCard(it) }
+        subjectsWithoutSubTopicsCards.filterNot {
+            isReleasesRootCard(it) || isDefenseRootCard(it)
+        }
     }
 
     val defenseRootCard = remember(totalDefense, defenseDialogCountsMap, isEnglish, hasAccess) {
@@ -1219,8 +1307,12 @@ internal fun TopicsBySubjectCard(
                             isDarkMode = isDarkMode,
                             onClick = {
                                 when (card.first) {
-                                    "defense_root" -> {
+                                    "defense_root",
+                                    "defenses_root",
+                                    "defenses" -> {
                                         if (!hasAccess) {
+                                            askDefense = false
+                                            askKind = null
                                             onOpenSubscription()
                                         } else {
                                             askDefense = true
@@ -1345,7 +1437,13 @@ internal fun TopicsBySubjectCard(
                     }
                 }
 
-                    if (askDefense) {
+                    if (askDefense && !hasAccess) {
+                        askDefense = false
+                        askKind = null
+                        onOpenSubscription()
+                    }
+
+                    if (askDefense && hasAccess) {
                         DefenseCategoryPickDialogModern(
                             counts = defenseDialogCountsMap,
                             hasAccess = hasAccess,
@@ -1355,8 +1453,7 @@ internal fun TopicsBySubjectCard(
 
                                 when (val decision = SubjectTopicsUiLogic.resolveDefenseDialogPick(picked)) {
                                     is SubjectTopicsUiLogic.DefenseDialogDecision.AskKind -> {
-                                        val canOpen =
-                                            accessMode == AccessMode.OPEN
+                                        val canOpen = hasAccess
 
                                         if (!canOpen) {
                                             onOpenSubscription()
@@ -1367,7 +1464,11 @@ internal fun TopicsBySubjectCard(
 
                                     is SubjectTopicsUiLogic.DefenseDialogDecision.OpenHardSubject -> {
                                         val canOpen =
-                                            LockedContentPolicy.canOpenTopic(accessMode, decision.subjectId)
+                                            hasAccess ||
+                                                    LockedContentPolicy.canOpenTopic(
+                                                        accessMode,
+                                                        decision.subjectId
+                                                    )
 
                                         if (!canOpen) {
                                             onOpenSubscription()
@@ -1395,8 +1496,7 @@ internal fun TopicsBySubjectCard(
 
                                 when (val decision = SubjectTopicsUiLogic.resolveDefenseKindPick(kind, pickedClean)) {
                                     is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenLegacyDefenses -> {
-                                        val canOpen =
-                                            accessMode == AccessMode.OPEN
+                                        val canOpen = hasAccess
 
                                         if (!canOpen) {
                                             onOpenSubscription()
@@ -1411,7 +1511,11 @@ internal fun TopicsBySubjectCard(
 
                                     is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenHardSubject -> {
                                         val canOpen =
-                                            LockedContentPolicy.canOpenTopic(accessMode, decision.subjectId)
+                                            hasAccess ||
+                                                    LockedContentPolicy.canOpenTopic(
+                                                        accessMode,
+                                                        decision.subjectId
+                                                    )
 
                                         if (!canOpen) {
                                             onOpenSubscription()
