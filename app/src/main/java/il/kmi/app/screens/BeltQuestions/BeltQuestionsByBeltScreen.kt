@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import il.kmi.app.domain.SubjectTopic
 import il.kmi.shared.domain.SubjectTopic as SharedSubjectTopic
 import il.kmi.shared.domain.content.SubjectItemsResolver
@@ -261,6 +262,34 @@ internal fun formatCount(n: Int, lang: AppLanguage): String = when {
             n <= 0 -> "0 תרגילים"
             n == 1 -> "תרגיל 1"
             else -> "$n תרגילים"
+        }
+    }
+}
+
+private fun SharedContentRepo.SubTopic.totalExercisesCountDeep(): Int {
+    val directCount = items.size
+    val nestedCount = subTopics.sumOf { it.totalExercisesCountDeep() }
+    return directCount + nestedCount
+}
+
+private fun subTopicStatsLineForUi(
+    subTopic: SharedContentRepo.SubTopic,
+    lang: AppLanguage
+): String {
+    val nestedCount = subTopic.subTopics.size
+    val exercisesCount = subTopic.totalExercisesCountDeep()
+
+    return if (lang == AppLanguage.ENGLISH) {
+        if (nestedCount > 0) {
+            "$nestedCount subtopics  •  $exercisesCount exercises"
+        } else {
+            "$exercisesCount exercises"
+        }
+    } else {
+        if (nestedCount > 0) {
+            "$nestedCount תתי נושאים  •  $exercisesCount תרגילים"
+        } else {
+            "$exercisesCount תרגילים"
         }
     }
 }
@@ -1603,6 +1632,16 @@ private fun TopicsCardForBelt(
                                         subTitles.forEach { sub ->
                                             val displaySub = topicTitleForUi(sub, lang)
 
+                                            val subTopicStatsLine = remember(belt, title, sub, lang) {
+                                                SharedContentRepo.getSubTopicsFor(
+                                                    belt = belt,
+                                                    topicTitle = title
+                                                )
+                                                    .firstOrNull { it.title.trim() == sub.trim() }
+                                                    ?.let { subTopicStatsLineForUi(it, lang) }
+                                                    .orEmpty()
+                                            }
+
                                             Surface(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -1644,14 +1683,36 @@ private fun TopicsCardForBelt(
                                                         Spacer(Modifier.width(8.dp))
                                                     }
 
-                                                    Text(
-                                                        text = displaySub,
+                                                    Column(
                                                         modifier = Modifier.weight(1f),
-                                                        textAlign = titleTextAlignByLang,
-                                                        color = floatingTitleColor,
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        fontWeight = FontWeight.SemiBold
-                                                    )
+                                                        horizontalAlignment = horizontalByLang
+                                                    ) {
+                                                        Text(
+                                                            text = displaySub,
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            textAlign = titleTextAlignByLang,
+                                                            color = floatingTitleColor,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            maxLines = 2,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+
+                                                        if (subTopicStatsLine.isNotBlank()) {
+                                                            Spacer(Modifier.height(2.dp))
+
+                                                            Text(
+                                                                text = subTopicStatsLine,
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                textAlign = titleTextAlignByLang,
+                                                                color = floatingSubColor,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
+                                                    }
 
                                                     if (isEnglish && parentLocked) {
                                                         Spacer(Modifier.width(8.dp))

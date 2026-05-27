@@ -112,9 +112,9 @@ fun SubscriptionPlansScreen(
         ctx.getSharedPreferences("kmi_subs", android.content.Context.MODE_PRIVATE)
     }
 
-    val isAssociationMember = remember {
-        userSp.getBoolean("is_association_member", false)
-    }
+    // כרגע אין ב-Google Play מסלולים נפרדים לחברי עמותה.
+    // לכן מסך התוכניות מציג ומשתמש רק במסלולים הרגילים בתשלום מלא.
+    val isAssociationMember = false
 
     var purchaseStartedFromPlans by rememberSaveable {
         mutableStateOf(false)
@@ -149,11 +149,14 @@ fun SubscriptionPlansScreen(
         return (userUntil > now || subsUntil > now) && (userHasAccess || subsHasAccess)
     }
 
-    val monthlyProductId = remember(isAssociationMember) {
-        SubscriptionResolver.resolveMonthlyProduct(isAssociationMember)
+    // כרגע קיימים ב-Google Play רק שני Product IDs רגילים.
+    // לכן גם אם בעתיד המשתמש יסומן כחבר עמותה, הרכישה כאן משתמשת במוצרים הקיימים בפועל.
+    val monthlyProductId = remember {
+        SubscriptionProducts.REGULAR_MONTHLY
     }
-    val yearlyProductId = remember(isAssociationMember) {
-        SubscriptionResolver.resolveYearlyProduct(isAssociationMember)
+
+    val yearlyProductId = remember {
+        SubscriptionProducts.REGULAR_YEARLY
     }
 
     // Billing – חיבור לשירות
@@ -177,7 +180,20 @@ fun SubscriptionPlansScreen(
     val yearlyPriceText = yearlyStorePrice
         ?: if (isEnglish) "Price will appear soon" else "המחיר יופיע בקרוב"
 
-    val isBillingReady = state.connected && state.productsLoaded && state.error == null
+    val monthlyProductLoaded = state.loadedProductIds.contains(monthlyProductId)
+    val yearlyProductLoaded = state.loadedProductIds.contains(yearlyProductId)
+
+    val monthlyBuyReady =
+        state.connected &&
+                state.error == null &&
+                monthlyProductLoaded &&
+                monthlyStorePrice != null
+
+    val yearlyBuyReady =
+        state.connected &&
+                state.error == null &&
+                yearlyProductLoaded &&
+                yearlyStorePrice != null
 
     DisposableEffect(userSp, subsSp, purchaseStartedFromPlans) {
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -364,8 +380,8 @@ fun SubscriptionPlansScreen(
                     ),
                     containerColor = Color(0xFF0EA5E9),
                     showTrialBadge = false,
-                    buyEnabled = isBillingReady,
-                    buyText = if (isBillingReady) {
+                    buyEnabled = monthlyBuyReady,
+                    buyText = if (monthlyBuyReady) {
                         if (isEnglish) "Secure purchase" else "רכישה מאובטחת"
                     } else {
                         if (isEnglish) "Loading price..." else "טוען מחיר..."
@@ -440,8 +456,8 @@ fun SubscriptionPlansScreen(
                         }
                     ),
                     containerColor = Color(0xFFFFA000),
-                    buyEnabled = isBillingReady,
-                    buyText = if (isBillingReady) {
+                    buyEnabled = yearlyBuyReady,
+                    buyText = if (yearlyBuyReady) {
                         if (isEnglish) "Secure purchase" else "רכישה מאובטחת"
                     } else {
                         if (isEnglish) "Loading price..." else "טוען מחיר..."

@@ -2,6 +2,7 @@ package il.kmi.app.subscription
 
 import android.app.Activity
 import android.content.Context
+import android.util.Log
 import com.android.billingclient.api.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,16 +34,18 @@ class BillingRepository(
 ) : PurchasesUpdatedListener {
 
     private companion object {
+        private const val TAG = "KMI_BILLING"
+
         fun logBilling(message: String) {
-            // Production no-op
+            Log.d(TAG, message)
         }
 
         fun logBillingError(message: String, throwable: Throwable? = null) {
-            // Production no-op
+            Log.e(TAG, message, throwable)
         }
 
         fun logBillingWarning(message: String) {
-            // Production no-op
+            Log.w(TAG, message)
         }
     }
 
@@ -63,11 +66,12 @@ class BillingRepository(
         .build()
 
     // מוצרי המנוי מתוך Play Console
+    // כרגע ב-Google Play מוגדרים רק שני מוצרים:
+    // מנוי חודשי רגיל + מנוי שנתי רגיל.
+    // לכן לא טוענים כאן מוצרי חבר עמותה עד שיוגדרו בפועל ב-Play Console.
     private val productIds = listOf(
         SubscriptionProducts.REGULAR_MONTHLY,
-        SubscriptionProducts.REGULAR_YEARLY,
-      //  SubscriptionProducts.MEMBER_MONTHLY,
-      //  SubscriptionProducts.MEMBER_YEARLY
+        SubscriptionProducts.REGULAR_YEARLY
     )
 
     private val cachedProductDetails = linkedMapOf<String, ProductDetails>()
@@ -165,7 +169,9 @@ class BillingRepository(
             val loadedIds = cachedProductDetails.keys.toList()
 
             logBilling(
-                "queryProductDetails loaded=${loadedIds.size} ids=$loadedIds expected=$productIds"
+                "queryProductDetails loaded=${loadedIds.size} ids=$loadedIds expected=$productIds " +
+                        "billingResponseCode=${res.billingResult.responseCode} " +
+                        "billingMessage='${res.billingResult.debugMessage}'"
             )
 
             _state.update {

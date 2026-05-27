@@ -2,6 +2,12 @@ package il.kmi.app.screens.BeltQuestions
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -1268,7 +1275,7 @@ internal fun TopicsBySubjectCard(
                         .heightIn(max = 420.dp)
                         .verticalScroll(scrollState)
                         .padding(vertical = 4.dp, horizontal = 8.dp)
-                        .padding(bottom = if (showScrollHint) 46.dp else 8.dp),
+                        .padding(bottom = if (showScrollHint) 26.dp else 8.dp),
                     verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
                     Text(
@@ -1676,36 +1683,79 @@ internal fun TopicsBySubjectCard(
                 }
 
                 if (showScrollHint) {
+                    val scrollHintPulse = rememberInfiniteTransition(label = "scrollHintPulse")
+
+                    val arrowOffsetY by scrollHintPulse.animateFloat(
+                        initialValue = -2f,
+                        targetValue = 5f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(
+                                durationMillis = 850,
+                                easing = FastOutSlowInEasing
+                            ),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "scrollHintArrowOffset"
+                    )
+
+                    val arrowAlpha by scrollHintPulse.animateFloat(
+                        initialValue = 0.42f,
+                        targetValue = 0.90f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(
+                                durationMillis = 850,
+                                easing = FastOutSlowInEasing
+                            ),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "scrollHintArrowAlpha"
+                    )
+
                     Surface(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 10.dp)
+                            .padding(bottom = 8.dp)
                             .zIndex(5f),
                         shape = RoundedCornerShape(999.dp),
-                        color = Color(0xCC6A1B9A),
-                        shadowElevation = 8.dp,
-                        tonalElevation = 2.dp,
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
+                        color = if (isDarkMode) {
+                            Color(0xFF334155).copy(alpha = 0.88f)
+                        } else {
+                            Color(0xFFEDE9FE).copy(alpha = 0.96f)
+                        },
+                        shadowElevation = 5.dp,
+                        tonalElevation = 1.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (isDarkMode) {
+                                Color.White.copy(alpha = 0.16f)
+                            } else {
+                                Color(0xFF8B5CF6).copy(alpha = 0.26f)
+                            }
+                        )
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                        Box(
+                            modifier = Modifier
+                                .width(46.dp)
+                                .height(30.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = if (isEnglish) "Scroll down" else "גלול למטה",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-
-                            Spacer(modifier = Modifier.width(4.dp))
-
                             Icon(
                                 imageVector = Icons.Filled.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
+                                contentDescription = if (isEnglish) {
+                                    "More items below"
+                                } else {
+                                    "יש עוד פריטים למטה"
+                                },
+                                tint = if (isDarkMode) {
+                                    Color.White.copy(alpha = arrowAlpha)
+                                } else {
+                                    Color(0xFF6D28D9).copy(alpha = arrowAlpha)
+                                },
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .graphicsLayer {
+                                        translationY = arrowOffsetY
+                                    }
                             )
                         }
                     }

@@ -134,20 +134,37 @@ private fun itemTitleForUi(topic: String, rawItem: String, lang: AppLanguage): S
             .replace(Regex("\\s+"), " ")
             .trim()
 
-    val cleaned = buildString {
-        var s = rawItem.trim()
+    fun removeTopicPrefixOnlyWithSeparator(value: String): String {
+        if (topicTrim.isBlank()) return value
 
-        if (topicTrim.isNotBlank() && s.startsWith("$topicTrim::")) {
-            s = s.removePrefix("$topicTrim::").trim()
+        val s = value.trim()
+
+        return when {
+            s.startsWith("$topicTrim::") -> {
+                s.removePrefix("$topicTrim::").trim()
+            }
+
+            s.startsWith("$topicTrim -") -> {
+                s.removePrefix(topicTrim).trimStart('-', '–', '—', ':').trim()
+            }
+
+            s.startsWith("$topicTrim –") -> {
+                s.removePrefix(topicTrim).trimStart('-', '–', '—', ':').trim()
+            }
+
+            s.startsWith("$topicTrim —") -> {
+                s.removePrefix(topicTrim).trimStart('-', '–', '—', ':').trim()
+            }
+
+            s.startsWith("$topicTrim:") -> {
+                s.removePrefix(topicTrim).trimStart('-', '–', '—', ':').trim()
+            }
+
+            else -> s
         }
-
-        if (topicTrim.isNotBlank() && s.startsWith(topicTrim)) {
-            s = s.removePrefix(topicTrim).trim()
-            s = s.trimStart('-', '–', '—', ':').trim()
-        }
-
-        append(s)
     }
+
+    val cleaned = removeTopicPrefixOnlyWithSeparator(rawItem)
 
     val display = ExerciseTitleFormatter.displayName(cleaned).ifBlank {
         CanonicalIds.uiDisplayName(topicTrim, rawItem).trim()
@@ -236,7 +253,7 @@ fun MaterialsScreen(
             ?.let { decodeMaterialParam(it) }
     }
 
-    fun isGreenDefenseLevelOneTitle(value: String): Boolean {
+    fun isDefenseLevelOneTitle(value: String): Boolean {
         val clean = value
             .replace("\u200F", "")
             .replace("\u200E", "")
@@ -253,13 +270,12 @@ fun MaterialsScreen(
     }
 
     // ✅ תיקון חשוב:
-    // לפעמים המסך נפתח עם topic = "הגנות נגד מכות" ו-subTopicFilter = null.
+    // לפעמים המסך נפתח עם topic = "הגנות נגד בעיטות" ו-subTopicFilter = null.
     // במקרה כזה root הנושא האמיתי הוא "הגנות", וה-topic עצמו הוא רמה 1.
     val materialRootTopic = remember(belt, topicUi, decodedSubTopicFilter) {
         if (
-            belt == Belt.GREEN &&
             decodedSubTopicFilter.isNullOrBlank() &&
-            isGreenDefenseLevelOneTitle(topicUi)
+            isDefenseLevelOneTitle(topicUi)
         ) {
             "הגנות"
         } else {
@@ -271,7 +287,7 @@ fun MaterialsScreen(
         when {
             !decodedSubTopicFilter.isNullOrBlank() -> decodedSubTopicFilter
 
-            belt == Belt.GREEN && isGreenDefenseLevelOneTitle(topicUi) -> topicUi
+            isDefenseLevelOneTitle(topicUi) -> topicUi
 
             else -> null
         }
@@ -1010,100 +1026,8 @@ fun MaterialsScreen(
                 .fillMaxSize(),
             horizontalAlignment = Alignment.End
         ) {
-            val header = when {
-                materialParentSubTopic.isNullOrBlank() -> {
-                    if (isEnglish) {
-                        "Material: ${topicTitleForUi(materialRootTopic, currentLang)}"
-                    } else {
-                        "חומר: $materialRootTopic"
-                    }
-                }
-
-                openedNestedSubTopic.isNullOrBlank() -> {
-                    if (isEnglish) {
-                        "Material: ${topicTitleForUi(materialRootTopic, currentLang)} – ${topicTitleForUi(materialParentSubTopic, currentLang)}"
-                    } else {
-                        "חומר: $materialRootTopic – $materialParentSubTopic"
-                    }
-                }
-
-                else -> {
-                    if (isEnglish) {
-                        "Material: ${topicTitleForUi(materialParentSubTopic, currentLang)} – ${topicTitleForUi(openedNestedSubTopic ?: "", currentLang)}"
-                    } else {
-                        "חומר: $materialParentSubTopic – ${openedNestedSubTopic.orEmpty()}"
-                    }
-                }
-            }
-
-            CompositionLocalProvider(
-                LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
-                ) {
-                    val beltRes: Int = when (belt) {
-                        Belt.WHITE  -> R.drawable.belt_white
-                        Belt.YELLOW -> R.drawable.belt_yellow
-                        Belt.ORANGE -> R.drawable.belt_orange
-                        Belt.GREEN  -> R.drawable.belt_green
-                        Belt.BLUE   -> R.drawable.belt_blue
-                        Belt.BROWN  -> R.drawable.belt_brown
-                        Belt.BLACK  -> R.drawable.belt_black
-                    }
-
-                    Text(
-                        text = header,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = Color(0xFF334155),
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Spacer(Modifier.width(10.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .background(
-                                color = Color.White.copy(alpha = 0.70f),
-                                shape = CircleShape
-                            )
-                            .border(
-                                width = 1.dp,
-                                color = belt.color.copy(alpha = 0.18f),
-                                shape = CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            painter = painterResource(id = beltRes),
-                            contentDescription = if (isEnglish) {
-                                "${belt.en} belt"
-                            } else {
-                                "חגורה ${belt.heb}"
-                            },
-                            modifier = Modifier.size(32.dp),
-                            contentScale = ContentScale.Fit
-                        )
-                    }
-                }
-            }
-
-                Divider(
-                    color = belt.color.copy(alpha = 0.14f),
-                    thickness = 1.dp
-                )
-
-                Box(
-                    modifier = Modifier
+            Box(
+                modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                         .background(belt.lightColor)
