@@ -44,3 +44,5 @@ app/google-services.json
 firebase-debug.log
 *.local
 .env
+
+package-lock.json
