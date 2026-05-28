@@ -39,3 +39,8 @@ app/google-services.json
 
 # --- Build outputs ---
 *.apk
+
+.firebase/
+firebase-debug.log
+*.local
+.env
