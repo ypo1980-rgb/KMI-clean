@@ -76,12 +76,30 @@ private fun adminAgeBucketLabel(bucket: String, isEnglish: Boolean): String {
 private fun Int?.orEmptyCount(): Int = this ?: 0
 
 private fun adminMillisFromFirestore(value: Any?): Long? {
-    return when (value) {
+    val rawMillis = when (value) {
+        is Timestamp -> value.toDate().time
         is Long -> value
         is Int -> value.toLong()
         is Double -> value.toLong()
-        is Timestamp -> value.toDate().time
+        is Float -> value.toLong()
+        is String -> value.toLongOrNull()
         else -> null
+    } ?: return null
+
+    // אם בטעות נשמר timestamp בשניות ולא במילישניות
+    val millis = if (rawMillis in 1_000_000_000L..9_999_999_999L) {
+        rawMillis * 1000L
+    } else {
+        rawMillis
+    }
+
+    // לא מציגים תאריכים שבורים כמו 0 / 1970
+    val minReasonableMillis = 1_577_836_800_000L // 01.01.2020
+    val maxReasonableMillis =
+        System.currentTimeMillis() + 7L * 24L * 60L * 60L * 1000L
+
+    return millis.takeIf {
+        it in minReasonableMillis..maxReasonableMillis
     }
 }
 
@@ -108,7 +126,11 @@ data class AdminUserRecord(
     val role: String? = null,
     val isCoachFlag: Boolean? = null,
 
-    val createdAtMillis: Long?
+    val createdAtMillis: Long?,
+
+    // ✅ נתוני שימוש באפליקציה
+    val appOpenCount: Int = 0,
+    val lastSeenAtMillis: Long? = null
 ) {
 
     data class AssistantQuestionRecord(
@@ -461,7 +483,13 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         role = role,
         isCoachFlag = isCoachFlag,
 
-        createdAtMillis = createdMillis
+        createdAtMillis = createdMillis,
+
+        // ✅ נתוני שימוש באפליקציה
+        appOpenCount = intOrNull("appOpenCount") ?: 0,
+        lastSeenAtMillis = adminMillisFromFirestore(
+            get("lastSeenAtMillis") ?: get("lastSeenAt")
+        )
     )
 }
 
@@ -768,6 +796,10 @@ fun AdminUsersScreen(
 
     val avgAge = users.mapNotNull { it.age }.takeIf { it.isNotEmpty() }?.average()
 
+    // ✅ נתוני שימוש כלליים
+    val totalAppOpens = users.sumOf { it.appOpenCount }
+    val activeUsersWithUsage = users.count { it.appOpenCount > 0 }
+
     val outerScroll = rememberScrollState()
 
     Scaffold(
@@ -831,6 +863,33 @@ fun AdminUsersScreen(
                         } else {
                             avgAge?.let { String.format("%.1f", it) }
                                 ?: "-"
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    StatCard(
+                        title = adminTr(isEnglish, "שימושים", "App opens"),
+                        value = if (loading) "…" else totalAppOpens.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    StatCard(
+                        title = adminTr(isEnglish, "משתמשים פעילים", "Active users"),
+                        value = if (loading) "…" else activeUsersWithUsage.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    StatCard(
+                        title = adminTr(isEnglish, "ממוצע שימוש", "Avg. opens"),
+                        value = if (loading || totalUsers == 0) {
+                            "…"
+                        } else {
+                            String.format(Locale.US, "%.1f", totalAppOpens.toDouble() / totalUsers.toDouble())
                         },
                         modifier = Modifier.weight(1f)
                     )
@@ -1476,6 +1535,83 @@ private fun AdminUserRecord.displayRegionText(isEnglish: Boolean): String {
         ?: adminTr(isEnglish, "לא נבחר אזור", "No region selected")
 }
 
+private fun AdminUserRecord.displayLastSeenText(isEnglish: Boolean): String {
+    val lastSeen = lastSeenAtMillis ?: return adminTr(
+        isEnglish,
+        "לא ידוע",
+        "Unknown"
+    )
+
+    val now = System.currentTimeMillis()
+
+    // הגנה מערכים שבורים כמו 0 / 1970 או תאריך עתידי לא הגיוני
+    if (lastSeen < 1_577_836_800_000L ||
+        lastSeen > now + 7L * 24L * 60L * 60L * 1000L
+    ) {
+        return adminTr(
+            isEnglish,
+            "לא ידוע",
+            "Unknown"
+        )
+    }
+
+    val diffMillis = (now - lastSeen).coerceAtLeast(0L)
+
+    val minutes = diffMillis / (1000L * 60L)
+    val hours = diffMillis / (1000L * 60L * 60L)
+    val days = diffMillis / (1000L * 60L * 60L * 24L)
+
+    return when {
+        minutes < 1L -> adminTr(
+            isEnglish,
+            "עכשיו",
+            "Now"
+        )
+
+        minutes < 60L -> adminTr(
+            isEnglish,
+            "לפני $minutes דקות",
+            "$minutes min ago"
+        )
+
+        hours < 24L -> adminTr(
+            isEnglish,
+            "לפני $hours שעות",
+            "$hours hours ago"
+        )
+
+        days == 1L -> adminTr(
+            isEnglish,
+            "אתמול",
+            "Yesterday"
+        )
+
+        days < 30L -> adminTr(
+            isEnglish,
+            "לפני $days ימים",
+            "$days days ago"
+        )
+
+        days < 365L -> {
+            val months = (days / 30L).coerceAtLeast(1L)
+            adminTr(
+                isEnglish,
+                "לפני $months חודשים",
+                "$months months ago"
+            )
+        }
+
+        else -> {
+            val years = (days / 365L).coerceAtLeast(1L)
+            adminTr(
+                isEnglish,
+                "לפני $years שנים",
+                "$years years ago"
+            )
+        }
+    }
+}
+
 private fun AdminUserRecord.displayAppTenureText(isEnglish: Boolean): String {
     val created = createdAtMillis ?: return adminTr(
         isEnglish,
@@ -1669,6 +1805,7 @@ private fun UserRowCard(
                 )
 
                 val appTenureText = user.displayAppTenureText(isEnglish)
+                val lastSeenText = user.displayLastSeenText(isEnglish)
 
                 Text(
                     text = adminTr(
@@ -1678,6 +1815,19 @@ private fun UserRowCard(
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF7DD3FC),
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+
+                Text(
+                    text = adminTr(
+                        isEnglish,
+                        "שימושים באפליקציה: ${user.appOpenCount} • שימוש אחרון: $lastSeenText",
+                        "App opens: ${user.appOpenCount} • Last use: $lastSeenText"
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF67E8F9),
                     textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
                 )

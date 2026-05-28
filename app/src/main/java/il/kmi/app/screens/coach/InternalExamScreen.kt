@@ -1402,6 +1402,7 @@ fun InternalExamScreen(
                     session = session,
                     isEnglish = isEnglish,
                     isSaving = isSavingFinalResult,
+                    finishMode = true,
                     onSave = {
                         val activeName = traineeName.trim()
 
@@ -1439,7 +1440,12 @@ fun InternalExamScreen(
                             isSavingFinalResult = true
 
                             runCatching {
-                                saveExamDraft(ctx, activeName, belt, marksMap)
+                                saveExamDraftAwait(
+                                    context = ctx,
+                                    traineeName = activeName,
+                                    belt = belt,
+                                    marksMap = marksMap
+                                )
 
                                 val resultId = saveCompletedInternalExamResult(
                                     traineeName = activeName,
@@ -1453,9 +1459,10 @@ fun InternalExamScreen(
                                 )
 
                                 resultId
-                            }.onSuccess { resultId ->
+                            }.onSuccess {
                                 pushRecentTrainee(ctx, activeName, 20)
                                 saveLastTrainee(ctx, activeName)
+
                                 hasUnsavedChanges = false
                                 resumeCheckedKey = "${belt.name}_${internalExamTraineeKey(activeName)}"
 
@@ -1463,18 +1470,20 @@ fun InternalExamScreen(
                                     ctx,
                                     examTr(
                                         isEnglish,
-                                        "המבחן נשמר כתוצאה סופית",
-                                        "The exam was saved as a final result"
+                                        "המבחן הסתיים ונשמר כתוצאה סופית",
+                                        "The exam was finished and saved"
                                     ),
                                     Toast.LENGTH_SHORT
                                 ).show()
+
+                                onBack()
                             }.onFailure { error ->
                                 Toast.makeText(
                                     ctx,
                                     examTr(
                                         isEnglish,
-                                        "שמירת המבחן נכשלה",
-                                        "Saving the exam failed"
+                                        "סיום המבחן נכשל",
+                                        "Finishing the exam failed"
                                     ) + ": ${error.localizedMessage ?: ""}",
                                     Toast.LENGTH_LONG
                                 ).show()
@@ -1890,6 +1899,8 @@ fun InternalExamEntryScreen(
     var isLoadingCompletedPreview by remember { mutableStateOf(false) }
     var completedPreviewSession by remember { mutableStateOf<InternalExamSession?>(null) }
     var expanded by remember { mutableStateOf(false) }
+    var traineeToDelete by remember { mutableStateOf<String?>(null) }
+    var isDeletingTrainee by remember { mutableStateOf(false) }
 
     val traineeFocusRequester = remember { FocusRequester() }
     var allowTraineeKeyboard by rememberSaveable { mutableStateOf(false) }
@@ -1979,6 +1990,105 @@ fun InternalExamEntryScreen(
                 marksMap = marksMap
             )
         }
+    }
+
+    traineeToDelete?.let { nameToDelete ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {
+                if (!isDeletingTrainee) {
+                    traineeToDelete = null
+                }
+            },
+            title = {
+                Text(
+                    text = examTr(
+                        isEnglish,
+                        "מחיקת נבחן",
+                        "Delete trainee"
+                    )
+                )
+            },
+            text = {
+                Text(
+                    text = examTr(
+                        isEnglish,
+                        "האם למחוק את \"$nameToDelete\" ואת כל המבחנים/טיוטות שלו?",
+                        "Delete \"$nameToDelete\" and all of this trainee's exams/drafts?"
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isDeletingTrainee,
+                    onClick = {
+                        scope.launch {
+                            isDeletingTrainee = true
+
+                            runCatching {
+                                deleteTraineeAndExamHistory(nameToDelete)
+                            }.onSuccess {
+                                if (traineeName.trim().equals(nameToDelete.trim(), ignoreCase = true)) {
+                                    traineeName = ""
+                                    marksMap.clear()
+                                    traineeSessionKey++
+                                }
+
+                                recentTrainees = loadRecentTrainees(ctx, 20)
+                                recentCompletedResults = loadRecentCompletedExamResults(limit = 8)
+                                completedPreviewSession = null
+                                expanded = false
+                                allowTraineeKeyboard = false
+                                traineeToDelete = null
+
+                                Toast.makeText(
+                                    ctx,
+                                    examTr(
+                                        isEnglish,
+                                        "הנבחן והמבחנים שלו נמחקו",
+                                        "The trainee and exam history were deleted"
+                                    ),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }.onFailure { error ->
+                                Toast.makeText(
+                                    ctx,
+                                    examTr(
+                                        isEnglish,
+                                        "מחיקת הנבחן נכשלה",
+                                        "Deleting the trainee failed"
+                                    ) + ": ${error.localizedMessage ?: ""}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+
+                            isDeletingTrainee = false
+                        }
+                    }
+                ) {
+                    Text(
+                        text = if (isDeletingTrainee) {
+                            examTr(isEnglish, "מוחק...", "Deleting...")
+                        } else {
+                            examTr(isEnglish, "מחק", "Delete")
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                Button(
+                    enabled = !isDeletingTrainee,
+                    onClick = { traineeToDelete = null }
+                ) {
+                    Text(
+                        text = examTr(
+                            isEnglish,
+                            "ביטול",
+                            "Cancel"
+                        )
+                    )
+                }
+            }
+        )
     }
 
     if (!examStarted) {
@@ -2214,16 +2324,58 @@ fun InternalExamEntryScreen(
                                     recentTrainees.take(20).forEach { name ->
                                         DropdownMenuItem(
                                             text = {
-                                                Text(
-                                                    text = name,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = Color(0xFF111827),
-                                                    fontSize = 17.sp,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
+                                                Row(
                                                     modifier = Modifier.fillMaxWidth(),
-                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                                                )
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                ) {
+                                                    if (!isEnglish) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(30.dp)
+                                                                .clip(CircleShape)
+                                                                .background(Color(0xFFFEE2E2))
+                                                                .clickable {
+                                                                    traineeToDelete = name
+                                                                },
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Text(
+                                                                text = "🗑",
+                                                                fontSize = 16.sp
+                                                            )
+                                                        }
+                                                    }
+
+                                                    Text(
+                                                        text = name,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color(0xFF111827),
+                                                        fontSize = 17.sp,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.weight(1f),
+                                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                                                    )
+
+                                                    if (isEnglish) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(30.dp)
+                                                                .clip(CircleShape)
+                                                                .background(Color(0xFFFEE2E2))
+                                                                .clickable {
+                                                                    traineeToDelete = name
+                                                                },
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Text(
+                                                                text = "🗑",
+                                                                fontSize = 16.sp
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             },
                                             onClick = {
                                                 expanded = false
@@ -2322,19 +2474,32 @@ fun InternalExamEntryScreen(
                                         ).show()
                                     } else {
                                         traineeName = cleanName
-                                        saveExamDraft(ctx, cleanName, currentBelt, marksMap)
-                                        pushRecentTrainee(ctx, cleanName, 20)
-                                        saveLastTrainee(ctx, cleanName)
 
                                         scope.launch {
-                                            recentTrainees = loadRecentTrainees(ctx, 20)
-                                        }
+                                            runCatching {
+                                                saveExamDraftAwait(
+                                                    context = ctx,
+                                                    traineeName = cleanName,
+                                                    belt = currentBelt,
+                                                    marksMap = marksMap
+                                                )
+                                            }.onSuccess {
+                                                recentTrainees = loadRecentTrainees(ctx, 20)
 
-                                        Toast.makeText(
-                                            ctx,
-                                            examTr(isEnglish, "המבחן נשמר", "Exam saved"),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                                Toast.makeText(
+                                                    ctx,
+                                                    examTr(isEnglish, "המבחן נשמר להמשך", "Exam saved for later"),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }.onFailure { error ->
+                                                Toast.makeText(
+                                                    ctx,
+                                                    examTr(isEnglish, "שמירת המבחן נכשלה", "Saving the exam failed") +
+                                                            ": ${error.localizedMessage ?: ""}",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        }
                                     }
                                 },
                                 onExportPdf = {
@@ -3667,6 +3832,7 @@ private fun BottomActionBar(
     session: InternalExamSession,
     isEnglish: Boolean,
     isSaving: Boolean = false,
+    finishMode: Boolean = false,
     onSave: () -> Unit,
     onExportPdf: () -> Unit
 ) {
@@ -3751,6 +3917,8 @@ private fun BottomActionBar(
                         Text(
                             text = if (isSaving) {
                                 "⏳  ${examTr(isEnglish, "שומר...", "Saving...")}"
+                            } else if (finishMode) {
+                                "🏁  ${examTr(isEnglish, "סיום מבחן", "Finish exam")}"
                             } else {
                                 "💾  ${examTr(isEnglish, "שמור", "Save")}"
                             },
@@ -3961,6 +4129,60 @@ private fun saveExamDraft(
         .collection("internalExamDrafts")
         .document(docId)
         .set(data, SetOptions.merge())
+
+    pushRecentTrainee(context, cleanName, 20)
+    saveLastTrainee(context, cleanName)
+}
+
+private suspend fun saveExamDraftAwait(
+    context: Context,
+    traineeName: String,
+    belt: Belt,
+    marksMap: Map<String, Int>
+) {
+    val cleanName = traineeName.trim()
+    if (cleanName.isBlank()) return
+
+    val coachUid = internalExamCoachUid()
+        ?: error("Missing coach uid")
+
+    val session = buildInternalExamSessionForUi(
+        traineeName = cleanName,
+        belt = belt,
+        marksMap = marksMap
+    )
+
+    val safeMarks = marksMap
+        .filterKeys { it.isNotBlank() }
+        .mapValues { (_, score) -> clampScore10(score) }
+
+    val docId = internalExamDraftId(coachUid, cleanName, belt)
+
+    val data = hashMapOf(
+        "examId" to docId,
+        "coachUid" to coachUid,
+        "traineeName" to cleanName,
+        "traineeKey" to internalExamTraineeKey(cleanName),
+        "belt" to belt.name,
+        "beltHeb" to belt.heb,
+        "beltEn" to belt.en,
+        "status" to "draft",
+        "marks" to safeMarks,
+        "totalScore" to session.totalScore,
+        "maxScore" to session.maxScore,
+        "percent" to session.percent,
+        "summaryText" to session.summaryText,
+        "summaryTextHe" to examStatusText(session.percent, false),
+        "summaryTextEn" to examStatusText(session.percent, true),
+        "updatedAtMillis" to System.currentTimeMillis(),
+        "updatedAt" to FieldValue.serverTimestamp()
+    )
+
+    FirebaseFirestore.getInstance()
+        .collection("internalExamDrafts")
+        .document(docId)
+        .set(data, SetOptions.merge())
+        .await()
 
     pushRecentTrainee(context, cleanName, 20)
     saveLastTrainee(context, cleanName)
@@ -4372,4 +4594,46 @@ private fun pushRecentTrainee(context: Context, name: String, limit: Int = 20) {
             ),
             SetOptions.merge()
         )
+}
+
+private suspend fun deleteTraineeAndExamHistory(
+    traineeName: String
+) {
+    val cleanName = traineeName.trim()
+    if (cleanName.isBlank()) return
+
+    val coachUid = internalExamCoachUid() ?: return
+    val traineeKey = internalExamTraineeKey(cleanName)
+    val db = FirebaseFirestore.getInstance()
+
+    val draftsSnap = db.collection("internalExamDrafts")
+        .whereEqualTo("coachUid", coachUid)
+        .whereEqualTo("traineeKey", traineeKey)
+        .get()
+        .await()
+
+    val resultsSnap = db.collection("internalExamResults")
+        .whereEqualTo("coachUid", coachUid)
+        .whereEqualTo("traineeKey", traineeKey)
+        .get()
+        .await()
+
+    val batch = db.batch()
+
+    batch.delete(
+        db.collection("internalExamRecentTrainees")
+            .document(coachUid)
+            .collection("trainees")
+            .document(traineeKey)
+    )
+
+    draftsSnap.documents.forEach { doc ->
+        batch.delete(doc.reference)
+    }
+
+    resultsSnap.documents.forEach { doc ->
+        batch.delete(doc.reference)
+    }
+
+    batch.commit().await()
 }

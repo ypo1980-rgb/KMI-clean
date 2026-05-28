@@ -1042,48 +1042,63 @@ private fun UserProfileCard(
             Spacer(Modifier.height(8.dp))
 
             // שורת הדגשה תחתונה – “מתאמן לחגורה”
-            Row(
+            val trainingTargetText = info.trainingTowardsBelt
+                .removePrefix("מתאמן לחגורה")
+                .removePrefix("Training toward belt")
+                .trim()
+                .ifEmpty { info.trainingTowardsBelt }
+
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = profileTr(
-                        isEnglish,
-                        "מתאמן לחגורה",
-                        "Training toward belt"
-                    ),
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    textAlign = profileTextAlign(isEnglish)
-                )
-                Spacer(Modifier.weight(1f))
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFFBFD7FF).copy(alpha = 0.18f),
-                    border = BorderStroke(
-                        1.dp,
-                        Brush.linearGradient(
-                            listOf(
-                                Color(0xFFBFD7FF).copy(alpha = 0.9f),
-                                Color(0xFF7AB2FF).copy(alpha = 0.6f)
-                            )
+                shape = RoundedCornerShape(22.dp),
+                color = Color.White.copy(alpha = 0.11f),
+                border = BorderStroke(
+                    1.dp,
+                    Brush.linearGradient(
+                        listOf(
+                            Color(0xFFBFD7FF).copy(alpha = 0.70f),
+                            Color(0xFF7AB2FF).copy(alpha = 0.30f),
+                            Color.White.copy(alpha = 0.18f)
                         )
                     )
+                ),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalAlignment = profileHorizontalAlignment(isEnglish)
                 ) {
                     Text(
-                        text = info.trainingTowardsBelt
-                            .removePrefix("מתאמן לחגורה")
-                            .removePrefix("Training toward belt")
-                            .trim()
-                            .ifEmpty { info.trainingTowardsBelt },
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFDAE8FF)
+                        text = profileTr(
+                            isEnglish,
+                            "מתאמן לחגורה",
+                            "Training toward belt"
                         ),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        textAlign = TextAlign.Left
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = Color.White.copy(alpha = 0.76f),
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        textAlign = profileTextAlign(isEnglish),
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = trainingTargetText,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFFEAF2FF)
+                        ),
+                        textAlign = profileTextAlign(isEnglish),
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

@@ -54,6 +54,7 @@ import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.screens.InitialLanguageScreen
 import com.google.firebase.auth.FirebaseAuth
 import il.kmi.app.screens.registration.RegistrationFormScreen
+import il.kmi.app.analytics.KmiUsageTracker
 
 private const val APP_ENTRY_ROUTE = "app_entry"
 private const val GOOGLE_PROFILE_COMPLETION_ROUTE = "google_profile_completion"
@@ -376,6 +377,13 @@ fun MainNavHost(
 
                             nav.openIntroCleanFrom(Route.Splash.route)
                             return@KmiStartupLoadingScreen
+                        }
+
+                        // ✅ רישום שימוש באפליקציה – רק אחרי שיש משתמש מחובר בוודאות
+                        splashScope.launch {
+                            runCatching {
+                                KmiUsageTracker.markAppOpen()
+                            }
                         }
 
                         val uid = firebaseUser.uid
