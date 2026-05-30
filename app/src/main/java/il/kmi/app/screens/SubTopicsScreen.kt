@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,7 +22,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.AppSubTopicRegistry
 import il.kmi.app.domain.ContentRepo
@@ -38,6 +41,7 @@ import androidx.compose.ui.graphics.luminance
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.domain.ExerciseCountProvider
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
 import il.kmi.shared.domain.content.HardSectionsCatalog.totalItemsCount
 import il.kmi.app.KmiViewModel
@@ -1336,19 +1340,32 @@ fun SubTopicsScreen(
 
                         val itemCount by remember(belt, topicDecoded, subTitle) {
                             mutableStateOf(
-                                nestedGreenDefenseGroupFor(
-                                    belt = belt,
-                                    topicTitle = subTitle
-                                )?.leaves?.size
-                                    ?: when {
-                                        belt == Belt.BLACK &&
-                                                topicDecoded.trim() == "הגנות" &&
-                                                subTitle == "הגנות עם רובה נגד דקירות סכין" -> {
+                                when {
+                                    nestedGreenDefenseGroupFor(
+                                        belt = belt,
+                                        topicTitle = subTitle
+                                    ) != null -> {
+                                        nestedGreenDefenseGroupFor(
+                                            belt = belt,
+                                            topicTitle = subTitle
+                                        )
+                                            ?.leaves
+                                            .orEmpty()
+                                            .sumOf { leaf -> leaf.items.size }
+                                    }
+
+                                    belt == Belt.BLACK &&
+                                            topicDecoded.trim() == "הגנות" &&
+                                            subTitle == "הגנות עם רובה נגד דקירות סכין" -> {
                                         HardSectionsCatalog.subjectSubSectionItemsFor(
                                             subjectId = "knife_defense",
                                             subSectionId = "knife_defense_rifle_against_knife_stabs",
                                             belt = belt
-                                        ).size
+                                        )
+                                            .map { ExerciseTitleFormatter.displayName(it).ifBlank { it }.trim() }
+                                            .filter { it.isNotBlank() }
+                                            .distinct()
+                                            .size
                                     }
 
                                     belt == Belt.BLACK &&
@@ -1357,21 +1374,21 @@ fun SubTopicsScreen(
                                         HardSectionsCatalog.subjectItemsFor(
                                             subjectId = "multiple_attackers_defense",
                                             belt = belt
-                                        ).size
+                                        )
+                                            .map { ExerciseTitleFormatter.displayName(it).ifBlank { it }.trim() }
+                                            .filter { it.isNotBlank() }
+                                            .distinct()
+                                            .size
                                     }
 
-                                        else -> {
-                                            AppSubTopicRegistry
-                                                .getItemsFor(belt, topicDecoded, subTitle)
-                                                .takeIf { it.isNotEmpty() }
-                                                ?.size
-                                                ?: ContentRepo.listItemTitles(
-                                                    belt = belt,
-                                                    topicTitle = topicDecoded,
-                                                    subTopicTitle = subTitle
-                                                ).size
-                                        }
+                                    else -> {
+                                        ExerciseCountProvider.subTopicStats(
+                                            belt = belt,
+                                            topicTitle = topicDecoded,
+                                            subTopicTitle = subTitle
+                                        ).exerciseCount
                                     }
+                                }
                             )
                         }
 
@@ -1779,6 +1796,75 @@ private fun HardSubTopicCategoryCard(
 }
 
 @Composable
+private fun HardGroupStatChip(
+    value: String,
+    label: String,
+    containerColor: Color,
+    contentColor: Color = Color.White
+) {
+    Surface(
+        modifier = Modifier.widthIn(min = 64.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        shadowElevation = 1.dp,
+        border = BorderStroke(
+            1.dp,
+            contentColor.copy(alpha = 0.14f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                color = contentColor,
+                fontSize = 14.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+
+            Text(
+                text = label,
+                color = contentColor.copy(alpha = 0.92f),
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun HardLegacyMetaBadge(
+    text: String,
+    containerColor: Color,
+    contentColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor,
+        border = BorderStroke(
+            1.dp,
+            contentColor.copy(alpha = 0.14f)
+        ),
+        shadowElevation = 0.dp
+    ) {
+        Text(
+            text = text,
+            color = contentColor,
+            fontSize = 9.sp,
+            lineHeight = 10.5.sp,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
 private fun HardBeltGroupCard(
     belt: Belt,
     items: List<String>,
@@ -1896,22 +1982,30 @@ private fun HardBeltGroupCard(
 
     fun statusIdFor(rawItem: String): String {
         val cleanItem = normalizeStatusPart(rawItem)
+        val cleanTopic = normalizeStatusPart(topicKey)
 
         val resolved = ExerciseIdentityRegistry.resolve(
             belt = belt,
             hebrewTitle = cleanItem,
-            topicKey = normalizeStatusPart(topicKey)
+            topicKey = cleanTopic
         )
 
-        return resolved.id
+        val itemStablePart = cleanItem
+            .lowercase()
+            .replace(Regex("[^\\p{L}\\p{N}]+"), "_")
+            .trim('_')
+            .ifBlank { "item" }
+
+        return "${resolved.id}__$itemStablePart"
     }
 
     fun statusKeysFor(rawItem: String): List<String> {
         val statusId = statusIdFor(rawItem)
+        val baseStatusId = statusId.substringBefore("__")
 
         val identityKeys = ExerciseIdentityRegistry
             .allKnown()
-            .firstOrNull { it.id == statusId && it.belt == belt }
+            .firstOrNull { it.id == baseStatusId && it.belt == belt }
             ?.topicKeys
             .orEmpty()
 
@@ -2094,6 +2188,31 @@ private fun HardBeltGroupCard(
         }
     }
 
+    val knownCount = displayItems.count { pair ->
+        val statusId = statusIdFor(pair.first)
+        itemStates[statusId] == true
+    }
+
+    val unknownCount = displayItems.count { pair ->
+        val statusId = statusIdFor(pair.first)
+        itemStates[statusId] == false
+    }
+
+    val unmarkedCount = displayItems.count { pair ->
+        val statusId = statusIdFor(pair.first)
+        itemStates[statusId] == null
+    }
+
+    val favoriteCount = displayItems.count { pair ->
+        val statusId = statusIdFor(pair.first)
+        favorites.contains(statusId)
+    }
+
+    val excludedCount = displayItems.count { pair ->
+        val statusId = statusIdFor(pair.first)
+        excludedItems.contains(statusId)
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -2136,7 +2255,10 @@ private fun HardBeltGroupCard(
                 ) {
                     Text(
                         text = countText,
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 15.sp,
+                            lineHeight = 17.sp
+                        ),
                         color = belt.color,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Start,
@@ -2145,13 +2267,71 @@ private fun HardBeltGroupCard(
 
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 18.sp,
+                            lineHeight = 21.sp
+                        ),
                         color = belt.color,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.End,
                         modifier = Modifier.weight(1f)
                     )
                 }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = if (isEnglish) {
+                    "← Swipe sideways to see more stats →"
+                } else {
+                    "→→ הזז לצד כדי לראות עוד נתונים →→"
+                },
+                color = Color(0xFF5B6472),
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HardGroupStatChip(
+                    value = knownCount.toString(),
+                    label = if (isEnglish) "Known" else "יודע",
+                    containerColor = Color(0xFF7ACB88)
+                )
+
+                HardGroupStatChip(
+                    value = unknownCount.toString(),
+                    label = if (isEnglish) "Unknown" else "לא יודע",
+                    containerColor = Color(0xFFF1A97A)
+                )
+
+                HardGroupStatChip(
+                    value = favoriteCount.toString(),
+                    label = if (isEnglish) "Favorites" else "מועדפים",
+                    containerColor = Color(0xFFE7A3B5)
+                )
+
+                HardGroupStatChip(
+                    value = excludedCount.toString(),
+                    label = if (isEnglish) "Excluded" else "מוחרגים",
+                    containerColor = Color(0xFFE5A3A3)
+                )
+
+                HardGroupStatChip(
+                    value = unmarkedCount.toString(),
+                    label = if (isEnglish) "Unmarked" else "לא סומן",
+                    containerColor = Color(0xFF8596C9)
+                )
             }
 
             Spacer(Modifier.height(10.dp))
@@ -2168,6 +2348,7 @@ private fun HardBeltGroupCard(
                 }
 
                 HardExerciseLegacyRow(
+                    exerciseNumber = index + 1,
                     belt = belt,
                     itemName = originalName,
                     displayName = displayName,
@@ -2222,6 +2403,7 @@ private fun HardBeltGroupCard(
 
 @Composable
 private fun HardExerciseLegacyRow(
+    exerciseNumber: Int,
     belt: Belt,
     itemName: String,
     displayName: String = itemName,
@@ -2272,11 +2454,12 @@ private fun HardExerciseLegacyRow(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 50.dp)
                     .padding(
-                        start = 10.dp,
-                        top = 10.dp,
+                        start = 8.dp,
+                        top = 5.dp,
                         end = 0.dp,
-                        bottom = 10.dp
+                        bottom = 5.dp
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -2292,40 +2475,74 @@ private fun HardExerciseLegacyRow(
                         onEditNote = onEditNote
                     )
 
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
 
-                    Box(
+                    Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { onInfoClick() },
-                        contentAlignment = Alignment.CenterStart
+                            .clickable { onInfoClick() }
+                            .padding(start = 2.dp, end = 4.dp),
+                        horizontalAlignment = Alignment.Start
                     ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HardLegacyMetaBadge(
+                                text = "No. $exerciseNumber",
+                                containerColor = belt.color.copy(alpha = 0.14f),
+                                contentColor = Color(0xFF1F2937)
+                            )
+
+                            if (isFav) {
+                                Spacer(Modifier.width(5.dp))
+                                HardLegacyMetaBadge(
+                                    text = "Favorite",
+                                    containerColor = Color(0xFFF9D9B8),
+                                    contentColor = Color(0xFF9A5A00)
+                                )
+                            }
+
+                            if (excluded) {
+                                Spacer(Modifier.width(5.dp))
+                                HardLegacyMetaBadge(
+                                    text = "Excluded",
+                                    containerColor = Color(0xFFE5E7EB),
+                                    contentColor = Color(0xFF6B7280)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(2.dp))
+
                         Text(
                             text = displayName.trim(),
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                lineHeight = 13.sp
+                            ),
                             fontWeight = FontWeight.ExtraBold,
                             color = rowTextColor,
                             textAlign = TextAlign.Left,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 4.dp, end = 6.dp),
-                            maxLines = 4
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
 
                     HardMasterToggle(
                         mastered = mastered,
                         onClick = onStatusClick
                     )
 
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
 
                     Box(
                         modifier = Modifier
-                            .width(4.dp)
-                            .height(36.dp)
+                            .width(3.dp)
+                            .height(34.dp)
                             .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
                             .background(belt.color)
                     )
@@ -2335,26 +2552,60 @@ private fun HardExerciseLegacyRow(
                         onClick = onStatusClick
                     )
 
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
 
-                    Box(
+                    Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { onInfoClick() },
-                        contentAlignment = Alignment.CenterEnd
+                            .clickable { onInfoClick() }
+                            .padding(start = 2.dp, end = 2.dp),
+                        horizontalAlignment = Alignment.End
                     ) {
-                        val fixedDisplayName = "\u200F${displayName.trim()}\u200F"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Spacer(Modifier.weight(1f))
+
+                            if (excluded) {
+                                HardLegacyMetaBadge(
+                                    text = "מוחרג",
+                                    containerColor = Color(0xFFE5E7EB),
+                                    contentColor = Color(0xFF6B7280)
+                                )
+                                Spacer(Modifier.width(5.dp))
+                            }
+
+                            if (isFav) {
+                                HardLegacyMetaBadge(
+                                    text = "מועדף",
+                                    containerColor = Color(0xFFF9D9B8),
+                                    contentColor = Color(0xFF9A5A00)
+                                )
+                                Spacer(Modifier.width(5.dp))
+                            }
+
+                            HardLegacyMetaBadge(
+                                text = "מס׳ $exerciseNumber",
+                                containerColor = belt.color.copy(alpha = 0.14f),
+                                contentColor = Color(0xFF1F2937)
+                            )
+                        }
+
+                        Spacer(Modifier.height(2.dp))
 
                         Text(
-                            text = fixedDisplayName,
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "\u200F${displayName.trim()}\u200F",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 11.sp,
+                                lineHeight = 13.sp
+                            ),
                             fontWeight = FontWeight.ExtraBold,
                             color = rowTextColor,
                             textAlign = TextAlign.Right,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 2.dp, end = 2.dp),
-                            maxLines = 4
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -2375,8 +2626,8 @@ private fun HardExerciseLegacyRow(
 
                     Box(
                         modifier = Modifier
-                            .width(4.dp)
-                            .height(36.dp)
+                            .width(3.dp)
+                            .height(34.dp)
                             .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
                             .background(belt.color)
                     )
@@ -2591,7 +2842,7 @@ private fun HardMasterToggle(
 
     Surface(
         modifier = Modifier
-            .size(42.dp)
+            .size(34.dp)
             .clickable(onClick = onClick),
         shape = CircleShape,
         color = bg,
@@ -2608,14 +2859,14 @@ private fun HardMasterToggle(
                     imageVector = Icons.Filled.Check,
                     contentDescription = "יודע",
                     tint = Color.White,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(21.dp)
                 )
 
                 false -> Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "לא יודע",
                     tint = Color.White,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(21.dp)
                 )
 
                 null -> Spacer(Modifier.size(1.dp))

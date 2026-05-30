@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.StyledExplanationText
 
 @Composable
@@ -61,24 +62,27 @@ fun ExerciseExplanationDialog(
 
     AlertDialog(
         modifier = Modifier
+            .shadow(
+                elevation = 22.dp,
+                shape = RoundedCornerShape(34.dp),
+                clip = false
+            )
             .background(
                 brush = backgroundBrush,
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(34.dp)
             )
             .border(
                 width = 1.dp,
-                color = accentColor.copy(alpha = 0.18f),
-                shape = RoundedCornerShape(24.dp)
+                color = accentColor.copy(alpha = 0.20f),
+                shape = RoundedCornerShape(34.dp)
             ),
         onDismissRequest = { },
         properties = androidx.compose.ui.window.DialogProperties(
             dismissOnClickOutside = false,
             dismissOnBackPress = true
         ),
-        // חשוב: השקיפות נמצאת רק ב־overlay של המסך, לא בכרטיס עצמו.
-        // הרקע של הכרטיס מגיע מ־backgroundBrush האטום.
         containerColor = Color.Transparent,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(34.dp),
         tonalElevation = 0.dp,
         title = {
             Column(
@@ -88,30 +92,34 @@ fun ExerciseExplanationDialog(
                         brush = Brush.verticalGradient(
                             colors = listOf(
                                 Color.White.copy(alpha = 0.99f),
-                                accentColor.copy(alpha = 0.08f),
-                                Color.White.copy(alpha = 0.97f)
+                                accentColor.copy(alpha = 0.07f),
+                                Color.White.copy(alpha = 0.98f)
                             )
                         ),
-                        shape = RoundedCornerShape(18.dp)
+                        shape = RoundedCornerShape(24.dp)
                     )
                     .border(
                         1.dp,
-                        accentColor.copy(alpha = 0.12f),
-                        RoundedCornerShape(18.dp)
+                        accentColor.copy(alpha = 0.13f),
+                        RoundedCornerShape(24.dp)
                     )
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 18.sp,
+                        lineHeight = 22.sp
+                    ),
+                    fontWeight = FontWeight.Black,
                     textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                     modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFF1F2937)
+                    color = Color(0xFF1F2937),
+                    maxLines = 2
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -120,16 +128,20 @@ fun ExerciseExplanationDialog(
                 ) {
                     Text(
                         text = beltLabel,
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 13.sp,
+                            lineHeight = 15.sp
+                        ),
                         textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                         modifier = Modifier
                             .weight(1f)
                             .padding(
-                                start = if (isEnglish) 10.dp else 0.dp,
-                                end = if (isEnglish) 0.dp else 10.dp
+                                start = if (isEnglish) 8.dp else 0.dp,
+                                end = if (isEnglish) 0.dp else 8.dp
                             ),
                         color = if (isEnglish) Color(0xFFB08900) else accentColor,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1
                     )
 
                     Row(
@@ -138,18 +150,18 @@ fun ExerciseExplanationDialog(
                     ) {
                         Surface(
                             onClick = onEditNote,
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
                             color = if (noteText.isNotBlank()) {
                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                             } else {
-                                Color.White.copy(alpha = 0.72f)
+                                Color.White.copy(alpha = 0.78f)
                             },
                             border = BorderStroke(
                                 1.dp,
-                                accentColor.copy(alpha = 0.12f)
+                                accentColor.copy(alpha = 0.13f)
                             ),
                             shadowElevation = 2.dp,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
@@ -160,7 +172,7 @@ fun ExerciseExplanationDialog(
                                     } else {
                                         MaterialTheme.colorScheme.onSurfaceVariant
                                     },
-                                    modifier = Modifier.size(21.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -170,22 +182,22 @@ fun ExerciseExplanationDialog(
                                 localIsFavorite = !localIsFavorite
                                 onToggleFavorite()
                             },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
                             color = if (localIsFavorite) {
                                 Color(0xFFFFF8E1)
                             } else {
-                                Color.White.copy(alpha = 0.72f)
+                                Color.White.copy(alpha = 0.78f)
                             },
                             border = BorderStroke(
                                 1.dp,
                                 if (localIsFavorite) {
                                     Color(0xFFFFC107).copy(alpha = 0.55f)
                                 } else {
-                                    accentColor.copy(alpha = 0.12f)
+                                    accentColor.copy(alpha = 0.13f)
                                 }
                             ),
                             shadowElevation = 2.dp,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
@@ -204,7 +216,7 @@ fun ExerciseExplanationDialog(
                                     } else {
                                         MaterialTheme.colorScheme.onSurfaceVariant
                                     },
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(19.dp)
                                 )
                             }
                         }
@@ -214,29 +226,32 @@ fun ExerciseExplanationDialog(
         },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.98f),
-                                accentColor.copy(alpha = 0.04f),
-                                Color.White.copy(alpha = 0.96f)
+                                Color.White.copy(alpha = 0.99f),
+                                accentColor.copy(alpha = 0.035f),
+                                Color.White.copy(alpha = 0.97f)
                             )
                         ),
-                        shape = RoundedCornerShape(18.dp)
+                        shape = RoundedCornerShape(24.dp)
                     )
                     .border(
                         1.dp,
-                        accentColor.copy(alpha = 0.10f),
-                        RoundedCornerShape(18.dp)
+                        accentColor.copy(alpha = 0.11f),
+                        RoundedCornerShape(24.dp)
                     )
-                    .padding(14.dp)
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
             ) {
                 StyledExplanationText(
                     raw = explanation,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 15.sp,
+                        lineHeight = 21.sp
+                    ),
                     textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                     modifier = Modifier.fillMaxWidth(),
                     color = Color(0xFF1B1B1B)
@@ -367,7 +382,10 @@ fun ExerciseExplanationDialog(
 
                     Text(
                         text = noteText,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 14.sp,
+                            lineHeight = 19.sp
+                        ),
                         textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                         modifier = Modifier.fillMaxWidth(),
                         color = Color(0xFF1B1B1B)
@@ -376,11 +394,34 @@ fun ExerciseExplanationDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = if (isEnglish) "Close" else "סגור",
-                    fontWeight = FontWeight.Bold
-                )
+            Surface(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(18.dp),
+                color = accentColor.copy(alpha = 0.12f),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = accentColor.copy(alpha = 0.18f)
+                ),
+                modifier = Modifier
+                    .height(38.dp)
+                    .widthIn(min = 96.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 18.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isEnglish) "Close" else "סגור",
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF6D5BA6),
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 14.sp,
+                            lineHeight = 16.sp
+                        )
+                    )
+                }
             }
         }
     )

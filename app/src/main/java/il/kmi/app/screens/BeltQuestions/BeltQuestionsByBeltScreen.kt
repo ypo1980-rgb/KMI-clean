@@ -90,6 +90,8 @@ import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.LockedContentPolicy
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.domain.ExerciseCountProvider
+
 
 /* ------------------------------ Helpers מקומיים למסך ------------------------------ */
 
@@ -103,7 +105,9 @@ internal fun topicDetailsFor(belt: Belt, topicTitle: String): TopicDetails {
         .distinct()
 
     return TopicDetails(
-        itemCount = details.itemCount,
+        // מספרי תרגילים כבר מגיעים רק מ-ExerciseCountProvider.
+        // השדה הזה נשאר 0 כדי למנוע שימוש בטעות בספירה הישנה.
+        itemCount = 0,
         subTitles = cleanSubs
     )
 }
@@ -1277,6 +1281,15 @@ private fun TopicsCardForBelt(
         rawTopicTitles.associateWith { title -> topicDetailsFor(belt, title) }
     }
 
+    val countStatsByTitle = remember(belt, rawTopicTitles) {
+        rawTopicTitles.associateWith { title ->
+            ExerciseCountProvider.topicStats(
+                belt = belt,
+                topicTitle = title
+            )
+        }
+    }
+
     // ✅ נושאים שיש להם תתי־נושאים תמיד מופיעים למעלה.
     // ✅ בחגורה צהובה נותנים סדר מיוחד:
     // עבודת ידיים -> הגנות -> שחרורים.
@@ -1301,25 +1314,22 @@ private fun TopicsCardForBelt(
         fun priorityRank(title: String): Int {
             val clean = title.trim()
 
-            if (belt == Belt.YELLOW) {
-                return when {
-                    // ✅ בצהובה שני הנושאים האלה צריכים להיות ראשונים
-                    clean.contains("הגנות") -> 0
-                    clean.contains("שחרורים") -> 1
-
-                    // ✅ עבודת ידיים נשאר עם תתי נושאים,
-                    // אבל יורד אחרי הגנות ושחרורים
-                    clean.contains("עבודת ידיים") -> 2
-
-                    hasRealSubTopics(title) -> 3
-                    else -> 10
-                }
-            }
-
             return when {
-                hasRealSubTopics(title) -> 0
-                clean.contains("הגנות") -> 1
-                clean.contains("שחרורים") -> 2
+                // ✅ בכל החגורות:
+                // הגנות תמיד ראשון
+                clean.contains("הגנות") -> 0
+
+                // ✅ שחרורים תמיד שני
+                clean.contains("שחרורים") -> 1
+
+                // ✅ בצהובה עבודת ידיים מיד אחרי הגנות ושחרורים
+                belt == Belt.YELLOW &&
+                        clean.contains("עבודת ידיים") -> 2
+
+                // ✅ שאר הנושאים עם תתי־נושאים
+                hasRealSubTopics(title) -> 3
+
+                // ✅ שאר הנושאים הרגילים
                 else -> 10
             }
         }
@@ -1413,19 +1423,25 @@ private fun TopicsCardForBelt(
                             .distinct()
                             .toList()
 
-                        val itemCount = details.itemCount
+                        val stats = countStatsByTitle[title]
+                            ?: ExerciseCountProvider.topicStats(
+                                belt = belt,
+                                topicTitle = title
+                            )
+
+                        val itemCount = stats.exerciseCount
                         val subCount = subTitles.size
-                        val hasSubs = subTitles.isNotEmpty()
+                        val hasSubs = subCount > 0
 
                         val countsLine = if (isEnglish) {
                             if (subCount > 0) {
-                                "$subCount subtopics  •  $itemCount exercises"
+                                "$subCount sub-topics\n$itemCount exercises"
                             } else {
                                 "$itemCount exercises"
                             }
                         } else {
                             if (subCount > 0) {
-                                "$subCount תתי נושאים  •  $itemCount תרגילים"
+                                "$subCount תתי נושאים\n$itemCount תרגילים"
                             } else {
                                 "$itemCount תרגילים"
                             }
@@ -1549,19 +1565,17 @@ private fun TopicsCardForBelt(
                                                 modifier = Modifier.fillMaxWidth()
                                             )
 
-                                            if (topicImageRes != null && !hasSubs) {
-                                                Spacer(Modifier.height(1.dp))
+                                            Spacer(Modifier.height(2.dp))
 
-                                                Text(
-                                                    text = countsLine,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = floatingSubColor,
-                                                    textAlign = titleTextAlignByLang,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-                                            }
+                                            Text(
+                                                text = countsLine,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = floatingSubColor,
+                                                textAlign = titleTextAlignByLang,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
                                         }
 
                                         if (parentLocked) {
@@ -1594,20 +1608,6 @@ private fun TopicsCardForBelt(
                                             )
                                         }
                                     }
-                                }
-
-                                if (topicImageRes == null || hasSubs) {
-                                    Spacer(Modifier.height(2.dp))
-
-                                    Text(
-                                        text = countsLine,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = floatingSubColor,
-                                        textAlign = titleTextAlignByLang,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
                                 }
 
                                 if (hasSubs && isExpanded) {

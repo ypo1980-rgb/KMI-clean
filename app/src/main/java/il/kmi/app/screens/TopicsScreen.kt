@@ -49,6 +49,8 @@ import il.kmi.app.ui.ext.color
 import android.app.Activity
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.app.domain.ExerciseCountProvider
+
 
 //==================================================================
 
@@ -130,41 +132,70 @@ private fun topicCountsText(
 // ───────────── עזר: שליפה שטוחה של תרגילים לנושא (Bridge-first) ─────────────
 private fun itemsForTopicFlatten(belt: Belt, topicTitle: String): List<String> {
 
-    // 1) Bridge (המקור הרשמי עכשיו)
+    fun normalizeTopic(value: String): String =
+        value
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace("־", "-")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    fun normalizeItem(value: String): String =
+        ExerciseTitleFormatter
+            .displayName(value)
+            .ifBlank { value }
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace("־", "-")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    val cleanTopic = normalizeTopic(topicTitle)
+
     val fromBridge: List<String> = runCatching {
         val direct = ContentRepo.listItemTitles(
             belt = belt,
-            topicTitle = topicTitle,
+            topicTitle = cleanTopic,
             subTopicTitle = null
         )
 
-        val subs = ContentRepo.listSubTopicTitles(belt, topicTitle)
+        val subs = ContentRepo.listSubTopicTitles(belt, cleanTopic)
+            .map { normalizeTopic(it) }
+            .filter { it.isNotBlank() }
+            .filter { it != cleanTopic }
+            .distinct()
+
         val viaSubs = subs.flatMap { stTitle ->
             ContentRepo.listItemTitles(
                 belt = belt,
-                topicTitle = topicTitle,
+                topicTitle = cleanTopic,
                 subTopicTitle = stTitle
             )
         }
 
-        (direct + viaSubs)
+        direct + viaSubs
     }.getOrDefault(emptyList())
 
     if (fromBridge.isNotEmpty()) {
         return fromBridge
-            .map { ExerciseTitleFormatter.displayName(it) }
+            .map { normalizeItem(it) }
             .filter { it.isNotBlank() }
             .distinct()
     }
 
-    // 2) Bridge אחר (אם נשאר אצלך מסיבות היסטוריות)
     val viaSearchBridge = runCatching {
-        il.kmi.app.search.KmiSearchBridge.itemsFor(belt, topicTitle)
+        il.kmi.app.search.KmiSearchBridge.itemsFor(belt, cleanTopic)
     }.getOrDefault(emptyList())
 
     if (viaSearchBridge.isNotEmpty()) {
         return viaSearchBridge
-            .map { ExerciseTitleFormatter.displayName(it) }
+            .map { normalizeItem(it) }
             .filter { it.isNotBlank() }
             .distinct()
     }
@@ -874,6 +905,15 @@ fun TopicsScreen(
                                             )
                                         }
 
+                                        val countStats by remember(effectiveBelt, title) {
+                                            mutableStateOf(
+                                                ExerciseCountProvider.topicStats(
+                                                    belt = effectiveBelt,
+                                                    topicTitle = title
+                                                )
+                                            )
+                                        }
+
                                         val realSubsCount by remember(effectiveBelt, title) {
                                             mutableStateOf(
                                                 runCatching {
@@ -884,10 +924,6 @@ fun TopicsScreen(
                                                         .size
                                                 }.getOrDefault(0)
                                             )
-                                        }
-
-                                        val itemCount by remember(effectiveBelt, title) {
-                                            mutableStateOf(itemsForTopicFlatten(effectiveBelt, title).size)
                                         }
 
                                         val hasRealSubs = realSubsCount > 0
@@ -946,12 +982,12 @@ fun TopicsScreen(
                                                     textAlign = screenTextAlign
                                                 )
                                                 Spacer(Modifier.height(6.dp))
-                                            val counts = topicCountsText(
+                                            val counts = ExerciseCountProvider.countText(
+                                                stats = countStats,
                                                 isEnglish = isEnglish,
-                                                hasRealSubs = hasRealSubs,
-                                                subTopicCount = realSubsCount,
-                                                itemCount = itemCount
+                                                showZeroSubTopics = false
                                             )
+
                                             Text(
                                                     text = counts,
                                                     style = MaterialTheme.typography.bodySmall,

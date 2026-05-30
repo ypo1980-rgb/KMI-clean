@@ -2,6 +2,7 @@ package il.kmi.app.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
@@ -48,6 +50,7 @@ import il.kmi.app.highlightItem
 import android.app.Activity
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
+import androidx.compose.ui.unit.Dp
 import il.kmi.app.ui.color
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
@@ -554,11 +557,84 @@ fun MaterialsScreen(
             sp.getStringSet(favKey, emptySet())?.toMutableSet() ?: mutableSetOf()
         )
     }
+
+    fun favoriteAliasesFor(
+        topicTitle: String,
+        rawItem: String
+    ): Set<String> {
+        val clean = cleanItem(topicTitle, rawItem).trim()
+
+        val registryId = ExerciseIdentityRegistry.resolve(
+            belt = belt,
+            hebrewTitle = clean,
+            topicKey = topicKey
+        ).id
+
+        val explanationId = CanonicalIds.resolveCanonicalForExplanation(
+            belt = belt,
+            topicTitle = topicTitle,
+            rawItemFromRepo = rawItem
+        )
+
+        val canonicalIdForTopic = canonicalFor(topicTitle, rawItem)
+        val canonicalIdForScreenTopic = canonicalFor(rawItem)
+
+        return setOf(
+            registryId,
+            explanationId,
+            canonicalIdForTopic,
+            canonicalIdForScreenTopic
+        )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }
+
+    fun isFavoriteByAliases(
+        topicTitle: String,
+        rawItem: String
+    ): Boolean {
+        return favoriteAliasesFor(topicTitle, rawItem).any { id ->
+            favorites.contains(id)
+        }
+    }
+
+    fun toggleFavoriteAliases(
+        topicTitle: String,
+        rawItem: String
+    ) {
+        val aliases = favoriteAliasesFor(topicTitle, rawItem)
+        val nextFavorites = favorites.toMutableSet()
+
+        val shouldAdd = aliases.none { id ->
+            nextFavorites.contains(id)
+        }
+
+        if (shouldAdd) {
+            nextFavorites.addAll(aliases)
+        } else {
+            aliases.forEach { id ->
+                nextFavorites.remove(id)
+            }
+        }
+
+        favorites = nextFavorites
+        sp.edit()
+            .putStringSet(favKey, nextFavorites)
+            .apply()
+    }
+
     fun toggleFavorite(id: String) {
-        val s = favorites.toMutableSet()
-        if (!s.add(id)) s.remove(id)
-        favorites = s
-        sp.edit().putStringSet(favKey, s).apply()
+        val nextFavorites = favorites.toMutableSet()
+
+        if (!nextFavorites.add(id)) {
+            nextFavorites.remove(id)
+        }
+
+        favorites = nextFavorites
+        sp.edit()
+            .putStringSet(favKey, nextFavorites)
+            .apply()
     }
 
     // ✅ סימונים (✓/✗/—) — מקור אמת יחיד: ViewModel/DataStore
@@ -745,6 +821,40 @@ fun MaterialsScreen(
         itemStates.putAll(nextStates)
     }
 
+    val currentCanonicalIds = itemList
+        .map { canonicalFor(it) }
+        .distinct()
+
+    val summaryTotalCount = itemList.size
+
+    val summaryMasteredCount = itemList
+        .mapIndexed { index, item ->
+            val statusId = statusIdFor(index, item)
+            itemStates[statusId] ?: when {
+                masteredSet.contains(statusId) -> true
+                unknowns.contains(statusId) -> false
+                else -> null
+            }
+        }
+        .count { it == true }
+
+    val summaryUnknownCount = itemList
+        .mapIndexed { index, item ->
+            val statusId = statusIdFor(index, item)
+            itemStates[statusId] ?: when {
+                masteredSet.contains(statusId) -> true
+                unknowns.contains(statusId) -> false
+                else -> null
+            }
+        }
+        .count { it == false }
+
+    val summaryFavoritesCount = itemList.count { item ->
+        isFavoriteByAliases(materialRootTopic, item)
+    }
+    val summaryExcludedCount = currentCanonicalIds.count { excludedItems.contains(it) }
+    val summaryNotesCount = currentCanonicalIds.count { loadNote(it).isNotBlank() }
+
     Scaffold(
         topBar = {
             val headerTitle =
@@ -816,18 +926,18 @@ fun MaterialsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             AnimatedButton(
                                 text = when {
-                                    isPracticeLocked && isEnglish -> "🔒 Practice"
-                                    isPracticeLocked -> "🔒 תרגול"
+                                    isPracticeLocked && isEnglish -> "Train 🔒"
+                                    isPracticeLocked -> "תרגול 🔒"
                                     isEnglish -> "Practice"
                                     else -> "תרגול"
                                 },
@@ -984,7 +1094,11 @@ fun MaterialsScreen(
                 beltLabel = dialogBeltLabel,
                 explanation = explanation,
                 noteText = dialogNoteText,
-                isFavorite = favorites.contains(dialogActionId),
+                isFavorite = favorites.contains(dialogActionId) ||
+                        isFavoriteByAliases(
+                            topicTitle = t,
+                            rawItem = iRaw
+                        ),
                 accentColor = b.color,
                 isEnglish = isEnglish,
                 onDismiss = { explainTriple = null },
@@ -997,7 +1111,10 @@ fun MaterialsScreen(
                     saveNote(dialogActionId, "")
                 },
                 onToggleFavorite = {
-                    toggleFavorite(dialogActionId)
+                    toggleFavoriteAliases(
+                        topicTitle = t,
+                        rawItem = iRaw
+                    )
                 }
             )
         }
@@ -1033,15 +1150,107 @@ fun MaterialsScreen(
                         .background(belt.lightColor)
                         .padding(top = 4.dp, start = 12.dp, end = 12.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scroll),
-                        verticalArrangement = Arrangement.spacedBy(0.dp),
-                        horizontalAlignment = Alignment.End
-                    ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scroll),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
 
-                        if (isShowingNestedSubTopicPicker) {
+                    if (!isShowingNestedSubTopicPicker && itemList.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (isEnglish) {
+                                    "← Swipe sideways to see more stats →"
+                                } else {
+                                    "→→ הזז לצד כדי לראות עוד נתונים →→"
+                                },
+                                color = Color(0xFF5B6472),
+                                fontSize = 10.sp,
+                                lineHeight = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp, bottom = 2.dp)
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                MaterialsTopStatChip(
+                                    value = summaryTotalCount.toString(),
+                                    label = if (isEnglish) "Exercises" else "תרגילים",
+                                    containerColor = Color(0xFF98A2B3),
+                                    contentColor = Color.White
+                                )
+
+                                MaterialsTopStatChip(
+                                    value = summaryMasteredCount.toString(),
+                                    label = if (isEnglish) "Known" else "יודע",
+                                    containerColor = Color(0xFF7ACB88),
+                                    contentColor = Color.White,
+                                    minWidth = 64.dp,
+                                    horizontalPadding = 12.dp
+                                )
+
+                                MaterialsTopStatChip(
+                                    value = summaryUnknownCount.toString(),
+                                    label = if (isEnglish) "Unknown" else "לא יודע",
+                                    containerColor = Color(0xFFF1A97A),
+                                    contentColor = Color.White
+                                )
+
+                                MaterialsTopStatChip(
+                                    value = summaryFavoritesCount.toString(),
+                                    label = if (isEnglish) "Favorites" else "מועדפים",
+                                    containerColor = Color(0xFFE7A3B5),
+                                    contentColor = Color.White
+                                )
+
+                                MaterialsTopStatChip(
+                                    value = summaryExcludedCount.toString(),
+                                    label = if (isEnglish) "Excluded" else "מוחרגים",
+                                    containerColor = Color(0xFF95D69A),
+                                    contentColor = Color.White
+                                )
+
+                                MaterialsTopStatChip(
+                                    value = summaryNotesCount.toString(),
+                                    label = if (isEnglish) "Notes" else "הערות",
+                                    containerColor = Color(0xFF8596C9),
+                                    contentColor = Color.White
+                                )
+                            }
+
+                            Text(
+                                text = if (isEnglish) {
+                                    "More cards are available off-screen"
+                                } else {
+                                    "יש עוד כרטיסים בהמשך הגלילה"
+                                },
+                                color = Color(0xFF7A8392),
+                                fontSize = 9.sp,
+                                lineHeight = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 0.dp, bottom = 4.dp)
+                            )
+                        }
+
+                        Spacer(Modifier.height(4.dp))
+                    }
+
+                    if (isShowingNestedSubTopicPicker) {
                             nestedSubTopicTitles.forEach { nestedTitle ->
                                 val count = remember(belt, topicUi, decodedSubTopicFilter, nestedTitle) {
                                     decodedSubTopicFilter
@@ -1122,8 +1331,25 @@ fun MaterialsScreen(
                             filtered.forEachIndexed { index, item ->
                             var showNoteDialog by remember { mutableStateOf(false) }
 
-                            // ✅ מזהה אחיד להסבר / מועדפים / הערות
-                            val canonicalId = remember(item, belt.id, topicUi) { canonicalFor(item) }
+                                // ✅ מזהה אחיד להסבר / הערות / החרגות
+                                val canonicalId = remember(item, belt.id, topicUi) {
+                                    canonicalFor(item)
+                                }
+
+                                // ✅ מועדפים לפי כל המזהים האפשריים של אותו תרגיל,
+                                // כדי שכוכבית בכרטיס הגלובאלי ותפריט ה-i יהיו מסונכרנים.
+                                val isFavorite = remember(
+                                    favorites,
+                                    item,
+                                    belt.id,
+                                    materialRootTopic,
+                                    topicKey
+                                ) {
+                                    isFavoriteByAliases(
+                                        topicTitle = materialRootTopic,
+                                        rawItem = item
+                                    )
+                                }
 
                             // ✅ מזהה לסימון יודע/לא יודע בלבד.
                             // אם canonicalId כפול בין כמה שורות, statusId מפריד ביניהן לפי מיקום השורה.
@@ -1163,70 +1389,149 @@ fun MaterialsScreen(
                                 label = "scaleAnim"
                             )
 
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .scale(scale)
-                                    .bringIntoViewRequester(bringer)
-                            ) {
-                                Row(
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .heightIn(min = 58.dp)
-                                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .scale(scale)
+                                        .bringIntoViewRequester(bringer)
                                 ) {
-                                    ItemFloatingActions(
-                                        isEnglish = isEnglish,
-                                        excluded = isExcluded,
-                                        isFav = favorites.contains(canonicalId),
-                                        hasNote = noteText.isNotBlank(),
-                                        onToggleExclude = { toggleExclude(canonicalId) },
-                                        onInfo = {
-                                            pressed = true
-
-                                            // ✅ להסברים שולחים את שם התרגיל המקורי.
-                                            // ה-Resolver כבר יפתור אותו ל-ex_... דרך ExerciseIdentityRegistry.
-                                            explainTriple = Triple(
-                                                belt,
-                                                materialRootTopic,
-                                                item
-                                            )
-
-                                            scope.launch {
-                                                kotlinx.coroutines.delay(150)
-                                                pressed = false
-                                            }
-                                        },
-                                        onToggleFavorite = { toggleFavorite(canonicalId) },
-                                        onEditNote = { showNoteDialog = true }
-                                    )
-
-                                    Spacer(Modifier.width(8.dp))
-
-                                    Text(
-                                        text = displayName,
-                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                    Row(
                                         modifier = Modifier
-                                            .weight(1f)
-                                            .padding(horizontal = 4.dp),
-                                        color = when {
-                                            isExcluded -> Color.Gray
-                                            isHighlighted -> belt.color.copy(alpha = 0.95f)
-                                            else -> Color(0xFF111827)
-                                        },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
-                                        maxLines = 4,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                            .fillMaxWidth()
+                                            .heightIn(min = 48.dp)
+                                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        ItemFloatingActions(
+                                            isEnglish = isEnglish,
+                                            excluded = isExcluded,
+                                            isFav = isFavorite,
+                                            hasNote = noteText.isNotBlank(),
+                                            onToggleExclude = { toggleExclude(canonicalId) },
+                                            onInfo = {
+                                                pressed = true
 
-                                    Spacer(Modifier.width(8.dp))
+                                                explainTriple = Triple(
+                                                    belt,
+                                                    materialRootTopic,
+                                                    item
+                                                )
 
-                                    key(statusId, mastered) {
-                                        MasterToggle(
-                                            mastered = mastered,
-                                            onSelect = { newVal ->
+                                                scope.launch {
+                                                    kotlinx.coroutines.delay(150)
+                                                    pressed = false
+                                                }
+                                            },
+                                            onToggleFavorite = {
+                                                toggleFavoriteAliases(
+                                                    topicTitle = materialRootTopic,
+                                                    rawItem = item
+                                                )
+                                            },
+                                            onEditNote = { showNoteDialog = true }
+                                        )
+
+                                        Spacer(Modifier.width(8.dp))
+
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(horizontal = 2.dp)
+                                        ) {
+                                            CompositionLocalProvider(
+                                                LocalLayoutDirection provides LayoutDirection.Ltr
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    if (isEnglish) {
+                                                        ExerciseMetaBadge(
+                                                            text = "No. ${index + 1}",
+                                                            containerColor = belt.color.copy(alpha = 0.14f),
+                                                            contentColor = Color(0xFF1F2937)
+                                                        )
+
+                                                        if (isFavorite) {
+                                                            Spacer(Modifier.width(5.dp))
+                                                            ExerciseMetaBadge(
+                                                                text = "Favorite",
+                                                                containerColor = Color(0xFFF9D9B8),
+                                                                contentColor = Color(0xFF9A5A00)
+                                                            )
+                                                        }
+
+                                                        if (isExcluded) {
+                                                            Spacer(Modifier.width(5.dp))
+                                                            ExerciseMetaBadge(
+                                                                text = "Excluded",
+                                                                containerColor = Color(0xFFE5E7EB),
+                                                                contentColor = Color(0xFF6B7280)
+                                                            )
+                                                        }
+
+                                                        Spacer(Modifier.weight(1f))
+                                                    } else {
+                                                        Spacer(Modifier.weight(1f))
+
+                                                        if (isExcluded) {
+                                                            ExerciseMetaBadge(
+                                                                text = "מוחרג",
+                                                                containerColor = Color(0xFFE5E7EB),
+                                                                contentColor = Color(0xFF6B7280)
+                                                            )
+                                                            Spacer(Modifier.width(5.dp))
+                                                        }
+
+                                                        if (isFavorite) {
+                                                            ExerciseMetaBadge(
+                                                                text = "מועדף",
+                                                                containerColor = Color(0xFFF9D9B8),
+                                                                contentColor = Color(0xFF9A5A00)
+                                                            )
+                                                            Spacer(Modifier.width(5.dp))
+                                                        }
+
+                                                        ExerciseMetaBadge(
+                                                            text = "מס׳ ${index + 1}",
+                                                            containerColor = belt.color.copy(alpha = 0.14f),
+                                                            contentColor = Color(0xFF1F2937)
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            Spacer(Modifier.height(2.dp))
+
+                                            Text(
+                                                text = displayName,
+                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                color = when {
+                                                    isExcluded -> Color.Gray
+                                                    isHighlighted -> belt.color.copy(alpha = 0.95f)
+                                                    else -> Color(0xFF111827)
+                                                },
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontSize = 11.sp,
+                                                    lineHeight = 13.sp
+                                                ),
+                                                fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+
+                                        Spacer(Modifier.width(8.dp))
+
+                                        Box(
+                                            modifier = Modifier.scale(0.82f),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            key(statusId, mastered) {
+                                                MasterToggle(
+                                                    mastered = mastered,
+                                                    onSelect = { newVal ->
                                                 itemStates[statusId] = newVal
 
                                                 // ✅ במסך תת־נושא שומרים רק למפתח המדויק.
@@ -1310,6 +1615,7 @@ fun MaterialsScreen(
                                         )
                                     }
                                 }
+                            }
 
                                 Divider(
                                     color = belt.color.copy(alpha = 0.30f),
@@ -1359,7 +1665,7 @@ fun AnimatedButton(
 ) {
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.96f else 1f,
+        targetValue = if (pressed) 0.97f else 1f,
         label = "buttonScaleAnim"
     )
     val scope = rememberCoroutineScope()
@@ -1376,22 +1682,22 @@ fun AnimatedButton(
                 pressed = false
             }
         },
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(18.dp),
         modifier = modifier
             .scale(scale)
-            .height(56.dp)
-            .defaultMinSize(minWidth = 90.dp),
+            .height(42.dp)
+            .defaultMinSize(minWidth = 72.dp),
         border = BorderStroke(
             1.dp,
-            Color.White.copy(alpha = 0.24f)
+            Color.White.copy(alpha = 0.22f)
         ),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
             contentColor = contentOnContainer
         ),
         elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 6.dp,
-            pressedElevation = 2.dp
+            defaultElevation = 4.dp,
+            pressedElevation = 1.5.dp
         )
     ) {
         Text(
@@ -1399,8 +1705,124 @@ fun AnimatedButton(
             color = contentOnContainer,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
+            fontSize = 14.5.sp,
+            lineHeight = 16.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Clip
+        )
+    }
+}
+
+@Composable
+private fun MaterialsTopStatChip(
+    value: String,
+    label: String,
+    containerColor: Color,
+    contentColor: Color = Color.White,
+    minWidth: Dp = 64.dp,
+    horizontalPadding: Dp = 12.dp
+) {
+    Surface(
+        modifier = Modifier.widthIn(min = minWidth),
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        shadowElevation = 1.dp,
+        border = BorderStroke(
+            1.dp,
+            contentColor.copy(alpha = 0.14f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(
+                horizontal = horizontalPadding,
+                vertical = 6.dp
+            ),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                color = contentColor,
+                fontSize = 14.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+
+            Text(
+                text = label,
+                color = contentColor.copy(alpha = 0.92f),
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExerciseMetaBadge(
+    text: String,
+    containerColor: Color,
+    contentColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor,
+        border = BorderStroke(
+            1.dp,
+            contentColor.copy(alpha = 0.14f)
+        ),
+        shadowElevation = 0.dp
+    ) {
+        Text(
+            text = text,
+            color = contentColor,
+            fontSize = 9.sp,
+            lineHeight = 10.5.sp,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
             maxLines = 1
         )
+    }
+}
+
+@Composable
+private fun CompactDropdownAction(
+    text: String,
+    isEnglish: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    CompositionLocalProvider(
+        LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(32.dp)
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.fillMaxWidth(),
+                color = if (enabled) {
+                    Color(0xFF1F2937)
+                } else {
+                    Color(0xFF6B7280)
+                },
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 11.5.sp,
+                    lineHeight = 13.sp
+                ),
+                fontWeight = FontWeight.SemiBold,
+                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -1475,71 +1897,76 @@ private fun ItemFloatingActions(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
+            shape = RoundedCornerShape(22.dp),
+            containerColor = Color(0xFFF7F5FB),
+            tonalElevation = 0.dp,
+            shadowElevation = 8.dp,
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+            ),
             modifier = Modifier
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.99f),
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
-                            Color.White.copy(alpha = 0.97f)
+                            Color(0xFFF9F8FC),
+                            Color(0xFFF3F0FA),
+                            Color(0xFFF7F5FB)
                         )
                     ),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = RoundedCornerShape(22.dp)
                 )
-                .border(
-                    1.dp,
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                    RoundedCornerShape(18.dp)
-                )
+                .padding(vertical = 4.dp)
         ) {
 
             if (!helpSeen) {
-                DropdownMenuItem(
-                    enabled = false,
-                    text = {
-                        Text(
-                            text = if (isEnglish) {
-                                "What does “Exclude” mean?\nRemoves this exercise from practice for the selected topic."
-                            } else {
-                                "מה זה “החרג”?\nמנטרל את התרגיל מהתרגול של הנושא הנבחר."
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                        )
-                    },
-                    onClick = {}
-                )
-                Divider()
-            }
-
-            DropdownMenuItem(
-                text = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
+                ) {
                     Text(
-                        text = if (isEnglish) "Info" else "מידע",
-                        style = MaterialTheme.typography.labelLarge,
+                        text = if (isEnglish) {
+                            "What does “Exclude” mean?\nRemoves this exercise from practice."
+                        } else {
+                            "מה זה “החרג”?\nמנטרל את התרגיל מהתרגול."
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.5.sp,
+                            lineHeight = 12.5.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold,
                         textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                     )
-                },
+                }
+
+                Divider(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                    thickness = 0.8.dp,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
+                )
+            }
+
+            CompactDropdownAction(
+                text = if (isEnglish) "Info" else "מידע",
+                isEnglish = isEnglish,
                 onClick = {
                     expanded = false
                     onInfo()
                 }
             )
 
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = when {
-                            isEnglish && isFav -> "Remove from favorites"
-                            isEnglish -> "Add to favorites"
-                            isFav -> "הסר ממועדפים"
-                            else -> "הוסף למועדפים"
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                    )
+            CompactDropdownAction(
+                text = when {
+                    isEnglish && isFav -> "Remove from favorites"
+                    isEnglish -> "Add to favorites"
+                    isFav -> "הסר ממועדפים"
+                    else -> "הוסף למועדפים"
                 },
+                isEnglish = isEnglish,
                 onClick = {
                     expanded = false
                     onToggleFavorite()
@@ -1558,19 +1985,14 @@ private fun ItemFloatingActions(
                 }
             )
 
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = when {
-                            isEnglish && excluded -> "Cancel exclusion"
-                            isEnglish -> "Exclude from practice"
-                            excluded -> "בטל החרגה"
-                            else -> "החרג (מנטרל מהתרגול)"
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                    )
+            CompactDropdownAction(
+                text = when {
+                    isEnglish && excluded -> "Cancel exclusion"
+                    isEnglish -> "Exclude from practice"
+                    excluded -> "בטל החרגה"
+                    else -> "בטל החרגה"
                 },
+                isEnglish = isEnglish,
                 onClick = {
                     expanded = false
                     onToggleExclude()
@@ -1578,10 +2000,10 @@ private fun ItemFloatingActions(
                         .makeText(
                             context,
                             when {
-                                isEnglish && excluded -> "Exclusion canceled. The exercise will return to practice."
-                                isEnglish -> "Exercise excluded. It will not appear in this topic practice."
-                                excluded -> "בוטלה ההחרגה – התרגיל יחזור לתרגול."
-                                else -> "התרגיל הוחרג – לא יופיע בתרגול הנושא."
+                                isEnglish && excluded -> "Exclusion canceled."
+                                isEnglish -> "Exercise excluded."
+                                excluded -> "בוטלה ההחרגה."
+                                else -> "התרגיל הוחרג."
                             },
                             android.widget.Toast.LENGTH_SHORT
                         )
@@ -1589,19 +2011,14 @@ private fun ItemFloatingActions(
                 }
             )
 
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = when {
-                            isEnglish && hasNote -> "Edit / delete note"
-                            isEnglish -> "Add exercise note"
-                            hasNote -> "ערוך / מחק הערה"
-                            else -> "הוסף הערה לתרגיל"
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                    )
+            CompactDropdownAction(
+                text = when {
+                    isEnglish && hasNote -> "Edit / delete note"
+                    isEnglish -> "Add exercise note"
+                    hasNote -> "ערוך / מחק הערה"
+                    else -> "הוסף הערה לתרגיל"
                 },
+                isEnglish = isEnglish,
                 onClick = {
                     expanded = false
                     onEditNote()

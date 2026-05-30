@@ -7,9 +7,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +26,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -33,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import il.kmi.app.KmiViewModel
 import il.kmi.app.domain.Explanations
 import il.kmi.app.domain.ExerciseExplanationResolver
@@ -683,6 +687,24 @@ fun SubjectExercisesScreen(
         }
     }
 
+    val subjectTotalCount = rows.size
+
+    val subjectKnownCount = rows.count { row ->
+        subjectItemStates[subjectStatusIdFor(row)] == true
+    }
+
+    val subjectUnknownCount = rows.count { row ->
+        subjectItemStates[subjectStatusIdFor(row)] == false
+    }
+
+    val subjectUnmarkedCount = rows.count { row ->
+        subjectItemStates[subjectStatusIdFor(row)] == null
+    }
+
+    val subjectFavoriteCount = rows.count { row ->
+        row.canonicalId in favIds
+    }
+
     // מצב: איזה תרגיל נבחר להצגת דיאלוג הסבר
     var selectedRow by remember { mutableStateOf<RowData?>(null) }
 
@@ -702,20 +724,81 @@ fun SubjectExercisesScreen(
                     showBottomActions = true
                 )
 
-                // ✅ הפילטרים בתוך ה-topBar => ה-Scaffold מפנה להם מקום, לא נחתכים
-                Box(
+                // ✅ הפילטרים + סטטיסטיקה בתוך ה-topBar
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(backgroundBrush) // ✅ אותו רקע כמו המסך מאחורי 3 הכפתורים
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .background(backgroundBrush)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     TopFiltersBarModern(
                         filterMode = filterMode,
-                        favCount = favoritesCountForThisSubject, // ✅ היה: favIds.size
+                        favCount = favoritesCountForThisSubject,
                         recentCount = recentIds.size,
                         onPick = { filterMode = it },
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        text = if (isEnglish) {
+                            "← Swipe sideways to see more stats →"
+                        } else {
+                            "→→ הזז לצד כדי לראות עוד נתונים →→"
+                        },
+                        color = Color.White.copy(alpha = 0.86f),
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SubjectTopStatChip(
+                            value = subjectTotalCount.toString(),
+                            label = if (isEnglish) "Exercises" else "תרגילים",
+                            containerColor = Color(0xFF98A2B3)
+                        )
+
+                        SubjectTopStatChip(
+                            value = subjectKnownCount.toString(),
+                            label = if (isEnglish) "Known" else "יודע",
+                            containerColor = Color(0xFF7ACB88)
+                        )
+
+                        SubjectTopStatChip(
+                            value = subjectUnknownCount.toString(),
+                            label = if (isEnglish) "Unknown" else "לא יודע",
+                            containerColor = Color(0xFFF1A97A)
+                        )
+
+                        SubjectTopStatChip(
+                            value = subjectFavoriteCount.toString(),
+                            label = if (isEnglish) "Favorites" else "מועדפים",
+                            containerColor = Color(0xFFE7A3B5)
+                        )
+
+                        SubjectTopStatChip(
+                            value = subjectUnmarkedCount.toString(),
+                            label = if (isEnglish) "Unmarked" else "לא סומן",
+                            containerColor = Color(0xFF8596C9)
+                        )
+
+                        SubjectTopStatChip(
+                            value = recentIds.size.toString(),
+                            label = if (isEnglish) "Recent" else "אחרונים",
+                            containerColor = Color(0xFF95D69A)
+                        )
+                    }
                 }
             }
         }
@@ -764,19 +847,20 @@ fun SubjectExercisesScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 16.dp, horizontal = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        contentPadding = PaddingValues(vertical = 10.dp, horizontal = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
 
                         if (filterMode == FilterMode.RECENTS) {
                             itemsIndexed(
                                 items = filteredRows,
                                 key = { index, row -> "recent_${index}_${row.canonicalId}" }
-                            ) { _, row ->
+                            ) { index, row ->
                                 val statusId = subjectStatusIdFor(row)
                                 val mastered = subjectItemStates[statusId]
 
                                 ExerciseRowCardModern(
+                                    exerciseNumber = index + 1,
                                     belt = row.belt,
                                     topic = row.topic,
                                     item = row.displayItem,
@@ -841,11 +925,12 @@ fun SubjectExercisesScreen(
                                         count = beltRows.size,
                                         isDarkMode = isDarkMode
                                     ) {
-                                        beltRows.forEach { row ->
+                                        beltRows.forEachIndexed { rowIndex, row ->
                                             val statusId = subjectStatusIdFor(row)
                                             val mastered = subjectItemStates[statusId]
 
                                             ExerciseRowCardModern(
+                                                exerciseNumber = rowIndex + 1,
                                                 belt = belt,
                                                 topic = row.topic,
                                                 item = row.displayItem,
@@ -903,7 +988,6 @@ fun SubjectExercisesScreen(
                         }
                     }
                 }
-
 
             // ✅ דיאלוג נשאר אותו דבר (הוא מתחת ל-Column, אין שינוי)
             selectedRow?.let { row ->
@@ -1025,6 +1109,74 @@ fun SubjectExercisesScreen(
                  }
             }
         }
+    }
+}
+
+@Composable
+private fun SubjectTopStatChip(
+    value: String,
+    label: String,
+    containerColor: Color,
+    contentColor: Color = Color.White
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        shadowElevation = 1.dp,
+        border = BorderStroke(
+            1.dp,
+            contentColor.copy(alpha = 0.14f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                color = contentColor,
+                fontSize = 14.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+
+            Text(
+                text = label,
+                color = contentColor.copy(alpha = 0.92f),
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun SubjectExerciseMetaBadge(
+    text: String,
+    containerColor: Color,
+    contentColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor,
+        border = BorderStroke(
+            1.dp,
+            contentColor.copy(alpha = 0.14f)
+        ),
+        shadowElevation = 0.dp
+    ) {
+        Text(
+            text = text,
+            color = contentColor,
+            fontSize = 9.sp,
+            lineHeight = 10.5.sp,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+            maxLines = 1
+        )
     }
 }
 
@@ -1247,6 +1399,7 @@ private fun BeltSectionCardModern(
 
 @Composable
 private fun ExerciseRowCardModern(
+    exerciseNumber: Int,
     belt: Belt,
     topic: String,
     item: String,
@@ -1294,43 +1447,101 @@ private fun ExerciseRowCardModern(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SubjectMasterToggle(
-                    mastered = mastered,
-                    onClick = onStatusClick
-                )
+                Box(
+                    modifier = Modifier.scale(0.82f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    SubjectMasterToggle(
+                        mastered = mastered,
+                        onClick = onStatusClick
+                    )
+                }
 
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
 
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
                         .clickable { onInfoClick() }
-                        .padding(vertical = 2.dp),
+                        .padding(vertical = 1.dp),
                     horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                 ) {
+                    CompositionLocalProvider(
+                        LocalLayoutDirection provides LayoutDirection.Ltr
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isEnglish) {
+                                SubjectExerciseMetaBadge(
+                                    text = "No. $exerciseNumber",
+                                    containerColor = belt.color.copy(alpha = 0.14f),
+                                    contentColor = Color(0xFF1F2937)
+                                )
+
+                                if (isFavorite) {
+                                    Spacer(Modifier.width(5.dp))
+                                    SubjectExerciseMetaBadge(
+                                        text = "Favorite",
+                                        containerColor = Color(0xFFF9D9B8),
+                                        contentColor = Color(0xFF9A5A00)
+                                    )
+                                }
+
+                                Spacer(Modifier.weight(1f))
+                            } else {
+                                Spacer(Modifier.weight(1f))
+
+                                if (isFavorite) {
+                                    SubjectExerciseMetaBadge(
+                                        text = "מועדף",
+                                        containerColor = Color(0xFFF9D9B8),
+                                        contentColor = Color(0xFF9A5A00)
+                                    )
+                                    Spacer(Modifier.width(5.dp))
+                                }
+
+                                SubjectExerciseMetaBadge(
+                                    text = "מס׳ $exerciseNumber",
+                                    containerColor = belt.color.copy(alpha = 0.14f),
+                                    contentColor = Color(0xFF1F2937)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(2.dp))
+
                     Text(
                         text = item,
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 11.sp,
+                            lineHeight = 13.sp
+                        ),
                         fontWeight = FontWeight.ExtraBold,
                         color = rowTextColor,
-                        maxLines = 2,
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     if (showMeta) {
-                        Spacer(Modifier.height(3.dp))
-
                         val meta = topic.trim()
                         if (meta.isNotBlank() && meta != "כללי" && meta != "שחרורים") {
+                            Spacer(Modifier.height(2.dp))
+
                             Text(
                                 text = meta,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 9.5.sp,
+                                    lineHeight = 11.sp
+                                ),
                                 color = rowMetaColor,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
@@ -1342,11 +1553,11 @@ private fun ExerciseRowCardModern(
                     }
                 }
 
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(6.dp))
 
                 IconButton(
                     onClick = onInfoClick,
-                    modifier = Modifier.size(42.dp)
+                    modifier = Modifier.size(30.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Info,
@@ -1355,14 +1566,15 @@ private fun ExerciseRowCardModern(
                             Color.White.copy(alpha = 0.78f)
                         } else {
                             Color(0xFF607D8B)
-                        }
+                        },
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(3.dp))
 
                 val scale by animateFloatAsState(
-                    targetValue = if (isFavorite) 1.18f else 1f,
+                    targetValue = if (isFavorite) 1.12f else 1f,
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioMediumBouncy,
                         stiffness = Spring.StiffnessMedium
@@ -1373,7 +1585,7 @@ private fun ExerciseRowCardModern(
                 IconButton(
                     onClick = onToggleFavorite,
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(30.dp)
                         .graphicsLayer {
                             scaleX = scale
                             scaleY = scale
@@ -1386,16 +1598,17 @@ private fun ExerciseRowCardModern(
                             Color(0xFFFFC107)
                         } else {
                             if (isDarkMode) Color.White.copy(alpha = 0.62f) else Color(0xFF9CA3AF)
-                        }
+                        },
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(3.dp))
 
                 Box(
                     modifier = Modifier
-                        .width(4.dp)
-                        .heightIn(min = 40.dp)
+                        .width(3.dp)
+                        .heightIn(min = 34.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .background(belt.color.copy(alpha = 0.9f))
                 )
@@ -1403,6 +1616,7 @@ private fun ExerciseRowCardModern(
         }
     }
 }
+
 
 @Composable
 private fun SubjectMasterToggle(
@@ -1428,7 +1642,7 @@ private fun SubjectMasterToggle(
 
     Surface(
         modifier = Modifier
-            .size(42.dp)
+            .size(38.dp)
             .clickable(onClick = onClick),
         shape = CircleShape,
         color = bg,
@@ -1445,14 +1659,14 @@ private fun SubjectMasterToggle(
                     imageVector = Icons.Filled.Check,
                     contentDescription = "יודע",
                     tint = iconTint,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(24.dp)
                 )
 
                 false -> Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "לא יודע",
                     tint = iconTint,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(24.dp)
                 )
 
                 null -> Spacer(Modifier.size(1.dp))

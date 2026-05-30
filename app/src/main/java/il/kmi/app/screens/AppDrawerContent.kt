@@ -453,8 +453,9 @@ fun AppDrawerContent(
                     .titleMedium.copy(
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 16.sp,
-                        lineHeight = 19.sp
+                        fontSize = 12.5.sp,
+                        lineHeight = 14.sp,
+                        letterSpacing = (-0.12).sp
                     )
             ) {
                 val autoIcon = drawerIconForTitle(title)
@@ -462,14 +463,16 @@ fun AppDrawerContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(Color.Transparent)
                         .padding(start = 16.dp, end = 16.dp)
                         .clickable(onClick = onClick)
-                        .padding(vertical = 8.dp)
+                        .padding(top = 2.dp, bottom = 4.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 4.dp),
+                            .background(Color.Transparent)
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (leading != null || autoIcon != null) {
@@ -504,9 +507,10 @@ fun AppDrawerContent(
                                     overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = Color.White.copy(alpha = 0.72f),
-                                        fontSize = 13.sp,
-                                        lineHeight = 16.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                        fontSize = 10.sp,
+                                        lineHeight = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        letterSpacing = (-0.08).sp
                                     ),
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
@@ -539,8 +543,9 @@ fun AppDrawerContent(
                     .titleMedium.copy(
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 16.sp,
-                        lineHeight = 19.sp
+                        fontSize = 12.5.sp,
+                        lineHeight = 14.sp,
+                        letterSpacing = (-0.12).sp
                     )
             ) {
                 val autoIcon = drawerIconForTitle(title)
@@ -548,14 +553,16 @@ fun AppDrawerContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(Color.Transparent)
                         .padding(start = 8.dp, end = 16.dp)
                         .clickable(onClick = onClick)
-                        .padding(vertical = 8.dp)
+                        .padding(top = 2.dp, bottom = 4.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 4.dp),
+                            .background(Color.Transparent)
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (leading != null || autoIcon != null) {
@@ -590,9 +597,10 @@ fun AppDrawerContent(
                                     overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = Color.White.copy(alpha = 0.72f),
-                                        fontSize = 13.sp,
-                                        lineHeight = 16.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                        fontSize = 10.sp,
+                                        lineHeight = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        letterSpacing = (-0.08).sp
                                     ),
                                     textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth()
@@ -624,14 +632,16 @@ fun AppDrawerContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(Color.Transparent)
                         .padding(horizontal = 16.dp)
                         .clickable(onClick = onClick)
-                        .padding(vertical = 10.dp)
+                        .padding(top = 2.dp, bottom = 4.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                            .background(Color.Transparent)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         DrawerMenuIconBubble(
@@ -649,7 +659,10 @@ fun AppDrawerContent(
                                 text = title,
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     color = Color.White,
-                                    fontWeight = FontWeight.ExtraBold
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.5.sp,
+                                    lineHeight = 14.sp,
+                                    letterSpacing = (-0.12).sp
                                 ),
                                 textAlign = TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth(),
@@ -663,7 +676,10 @@ fun AppDrawerContent(
                                     text = subtitle,
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = Color.White.copy(alpha = 0.82f),
-                                        fontWeight = FontWeight.Medium
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 10.sp,
+                                        lineHeight = 11.5.sp,
+                                        letterSpacing = (-0.08).sp
                                     ),
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth(),
@@ -694,14 +710,16 @@ fun AppDrawerContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(Color.Transparent)
                         .padding(start = 8.dp, end = 42.dp)
                         .clickable(onClick = onClick)
-                        .padding(vertical = 10.dp)
+                        .padding(top = 2.dp, bottom = 4.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                            .background(Color.Transparent)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -722,7 +740,10 @@ fun AppDrawerContent(
                                 text = title,
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     color = Color.White,
-                                    fontWeight = FontWeight.ExtraBold
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.5.sp,
+                                    lineHeight = 14.sp,
+                                    letterSpacing = (-0.12).sp
                                 ),
                                 textAlign = TextAlign.Start,
                                 modifier = Modifier.fillMaxWidth(),
@@ -736,7 +757,10 @@ fun AppDrawerContent(
                                     text = subtitle,
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = Color.White.copy(alpha = 0.82f),
-                                        fontWeight = FontWeight.Medium
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 10.sp,
+                                        lineHeight = 11.5.sp,
+                                        letterSpacing = (-0.08).sp
                                     ),
                                     textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth(),
@@ -848,7 +872,7 @@ fun AppDrawerContent(
                                         color = Color(0xFFFF8AD8).copy(alpha = 0.22f),
                                         shape = RoundedCornerShape(24.dp)
                                     )
-                                    .padding(vertical = 8.dp)
+                                    .padding(vertical = 6.dp)
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -867,7 +891,9 @@ fun AppDrawerContent(
                                             text = tr("אזור מאמן", "Coach area"),
                                             color = Color.White,
                                             fontWeight = FontWeight.Black,
-                                            fontSize = 16.sp,
+                                            fontSize = 12.5.sp,
+                                            lineHeight = 14.sp,
+                                            letterSpacing = (-0.12).sp,
                                             textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                             modifier = Modifier.fillMaxWidth()
                                         )
@@ -967,75 +993,181 @@ fun AppDrawerContent(
                                 }
                             }
 
-                            // מפריד אחד בולט בין אזור המאמן לאזור המתאמן
-                            Spacer(Modifier.height(14.dp))
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                thickness = 2.dp,
-                                color = Color.White.copy(alpha = 0.32f)
-                            )
-                            Spacer(Modifier.height(14.dp))
+                            Spacer(Modifier.height(10.dp))
                         }
 
                         // ===== אזור מנהל – רק למנהל =====
                         if (effectiveIsAdmin) {
-                            if (isEnglish) {
-                                DrawerLineItemEn(
-                                    title = "Manage Users",
-                                    subtitle = "View all app users",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAdminUsers()
+                            Spacer(Modifier.height(6.dp))
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFF163524).copy(alpha = 0.96f),
+                                                Color(0xFF1F5A3D).copy(alpha = 0.82f),
+                                                Color(0xFF1F7A57).copy(alpha = 0.42f)
+                                            )
+                                        )
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = Color(0xFF7DFFB3).copy(alpha = 0.24f),
+                                        shape = RoundedCornerShape(24.dp)
+                                    )
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                    ) {
+                                        Text(
+                                            text = tr("אזור מנהל", "Admin area"),
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 12.5.sp,
+                                            lineHeight = 14.sp,
+                                            letterSpacing = (-0.12).sp,
+                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
                                     }
+                                }
+
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                    thickness = 1.dp,
+                                    color = Color.White.copy(alpha = 0.16f)
                                 )
-                            } else {
-                                DrawerLineItemHe(
-                                    title = "ניהול משתמשים",
-                                    subtitle = "צפייה בכל המשתמשים באפליקציה",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAdminUsers()
-                                    }
-                                )
+
+                                if (isEnglish) {
+                                    CoachLineItemEn(
+                                        title = "Manage Users",
+                                        subtitle = "View all app users",
+                                        icon = Icons.Filled.Groups,
+                                        showDivider = false,
+                                        onClick = {
+                                            onClose()
+                                            onOpenAdminUsers()
+                                        }
+                                    )
+                                } else {
+                                    CoachLineItemHe(
+                                        title = "ניהול משתמשים",
+                                        subtitle = "צפייה בכל המשתמשים באפליקציה",
+                                        icon = Icons.Filled.Groups,
+                                        showDivider = false,
+                                        onClick = {
+                                            onClose()
+                                            onOpenAdminUsers()
+                                        }
+                                    )
+                                }
                             }
 
                             Spacer(Modifier.height(8.dp))
                         }
 
-                        // ✅ הפרופיל שלי — מסך אמת שמציג נתונים מהמשתמש / Firestore / Preferences
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                leading = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Person,
-                                        contentDescription = null,
-                                        tint = Color.White
+                        // ===== אזור מתאמן =====
+                        Spacer(Modifier.height(6.dp))
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFF153A63).copy(alpha = 0.94f),
+                                            Color(0xFF1D5C96).copy(alpha = 0.82f),
+                                            Color(0xFF2F83C8).copy(alpha = 0.42f)
+                                        )
                                     )
-                                },
-                                title = "My Profile",
-                                subtitle = "View your personal K.M.I details",
-                                onClick = {
-                                    onClose()
-                                    onOpenMyProfile()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                leading = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Person,
-                                        contentDescription = null,
-                                        tint = Color.White
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = Color(0xFF8FD3FF).copy(alpha = 0.24f),
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                                .padding(vertical = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+
+                                Spacer(Modifier.width(10.dp))
+
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                ) {
+                                    Text(
+                                        text = tr("אזור מתאמן", "Trainee area"),
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 12.5.sp,
+                                        lineHeight = 14.sp,
+                                        letterSpacing = (-0.12).sp,
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                        modifier = Modifier.fillMaxWidth()
                                     )
-                                },
-                                title = "הפרופיל שלי",
-                                subtitle = "צפייה בפרטים האישיים שלך",
-                                onClick = {
-                                    onClose()
-                                    onOpenMyProfile()
                                 }
+                            }
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                thickness = 1.dp,
+                                color = Color.White.copy(alpha = 0.16f)
                             )
-                        }
+
+                            // ✅ הפרופיל שלי — מסך אמת שמציג נתונים מהמשתמש / Firestore / Preferences
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Person,
+                                            contentDescription = null,
+                                            tint = Color.White
+                                        )
+                                    },
+                                    title = "My Profile",
+                                    subtitle = "View your personal K.M.I details",
+                                    onClick = {
+                                        onClose()
+                                        onOpenMyProfile()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Person,
+                                            contentDescription = null,
+                                            tint = Color.White
+                                        )
+                                    },
+                                    title = "הפרופיל שלי",
+                                    subtitle = "צפייה בפרטים האישיים שלך",
+                                    onClick = {
+                                        onClose()
+                                        onOpenMyProfile()
+                                    }
+                                )
+                            }
 
                         // ===== כפתור ראשון: אודות אבי אביסידון =====
                         if (isEnglish) {
@@ -1044,9 +1176,10 @@ fun AppDrawerContent(
                                 subtitle = "Head of the method",
                                 titleTextStyle = MaterialTheme.typography.titleMedium.copy(
                                     color = Color.White,
-                                    fontSize = 15.sp,
+                                    fontSize = 12.5.sp,
+                                    lineHeight = 14.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.2).sp
+                                    letterSpacing = (-0.12).sp
                                 ),
                                 onClick = {
                                     onClose()
@@ -1059,9 +1192,10 @@ fun AppDrawerContent(
                                 subtitle = "ראש השיטה",
                                 titleTextStyle = MaterialTheme.typography.titleMedium.copy(
                                     color = Color.White,
-                                    fontSize = 15.sp,
+                                    fontSize = 12.5.sp,
+                                    lineHeight = 14.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.2).sp
+                                    letterSpacing = (-0.12).sp
                                 ),
                                 onClick = {
                                     onClose()
@@ -1077,9 +1211,10 @@ fun AppDrawerContent(
                                 subtitle = "Ranks, experience and certifications",
                                 titleTextStyle = MaterialTheme.typography.titleMedium.copy(
                                     color = Color.White,
-                                    fontSize = 15.sp,
+                                    fontSize = 12.5.sp,
+                                    lineHeight = 14.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.2).sp
+                                    letterSpacing = (-0.12).sp
                                 ),
                                 onClick = {
                                     onClose()
@@ -1092,9 +1227,10 @@ fun AppDrawerContent(
                                 subtitle = "דרגות, ותק, הכשרות והסמכות",
                                 titleTextStyle = MaterialTheme.typography.titleMedium.copy(
                                     color = Color.White,
-                                    fontSize = 15.sp,
+                                    fontSize = 12.5.sp,
+                                    lineHeight = 14.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.2).sp
+                                    letterSpacing = (-0.12).sp
                                 ),
                                 onClick = {
                                     onClose()
@@ -1344,39 +1480,40 @@ fun AppDrawerContent(
                             )
                         }
 
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                leading = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Logout,
-                                        contentDescription = null,
-                                        tint = Color.White
-                                    )
-                                },
-                                title = "Logout",
-                                onClick = {
-                                    onClose()
-                                    onLogout()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                leading = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Logout,
-                                        contentDescription = null,
-                                        tint = Color.White
-                                    )
-                                },
-                                title = "התנתקות",
-                                onClick = {
-                                    onClose()
-                                    onLogout()
-                                }
-                            )
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Logout,
+                                            contentDescription = null,
+                                            tint = Color.White
+                                        )
+                                    },
+                                    title = "Logout",
+                                    onClick = {
+                                        onClose()
+                                        onLogout()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Logout,
+                                            contentDescription = null,
+                                            tint = Color.White
+                                        )
+                                    },
+                                    title = "התנתקות",
+                                    onClick = {
+                                        onClose()
+                                        onLogout()
+                                    }
+                                )
+                            }
                         }
 
-                    Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(8.dp))
                         Text(
                             text = "© KAMI",
                             style = MaterialTheme.typography.bodySmall,
@@ -1384,7 +1521,7 @@ fun AppDrawerContent(
                             textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                             modifier = Modifier.fillMaxWidth()
                         )
-                    Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(8.dp))
                 } // end Column
             } // end AnimatedVisibility
 

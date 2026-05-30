@@ -313,15 +313,21 @@ class KmiViewModel(
     }
 
     fun preloadTopicsBySubjectCounts() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+        viewModelScope.launch(context = kotlinx.coroutines.Dispatchers.Default) {
             runCatching {
                 val subjects = il.kmi.app.domain.TopicsBySubjectRegistry.allSubjects()
                 val handsBase = subjects.firstOrNull { it.id == "hands_all" }
 
+                val beltForCounts =
+                    selectedBelt.value
+                        ?.takeUnless { it == Belt.WHITE }
+                        ?: Belt.GREEN
+
                 il.kmi.app.screens.BeltQuestions.SubjectTopicsUiLogic
                     .ensureTopicsUiCountsPreloaded(
                         subjects = subjects,
-                        handsBase = handsBase
+                        handsBase = handsBase,
+                        currentBelt = beltForCounts
                     )
             }
         }

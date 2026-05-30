@@ -34,6 +34,7 @@ import androidx.compose.ui.zIndex
 import il.kmi.app.R
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.domain.ExerciseCountsRegistry
+import il.kmi.app.domain.ExerciseCountProvider
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.SubjectTopic
 import il.kmi.app.favorites.FavoritesStore
@@ -68,6 +69,8 @@ import il.kmi.app.subscription.AccessMode
 import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.LockedContentPolicy
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -868,12 +871,16 @@ private fun SubjectRootCardPremium(
 
                         Text(
                             text = countText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            textAlign = TextAlign.Start,
-                            color = countColor,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                lineHeight = 13.sp
+                            ),
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            color = Color(0xFF6B7280).copy(alpha = 0.92f),
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 1
+                            maxLines = 2,
+                            overflow = TextOverflow.Clip
                         )
                     }
                 } else {
@@ -908,12 +915,16 @@ private fun SubjectRootCardPremium(
 
                         Text(
                             text = countText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.ExtraBold,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                lineHeight = 13.sp
+                            ),
+                            fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Right,
-                            color = countColor,
+                            color = Color(0xFF6B7280).copy(alpha = 0.92f),
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 1
+                            maxLines = 2,
+                            overflow = TextOverflow.Clip
                         )
                     }
 
@@ -1009,9 +1020,9 @@ internal fun TopicsBySubjectCard(
         countsReady = true
     }
 
-    LaunchedEffect(subjects, handsBase) {
-        // ✅ אם כבר יש cache בזיכרון — משתמשים בו מיידית בלי חישוב מחדש
-        SubjectTopicsUiLogic.getCachedTopicsUiCountsPayload()?.let { cached ->
+    LaunchedEffect(subjects, handsBase, currentBelt) {
+        // ✅ אם כבר יש cache בזיכרון לחגורה הנוכחית — משתמשים בו מיידית
+        SubjectTopicsUiLogic.getCachedTopicsUiCountsPayload(currentBelt)?.let { cached ->
             applyPayload(cached)
             return@LaunchedEffect
         }
@@ -1019,11 +1030,16 @@ internal fun TopicsBySubjectCard(
         val payload = withContext(Dispatchers.Default) {
             SubjectTopicsUiLogic.buildTopicsUiCountsPayload(
                 subjects = subjects,
-                handsBase = handsBase
+                handsBase = handsBase,
+                currentBelt = currentBelt
             )
         }
 
-        SubjectTopicsUiLogic.cacheTopicsUiCountsPayload(payload)
+        SubjectTopicsUiLogic.cacheTopicsUiCountsPayload(
+            currentBelt = currentBelt,
+            value = payload
+        )
+
         applyPayload(payload)
     }
 
@@ -1038,6 +1054,215 @@ internal fun TopicsBySubjectCard(
         return raw
             .replace(Regex("""(\d+)\s+תתי\s+נושאים"""), "sub-topics $1")
             .replace(Regex("""(\d+)\s+תרגילים"""), "exercises $1")
+    }
+
+    fun countTextFromSubTopicTotalsOrFallback(
+        counts: Map<String, Int>,
+        fallback: String
+    ): String {
+        val cleanCounts = counts
+            .filterKeys { it.trim().isNotBlank() }
+            .filterValues { it > 0 }
+
+        val subTopicCount = cleanCounts.size
+        val totalExercises = cleanCounts.values.sum()
+
+        if (subTopicCount >= 2 && totalExercises > 0) {
+            return if (isEnglish) {
+                "$subTopicCount sub-topics\n${formatCount(totalExercises)}"
+            } else {
+                "$subTopicCount תתי נושאים\n${formatCount(totalExercises)}"
+            }
+        }
+
+        return translateCardCountText(fallback)
+    }
+
+    fun normalizeCountPart(value: String): String =
+        value
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace("־", "-")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    fun subjectTopicCandidatesForCount(
+        subjectId: String,
+        title: String
+    ): List<String> {
+        val cleanTitle = normalizeCountPart(stripLockSuffix(title))
+
+        return when (subjectId.trim().lowercase()) {
+            "rolls_breakfalls",
+            "topic_breakfalls_rolls" -> listOf(
+                "בלימות וגלגולים",
+                "גלגולים ובלימות",
+                "topic_breakfalls_rolls"
+            )
+
+            "topic_ready_stance" -> listOf(
+                "עמידת מוצא",
+                "topic_ready_stance"
+            )
+
+            "topic_ground_prep" -> listOf(
+                "עבודת קרקע",
+                "topic_ground_prep"
+            )
+
+            "topic_kavaler",
+            "kavaler" -> listOf(
+                "קוואלר",
+                "topic_kavaler",
+                "kavaler"
+            )
+
+            "kicks",
+            "topic_kicks" -> listOf(
+                "בעיטות",
+                "topic_kicks",
+                "kicks"
+            )
+
+            else -> listOf(cleanTitle, subjectId)
+        }
+            .map { normalizeCountPart(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    fun fallbackLastNumberFromText(text: String): Int {
+        return Regex("""\d+""")
+            .findAll(text)
+            .mapNotNull { it.value.toIntOrNull() }
+            .lastOrNull()
+            ?: 0
+    }
+
+    fun countTextForSubjectCard(
+        card: SubjectTopicsUiLogic.SubjectCardModel
+    ): String {
+        val globalTopicTitle = when (card.id.trim().lowercase()) {
+            "rolls_breakfalls",
+            "topic_breakfalls_rolls" -> "בלימות וגלגולים"
+
+            "topic_ready_stance" -> "עמידת מוצא"
+
+            "topic_ground_prep" -> "עבודת קרקע"
+
+            "topic_kavaler",
+            "kavaler" -> "קוואלר"
+
+            "kicks",
+            "topic_kicks" -> "בעיטות"
+
+            else -> null
+        }
+
+        if (globalTopicTitle != null) {
+            val stats = ExerciseCountProvider.topicStats(
+                belt = currentBelt,
+                topicTitle = globalTopicTitle
+            )
+
+            if (stats.exerciseCount > 0) {
+                return ExerciseCountProvider.countText(
+                    stats = stats,
+                    isEnglish = isEnglish,
+                    showZeroSubTopics = false
+                )
+                    .replace("  •  ", "\n")
+                    .replace(" • ", "\n")
+            }
+        }
+
+        val candidates = subjectTopicCandidatesForCount(
+            subjectId = card.id,
+            title = card.title
+        )
+
+        val subTitles = candidates
+            .flatMap { candidate ->
+                runCatching {
+                    ContentRepo.listSubTopicTitles(currentBelt, candidate)
+                }.getOrDefault(emptyList())
+            }
+            .map { normalizeCountPart(it) }
+            .filter { it.isNotBlank() }
+            .filter { subTitle ->
+                candidates.none { candidate ->
+                    normalizeCountPart(candidate).equals(
+                        normalizeCountPart(subTitle),
+                        ignoreCase = true
+                    )
+                }
+            }
+            .distinct()
+
+        val directItems = candidates
+            .flatMap { candidate ->
+                runCatching {
+                    ContentRepo.listItemTitles(
+                        belt = currentBelt,
+                        topicTitle = candidate,
+                        subTopicTitle = null
+                    )
+                }.getOrDefault(emptyList())
+            }
+
+        val subItems = candidates
+            .flatMap { candidate ->
+                subTitles.flatMap { subTitle ->
+                    runCatching {
+                        ContentRepo.listItemTitles(
+                            belt = currentBelt,
+                            topicTitle = candidate,
+                            subTopicTitle = subTitle
+                        )
+                    }.getOrDefault(emptyList())
+                }
+            }
+
+        val realItemCount = (directItems + subItems)
+            .map { ExerciseTitleFormatter.displayName(it).ifBlank { it } }
+            .map { normalizeCountPart(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .size
+
+        val cachedSubTopicCounts = subTopicsPickCountsBySubjectId[card.id].orEmpty()
+
+        val finalSubTopicCount = maxOf(
+            subTitles.size,
+            cachedSubTopicCounts.size
+        )
+
+        val finalItemCount = when {
+            realItemCount > 0 -> realItemCount
+            cachedSubTopicCounts.values.sum() > 0 -> cachedSubTopicCounts.values.sum()
+            else -> fallbackLastNumberFromText(card.countText)
+        }
+
+        if (finalItemCount <= 0) {
+            return translateCardCountText(card.countText)
+        }
+
+        return if (isEnglish) {
+            if (finalSubTopicCount > 0) {
+                "$finalSubTopicCount sub-topics\n$finalItemCount exercises"
+            } else {
+                "$finalItemCount exercises"
+            }
+        } else {
+            if (finalSubTopicCount > 0) {
+                "$finalSubTopicCount תתי נושאים\n$finalItemCount תרגילים"
+            } else {
+                "$finalItemCount תרגילים"
+            }
+        }
     }
 
     fun openSubjectSmart(subject: SubjectTopic) {
@@ -1085,6 +1310,7 @@ internal fun TopicsBySubjectCard(
             subjects = visibleSubjectsSplit.withSubTopics,
             sectionCounts = uiSectionCounts,
             subjectCounts = subjectCounts,
+            subTopicsPickCountsBySubjectId = subTopicsPickCountsBySubjectId,
             formatCount = ::formatCount
         ).map { card ->
 
@@ -1134,6 +1360,7 @@ internal fun TopicsBySubjectCard(
             subjects = visibleSubjectsSplit.withoutSubTopics,
             sectionCounts = uiSectionCounts,
             subjectCounts = subjectCounts,
+            subTopicsPickCountsBySubjectId = subTopicsPickCountsBySubjectId,
             formatCount = ::formatCount
         ).map { card ->
 
@@ -1169,6 +1396,7 @@ internal fun TopicsBySubjectCard(
     val releasesRootCard = remember(
         subjectsWithSubTopicsCards,
         subjectsWithoutSubTopicsCards,
+        subTopicsPickCountsBySubjectId,
         isEnglish,
         hasAccess
     ) {
@@ -1182,9 +1410,15 @@ internal fun TopicsBySubjectCard(
                 isEnglish = isEnglish
             )
 
+            val releaseCounts = subTopicsPickCountsBySubjectId["releases"].orEmpty()
+
             it.copy(
                 id = "releases",
-                title = if (hasAccess) baseTitle else "$baseTitle 🔒"
+                title = if (hasAccess) baseTitle else "$baseTitle 🔒",
+                countText = countTextFromSubTopicTotalsOrFallback(
+                    counts = releaseCounts,
+                    fallback = it.countText
+                )
             )
         }
     }
@@ -1221,8 +1455,11 @@ internal fun TopicsBySubjectCard(
     }
 
     val handsRootCard = remember(handsRootCount, handsPickCounts, isEnglish) {
+        val totalHandsExercises =
+            handsPickCounts.values.sum().takeIf { it > 0 } ?: handsRootCount
+
         val base = SubjectTopicsUiLogic.buildHandsRootCard(
-            handsRootCount = handsRootCount,
+            handsRootCount = totalHandsExercises,
             formatCount = ::formatCount,
             subTopicsCount = handsPickCounts.size
         )
@@ -1233,7 +1470,10 @@ internal fun TopicsBySubjectCard(
                 fallbackHeb = base.title,
                 isEnglish = isEnglish
             ),
-            countText = translateCardCountText(base.countText)
+            countText = countTextFromSubTopicTotalsOrFallback(
+                counts = handsPickCounts,
+                fallback = base.countText
+            )
         )
     }
 
@@ -1397,7 +1637,7 @@ internal fun TopicsBySubjectCard(
                                 title = card.title,
                                 subtitle = "",
                                 subjectId = card.id,
-                                countText = card.countText,
+                                countText = countTextForSubjectCard(card),
                                 isDarkMode = isDarkMode,
                                 onClick = {
                                     if (card.id == "releases_hugs") {
@@ -1430,10 +1670,10 @@ internal fun TopicsBySubjectCard(
                                 title = card.title,
                                 subtitle = "",
                                 subjectId = card.id,
-                                countText = card.countText,
+                                countText = countTextForSubjectCard(card),
                                 isDarkMode = isDarkMode,
                                 onClick = {
-                            when (card.id) {
+                                    when (card.id) {
                                 "topic_kavaler" -> {
                                     val action = SubjectTopicsUiLogic.buildOpenSubjectUiAction(
                                         subject = subject,

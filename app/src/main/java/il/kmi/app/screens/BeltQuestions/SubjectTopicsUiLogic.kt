@@ -54,7 +54,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.window.DialogProperties
-
+import il.kmi.app.domain.ContentRepo
+import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 
 // -------------------------------------------------------------
 // UI MODELS (הועברו מ-BeltQuestionsUiModels.kt)
@@ -259,34 +260,45 @@ internal fun HandsPickModeDialogModern(
                                 .wrapContentHeight()
                                 .padding(horizontal = 16.dp, vertical = 14.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides LayoutDirection.Ltr
                             ) {
-                                if (!isEnglish) {
-                                    IconButton(onClick = onDismiss) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = tr("סגור", "Close")
-                                        )
-                                    }
-                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (!isEnglish) {
+                                        IconButton(onClick = onDismiss) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = tr("סגור", "Close")
+                                            )
+                                        }
 
-                                Text(
-                                    text = tr("עבודת ידיים", "Hand Techniques"),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = primaryTextColor,
-                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                    modifier = Modifier.weight(1f)
-                                )
-
-                                if (isEnglish) {
-                                    IconButton(onClick = onDismiss) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = tr("סגור", "Close")
+                                        Text(
+                                            text = tr("עבודת ידיים", "Hand Techniques"),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = primaryTextColor,
+                                            textAlign = TextAlign.Right,
+                                            modifier = Modifier.weight(1f)
                                         )
+                                    } else {
+                                        Text(
+                                            text = tr("עבודת ידיים", "Hand Techniques"),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = primaryTextColor,
+                                            textAlign = TextAlign.Left,
+                                            modifier = Modifier.weight(1f)
+                                        )
+
+                                        IconButton(onClick = onDismiss) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = tr("סגור", "Close")
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -423,37 +435,48 @@ internal fun SubTopicsPickModeDialogModern(
                                 .wrapContentHeight()
                                 .padding(horizontal = 16.dp, vertical = 14.dp)
                         ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (!isEnglish) {
-                                IconButton(onClick = onDismiss) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = tr("סגור", "Close")
-                                    )
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides LayoutDirection.Ltr
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (!isEnglish) {
+                                        IconButton(onClick = onDismiss) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = tr("סגור", "Close")
+                                            )
+                                        }
+
+                                        Text(
+                                            text = title,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = primaryTextColor,
+                                            textAlign = TextAlign.Right,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = title,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = primaryTextColor,
+                                            textAlign = TextAlign.Left,
+                                            modifier = Modifier.weight(1f)
+                                        )
+
+                                        IconButton(onClick = onDismiss) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = tr("סגור", "Close")
+                                            )
+                                        }
+                                    }
                                 }
                             }
-
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = primaryTextColor,
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            if (isEnglish) {
-                                IconButton(onClick = onDismiss) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = tr("סגור", "Close")
-                                    )
-                                }
-                            }
-                        }
 
                         Spacer(Modifier.height(10.dp))
 
@@ -760,37 +783,48 @@ internal fun DefenseCategoryPickDialogModern(
                                 .fillMaxSize()
                                 .padding(horizontal = 16.dp, vertical = 10.dp)
                         ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (!isEnglish) {
-                                IconButton(onClick = onDismiss) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = tr("סגור", "Close")
-                                    )
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides LayoutDirection.Ltr
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (!isEnglish) {
+                                        IconButton(onClick = onDismiss) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = tr("סגור", "Close")
+                                            )
+                                        }
+
+                                        Text(
+                                            text = tr("הגנות", "Defenses"),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = primaryTextColor,
+                                            textAlign = TextAlign.Right,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = tr("הגנות", "Defenses"),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = primaryTextColor,
+                                            textAlign = TextAlign.Left,
+                                            modifier = Modifier.weight(1f)
+                                        )
+
+                                        IconButton(onClick = onDismiss) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = tr("סגור", "Close")
+                                            )
+                                        }
+                                    }
                                 }
                             }
-
-                            Text(
-                                text = tr("הגנות", "Defenses"),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = primaryTextColor,
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            if (isEnglish) {
-                                IconButton(onClick = onDismiss) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = tr("סגור", "Close")
-                                    )
-                                }
-                            }
-                        }
 
                         Spacer(Modifier.height(4.dp))
 
@@ -1323,27 +1357,31 @@ internal object SubjectTopicsUiLogic {
         val subTopicsPickCountsBySubjectId: Map<String, Map<String, Int>>
     )
 
-    // ✅ PERF CACHE: שומר את ה-payload בזיכרון כדי לא לחשב מחדש בכל פתיחת מסך
+    // ✅ PERF CACHE: שומר payload לפי חגורה כדי לא לערבב ספירות בין חגורות
     private object TopicsUiCountsMemoryCache {
         @Volatile
-        private var payload: TopicsUiCountsPayload? = null
+        private var payloadByBeltId: Map<String, TopicsUiCountsPayload> = emptyMap()
 
-        fun get(): TopicsUiCountsPayload? = payload
+        fun get(belt: Belt): TopicsUiCountsPayload? =
+            payloadByBeltId[belt.id]
 
-        fun put(value: TopicsUiCountsPayload) {
-            payload = value
+        fun put(belt: Belt, value: TopicsUiCountsPayload) {
+            payloadByBeltId = payloadByBeltId + (belt.id to value)
         }
 
         fun clear() {
-            payload = null
+            payloadByBeltId = emptyMap()
         }
     }
 
-    fun getCachedTopicsUiCountsPayload(): TopicsUiCountsPayload? =
-        TopicsUiCountsMemoryCache.get()
+    fun getCachedTopicsUiCountsPayload(currentBelt: Belt): TopicsUiCountsPayload? =
+        TopicsUiCountsMemoryCache.get(currentBelt)
 
-    fun cacheTopicsUiCountsPayload(value: TopicsUiCountsPayload) {
-        TopicsUiCountsMemoryCache.put(value)
+    fun cacheTopicsUiCountsPayload(
+        currentBelt: Belt,
+        value: TopicsUiCountsPayload
+    ) {
+        TopicsUiCountsMemoryCache.put(currentBelt, value)
     }
 
     fun clearCachedTopicsUiCountsPayload() {
@@ -1352,16 +1390,21 @@ internal object SubjectTopicsUiLogic {
 
     fun ensureTopicsUiCountsPreloaded(
         subjects: List<SubjectTopic>,
-        handsBase: SubjectTopic?
+        handsBase: SubjectTopic?,
+        currentBelt: Belt
     ) {
-        if (getCachedTopicsUiCountsPayload() != null) return
+        if (getCachedTopicsUiCountsPayload(currentBelt) != null) return
 
         val payload = buildTopicsUiCountsPayload(
             subjects = subjects,
-            handsBase = handsBase
+            handsBase = handsBase,
+            currentBelt = currentBelt
         )
 
-        cacheTopicsUiCountsPayload(payload)
+        cacheTopicsUiCountsPayload(
+            currentBelt = currentBelt,
+            value = payload
+        )
     }
 
     private fun normReleaseTitle(raw: String): String =
@@ -1386,7 +1429,10 @@ internal object SubjectTopicsUiLogic {
         }
     }
 
-    private fun hardSectionTotalItems(sectionId: String): Int {
+    private fun hardSectionTotalItems(
+        sectionId: String,
+        currentBelt: Belt
+    ): Int {
         val section = il.kmi.shared.domain.content.HardSectionsCatalog.findSectionById(
             subjectId = "releases",
             sectionId = sectionId
@@ -1398,24 +1444,107 @@ internal object SubjectTopicsUiLogic {
             return if (s.subSections.isNotEmpty()) {
                 s.subSections.sumOf { child -> countDeep(child) }
             } else {
-                s.beltGroups.sumOf { group -> group.items.size }
+                s.beltGroups
+                    .filter { group -> group.belt == currentBelt }
+                    .sumOf { group ->
+                        group.items
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                            .size
+                    }
             }
         }
 
         return countDeep(section)
     }
 
-    private fun releasesCountForPick(raw: String): Int {
+    private fun releasesCountForPick(
+        raw: String,
+        currentBelt: Belt
+    ): Int {
         val sectionId = releasesSectionIdForTitle(raw) ?: return 0
-        return hardSectionTotalItems(sectionId)
+        return hardSectionTotalItems(
+            sectionId = sectionId,
+            currentBelt = currentBelt
+        )
+    }
+
+    private fun normalizeCountValue(raw: String): String =
+        raw
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace("־", "-")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    private fun repoItemsForTopic(
+        currentBelt: Belt,
+        topicTitle: String
+    ): List<String> {
+        val cleanTopic = normalizeCountValue(topicTitle)
+        if (cleanTopic.isBlank()) return emptyList()
+
+        val directItems = runCatching {
+            ContentRepo.listItemTitles(
+                belt = currentBelt,
+                topicTitle = cleanTopic,
+                subTopicTitle = null
+            )
+        }.getOrDefault(emptyList())
+
+        val subTitles = runCatching {
+            ContentRepo.listSubTopicTitles(
+                belt = currentBelt,
+                topicTitle = cleanTopic
+            )
+        }.getOrDefault(emptyList())
+            .map { normalizeCountValue(it) }
+            .filter { it.isNotBlank() }
+            .filter { it != cleanTopic }
+            .distinct()
+
+        val subItems = subTitles.flatMap { subTitle ->
+            runCatching {
+                ContentRepo.listItemTitles(
+                    belt = currentBelt,
+                    topicTitle = cleanTopic,
+                    subTopicTitle = subTitle
+                )
+            }.getOrDefault(emptyList())
+        }
+
+        return (directItems + subItems)
+            .map { item ->
+                ExerciseTitleFormatter
+                    .displayName(item)
+                    .ifBlank { item }
+            }
+            .map { normalizeCountValue(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    private fun countSubjectItemsForBelt(
+        subject: SubjectTopic,
+        currentBelt: Belt
+    ): Int {
+        return SubjectTopicsEngine.countUiTitlesForSubject(subject)
     }
 
     fun buildTopicsUiCountsPayload(
         subjects: List<SubjectTopic>,
-        handsBase: SubjectTopic?
+        handsBase: SubjectTopic?,
+        currentBelt: Belt
     ): TopicsUiCountsPayload {
         val subjectCounts = subjects.associate { subject ->
-            subject.id to SubjectTopicsEngine.countUiTitlesForSubject(subject)
+            subject.id to countSubjectItemsForBelt(
+                subject = subject,
+                currentBelt = currentBelt
+            )
         }
 
         val handsPicksOrder: List<String> =
@@ -1428,7 +1557,11 @@ internal object SubjectTopicsUiLogic {
                     0
                 } else {
                     val tmp = SubjectTopicsEngine.handsSubjectForPick(base, pick)
-                    SubjectTopicsEngine.countUiTitlesForSubject(tmp)
+
+                    countSubjectItemsForBelt(
+                        subject = tmp,
+                        currentBelt = currentBelt
+                    )
                 }
             }
 
@@ -1466,12 +1599,16 @@ internal object SubjectTopicsUiLogic {
                             when (base.id) {
                                 "hands_all" -> {
                                     val tmp = SubjectTopicsEngine.handsSubjectForPick(base, pick)
+
                                     SubjectTopicsEngine.countUiTitlesForSubject(tmp)
                                 }
 
                                 "releases",
                                 "releases_hugs" -> {
-                                    releasesCountForPick(pick)
+                                    releasesCountForPick(
+                                        raw = pick,
+                                        currentBelt = currentBelt
+                                    )
                                 }
 
                                 else -> {
@@ -1583,22 +1720,29 @@ internal object SubjectTopicsUiLogic {
         subjects: List<SubjectTopic>,
         sectionCounts: Map<String, Int>,
         subjectCounts: Map<String, Int>,
+        subTopicsPickCountsBySubjectId: Map<String, Map<String, Int>> = emptyMap(),
         formatCount: (Int) -> String
     ): List<SubjectCardModel> {
         return subjects.map { subject ->
             val subCount = sectionCounts[subject.id] ?: subject.subTopics.size
             val exCount = subjectCounts[subject.id] ?: 0
-            val hasSubTopics = subCount > 0
+            val hasSubTopics = subCount >= 2
+
+            val countText = when {
+                hasSubTopics -> {
+                    "$subCount תתי נושאים\n${formatCount(exCount)}"
+                }
+
+                else -> {
+                    formatCount(exCount)
+                }
+            }
 
             SubjectCardModel(
                 id = subject.id,
                 title = subject.titleHeb,
                 subtitle = if (hasSubTopics) "בחר תת־נושא" else "כניסה לתרגילים",
-                countText = if (hasSubTopics) {
-                    "$subCount תתי נושאים\n${formatCount(exCount)}"
-                } else {
-                    formatCount(exCount)
-                },
+                countText = countText,
                 hasSubTopics = hasSubTopics
             )
         }

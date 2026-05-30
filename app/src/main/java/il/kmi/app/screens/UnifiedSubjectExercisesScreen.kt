@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -28,7 +30,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,9 +65,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import il.kmi.app.KmiViewModel
 import il.kmi.app.domain.Explanations
 import il.kmi.app.domain.color
+import il.kmi.app.favorites.FavoritesStore
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.English.ExerciseTitlesEnAliases
 import il.kmi.shared.domain.content.English.ExerciseTitlesEnItems
@@ -320,6 +326,74 @@ private data class SelectedHardExercise(
 )
 
 @Composable
+private fun HardTopStatChip(
+    value: String,
+    label: String,
+    containerColor: Color,
+    contentColor: Color = Color.White
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        shadowElevation = 1.dp,
+        border = BorderStroke(
+            1.dp,
+            contentColor.copy(alpha = 0.14f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                color = contentColor,
+                fontSize = 14.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+
+            Text(
+                text = label,
+                color = contentColor.copy(alpha = 0.92f),
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun HardExerciseMetaBadge(
+    text: String,
+    containerColor: Color,
+    contentColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor,
+        border = BorderStroke(
+            1.dp,
+            contentColor.copy(alpha = 0.14f)
+        ),
+        shadowElevation = 0.dp
+    ) {
+        Text(
+            text = text,
+            color = contentColor,
+            fontSize = 9.sp,
+            lineHeight = 10.5.sp,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
 private fun BeltGroupsContent(
     title: String,
     groups: List<HardSectionsResolver.BeltItems>,
@@ -500,30 +574,138 @@ private fun BeltGroupsContent(
         }
     }
 
+    val favoriteIds: Set<String> by FavoritesStore
+        .favoritesFlow
+        .collectAsState(initial = emptySet())
+
+    fun hardFavoriteIdFor(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ): String {
+        return hardStatusIdFor(
+            belt = belt,
+            topic = topic,
+            rawItem = rawItem
+        )
+    }
+
+    val allHardItems = remember(groups, title) {
+        groups.flatMap { group ->
+            group.items.map { rawItem ->
+                Triple(group.belt, title, rawItem)
+            }
+        }
+    }
+
+    val hardTotalCount = allHardItems.size
+
+    val hardKnownCount = allHardItems.count { (belt, topic, rawItem) ->
+        val statusId = hardStatusIdFor(belt, topic, rawItem)
+        hardItemStates[statusId] == true
+    }
+
+    val hardUnknownCount = allHardItems.count { (belt, topic, rawItem) ->
+        val statusId = hardStatusIdFor(belt, topic, rawItem)
+        hardItemStates[statusId] == false
+    }
+
+    val hardUnmarkedCount = allHardItems.count { (belt, topic, rawItem) ->
+        val statusId = hardStatusIdFor(belt, topic, rawItem)
+        hardItemStates[statusId] == null
+    }
+
+    val hardFavoriteCount = allHardItems.count { (belt, topic, rawItem) ->
+        hardFavoriteIdFor(belt, topic, rawItem) in favoriteIds
+    }
+
     var selectedExercise by remember { mutableStateOf<SelectedHardExercise?>(null) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             Text(
                 text = if (isEnglish) translateHardTopicTitle(title) else title,
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 22.sp,
+                    lineHeight = 25.sp
+                ),
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
 
             Text(
                 text = if (isEnglish) "Exercises by belt" else "תרגילים לפי חגורות",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp
+                ),
+                color = Color(0xFF5B6472),
+                fontWeight = FontWeight.SemiBold,
                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = if (isEnglish) {
+                    "← Swipe sideways to see more stats →"
+                } else {
+                    "→→ הזז לצד כדי לראות עוד נתונים →→"
+                },
+                color = Color(0xFF5B6472),
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HardTopStatChip(
+                    value = hardTotalCount.toString(),
+                    label = if (isEnglish) "Exercises" else "תרגילים",
+                    containerColor = Color(0xFF98A2B3)
+                )
+
+                HardTopStatChip(
+                    value = hardKnownCount.toString(),
+                    label = if (isEnglish) "Known" else "יודע",
+                    containerColor = Color(0xFF7ACB88)
+                )
+
+                HardTopStatChip(
+                    value = hardUnknownCount.toString(),
+                    label = if (isEnglish) "Unknown" else "לא יודע",
+                    containerColor = Color(0xFFF1A97A)
+                )
+
+                HardTopStatChip(
+                    value = hardFavoriteCount.toString(),
+                    label = if (isEnglish) "Favorites" else "מועדפים",
+                    containerColor = Color(0xFFE7A3B5)
+                )
+
+                HardTopStatChip(
+                    value = hardUnmarkedCount.toString(),
+                    label = if (isEnglish) "Unmarked" else "לא סומן",
+                    containerColor = Color(0xFF8596C9)
+                )
+            }
         }
 
         items(groups) { group ->
@@ -532,11 +714,28 @@ private fun BeltGroupsContent(
                 title = title,
                 isEnglish = isEnglish,
                 hardItemStates = hardItemStates,
+                favoriteIds = favoriteIds,
                 statusIdFor = { belt, topic, raw ->
                     hardStatusIdFor(
                         belt = belt,
                         topic = topic,
                         rawItem = raw
+                    )
+                },
+                favoriteIdFor = { belt, topic, raw ->
+                    hardFavoriteIdFor(
+                        belt = belt,
+                        topic = topic,
+                        rawItem = raw
+                    )
+                },
+                onToggleFavorite = { belt, topic, raw ->
+                    FavoritesStore.toggle(
+                        hardFavoriteIdFor(
+                            belt = belt,
+                            topic = topic,
+                            rawItem = raw
+                        )
                     )
                 },
                 onStatusClick = { belt, topic, raw ->
@@ -635,7 +834,10 @@ private fun BeltSectionCard(
     title: String,
     isEnglish: Boolean,
     hardItemStates: Map<String, Boolean?>,
+    favoriteIds: Set<String>,
     statusIdFor: (belt: Belt, topic: String, rawItem: String) -> String,
+    favoriteIdFor: (belt: Belt, topic: String, rawItem: String) -> String,
+    onToggleFavorite: (belt: Belt, topic: String, rawItem: String) -> Unit,
     onStatusClick: (belt: Belt, topic: String, rawItem: String) -> Unit,
     onInfoClick: (belt: Belt, topic: String, rawItem: String, displayItem: String) -> Unit
 ) {
@@ -688,16 +890,23 @@ private fun BeltSectionCard(
 
             group.items.forEachIndexed { index, rawItem ->
                 val statusId = statusIdFor(group.belt, title, rawItem)
+                val favoriteId = favoriteIdFor(group.belt, title, rawItem)
                 val mastered = hardItemStates[statusId]
                 val displayItem = if (isEnglish) translateHardExerciseTitle(rawItem) else rawItem
+                val isFavorite = favoriteId in favoriteIds
 
                 HardExerciseRowCard(
+                    exerciseNumber = index + 1,
                     belt = group.belt,
                     item = displayItem,
                     mastered = mastered,
+                    isFavorite = isFavorite,
                     isEnglish = isEnglish,
                     onStatusClick = {
                         onStatusClick(group.belt, title, rawItem)
+                    },
+                    onToggleFavorite = {
+                        onToggleFavorite(group.belt, title, rawItem)
                     },
                     onInfoClick = {
                         onInfoClick(group.belt, title, rawItem, displayItem)
@@ -705,7 +914,7 @@ private fun BeltSectionCard(
                 )
 
                 if (index != group.items.lastIndex) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(6.dp))
                 }
             }
         }
@@ -714,11 +923,14 @@ private fun BeltSectionCard(
 
 @Composable
 private fun HardExerciseRowCard(
+    exerciseNumber: Int,
     belt: Belt,
     item: String,
     mastered: Boolean?,
+    isFavorite: Boolean,
     isEnglish: Boolean,
     onStatusClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onInfoClick: () -> Unit
 ) {
     Surface(
@@ -735,8 +947,8 @@ private fun HardExerciseRowCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 58.dp)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .heightIn(min = 50.dp)
+                .padding(horizontal = 8.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             HardMasterToggle(
@@ -744,40 +956,114 @@ private fun HardExerciseRowCard(
                 onClick = onStatusClick
             )
 
-            Spacer(Modifier.width(10.dp))
-
-            Text(
-                text = item,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF263238),
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onInfoClick() }
-            )
-
             Spacer(Modifier.width(8.dp))
 
-            IconButton(
-                onClick = onInfoClick,
-                modifier = Modifier.size(40.dp)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onInfoClick() },
+                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Info,
-                    contentDescription = if (isEnglish) "Exercise information" else "מידע על התרגיל",
-                    tint = Color(0xFF607D8B)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isEnglish) {
+                        HardExerciseMetaBadge(
+                            text = "No. $exerciseNumber",
+                            containerColor = belt.color.copy(alpha = 0.14f),
+                            contentColor = Color(0xFF1F2937)
+                        )
+
+                        if (isFavorite) {
+                            Spacer(Modifier.width(5.dp))
+                            HardExerciseMetaBadge(
+                                text = "Favorite",
+                                containerColor = Color(0xFFF9D9B8),
+                                contentColor = Color(0xFF9A5A00)
+                            )
+                        }
+
+                        Spacer(Modifier.weight(1f))
+                    } else {
+                        Spacer(Modifier.weight(1f))
+
+                        if (isFavorite) {
+                            HardExerciseMetaBadge(
+                                text = "מועדף",
+                                containerColor = Color(0xFFF9D9B8),
+                                contentColor = Color(0xFF9A5A00)
+                            )
+                            Spacer(Modifier.width(5.dp))
+                        }
+
+                        HardExerciseMetaBadge(
+                            text = "מס׳ $exerciseNumber",
+                            containerColor = belt.color.copy(alpha = 0.14f),
+                            contentColor = Color(0xFF1F2937)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(2.dp))
+
+                Text(
+                    text = item,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp
+                    ),
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF263238),
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
             Spacer(Modifier.width(6.dp))
 
+            IconButton(
+                onClick = onInfoClick,
+                modifier = Modifier.size(30.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = if (isEnglish) "Exercise information" else "מידע על התרגיל",
+                    tint = Color(0xFF607D8B),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(Modifier.width(3.dp))
+
+            IconButton(
+                onClick = onToggleFavorite,
+                modifier = Modifier.size(30.dp)
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    contentDescription = if (isFavorite) {
+                        if (isEnglish) "Remove from favorites" else "הסר ממועדפים"
+                    } else {
+                        if (isEnglish) "Add to favorites" else "הוסף למועדפים"
+                    },
+                    tint = if (isFavorite) {
+                        Color(0xFFFFC107)
+                    } else {
+                        Color(0xFF9CA3AF)
+                    },
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(Modifier.width(3.dp))
+
             Box(
                 modifier = Modifier
-                    .width(4.dp)
-                    .heightIn(min = 42.dp)
+                    .width(3.dp)
+                    .heightIn(min = 34.dp)
                     .clip(RoundedCornerShape(999.dp))
                     .background(belt.color.copy(alpha = 0.90f))
             )
@@ -804,7 +1090,7 @@ private fun HardMasterToggle(
 
     Surface(
         modifier = Modifier
-            .size(42.dp)
+            .size(34.dp)
             .clickable(onClick = onClick),
         shape = CircleShape,
         color = bg,
@@ -821,14 +1107,14 @@ private fun HardMasterToggle(
                     imageVector = Icons.Filled.Check,
                     contentDescription = "יודע",
                     tint = Color.White,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(21.dp)
                 )
 
                 false -> Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "לא יודע",
                     tint = Color.White,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(21.dp)
                 )
 
                 null -> Spacer(Modifier.size(1.dp))
