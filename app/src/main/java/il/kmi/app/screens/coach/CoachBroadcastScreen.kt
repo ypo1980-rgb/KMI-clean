@@ -48,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import android.app.Activity
 import android.content.SharedPreferences
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import com.google.firebase.firestore.SetOptions
 import il.kmi.shared.localization.AppLanguage
@@ -288,10 +289,33 @@ fun CoachBroadcastScreen(
         }
     }
 
-    var sendScope by remember { mutableStateOf("group") }
+    var sendScope by remember { mutableStateOf("groups") }
 
-    val effectiveGroupKey = remember(sendScope, coachGroupKey) {
-        if (sendScope == "branch") "" else coachGroupKey.trim()
+    var availableBranchGroups by remember {
+        mutableStateOf<List<String>>(emptyList())
+    }
+
+    var availableBranchGroupCounts by remember {
+        mutableStateOf<Map<String, Int>>(emptyMap())
+    }
+
+    var selectedTargetGroups by remember {
+        mutableStateOf<Set<String>>(emptySet())
+    }
+
+    val effectiveGroupKeys = remember(sendScope, selectedTargetGroups) {
+        if (sendScope == "branch") {
+            emptyList()
+        } else {
+            selectedTargetGroups
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+    }
+
+    val effectiveGroupKey = remember(effectiveGroupKeys) {
+        effectiveGroupKeys.joinToString(", ")
     }
 
     var region by remember { mutableStateOf(defaultRegion.orEmpty()) }
@@ -305,6 +329,10 @@ fun CoachBroadcastScreen(
     // רשימת הנמענים מהקבוצה (נשלפת מפיירסטור)
     var recipients by remember { mutableStateOf<List<CoachRecipient>>(emptyList()) }
 
+    var isRecipientsLoading by remember {
+        mutableStateOf(false)
+    }
+
     val db = remember { FirebaseFirestore.getInstance() }
 
     // Snackbar לפידבק
@@ -312,7 +340,7 @@ fun CoachBroadcastScreen(
     val scope = rememberCoroutineScope()
 
     // ===== טעינת חברי הקבוצה מה- Firestore לפי אזור + סניף + קבוצה =====
-    LaunchedEffect(region, branch, effectiveGroupKey) {
+    LaunchedEffect(region, branch, sendScope, selectedTargetGroups, coachGroupKey) {
         fun String.norm(): String {
             return trim()
                 .replace('־', '-')
@@ -340,6 +368,16 @@ fun CoachBroadcastScreen(
                 .map { it.norm() }
                 .filter { it.isNotBlank() }
                 .distinct()
+        }
+
+        fun normalizePhoneKey(raw: String): String {
+            return raw
+                .trim()
+                .replace(" ", "")
+                .replace("-", "")
+                .replace("(", "")
+                .replace(")", "")
+                .replace(".", "")
         }
 
         fun expandGroupAliases(raw: String): List<String> {
@@ -443,6 +481,29 @@ fun CoachBroadcastScreen(
                 .distinct()
         }
 
+        fun DocumentSnapshot.groupDisplayTokens(): List<String> {
+            val groupsList = (get("groups") as? List<*>)
+                ?.mapNotNull { it?.toString()?.trim() }
+                .orEmpty()
+
+            return buildList {
+                addAll(groupsList)
+                addAll(splitTokensNorm(getString("primaryGroup")))
+                addAll(splitTokensNorm(getString("activeGroup")))
+                addAll(splitTokensNorm(getString("active_group")))
+                addAll(splitTokensNorm(getString("groupKey")))
+                addAll(splitTokensNorm(getString("group_key")))
+                addAll(splitTokensNorm(getString("group")))
+                addAll(splitTokensNorm(getString("groupName")))
+                addAll(splitTokensNorm(getString("groupsCsv")))
+                addAll(splitTokensNorm(getString("groupCsv")))
+                addAll(splitTokensNorm(getString("age_group")))
+            }
+                .map { it.norm() }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
         fun matchesAnyToken(tokens: List<String>, candidates: Set<String>): Boolean {
             if (tokens.isEmpty() || candidates.isEmpty()) return false
 
@@ -465,23 +526,37 @@ fun CoachBroadcastScreen(
         }
 
         val regionNorm = region.norm()
-        val branchPrimary = branch.norm().pickPrimaryBranch()
-        val groupNorm = effectiveGroupKey.norm()
 
-        if (regionNorm.isBlank() || branchPrimary.isBlank()) {
+        val branchNames = splitTokensNorm(branch)
+            .ifEmpty {
+                listOf(branch.norm().pickPrimaryBranch())
+            }
+            .map { it.pickPrimaryBranch().norm() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        val selectedGroupNames = effectiveGroupKeys.map { it.norm() }
+
+        if (regionNorm.isBlank() || branchNames.isEmpty()) {
+            isRecipientsLoading = false
             recipients = emptyList()
             return@LaunchedEffect
         }
 
-        val branchCandidates = listOf(
-            branchPrimary,
-            branchPrimary.replace("-", "–"),
-            branchPrimary.replace("-", "—"),
-            branchPrimary.replace("-", "־"),
-            branchPrimary.replace("–", "-"),
-            branchPrimary.replace("—", "-"),
-            branchPrimary.replace("־", "-")
-        )
+        isRecipientsLoading = true
+
+        val branchCandidates = branchNames
+            .flatMap { branchName ->
+                listOf(
+                    branchName,
+                    branchName.replace("-", "–"),
+                    branchName.replace("-", "—"),
+                    branchName.replace("-", "־"),
+                    branchName.replace("–", "-"),
+                    branchName.replace("—", "-"),
+                    branchName.replace("־", "-")
+                )
+            }
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
@@ -490,7 +565,8 @@ fun CoachBroadcastScreen(
             .map { it.norm() }
             .toSet()
 
-        val groupCandidateSet = expandGroupAliases(groupNorm)
+        val groupCandidateSet = selectedGroupNames
+            .flatMap { expandGroupAliases(it) }
             .toSet()
 
         fun docsToRecipients(docs: List<DocumentSnapshot>): List<CoachRecipient> {
@@ -503,10 +579,14 @@ fun CoachBroadcastScreen(
                 .filter { it.isTraineeRole() }
                 .filter { matchesAnyToken(it.branchTokensNorm(), branchCandidateSet) }
                 .filter {
-                    // אם אין לקואץ׳ קבוצה מוגדרת — לא מסננים לפי קבוצה.
-                    // אם יש קבוצה — שולחים רק למי ששייך לקבוצה הזו.
-                    groupCandidateSet.isEmpty() ||
-                            matchesAnyToken(it.groupTokensNorm(), groupCandidateSet)
+                    // במצב קבוצות: אם אין אף קבוצה מסומנת — לא מציגים נמענים.
+                    // רק קבוצות שסומנו בפועל יטענו מתאמנים.
+                    if (sendScope == "branch") {
+                        true
+                    } else {
+                        groupCandidateSet.isNotEmpty() &&
+                                matchesAnyToken(it.groupTokensNorm(), groupCandidateSet)
+                    }
                 }
                 .mapNotNull { doc ->
                     val phone = (
@@ -544,10 +624,18 @@ fun CoachBroadcastScreen(
                         canReceiveSms = phone.isNotBlank()
                     )
                 }
-                .groupBy { it.uid.ifBlank { it.phone } }
-                .values
-                .mapNotNull { it.firstOrNull() }
-                .distinctBy { it.phone }
+                .distinctBy { recipient ->
+                    val phoneKey = normalizePhoneKey(recipient.phone)
+                    val emailKey = recipient.email.trim().lowercase()
+                    val nameKey = recipient.name.trim().lowercase()
+
+                    when {
+                        phoneKey.isNotBlank() -> "phone:$phoneKey"
+                        emailKey.isNotBlank() -> "email:$emailKey"
+                        recipient.uid.isNotBlank() -> "uid:${recipient.uid}"
+                        else -> "name:$nameKey"
+                    }
+                }
                 .sortedBy { it.name }
                 .toList()
         }
@@ -639,11 +727,97 @@ fun CoachBroadcastScreen(
 
         try {
             val docs = fetchCandidateDocs()
+
+            val branchMatchedDocs = docs
+                .asSequence()
+                .filter { it.isActiveUser() }
+                .filter { it.isTraineeRole() }
+                .filter { matchesAnyToken(it.branchTokensNorm(), branchCandidateSet) }
+                .toList()
+
+            val branchGroups = branchMatchedDocs
+                .flatMap { it.groupDisplayTokens() }
+                .map { it.norm() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .sorted()
+
+            val groupCounts = branchGroups.associateWith { groupName ->
+                val groupCandidates = expandGroupAliases(groupName).toSet()
+
+                branchMatchedDocs
+                    .asSequence()
+                    .filter { doc ->
+                        matchesAnyToken(
+                            tokens = doc.groupTokensNorm(),
+                            candidates = groupCandidates
+                        )
+                    }
+                    .mapNotNull { doc ->
+                        val phone = (
+                                doc.getString("phone")
+                                    ?: doc.getString("phoneNumber")
+                                    ?: doc.getString("phone_number")
+                                    ?: ""
+                                ).trim()
+
+                        val uid = (
+                                doc.getString("uid")
+                                    ?: doc.getString("authUid")
+                                    ?: doc.id
+                                ).trim()
+
+                        val email = doc.getString("email")
+                            ?.trim()
+                            .orEmpty()
+
+                        val name = doc.displayNameOrPhone(phone).trim()
+
+                        val phoneKey = normalizePhoneKey(phone)
+                        val emailKey = email.lowercase()
+                        val nameKey = name.lowercase()
+
+                        when {
+                            phoneKey.isNotBlank() -> "phone:$phoneKey"
+                            emailKey.isNotBlank() -> "email:$emailKey"
+                            uid.isNotBlank() -> "uid:$uid"
+                            nameKey.isNotBlank() -> "name:$nameKey"
+                            else -> null
+                        }
+                    }
+                    .distinct()
+                    .count()
+            }
+
+            availableBranchGroups = branchGroups
+            availableBranchGroupCounts = groupCounts
+
+            if (sendScope != "branch" && branchGroups.isNotEmpty()) {
+                val normalizedSelectedGroups = selectedTargetGroups
+                    .map { it.norm() }
+                    .toSet()
+
+                val selectedStillValid = normalizedSelectedGroups
+                    .filter { it in branchGroups }
+                    .toSet()
+
+                if (selectedStillValid != normalizedSelectedGroups) {
+                    selectedTargetGroups = selectedStillValid
+                    recipients = emptyList()
+                    isRecipientsLoading = false
+                    return@LaunchedEffect
+                }
+            }
+
             val finalRecipients = docsToRecipients(docs)
 
             recipients = finalRecipients
+            isRecipientsLoading = false
         } catch (_: Exception) {
+            availableBranchGroups = emptyList()
+            availableBranchGroupCounts = emptyMap()
             recipients = emptyList()
+            isRecipientsLoading = false
         }
     }
 
@@ -773,20 +947,25 @@ fun CoachBroadcastScreen(
     ) {
         Scaffold(
             topBar = {
-            il.kmi.app.ui.KmiTopBar(
-                title = coachBroadcastTr(
-                    isEnglish,
-                    "שידור הודעה לקבוצה",
-                    "Broadcast Message"
-                ),
-                onHome = onHome,
-                onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
-                showRoleStatus = false,
-                lockSearch = true,
-                lockHome = false,
-                showBottomActions = true,
-                currentLang = if (isEnglish) "en" else "he",
-                onToggleLanguage = {
+                il.kmi.app.ui.KmiTopBar(
+                    title = coachBroadcastTr(
+                        isEnglish,
+                        "שידור הודעה לקבוצה",
+                        "Broadcast Message"
+                    ),
+                    onHome = onHome,
+                    onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
+                    showRoleStatus = false,
+                    lockSearch = true,
+
+                    // ✅ לא נועל את הבית בסרגל האייקונים התחתון.
+                    // ✅ רק מסתיר את אייקון הבית הקטן ליד הכותרת העליונה.
+                    lockHome = false,
+                    showTopHome = false,
+
+                    showBottomActions = true,
+                    currentLang = if (isEnglish) "en" else "he",
+                    onToggleLanguage = {
                     val newLang =
                         if (currentLanguage == AppLanguage.HEBREW) {
                             AppLanguage.ENGLISH
@@ -876,6 +1055,10 @@ fun CoachBroadcastScreen(
                                         onClick = {
                                             region = r
                                             branch = ""
+                                            sendScope = "groups"
+                                            availableBranchGroups = emptyList()
+                                            availableBranchGroupCounts = emptyMap()
+                                            selectedTargetGroups = emptySet()
                                             recipients = emptyList()
                                             expandedRegion = false
                                         }
@@ -921,6 +1104,11 @@ fun CoachBroadcastScreen(
                                             },
                                             onClick = {
                                                 branch = b
+                                                sendScope = "groups"
+                                                availableBranchGroups = emptyList()
+                                                availableBranchGroupCounts = emptyMap()
+                                                selectedTargetGroups = emptySet()
+                                                recipients = emptyList()
                                                 expandedBranch = false
                                             }
                                         )
@@ -950,7 +1138,7 @@ fun CoachBroadcastScreen(
                     }
                 }
 
-                if (coachGroupKey.isNotBlank()) {
+                if (branch.isNotBlank() && availableBranchGroups.isNotEmpty()) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
@@ -965,13 +1153,13 @@ fun CoachBroadcastScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
                                 text = coachBroadcastTr(
                                     isEnglish,
-                                    "בחירת קהל יעד",
-                                    "Target audience"
+                                    "בחירת קבוצות לשליחה",
+                                    "Select groups to include"
                                 ),
                                 color = Color.White,
                                 style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
@@ -980,132 +1168,243 @@ fun CoachBroadcastScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
+                            val areAllGroupsSelected =
+                                availableBranchGroups.isNotEmpty() &&
+                                        selectedTargetGroups.containsAll(availableBranchGroups)
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.Top
+                                horizontalArrangement = Arrangement.Center
                             ) {
-                                OutlinedButton(
-                                    onClick = { sendScope = "group" },
+                                Surface(
+                                    onClick = {
+                                        sendScope = "groups"
+
+                                        selectedTargetGroups =
+                                            if (areAllGroupsSelected) {
+                                                emptySet()
+                                            } else {
+                                                availableBranchGroups.toSet()
+                                            }
+
+                                        recipients = emptyList()
+                                        isRecipientsLoading = true
+                                    },
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 78.dp),
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                        .widthIn(min = 210.dp, max = 260.dp)
+                                        .height(58.dp),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                                    color = Color.Transparent,
+                                    shadowElevation = 3.dp,
                                     border = BorderStroke(
                                         1.dp,
-                                        if (sendScope == "group") {
+                                        if (areAllGroupsSelected) {
+                                            Color(0xFFFBBF24)
+                                        } else {
                                             Color(0xFF67E8F9)
-                                        } else {
-                                            Color.White.copy(alpha = 0.18f)
                                         }
-                                    ),
-                                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                                        containerColor = if (sendScope == "group") {
-                                            Color(0xFF0EA5E9).copy(alpha = 0.32f)
-                                        } else {
-                                            Color(0xFF0B1220).copy(alpha = 0.82f)
-                                        },
-                                        contentColor = Color(0xFFE0F2FE)
-                                    ),
-                                    contentPadding = PaddingValues(
-                                        horizontal = 10.dp,
-                                        vertical = 10.dp
                                     )
                                 ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                brush = Brush.horizontalGradient(
+                                                    colors = if (areAllGroupsSelected) {
+                                                        listOf(
+                                                            Color(0xFF92400E),
+                                                            Color(0xFFD97706),
+                                                            Color(0xFFF59E0B)
+                                                        )
+                                                    } else {
+                                                        listOf(
+                                                            Color(0xFF155E75),
+                                                            Color(0xFF0891B2),
+                                                            Color(0xFF22D3EE)
+                                                        )
+                                                    }
+                                                )
+                                            )
+                                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Text(
-                                            text = coachBroadcastTr(
-                                                isEnglish,
-                                                "הקבוצה שלי",
-                                                "My group"
-                                            ),
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 1,
-                                            color = Color.White,
-                                            fontSize = 18.sp,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Text(
+                                                text = if (areAllGroupsSelected) {
+                                                    "↩️"
+                                                } else {
+                                                    "☑️"
+                                                },
+                                                fontSize = 14.sp,
+                                                lineHeight = 15.sp,
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 1
+                                            )
 
-                                        Spacer(Modifier.height(4.dp))
+                                            Spacer(Modifier.width(7.dp))
 
-                                        Text(
-                                            text = coachBroadcastTr(
-                                                isEnglish,
-                                                "רק המתאמנים של הקבוצה",
-                                                "Only this group's trainees"
-                                            ),
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 2,
-                                            color = Color(0xFFBAE6FD),
-                                            fontSize = 12.sp,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                Text(
+                                                    text = if (areAllGroupsSelected) {
+                                                        coachBroadcastTr(
+                                                            isEnglish,
+                                                            "בטל סימון לכולם",
+                                                            "Unselect all"
+                                                        )
+                                                    } else {
+                                                        coachBroadcastTr(
+                                                            isEnglish,
+                                                            "סמן את כולם",
+                                                            "Select all"
+                                                        )
+                                                    },
+                                                    textAlign = TextAlign.Center,
+                                                    color = Color.White,
+                                                    fontSize = 13.sp,
+                                                    lineHeight = 15.sp,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                                                    maxLines = 1,
+                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                )
+
+                                                Text(
+                                                    text = if (areAllGroupsSelected) {
+                                                        coachBroadcastTr(
+                                                            isEnglish,
+                                                            "כל הקבוצות מסומנות",
+                                                            "All groups selected"
+                                                        )
+                                                    } else {
+                                                        coachBroadcastTr(
+                                                            isEnglish,
+                                                            "${availableBranchGroups.size} קבוצות · ${
+                                                                availableBranchGroups.sumOf { availableBranchGroupCounts[it] ?: 0 }
+                                                            } מתאמנים",
+                                                            "${availableBranchGroups.size} groups · ${
+                                                                availableBranchGroups.sumOf { availableBranchGroupCounts[it] ?: 0 }
+                                                            } trainees"
+                                                        )
+                                                    },
+                                                    textAlign = TextAlign.Center,
+                                                    color = if (areAllGroupsSelected) {
+                                                        Color(0xFFFFF7ED)
+                                                    } else {
+                                                        Color(0xFFE0F2FE)
+                                                    },
+                                                    fontSize = 10.sp,
+                                                    lineHeight = 11.sp,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                                    maxLines = 1,
+                                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
                                     }
                                 }
+                            }
 
-                                OutlinedButton(
-                                    onClick = { sendScope = "branch" },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 78.dp),
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (sendScope == "branch") {
-                                            Color(0xFF67E8F9)
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                availableBranchGroups.forEach { groupName ->
+                                    val isSelected = sendScope != "branch" &&
+                                            selectedTargetGroups.contains(groupName)
+
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                sendScope = "groups"
+
+                                                selectedTargetGroups =
+                                                    if (isSelected) {
+                                                        selectedTargetGroups - groupName
+                                                    } else {
+                                                        selectedTargetGroups + groupName
+                                                    }
+
+                                                recipients = emptyList()
+                                                isRecipientsLoading = true
+                                            },
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+                                        color = if (isSelected) {
+                                            Color(0xFF0EA5E9).copy(alpha = 0.28f)
                                         } else {
-                                            Color.White.copy(alpha = 0.18f)
-                                        }
-                                    ),
-                                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                                        containerColor = if (sendScope == "branch") {
-                                            Color(0xFF0EA5E9).copy(alpha = 0.32f)
-                                        } else {
-                                            Color(0xFF0B1220).copy(alpha = 0.82f)
+                                            Color(0xFF0B1220).copy(alpha = 0.78f)
                                         },
-                                        contentColor = Color(0xFFE0F2FE)
-                                    ),
-                                    contentPadding = PaddingValues(
-                                        horizontal = 10.dp,
-                                        vertical = 10.dp
-                                    )
-                                ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isSelected) {
+                                                Color(0xFF67E8F9)
+                                            } else {
+                                                Color.White.copy(alpha = 0.12f)
+                                            }
+                                        )
                                     ) {
-                                        Text(
-                                            text = coachBroadcastTr(
-                                                isEnglish,
-                                                "כל הסניף",
-                                                "Entire branch"
-                                            ),
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 1,
-                                            color = Color.White,
-                                            fontSize = 18.sp,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                horizontalAlignment = if (isEnglish) {
+                                                    Alignment.Start
+                                                } else {
+                                                    Alignment.End
+                                                },
+                                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                            ) {
+                                                Text(
+                                                    text = groupName,
+                                                    color = Color.White,
+                                                    style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                    textAlign = screenTextAlign,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
 
-                                        Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    text = coachBroadcastTr(
+                                                        isEnglish,
+                                                        "${availableBranchGroupCounts[groupName] ?: 0} מתאמנים",
+                                                        "${availableBranchGroupCounts[groupName] ?: 0} trainees"
+                                                    ),
+                                                    color = Color(0xFFBAE6FD),
+                                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                                    textAlign = screenTextAlign,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
 
-                                        Text(
-                                            text = coachBroadcastTr(
-                                                isEnglish,
-                                                "כולל כל הקבוצות בסניף",
-                                                "Includes all groups in branch"
-                                            ),
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 2,
-                                            color = Color(0xFFBAE6FD),
-                                            fontSize = 12.sp,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
+                                            Checkbox(
+                                                checked = isSelected,
+                                                onCheckedChange = { checked ->
+                                                    sendScope = "groups"
+
+                                                    selectedTargetGroups =
+                                                        if (checked) {
+                                                            selectedTargetGroups + groupName
+                                                        } else {
+                                                            selectedTargetGroups - groupName
+                                                        }
+
+                                                    recipients = emptyList()
+                                                    isRecipientsLoading = true
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1113,22 +1412,10 @@ fun CoachBroadcastScreen(
                             Text(
                                 text = coachBroadcastTr(
                                     isEnglish,
-                                    if (sendScope == "group") {
-                                        "ההודעה תישלח רק למתאמני הקבוצה: $coachGroupKey"
-                                    } else {
-                                        "ההודעה תישלח לכל המתאמנים הפעילים בכל הקבוצות של הסניף שנבחר."
-                                    },
-                                    if (sendScope == "group") {
-                                        "The message will be sent only to trainees in: $coachGroupKey"
-                                    } else {
-                                        "The message will be sent to all active trainees in all groups of the selected branch."
-                                    }
+                                    "ההודעה תישלח רק למתאמנים בקבוצות שסומנו.",
+                                    "The message will be sent only to trainees in the selected groups."
                                 ),
-                                color = if (sendScope == "branch") {
-                                    Color(0xFFBAE6FD)
-                                } else {
-                                    Color(0xFFE0F2FE)
-                                },
+                                color = Color(0xFFE0F2FE),
                                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                                 textAlign = screenTextAlign,
                                 modifier = Modifier.fillMaxWidth()
@@ -1138,7 +1425,45 @@ fun CoachBroadcastScreen(
                 }
 
                 // ===== רשימת נמענים מהקבוצה =====
-                if (recipients.isNotEmpty()) {
+                if (isRecipientsLoading) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                        color = Color(0xFF0B1220).copy(alpha = 0.86f),
+                        border = BorderStroke(
+                            1.dp,
+                            Color(0xFF67E8F9).copy(alpha = 0.45f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = Color(0xFF67E8F9)
+                            )
+
+                            Spacer(Modifier.width(10.dp))
+
+                            Text(
+                                text = coachBroadcastTr(
+                                    isEnglish,
+                                    "טוען מתאמנים לקבוצות שנבחרו...",
+                                    "Loading trainees for selected groups..."
+                                ),
+                                color = Color.White,
+                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else if (recipients.isNotEmpty()) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
@@ -1237,15 +1562,15 @@ fun CoachBroadcastScreen(
                     Text(
                         text = coachBroadcastTr(
                             isEnglish,
-                            if (effectiveGroupKey.isNotBlank()) {
-                                "לא נמצאו מתאמנים פעילים לסניף ולקבוצה שנבחרו."
+                            if (selectedTargetGroups.isEmpty()) {
+                                "לא נבחרו קבוצות לשליחה."
                             } else {
-                                "לא נמצאו מתאמנים פעילים לסניף שנבחר."
+                                "לא נמצאו מתאמנים פעילים לקבוצות שנבחרו בסניף הזה."
                             },
-                            if (effectiveGroupKey.isNotBlank()) {
-                                "No active trainees were found for the selected branch and group."
+                            if (selectedTargetGroups.isEmpty()) {
+                                "No groups were selected for sending."
                             } else {
-                                "No active trainees were found for the selected branch."
+                                "No active trainees were found for the selected groups in this branch."
                             }
                         ),
                         color = Color.White,
@@ -1263,16 +1588,8 @@ fun CoachBroadcastScreen(
                     Text(
                         text = coachBroadcastTr(
                             isEnglish,
-                            if (effectiveGroupKey.isNotBlank()) {
-                                "מתאמנים בקבוצה $effectiveGroupKey: ${recipients.size}"
-                            } else {
-                                "מתאמנים בסניף: ${recipients.size}"
-                            },
-                            if (effectiveGroupKey.isNotBlank()) {
-                                "Trainees in $effectiveGroupKey: ${recipients.size}"
-                            } else {
-                                "Trainees in branch: ${recipients.size}"
-                            }
+                            "מתאמנים בקבוצות שנבחרו: ${recipients.size}",
+                            "Trainees in selected groups: ${recipients.size}"
                         ),
                         color = Color.White,
                         style = androidx.compose.material3.MaterialTheme.typography.titleSmall,

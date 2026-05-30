@@ -14,9 +14,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -79,11 +81,13 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.runtime.saveable.rememberSaveable
 
 //=========================================================================
 
@@ -120,6 +124,9 @@ data class TraineeProfile(
 
     val beltAwardDates: Map<String, String> = emptyMap(),
 
+    // ✅ תיאור חופשי לכל חגורה — נשמר בשרת תחת users/{docId}.beltAwardDescriptions
+    val beltAwardDescriptions: Map<String, String> = emptyMap(),
+
     // ✅ הערות מאמן — נשמרות בשרת תחת users/{docId}.coachNotes
     val coachNotes: String = "",
 
@@ -135,12 +142,25 @@ data class GroupStatsUi(
     val avgAge: Int,
     val avgAttendance: Int,
     val beltCounts: Map<String, Int>,
-    val highAttendanceCount: Int
+    val highAttendanceCount: Int,
+    val avgSeniority: Double
 )
 
 private fun parseYearsFromSeniority(value: String): Int? {
     val digits = Regex("""\d+""").find(value)?.value ?: return null
     return digits.toIntOrNull()
+}
+
+private fun formatAvgSeniority(value: Double, isEnglish: Boolean): String {
+    if (value <= 0.0) return "—"
+
+    val formatted = String.format(Locale.US, "%.1f", value)
+
+    return if (isEnglish) {
+        "$formatted yrs"
+    } else {
+        "$formatted שנים"
+    }
 }
 
 private fun beltColorForStats(belt: String): Color {
@@ -273,6 +293,14 @@ private fun buildGroupStats(profiles: List<TraineeProfile>, filtered: List<Train
         ?.roundToInt()
         ?: 0
 
+    val avgSeniority = filtered
+        .mapNotNull { parseYearsFromSeniority(it.seniority)?.toDouble() }
+        .filter { it > 0.0 }
+        .average()
+        .takeIf { !it.isNaN() }
+        ?.let { (it * 10.0).roundToInt() / 10.0 }
+        ?: 0.0
+
     val beltCounts = filtered
         .groupingBy { it.belt.ifBlank { "ללא דרגה" } }
         .eachCount()
@@ -288,8 +316,476 @@ private fun buildGroupStats(profiles: List<TraineeProfile>, filtered: List<Train
         avgAge = avgAge,
         avgAttendance = avgAttendance,
         beltCounts = beltCounts,
-        highAttendanceCount = highAttendanceCount
+        highAttendanceCount = highAttendanceCount,
+        avgSeniority = avgSeniority
     )
+}
+
+@Composable
+private fun CoachTopStatsCard(
+    stats: GroupStatsUi,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    isEnglish: Boolean,
+    showSearch: Boolean = true
+) {
+
+    Surface(
+        color = Color(0xFF111827),
+        shape = RoundedCornerShape(22.dp),
+        shadowElevation = 8.dp,
+        border = BorderStroke(
+            1.dp,
+            Color.White.copy(alpha = 0.10f)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = coachHorizontalAlignment(isEnglish)
+        ) {
+            Text(
+                text = coachTr(isEnglish, "רשימת המתאמנים", "Trainees list"),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 17.sp,
+                    lineHeight = 20.sp
+                ),
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
+                textAlign = coachTextAlign(isEnglish),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Text(
+                text = coachTr(
+                    isEnglish,
+                    "נתוני נוכחות וקבוצה בזמן אמת",
+                    "attendance and group data"
+                ),
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp
+                ),
+                color = Color.White.copy(alpha = 0.72f),
+                textAlign = coachTextAlign(isEnglish),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    CoachTopStatTile(
+                        value = stats.totalTrainees.toString(),
+                        label = coachTr(isEnglish, "מתאמנים", "Trainees"),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    CoachTopStatTile(
+                        value = stats.beltCounts
+                            .filterValues { it > 0 }
+                            .size
+                            .toString(),
+                        label = coachTr(isEnglish, "דרגות", "Ranks"),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    CoachTopStatTile(
+                        value = if (stats.avgAttendance > 0) "${stats.avgAttendance}%" else "—",
+                        label = coachTr(isEnglish, "נוכחות", "Attendance"),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    CoachTopStatTile(
+                        value = if (stats.avgAge > 0) stats.avgAge.toString() else "—",
+                        label = coachTr(isEnglish, "גיל ממוצע", "Avg age"),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    CoachTopStatTile(
+                        value = stats.highAttendanceCount.toString(),
+                        label = coachTr(isEnglish, "נוכחות גבוהה", "High attendance"),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    CoachTopStatTile(
+                        value = formatAvgSeniority(stats.avgSeniority, isEnglish),
+                        label = coachTr(isEnglish, "וותק ממוצע", "Avg seniority"),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            if (showSearch) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 13.sp,
+                        textAlign = coachTextAlign(isEnglish),
+                        color = Color.White
+                    ),
+                    placeholder = {
+                        Text(
+                            text = coachTr(
+                                isEnglish,
+                                "חיפוש מתאמן",
+                                "Search trainee"
+                            ),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.62f)
+                            )
+                        )
+                    },
+                    leadingIcon = {
+                        Text(
+                            text = "🔎",
+                            fontSize = 15.sp,
+                            color = Color.White.copy(alpha = 0.82f)
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotBlank()) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = coachTr(isEnglish, "נקה חיפוש", "Clear search"),
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clickable {
+                                        onSearchQueryChange("")
+                                    },
+                                tint = Color.White.copy(alpha = 0.82f)
+                            )
+                        }
+                    },
+                    shape = RoundedCornerShape(18.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        disabledTextColor = Color.White.copy(alpha = 0.60f),
+                        cursorColor = Color.White,
+                        focusedBorderColor = Color(0xFFA78BFA),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.18f),
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedPlaceholderColor = Color.White.copy(alpha = 0.62f),
+                        unfocusedPlaceholderColor = Color.White.copy(alpha = 0.62f),
+                        focusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
+                        unfocusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
+                        focusedTrailingIconColor = Color.White.copy(alpha = 0.82f),
+                        unfocusedTrailingIconColor = Color.White.copy(alpha = 0.82f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoachTopStatTile(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier
+) {
+    val iconText = when {
+        label.contains("מתאמנים") || label.contains("Trainees") -> "👥"
+        label.contains("דרגות") || label.contains("Ranks") -> "🎖️"
+        label.contains("נוכחות גבוהה") || label.contains("High attendance") -> "✅"
+        label.contains("נוכחות") || label.contains("Attendance") -> "📊"
+        label.contains("גיל") || label.contains("Age") -> "🎂"
+        label.contains("וותק") || label.contains("seniority", ignoreCase = true) -> "⏱️"
+        else -> "⭐"
+    }
+
+    Surface(
+        color = Color(0xFF243044),
+        shape = RoundedCornerShape(16.dp),
+        shadowElevation = 2.dp,
+        border = BorderStroke(
+            1.dp,
+            Color.White.copy(alpha = 0.10f)
+        ),
+        modifier = modifier.heightIn(min = 72.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 7.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = iconText,
+                fontSize = 15.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+
+            Spacer(Modifier.height(2.dp))
+
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontSize = 15.sp,
+                    lineHeight = 17.sp
+                ),
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(1.dp))
+
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 9.sp,
+                    lineHeight = 10.sp
+                ),
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White.copy(alpha = 0.76f),
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun PremiumCoachDateField(
+    label: String,
+    value: String,
+    placeholder: String,
+    accent: Color,
+    isEnglish: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xFFF8FAFC),
+        shadowElevation = 4.dp,
+        border = BorderStroke(
+            1.dp,
+            accent.copy(alpha = 0.72f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = if (isEnglish) {
+                            listOf(
+                                Color.White,
+                                accent.copy(alpha = 0.05f),
+                                Color.White
+                            )
+                        } else {
+                            listOf(
+                                Color.White,
+                                accent.copy(alpha = 0.05f),
+                                Color.White
+                            )
+                        }
+                    )
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "📅",
+                fontSize = 22.sp,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+
+            Spacer(Modifier.width(10.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = coachHorizontalAlignment(isEnglish),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp
+                    ),
+                    color = accent,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = coachTextAlign(isEnglish),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = value.ifBlank { placeholder },
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 17.sp,
+                        lineHeight = 20.sp
+                    ),
+                    color = if (value.isBlank()) {
+                        Color(0xFF64748B)
+                    } else {
+                        Color(0xFF0F172A)
+                    },
+                    fontWeight = FontWeight.Black,
+                    textAlign = coachTextAlign(isEnglish),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PremiumCoachDatePickerDialog(
+    title: String,
+    selectedDate: String,
+    accent: Color,
+    isEnglish: Boolean,
+    onDismiss: () -> Unit,
+    onDateSelected: (String) -> Unit
+) {
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = coachDateToMillis(selectedDate)
+            ?: System.currentTimeMillis()
+    )
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val selectedMillis = datePickerState.selectedDateMillis
+
+                    if (selectedMillis != null) {
+                        onDateSelected(coachMillisToDateText(selectedMillis))
+                    }
+
+                    onDismiss()
+                }
+            ) {
+                Text(
+                    text = coachTr(isEnglish, "אישור", "OK"),
+                    color = accent,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = coachTr(isEnglish, "ביטול", "Cancel"),
+                    color = Color(0xFF64748B),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        shape = RoundedCornerShape(28.dp),
+        tonalElevation = 6.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White,
+                            accent.copy(alpha = 0.07f),
+                            Color.White
+                        )
+                    )
+                )
+                .padding(top = 8.dp),
+            horizontalAlignment = coachHorizontalAlignment(isEnglish)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 22.sp,
+                    lineHeight = 26.sp
+                ),
+                fontWeight = FontWeight.Black,
+                color = Color(0xFF0F172A),
+                textAlign = coachTextAlign(isEnglish),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 6.dp)
+            )
+
+            Text(
+                text = coachTr(
+                    isEnglish,
+                    "בחר תאריך מתוך לוח השנה",
+                    "Choose a date from the calendar"
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF64748B),
+                textAlign = coachTextAlign(isEnglish),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 2.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                DatePicker(
+                    state = datePickerState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 430.dp),
+                    title = null,
+                    headline = null,
+                    showModeToggle = false,
+                    colors = DatePickerDefaults.colors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color(0xFF0F172A),
+                        headlineContentColor = Color(0xFF0F172A),
+                        weekdayContentColor = Color(0xFF475569),
+                        subheadContentColor = Color(0xFF334155),
+                        navigationContentColor = accent,
+                        yearContentColor = Color(0xFF0F172A),
+                        currentYearContentColor = accent,
+                        selectedYearContentColor = Color.White,
+                        selectedYearContainerColor = accent,
+                        dayContentColor = Color(0xFF0F172A),
+                        disabledDayContentColor = Color(0xFFCBD5E1),
+                        selectedDayContentColor = Color.White,
+                        selectedDayContainerColor = accent,
+                        todayContentColor = accent,
+                        todayDateBorderColor = accent
+                    )
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -674,6 +1170,7 @@ fun CoachTraineesScreen(
                 val beltHeb: String,
                 val seniority: String,
                 val beltAwardDates: Map<String, String>,
+                val beltAwardDescriptions: Map<String, String>,
                 val coachNotes: String,
                 val seminarDates: Map<String, CoachDateEntry>,
                 val campDates: Map<String, CoachDateEntry>,
@@ -860,6 +1357,7 @@ fun CoachTraineesScreen(
                 }
 
                 val beltAwardDates = readStringMap("beltAwardDates")
+                val beltAwardDescriptions = readStringMap("beltAwardDescriptions")
                 val coachNotes = doc.getString("coachNotes").orEmpty()
                 val seminarDates = readCoachEntryMap("seminarDates")
                 val campDates = readCoachEntryMap("campDates")
@@ -871,6 +1369,7 @@ fun CoachTraineesScreen(
                     beltHeb = beltHeb(beltRaw),
                     seniority = seniority,
                     beltAwardDates = beltAwardDates,
+                    beltAwardDescriptions = beltAwardDescriptions,
                     coachNotes = coachNotes,
                     seminarDates = seminarDates,
                     campDates = campDates,
@@ -891,6 +1390,7 @@ fun CoachTraineesScreen(
                 val belt = info?.beltHeb.orEmpty()
                 val seniority = info?.seniority.orEmpty()
                 val beltAwardDates = info?.beltAwardDates ?: emptyMap()
+                val beltAwardDescriptions = info?.beltAwardDescriptions ?: emptyMap()
                 val coachNotes = info?.coachNotes.orEmpty()
                 val seminarDates = info?.seminarDates ?: emptyMap()
                 val campDates = info?.campDates ?: emptyMap()
@@ -907,6 +1407,7 @@ fun CoachTraineesScreen(
                     groupKey = groupName,
                     userDocId = userDocId,
                     beltAwardDates = beltAwardDates,
+                    beltAwardDescriptions = beltAwardDescriptions,
                     coachNotes = coachNotes,
                     seminarDates = seminarDates,
                     campDates = campDates,
@@ -973,8 +1474,39 @@ fun CoachTraineesScreen(
         return
     }
 
-    val uiProfiles = remember(traineeProfiles) {
-        traineeProfiles
+    var traineeSearchQuery by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    fun normalizeCoachSearchText(value: String): String =
+        value
+            .trim()
+            .replace('־', '-')
+            .replace('–', '-')
+            .replace('—', '-')
+            .replace(Regex("\\s+"), " ")
+            .lowercase(Locale("he", "IL"))
+
+    val uiProfiles = remember(traineeProfiles, traineeSearchQuery) {
+        val query = normalizeCoachSearchText(traineeSearchQuery)
+
+        if (query.isBlank()) {
+            traineeProfiles
+        } else {
+            traineeProfiles.filter { trainee ->
+                listOf(
+                    trainee.fullName,
+                    trainee.belt,
+                    trainee.branch,
+                    trainee.groupKey,
+                    trainee.seniority,
+                    trainee.age.takeIf { it > 0 }?.toString().orEmpty(),
+                    trainee.attendancePct.takeIf { it > 0 }?.toString().orEmpty()
+                ).any { value ->
+                    normalizeCoachSearchText(value).contains(query)
+                }
+            }
+        }
     }
 
     // בחירה נוכחית
@@ -988,6 +1520,9 @@ fun CoachTraineesScreen(
     // תאריכי קבלת חגורות לפי מתאמן
     val beltAwardDatesState = remember { mutableStateMapOf<String, Map<String, String>>() }
 
+    // ✅ תיאור חופשי לכל חגורה לפי מתאמן
+    val beltAwardDescriptionsState = remember { mutableStateMapOf<String, Map<String, String>>() }
+
     // ✅ שדות נוספים למילוי ע"י המאמן לפי מתאמן: תאריך + תיאור
     val seminarDatesState = remember { mutableStateMapOf<String, Map<String, CoachDateEntry>>() }
     val campDatesState = remember { mutableStateMapOf<String, Map<String, CoachDateEntry>>() }
@@ -995,8 +1530,33 @@ fun CoachTraineesScreen(
 
     var showStatsSheet by remember { mutableStateOf(false) }
 
-    val groupStats = remember(uiProfiles) {
-        buildGroupStats(uiProfiles, uiProfiles)
+// ✅ סטטיסטיקה עליונה: מחזירים את הכרטיסים היפים, אבל ככרטיס מתקפל נפרד.
+    var isTopStatsExpanded by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+// ✅ בחירת מתאמן: פתוח רק כשצריך לבחור / לחפש.
+// אחרי בחירת מתאמן הכרטיס נסגר אוטומטית כדי לפנות מקום למסך.
+    var isTraineePickerExpanded by rememberSaveable {
+        mutableStateOf(true)
+    }
+
+// ✅ החלק התחתון עובד כאקורדיון: רק נושא אחד פתוח בכל רגע.
+    var expandedCoachSection by rememberSaveable(selectedId) {
+        mutableStateOf<String?>(null)
+    }
+
+    val beltDatesSectionKey = "belt_dates"
+    val seminarsSectionKey = "seminars"
+    val campsSectionKey = "camps"
+    val certificationsSectionKey = "certifications"
+    val notesSectionKey = "coach_notes"
+
+    val groupStats = remember(traineeProfiles, uiProfiles) {
+        buildGroupStats(
+            profiles = traineeProfiles,
+            filtered = uiProfiles
+        )
     }
 
     val screenScope = rememberCoroutineScope()
@@ -1076,7 +1636,8 @@ fun CoachTraineesScreen(
 
     suspend fun saveBeltAwardDatesForSelected(
         selectedProfile: TraineeProfile,
-        dates: Map<String, String>
+        dates: Map<String, String>,
+        descriptions: Map<String, String>
     ) {
         val userDocId = resolveUserDocIdForSelected(selectedProfile)
 
@@ -1084,15 +1645,23 @@ fun CoachTraineesScreen(
             .mapValues { it.value.trim() }
             .filterValues { it.isNotBlank() }
 
-        if (cleanedDates.isEmpty()) return
+        val cleanedDescriptions = descriptions
+            .mapValues { it.value.trim() }
+            .filterValues { it.isNotBlank() }
 
-        val updates = cleanedDates.entries.associate { (beltName, dateValue) ->
+        if (cleanedDates.isEmpty() && cleanedDescriptions.isEmpty()) return
+
+        val dateUpdates = cleanedDates.entries.associate { (beltName, dateValue) ->
             "beltAwardDates.$beltName" to dateValue
+        }
+
+        val descriptionUpdates = cleanedDescriptions.entries.associate { (beltName, descriptionValue) ->
+            "beltAwardDescriptions.$beltName" to descriptionValue
         }
 
         Firebase.firestore.collection("users")
             .document(userDocId)
-            .update(updates)
+            .update(dateUpdates + descriptionUpdates)
             .await()
     }
 
@@ -1156,6 +1725,10 @@ fun CoachTraineesScreen(
         uiProfiles.forEach { trainee ->
             if (beltAwardDatesState[trainee.id] == null) {
                 beltAwardDatesState[trainee.id] = trainee.beltAwardDates
+            }
+
+            if (beltAwardDescriptionsState[trainee.id] == null) {
+                beltAwardDescriptionsState[trainee.id] = trainee.beltAwardDescriptions
             }
 
             if (coachNotes[trainee.id] == null) {
@@ -1226,30 +1799,34 @@ fun CoachTraineesScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFF1E4B86),
+                                    Color(0xFF0EA5E9)
+                                )
+                            )
+                        )
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Surface(
                         onClick = { showStatsSheet = true },
-                        shape = RoundedCornerShape(18.dp),
-                        shadowElevation = 5.dp,
+                        shape = RoundedCornerShape(15.dp),
+                        shadowElevation = 1.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(60.dp)
-                            .shadow(12.dp, RoundedCornerShape(18.dp))
-                            .graphicsLayer {
-                                scaleX = 1.02f
-                                scaleY = 1.02f
-                            }
+                            .height(44.dp)
+                            .shadow(2.dp, RoundedCornerShape(15.dp))
                             .border(
                                 width = 1.dp,
                                 brush = Brush.linearGradient(
                                     colors = listOf(
-                                        Color.White.copy(alpha = 0.85f),
-                                        Color.White.copy(alpha = 0.25f),
-                                        Color.White.copy(alpha = 0.85f)
+                                        Color.White.copy(alpha = 0.72f),
+                                        Color.White.copy(alpha = 0.18f),
+                                        Color.White.copy(alpha = 0.72f)
                                     )
                                 ),
-                                shape = RoundedCornerShape(18.dp)
+                                shape = RoundedCornerShape(15.dp)
                             )
                     ) {
                         Box(
@@ -1268,11 +1845,11 @@ fun CoachTraineesScreen(
                             Box(
                                 modifier = Modifier
                                     .offset(x = statsBubbleOffset.dp)
-                                    .size(140.dp)
+                                    .size(96.dp)
                                     .background(
                                         Brush.radialGradient(
                                             listOf(
-                                                Color.White.copy(alpha = 0.45f),
+                                                Color.White.copy(alpha = 0.34f),
                                                 Color.Transparent
                                             )
                                         ),
@@ -1292,16 +1869,19 @@ fun CoachTraineesScreen(
                                         imageVector = Icons.Filled.Assessment,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(14.dp)
                                     )
 
-                                    Spacer(Modifier.width(8.dp))
+                                    Spacer(Modifier.width(6.dp))
 
                                     Text(
                                         text = coachTr(isEnglish, "סטטיסטיקה לקבוצה", "Group statistics"),
-                                        fontWeight = FontWeight.Bold,
+                                        fontWeight = FontWeight.ExtraBold,
                                         color = Color.White,
-                                        style = MaterialTheme.typography.titleMedium
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            fontSize = 15.sp,
+                                            lineHeight = 17.sp
+                                        )
                                     )
                                 }
                             }
@@ -1326,162 +1906,350 @@ fun CoachTraineesScreen(
                     .padding(horizontal = 12.dp),
                 contentPadding = PaddingValues(
                     top = 12.dp,
-                    bottom = if (showStatsSheet || isKeyboardVisible) 16.dp else 96.dp
+                    bottom = if (showStatsSheet || isKeyboardVisible) 8.dp else 24.dp
                 ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            onClick = {
+                                isTopStatsExpanded = !isTopStatsExpanded
+                            },
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color(0xFF111827).copy(alpha = 0.92f),
+                            shadowElevation = 5.dp,
+                            border = BorderStroke(
+                                1.dp,
+                                Color.White.copy(alpha = 0.18f)
+                            ),
+                            modifier = Modifier
+                                .widthIn(min = 150.dp)
+                                .height(32.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isTopStatsExpanded) {
+                                        Icons.Default.KeyboardArrowUp
+                                    } else {
+                                        Icons.Default.KeyboardArrowDown
+                                    },
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(19.dp)
+                                )
+
+                                Spacer(Modifier.width(6.dp))
+
+                                Text(
+                                    text = if (isTopStatsExpanded) {
+                                        coachTr(isEnglish, "הסתר נתונים", "Hide data")
+                                    } else {
+                                        coachTr(isEnglish, "הצג נתונים", "Show data")
+                                    },
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontSize = 12.sp,
+                                        lineHeight = 14.sp
+                                    ),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+
+                        if (isTopStatsExpanded) {
+                            CoachTopStatsCard(
+                                stats = groupStats,
+                                searchQuery = traineeSearchQuery,
+                                onSearchQueryChange = { traineeSearchQuery = it },
+                                isEnglish = isEnglish,
+                                showSearch = false
+                            )
+                        }
+                    }
+                }
 
                 item {
-                    // כרטיס רשימת מתאמנים
                     Surface(
-                        color = Color.White.copy(alpha = 0.9f),
-                        shape = MaterialTheme.shapes.large,
+                        color = Color(0xFF111827).copy(alpha = 0.96f),
+                        shape = RoundedCornerShape(24.dp),
+                        shadowElevation = 8.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            Color.White.copy(alpha = 0.14f)
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column {
-                            Divider()
-
-                            if (effectiveBranch.isBlank() || effectiveGroupKey.isBlank()) {
-                                Text(
-                                    text = coachTr(
-                                        isEnglish,
-                                        "לא אותרו סניף או קבוצה עבור המאמן.",
-                                        "No branch or group was found for this coach."
-                                    ),
-                                    color = Color(0xFFB91C1C),
-                                    textAlign = screenTextAlign,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp)
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalAlignment = screenHorizontalAlignment
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        isTraineePickerExpanded = !isTraineePickerExpanded
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Icon(
+                                    imageVector = if (isTraineePickerExpanded) {
+                                        Icons.Default.KeyboardArrowUp
+                                    } else {
+                                        Icons.Default.KeyboardArrowDown
+                                    },
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
                                 )
-                            } else if (isProfilesLoading || isInitialServerSyncRunning || !didFinishInitialProfilesLoad) {
+
+                                Spacer(Modifier.width(8.dp))
+
                                 Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(18.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = screenHorizontalAlignment
                                 ) {
-                                    LinearProgressIndicator(
+                                    Text(
+                                        text = coachTr(isEnglish, "בחירת מתאמן", "Select trainee"),
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontSize = 17.sp,
+                                            lineHeight = 20.sp
+                                        ),
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White,
+                                        textAlign = screenTextAlign,
                                         modifier = Modifier.fillMaxWidth()
                                     )
 
                                     Text(
-                                        text = coachTr(
-                                            isEnglish,
-                                            "טוען מתאמנים מהשרת...",
-                                            "Loading trainees from the server..."
+                                        text = selected?.fullName
+                                            ?: coachTr(isEnglish, "לא נבחר מתאמן", "No trainee selected"),
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 12.sp,
+                                            lineHeight = 14.sp
                                         ),
-                                        color = Color(0xFF0369A1),
-                                        textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.bodyMedium
+                                        color = Color.White.copy(alpha = 0.72f),
+                                        textAlign = screenTextAlign,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                 }
-                            } else if (uiProfiles.isEmpty() && didFinishInitialProfilesLoad && !isProfilesLoading && !isInitialServerSyncRunning) {
-                                Text(
-                                    text = coachTr(
-                                        isEnglish,
-                                        "לא נמצאו מתאמנים פעילים לסניף ולקבוצה שנבחרו.",
-                                        "No active trainees were found for the selected branch and group."
+                            }
+
+                            if (isTraineePickerExpanded) {
+                                OutlinedTextField(
+                                    value = traineeSearchQuery,
+                                    onValueChange = { traineeSearchQuery = it },
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 13.sp,
+                                        textAlign = coachTextAlign(isEnglish),
+                                        color = Color.White
                                     ),
-                                    color = Color(0xFF64748B),
-                                    textAlign = screenTextAlign,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp)
-                                )
-                            } else if (uiProfiles.isNotEmpty()) {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 210.dp)
-                                ) {
-                                    items(uiProfiles, key = { it.id }) { trainee ->
-                                        val isSelected = selectedId == trainee.id
-
-                                        Surface(
-                                            color = if (isSelected) Color(0xFFE0F2FE) else Color.Transparent,
-                                            tonalElevation = 0.dp,
-                                            shape = RoundedCornerShape(14.dp),
-                                            border = if (isSelected) BorderStroke(1.dp, Color(0xFF7DD3FC)) else null,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Row(
+                                    placeholder = {
+                                        Text(
+                                            text = coachTr(isEnglish, "חיפוש מתאמן", "Search trainee"),
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontSize = 12.sp,
+                                                color = Color.White.copy(alpha = 0.62f)
+                                            )
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Text(
+                                            text = "🔎",
+                                            fontSize = 15.sp,
+                                            color = Color.White.copy(alpha = 0.82f)
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (traineeSearchQuery.isNotBlank()) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = coachTr(isEnglish, "נקה חיפוש", "Clear search"),
                                                 modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable { selectedId = trainee.id }
-                                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Column {
-                                                    Text(
-                                                        text = trainee.fullName,
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        color = if (isSelected) Color(0xFF0C4A6E) else Color.Unspecified
-                                                    )
+                                                    .size(18.dp)
+                                                    .clickable {
+                                                        traineeSearchQuery = ""
+                                                    },
+                                                tint = Color.White.copy(alpha = 0.82f)
+                                            )
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(18.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        disabledTextColor = Color.White.copy(alpha = 0.60f),
+                                        cursorColor = Color.White,
+                                        focusedBorderColor = Color(0xFFA78BFA),
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.18f),
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        disabledContainerColor = Color.Transparent,
+                                        focusedPlaceholderColor = Color.White.copy(alpha = 0.62f),
+                                        unfocusedPlaceholderColor = Color.White.copy(alpha = 0.62f),
+                                        focusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
+                                        unfocusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
+                                        focusedTrailingIconColor = Color.White.copy(alpha = 0.82f),
+                                        unfocusedTrailingIconColor = Color.White.copy(alpha = 0.82f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-                                                    val metaLine = buildList {
-                                                        if (trainee.belt.isNotBlank()) {
-                                                            add(coachBeltNameForUi(trainee.belt, isEnglish))
-                                                        }
-                                                        if (trainee.branch.isNotBlank()) {
-                                                            add(coachTr(isEnglish, "סניף: ${trainee.branch}", "Branch: ${trainee.branch}"))
-                                                        }
-                                                        if (trainee.groupKey.isNotBlank()) {
-                                                            add(coachTr(isEnglish, "קבוצה: ${trainee.groupKey}", "Group: ${trainee.groupKey}"))
-                                                        }
-                                                    }.joinToString(" • ")
+                                when {
+                                    effectiveBranch.isBlank() || effectiveGroupKey.isBlank() -> {
+                                        Text(
+                                            text = coachTr(
+                                                isEnglish,
+                                                "לא אותרו סניף או קבוצה עבור המאמן.",
+                                                "No branch or group was found for this coach."
+                                            ),
+                                            color = Color(0xFFFCA5A5),
+                                            textAlign = screenTextAlign,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
 
-                                                    if (metaLine.isNotBlank()) {
+                                    isProfilesLoading || isInitialServerSyncRunning || !didFinishInitialProfilesLoad -> {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            LinearProgressIndicator(
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+
+                                            Text(
+                                                text = coachTr(
+                                                    isEnglish,
+                                                    "טוען מתאמנים מהשרת...",
+                                                    "Loading trainees from the server..."
+                                                ),
+                                                color = Color.White.copy(alpha = 0.82f),
+                                                textAlign = TextAlign.Center,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                        }
+                                    }
+
+                                    uiProfiles.isEmpty() -> {
+                                        Text(
+                                            text = coachTr(
+                                                isEnglish,
+                                                "לא נמצאו מתאמנים פעילים לסניף ולקבוצה שנבחרו.",
+                                                "No active trainees were found for the selected branch and group."
+                                            ),
+                                            color = Color.White.copy(alpha = 0.72f),
+                                            textAlign = screenTextAlign,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+
+                                    else -> {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            uiProfiles.take(8).forEach { trainee ->
+                                                val isSelected = selectedId == trainee.id
+
+                                                Surface(
+                                                    color = if (isSelected) {
+                                                        Color.White.copy(alpha = 0.18f)
+                                                    } else {
+                                                        Color.White.copy(alpha = 0.08f)
+                                                    },
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    border = if (isSelected) {
+                                                        BorderStroke(1.dp, Color.White.copy(alpha = 0.45f))
+                                                    } else {
+                                                        BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+                                                    },
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            selectedId = trainee.id
+                                                            isTraineePickerExpanded = false
+                                                            traineeSearchQuery = ""
+                                                            expandedCoachSection = null
+                                                        }
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        if (isSelected) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.CheckCircle,
+                                                                contentDescription = null,
+                                                                tint = Color(0xFF86EFAC),
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        } else {
+                                                            Spacer(Modifier.size(18.dp))
+                                                        }
+
+                                                        Spacer(Modifier.width(8.dp))
+
                                                         Text(
-                                                            text = metaLine,
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color = if (isSelected) Color(0xFF0369A1) else Color(0xFF616161)
+                                                            text = trainee.fullName,
+                                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                                fontSize = 15.sp,
+                                                                lineHeight = 17.sp
+                                                            ),
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            color = Color.White,
+                                                            textAlign = screenTextAlign,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            modifier = Modifier.weight(1f)
                                                         )
                                                     }
                                                 }
                                             }
+
+                                            if (uiProfiles.size > 8) {
+                                                Text(
+                                                    text = coachTr(
+                                                        isEnglish,
+                                                        "מוצגים 8 ראשונים. השתמש בחיפוש למציאת מתאמן נוסף.",
+                                                        "Showing first 8. Use search to find another trainee."
+                                                    ),
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontSize = 11.sp,
+                                                        lineHeight = 13.sp
+                                                    ),
+                                                    color = Color.White.copy(alpha = 0.62f),
+                                                    textAlign = screenTextAlign,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
                                         }
-                                        Divider()
                                     }
                                 }
-                            } else if (isProfilesLoading || isInitialServerSyncRunning || !didFinishInitialProfilesLoad) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(18.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    LinearProgressIndicator(
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                    Text(
-                                        text = coachTr(
-                                            isEnglish,
-                                            "טוען מתאמנים מהשרת...",
-                                            "Loading trainees from the server..."
-                                        ),
-                                        color = Color(0xFF0369A1),
-                                        textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    text = coachTr(
-                                        isEnglish,
-                                        "לא נמצאו מתאמנים פעילים לסניף ולקבוצה שנבחרו.",
-                                        "No active trainees were found for the selected branch and group."
-                                    ),
-                                    color = Color(0xFF64748B),
-                                    textAlign = screenTextAlign,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp)
-                                )
                             }
                         }
                     }
@@ -1491,82 +2259,162 @@ fun CoachTraineesScreen(
                     item {
                         // כרטיס פרטי מתאמן
                         Surface(
-                            color = Color.White,
-                            shape = MaterialTheme.shapes.large,
-                            tonalElevation = 1.dp,
+                            color = Color.Transparent,
+                            shape = RoundedCornerShape(26.dp),
+                            shadowElevation = 8.dp,
+                            border = BorderStroke(
+                                1.dp,
+                                Color.White.copy(alpha = 0.10f)
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            if (selected == null) {
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(24.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        coachTr(isEnglish, "בחר מתאמן מהרשימה למעלה", "Select a trainee from the list above"),
-                                        color = Color(0xFF757575),
-                                        style = MaterialTheme.typography.bodyMedium
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFF0B1730),
+                                                Color(0xFF132A52),
+                                                Color(0xFF1E4B86)
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(26.dp)
                                     )
-                                }
-                            } else {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                                    horizontalAlignment = screenHorizontalAlignment
-                                ) {
-                                    Text(
-                                        text = selected.fullName,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = Color(0xFF212121),
-                                        textAlign = screenTextAlign,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                    Divider()
-
-                                    LabeledField(
-                                        label = coachTr(isEnglish, "גיל", "Age"),
-                                        value = if (selected.age > 0) "${selected.age}" else "—",
-                                        isEnglish = isEnglish
-                                    )
-                                    LabeledField(
-                                        label = coachTr(isEnglish, "ותק", "Seniority"),
-                                        value = selected.seniority.ifBlank { "—" },
-                                        isEnglish = isEnglish
-                                    )
-                                    LabeledField(
-                                        label = coachTr(isEnglish, "דרגה", "Rank"),
-                                        value = coachBeltNameForUi(selected.belt.ifBlank { "—" }, isEnglish),
-                                        isEnglish = isEnglish
-                                    )
-                                    LabeledField(
-                                        label = coachTr(isEnglish, "סניף", "Branch"),
-                                        value = selected.branch.ifBlank { "—" },
-                                        isEnglish = isEnglish
-                                    )
-                                    LabeledField(
-                                        label = coachTr(isEnglish, "קבוצה", "Group"),
-                                        value = selected.groupKey.ifBlank { "—" },
-                                        isEnglish = isEnglish
-                                    )
-                                    LabeledField(
-                                        label = coachTr(isEnglish, "אחוז נוכחות (60 ימים אחרונים)", "Attendance rate — last 60 days"),
-                                        value = if (selected.attendancePct > 0) "${selected.attendancePct}%" else "—",
-                                        isEnglish = isEnglish
-                                    )
-
-                                    Divider()
-
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                if (selected == null) {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(24.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        var isBeltDatesSectionExpanded by remember(selected.id) {
-                                            mutableStateOf(false)
+                                        Text(
+                                            text = coachTr(
+                                                isEnglish,
+                                                "בחר מתאמן מהרשימה למעלה",
+                                                "Select a trainee from the list above"
+                                            ),
+                                            color = Color.White.copy(alpha = 0.78f),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                } else {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        horizontalAlignment = screenHorizontalAlignment
+                                    ) {
+                                        Text(
+                                            text = selected.fullName,
+                                            style = MaterialTheme.typography.titleLarge.copy(
+                                                fontSize = 23.sp,
+                                                lineHeight = 27.sp,
+                                                fontWeight = FontWeight.ExtraBold
+                                            ),
+                                            color = Color.White,
+                                            textAlign = screenTextAlign,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        Text(
+                                            text = coachTr(
+                                                isEnglish,
+                                                "פרופיל מתאמן",
+                                                "Trainee profile"
+                                            ),
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontSize = 12.sp,
+                                                lineHeight = 14.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            ),
+                                            color = Color.White.copy(alpha = 0.68f),
+                                            textAlign = screenTextAlign,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        Divider(
+                                            color = Color.White.copy(alpha = 0.12f)
+                                        )
+
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                LabeledField(
+                                                    label = coachTr(isEnglish, "גיל", "Age"),
+                                                    value = if (selected.age > 0) "${selected.age}" else "—",
+                                                    isEnglish = isEnglish,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+
+                                                LabeledField(
+                                                    label = coachTr(isEnglish, "ותק", "Seniority"),
+                                                    value = selected.seniority.ifBlank { "—" },
+                                                    isEnglish = isEnglish,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                LabeledField(
+                                                    label = coachTr(isEnglish, "דרגה", "Rank"),
+                                                    value = coachBeltNameForUi(selected.belt.ifBlank { "—" }, isEnglish),
+                                                    isEnglish = isEnglish,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+
+                                                LabeledField(
+                                                    label = coachTr(isEnglish, "סניף", "Branch"),
+                                                    value = selected.branch.ifBlank { "—" },
+                                                    isEnglish = isEnglish,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                LabeledField(
+                                                    label = coachTr(isEnglish, "קבוצה", "Group"),
+                                                    value = selected.groupKey.ifBlank { "—" },
+                                                    isEnglish = isEnglish,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+
+                                                LabeledField(
+                                                    label = coachTr(
+                                                        isEnglish,
+                                                        "נוכחות",
+                                                        "Attendance"
+                                                    ),
+                                                    value = if (selected.attendancePct > 0) "${selected.attendancePct}%" else "—",
+                                                    isEnglish = isEnglish,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
                                         }
+
+                                        Divider(
+                                            color = Color.White.copy(alpha = 0.12f)
+                                        )
+
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            val isBeltDatesSectionExpanded = expandedCoachSection == beltDatesSectionKey
 
                                         PremiumCoachCompactSectionHeader(
                                             title = coachTr(isEnglish, "תאריכי קבלת חגורות", "Belt award dates"),
@@ -1580,9 +2428,14 @@ fun CoachTraineesScreen(
                                             accent = Color(0xFF6D56B8),
                                             isEnglish = isEnglish,
                                             onClick = {
-                                                    isBeltDatesSectionExpanded = !isBeltDatesSectionExpanded
-                                                }
-                                            )
+                                                expandedCoachSection =
+                                                    if (expandedCoachSection == beltDatesSectionKey) {
+                                                        null
+                                                    } else {
+                                                        beltDatesSectionKey
+                                                    }
+                                            }
+                                        )
 
                                             if (isBeltDatesSectionExpanded) {
                                             val beltOrder = listOf(
@@ -1611,14 +2464,19 @@ fun CoachTraineesScreen(
                                                 val currentDate = selectedDates[beltName].orEmpty()
                                                 val hasDate = currentDate.isNotBlank()
                                                 val isExpanded = expandedBelt == beltName
+                                                val selectedDescriptions =
+                                                    beltAwardDescriptionsState[selected.id] ?: emptyMap()
+
+                                                val currentDescription =
+                                                    selectedDescriptions[beltName].orEmpty()
 
                                                 Surface(
                                                     color = Color.White,
-                                                    shape = RoundedCornerShape(20.dp),
-                                                    shadowElevation = 3.dp,
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    shadowElevation = 1.dp,
                                                     border = BorderStroke(
                                                         1.dp,
-                                                        beltAccent.copy(alpha = 0.18f)
+                                                        beltAccent.copy(alpha = 0.16f)
                                                     ),
                                                     modifier = Modifier
                                                         .fillMaxWidth()
@@ -1629,8 +2487,8 @@ fun CoachTraineesScreen(
                                                     Column(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                                     ) {
                                                         Row(
                                                             modifier = Modifier.fillMaxWidth(),
@@ -1691,121 +2549,85 @@ fun CoachTraineesScreen(
                                                                 mutableStateOf(false)
                                                             }
 
-                                                            val datePickerState = rememberDatePickerState(
-                                                                initialSelectedDateMillis = coachDateToMillis(currentDate)
-                                                                    ?: System.currentTimeMillis()
-                                                            )
-
-                                                            Surface(
+                                                            PremiumCoachDateField(
+                                                                label = coachTr(isEnglish, "תאריך קבלה", "Award date"),
+                                                                value = currentDate,
+                                                                placeholder = coachTr(
+                                                                    isEnglish,
+                                                                    "בחר תאריך מלוח השנה",
+                                                                    "Choose a date from calendar"
+                                                                ),
+                                                                accent = beltAccent,
+                                                                isEnglish = isEnglish,
                                                                 onClick = {
                                                                     showBeltDatePicker = true
-                                                                },
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                shape = RoundedCornerShape(16.dp),
-                                                                color = Color(0xFFF8FAFC),
-                                                                border = BorderStroke(
-                                                                    1.dp,
-                                                                    beltAccent.copy(alpha = 0.75f)
-                                                                ),
-                                                                shadowElevation = 2.dp
-                                                            ) {
-                                                                Column(
-                                                                    modifier = Modifier
-                                                                        .fillMaxWidth()
-                                                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                                                    horizontalAlignment = coachHorizontalAlignment(isEnglish)
-                                                                ) {
-                                                                    Text(
-                                                                        text = coachTr(isEnglish, "תאריך קבלה", "Award date"),
-                                                                        style = MaterialTheme.typography.labelMedium,
-                                                                        color = beltAccent,
-                                                                        fontWeight = FontWeight.Bold,
-                                                                        textAlign = coachTextAlign(isEnglish),
-                                                                        modifier = Modifier.fillMaxWidth()
-                                                                    )
-
-                                                                    Text(
-                                                                        text = currentDate.ifBlank {
-                                                                            coachTr(
-                                                                                isEnglish,
-                                                                                "בחר תאריך מלוח השנה",
-                                                                                "Choose a date from calendar"
-                                                                            )
-                                                                        },
-                                                                        style = MaterialTheme.typography.titleMedium,
-                                                                        color = if (currentDate.isBlank()) {
-                                                                            Color(0xFF64748B)
-                                                                        } else {
-                                                                            Color(0xFF0F172A)
-                                                                        },
-                                                                        fontWeight = FontWeight.ExtraBold,
-                                                                        textAlign = coachTextAlign(isEnglish),
-                                                                        modifier = Modifier.fillMaxWidth()
-                                                                    )
                                                                 }
-                                                            }
+                                                            )
 
                                                             if (showBeltDatePicker) {
-                                                                DatePickerDialog(
-                                                                    onDismissRequest = {
+                                                                PremiumCoachDatePickerDialog(
+                                                                    title = coachTr(
+                                                                        isEnglish,
+                                                                        "בחר תאריך קבלת חגורה",
+                                                                        "Choose belt award date"
+                                                                    ),
+                                                                    selectedDate = currentDate,
+                                                                    accent = beltAccent,
+                                                                    isEnglish = isEnglish,
+                                                                    onDismiss = {
                                                                         showBeltDatePicker = false
                                                                     },
-                                                                    confirmButton = {
-                                                                        TextButton(
-                                                                            onClick = {
-                                                                                val selectedMillis =
-                                                                                    datePickerState.selectedDateMillis
+                                                                    onDateSelected = { newDate ->
+                                                                        val current = beltAwardDatesState[selected.id]
+                                                                            .orEmpty()
+                                                                            .toMutableMap()
 
-                                                                                if (selectedMillis != null) {
-                                                                                    val newDate =
-                                                                                        coachMillisToDateText(selectedMillis)
-
-                                                                                    val current = beltAwardDatesState[selected.id]
-                                                                                        .orEmpty()
-                                                                                        .toMutableMap()
-
-                                                                                    current[beltName] = newDate
-                                                                                    beltAwardDatesState[selected.id] = current
-                                                                                }
-
-                                                                                showBeltDatePicker = false
-                                                                            }
-                                                                        ) {
-                                                                            Text(coachTr(isEnglish, "אישור", "OK"))
-                                                                        }
-                                                                    },
-                                                                    dismissButton = {
-                                                                        TextButton(
-                                                                            onClick = {
-                                                                                showBeltDatePicker = false
-                                                                            }
-                                                                        ) {
-                                                                            Text(coachTr(isEnglish, "ביטול", "Cancel"))
-                                                                        }
+                                                                        current[beltName] = newDate
+                                                                        beltAwardDatesState[selected.id] = current
                                                                     }
-                                                                ) {
-                                                                    DatePicker(
-                                                                        state = datePickerState,
-                                                                        title = {
-                                                                            Text(
-                                                                                text = coachTr(
-                                                                                    isEnglish,
-                                                                                    "בחר תאריך קבלת חגורה",
-                                                                                    "Choose belt award date"
-                                                                                ),
-                                                                                modifier = Modifier.padding(
-                                                                                    start = 24.dp,
-                                                                                    end = 24.dp,
-                                                                                    top = 16.dp
-                                                                                )
-                                                                            )
-                                                                        }
-                                                                    )
-                                                                }
+                                                                )
                                                             }
+
+                                                            OutlinedTextField(
+                                                                value = currentDescription,
+                                                                onValueChange = { newValue ->
+                                                                    val current = beltAwardDescriptionsState[selected.id]
+                                                                        .orEmpty()
+                                                                        .toMutableMap()
+
+                                                                    current[beltName] = newValue
+                                                                    beltAwardDescriptionsState[selected.id] = current
+                                                                },
+                                                                label = {
+                                                                    Text(
+                                                                        coachTr(
+                                                                            isEnglish,
+                                                                            "תיאור",
+                                                                            "Description"
+                                                                        )
+                                                                    )
+                                                                },
+                                                                placeholder = {
+                                                                    Text(
+                                                                        coachTr(
+                                                                            isEnglish,
+                                                                            "לדוגמה: מבחן חגורה, הערת מאמן, הערכה מיוחדת",
+                                                                            "Example: belt test, coach note, special remark"
+                                                                        ),
+                                                                        textAlign = coachTextAlign(isEnglish),
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    )
+                                                                },
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                minLines = 2,
+                                                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                                                    textAlign = coachTextAlign(isEnglish)
+                                                                ),
+                                                                shape = RoundedCornerShape(16.dp)
+                                                            )
                                                         }
-                                                    }
+                                                            }
+
                                                 }
                                             }
 
@@ -1820,8 +2642,16 @@ fun CoachTraineesScreen(
                                                             .orEmpty()
                                                             .filterValues { it.isNotBlank() }
 
-                                                        if (datesToSave.isEmpty()) {
-                                                            beltDatesSaveMessage = coachTr(isEnglish, "אין תאריכים לשמירה", "No dates to save")
+                                                        val descriptionsToSave = beltAwardDescriptionsState[selectedProfile.id]
+                                                            .orEmpty()
+                                                            .filterValues { it.isNotBlank() }
+
+                                                        if (datesToSave.isEmpty() && descriptionsToSave.isEmpty()) {
+                                                            beltDatesSaveMessage = coachTr(
+                                                                isEnglish,
+                                                                "אין תאריכים או תיאורים לשמירה",
+                                                                "No dates or descriptions to save"
+                                                            )
                                                             return@Surface
                                                         }
 
@@ -1832,7 +2662,8 @@ fun CoachTraineesScreen(
                                                             runCatching {
                                                                 saveBeltAwardDatesForSelected(
                                                                     selectedProfile = selectedProfile,
-                                                                    dates = datesToSave
+                                                                    dates = datesToSave,
+                                                                    descriptions = descriptionsToSave
                                                                 )
                                                             }.onSuccess {
                                                                 beltDatesSaveMessage = coachTr(isEnglish, "תאריכי החגורות נשמרו", "Belt dates saved")
@@ -1919,6 +2750,15 @@ fun CoachTraineesScreen(
                                         selectedProfile = selected,
                                         screenScope = screenScope,
                                         isEnglish = isEnglish,
+                                        isExpanded = expandedCoachSection == seminarsSectionKey,
+                                        onToggleExpanded = {
+                                            expandedCoachSection =
+                                                if (expandedCoachSection == seminarsSectionKey) {
+                                                    null
+                                                } else {
+                                                    seminarsSectionKey
+                                                }
+                                        },
                                         onSave = ::saveCoachDateSectionForSelected
                                     )
 
@@ -1937,6 +2777,15 @@ fun CoachTraineesScreen(
                                         selectedProfile = selected,
                                         screenScope = screenScope,
                                         isEnglish = isEnglish,
+                                        isExpanded = expandedCoachSection == campsSectionKey,
+                                        onToggleExpanded = {
+                                            expandedCoachSection =
+                                                if (expandedCoachSection == campsSectionKey) {
+                                                    null
+                                                } else {
+                                                    campsSectionKey
+                                                }
+                                        },
                                         onSave = ::saveCoachDateSectionForSelected
                                     )
 
@@ -1955,6 +2804,15 @@ fun CoachTraineesScreen(
                                         selectedProfile = selected,
                                         screenScope = screenScope,
                                         isEnglish = isEnglish,
+                                        isExpanded = expandedCoachSection == certificationsSectionKey,
+                                        onToggleExpanded = {
+                                            expandedCoachSection =
+                                                if (expandedCoachSection == certificationsSectionKey) {
+                                                    null
+                                                } else {
+                                                    certificationsSectionKey
+                                                }
+                                        },
                                         onSave = ::saveCoachDateSectionForSelected
                                     )
 
@@ -1966,87 +2824,158 @@ fun CoachTraineesScreen(
                                         mutableStateOf<String?>(null)
                                     }
 
-                                    OutlinedTextField(
-                                        value = coachNotes[selected.id] ?: "",
-                                        onValueChange = {
-                                            coachNotes[selected.id] = it
-                                            coachNotesSaveMessage = null
-                                        },
-                                        label = {
-                                            Text(coachTr(isEnglish, "הערות מאמן", "Coach notes"))
-                                        },
-                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                            textAlign = screenTextAlign
-                                        ),
+                                    Column(
                                         modifier = Modifier.fillMaxWidth(),
-                                        minLines = 3,
-                                        shape = RoundedCornerShape(16.dp)
-                                    )
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        horizontalAlignment = screenHorizontalAlignment
+                                    ) {
+                                        Surface(
+                                            color = Color(0xFFF8FAFC),
+                                            shape = RoundedCornerShape(20.dp),
+                                            shadowElevation = 3.dp,
+                                            border = BorderStroke(
+                                                1.dp,
+                                                Color(0xFFD6E2F1)
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                                horizontalAlignment = screenHorizontalAlignment
+                                            ) {
+                                                Text(
+                                                    text = coachTr(isEnglish, "הערות מאמן", "Coach notes"),
+                                                    style = MaterialTheme.typography.labelMedium.copy(
+                                                        fontSize = 12.sp,
+                                                        lineHeight = 14.sp
+                                                    ),
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = Color(0xFF475569),
+                                                    textAlign = screenTextAlign,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
 
-                                    Surface(
-                                        onClick = {
-                                            val selectedProfile = selected
-                                            if (selectedProfile != null && !isSavingCoachNotes) {
-                                                val noteToSave = coachNotes[selectedProfile.id].orEmpty()
+                                                OutlinedTextField(
+                                                    value = coachNotes[selected.id] ?: "",
+                                                    onValueChange = {
+                                                        coachNotes[selected.id] = it
+                                                        coachNotesSaveMessage = null
+                                                    },
+                                                    placeholder = {
+                                                        Text(
+                                                            text = coachTr(
+                                                                isEnglish,
+                                                                "כתוב כאן הערות על המתאמן...",
+                                                                "Write coach notes here..."
+                                                            ),
+                                                            color = Color(0xFF94A3B8),
+                                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                                textAlign = screenTextAlign
+                                                            ),
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        )
+                                                    },
+                                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                        color = Color(0xFF0F172A),
+                                                        textAlign = screenTextAlign,
+                                                        fontSize = 14.sp,
+                                                        lineHeight = 18.sp
+                                                    ),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    minLines = 4,
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedTextColor = Color(0xFF0F172A),
+                                                        unfocusedTextColor = Color(0xFF0F172A),
+                                                        disabledTextColor = Color(0xFF64748B),
+                                                        cursorColor = Color(0xFF2563EB),
+                                                        focusedBorderColor = Color(0xFF60A5FA),
+                                                        unfocusedBorderColor = Color(0xFFCBD5E1),
+                                                        focusedContainerColor = Color.White,
+                                                        unfocusedContainerColor = Color.White,
+                                                        disabledContainerColor = Color(0xFFF8FAFC),
+                                                        focusedPlaceholderColor = Color(0xFF94A3B8),
+                                                        unfocusedPlaceholderColor = Color(0xFF94A3B8)
+                                                    )
+                                                )
+                                            }
+                                        }
 
-                                                screenScope.launch {
-                                                    isSavingCoachNotes = true
-                                                    coachNotesSaveMessage = null
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = if (isEnglish) {
+                                                Arrangement.Start
+                                            } else {
+                                                Arrangement.End
+                                            }
+                                        ) {
+                                            Surface(
+                                                onClick = {
+                                                    val selectedProfile = selected
+                                                    if (selectedProfile != null && !isSavingCoachNotes) {
+                                                        val noteToSave = coachNotes[selectedProfile.id].orEmpty()
 
-                                                    runCatching {
-                                                        saveCoachNotesForSelected(
-                                                            selectedProfile = selectedProfile,
-                                                            note = noteToSave
-                                                        )
-                                                    }.onSuccess {
-                                                        coachNotesSaveMessage = coachTr(
-                                                            isEnglish,
-                                                            "הערות המאמן נשמרו",
-                                                            "Coach notes saved"
-                                                        )
-                                                    }.onFailure {
-                                                        coachNotesSaveMessage = coachTr(
-                                                            isEnglish,
-                                                            "שמירת הערות המאמן נכשלה",
-                                                            "Failed to save coach notes"
-                                                        )
+                                                        screenScope.launch {
+                                                            isSavingCoachNotes = true
+                                                            coachNotesSaveMessage = null
+
+                                                            runCatching {
+                                                                saveCoachNotesForSelected(
+                                                                    selectedProfile = selectedProfile,
+                                                                    note = noteToSave
+                                                                )
+                                                            }.onSuccess {
+                                                                coachNotesSaveMessage = coachTr(
+                                                                    isEnglish,
+                                                                    "הערות המאמן נשמרו",
+                                                                    "Coach notes saved"
+                                                                )
+                                                            }.onFailure {
+                                                                coachNotesSaveMessage = coachTr(
+                                                                    isEnglish,
+                                                                    "שמירת הערות המאמן נכשלה",
+                                                                    "Failed to save coach notes"
+                                                                )
+                                                            }
+
+                                                            isSavingCoachNotes = false
+                                                        }
                                                     }
-
-                                                    isSavingCoachNotes = false
+                                                },
+                                                shape = RoundedCornerShape(999.dp),
+                                                color = Color(0xFFF1F5F9),
+                                                shadowElevation = 0.dp,
+                                                border = BorderStroke(
+                                                    1.dp,
+                                                    Color(0xFFCBD5E1)
+                                                ),
+                                                modifier = Modifier.widthIn(min = 118.dp)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = if (isSavingCoachNotes) {
+                                                            coachTr(isEnglish, "שומר...", "Saving...")
+                                                        } else {
+                                                            coachTr(isEnglish, "שמור", "Save")
+                                                        },
+                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                            fontSize = 12.sp,
+                                                            lineHeight = 14.sp
+                                                        ),
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFF334155),
+                                                        textAlign = TextAlign.Center,
+                                                        maxLines = 1
+                                                    )
                                                 }
                                             }
-                                        },
-                                        shape = RoundedCornerShape(18.dp),
-                                        color = Color.Transparent,
-                                        shadowElevation = 6.dp,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .background(
-                                                    brush = Brush.horizontalGradient(
-                                                        colors = listOf(
-                                                            Color(0xFF0F766E),
-                                                            Color(0xFF0891B2),
-                                                            Color(0xFF2563EB)
-                                                        )
-                                                    ),
-                                                    shape = RoundedCornerShape(18.dp)
-                                                )
-                                                .padding(vertical = 14.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = if (isSavingCoachNotes) {
-                                                    coachTr(isEnglish, "שומר...", "Saving...")
-                                                } else {
-                                                    coachTr(isEnglish, "שמור הערות מאמן", "Save coach notes")
-                                                },
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = Color.White
-                                            )
                                         }
                                     }
 
@@ -2086,6 +3015,7 @@ fun CoachTraineesScreen(
                             }
                         }
                     }
+                    }
                 }
             }
 
@@ -2100,7 +3030,6 @@ fun CoachTraineesScreen(
         }
     }
 }
-
 @Composable
 private fun PremiumCoachCompactSectionHeader(
     title: String,
@@ -2114,8 +3043,8 @@ private fun PremiumCoachCompactSectionHeader(
     Surface(
         onClick = onClick,
         color = Color(0xFFFCFDFF),
-        shape = RoundedCornerShape(28.dp),
-        shadowElevation = 6.dp,
+        shape = RoundedCornerShape(16.dp),
+        shadowElevation = 1.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             1.dp,
@@ -2123,7 +3052,7 @@ private fun PremiumCoachCompactSectionHeader(
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 88.dp)
+            .heightIn(min = 52.dp)
     ) {
         Row(
             modifier = Modifier
@@ -2133,18 +3062,18 @@ private fun PremiumCoachCompactSectionHeader(
                         colors = listOf(
                             Color.White,
                             Color(0xFFFAFBFF),
-                            accent.copy(alpha = 0.035f)
+                            accent.copy(alpha = 0.025f)
                         )
                     )
                 )
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 9.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = accent.copy(alpha = 0.08f),
-                shadowElevation = 2.dp,
-                modifier = Modifier.size(40.dp)
+                shadowElevation = 0.dp,
+                modifier = Modifier.size(28.dp)
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -2152,7 +3081,7 @@ private fun PremiumCoachCompactSectionHeader(
                 ) {
                     Text(
                         text = iconText,
-                        fontSize = 20.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = accent,
                         textAlign = TextAlign.Center
@@ -2160,22 +3089,22 @@ private fun PremiumCoachCompactSectionHeader(
                 }
             }
 
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(7.dp))
 
             Column(
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = coachHorizontalAlignment(isEnglish),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 Text(
                     text = title,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = coachTextAlign(isEnglish),
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 16.sp,
-                        lineHeight = 18.sp,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
                         fontWeight = FontWeight.Black,
                         color = Color(0xFF0F172A)
                     )
@@ -2187,16 +3116,16 @@ private fun PremiumCoachCompactSectionHeader(
                     textAlign = coachTextAlign(isEnglish),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 8.sp,
+                        lineHeight = 9.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFF7A879A)
                     )
                 )
             }
 
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(5.dp))
 
             Icon(
                 imageVector = if (isExpanded) {
@@ -2206,7 +3135,7 @@ private fun PremiumCoachCompactSectionHeader(
                 },
                 contentDescription = null,
                 tint = accent,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }
@@ -2224,13 +3153,14 @@ private fun CoachDateSectionCard(
     selectedProfile: TraineeProfile,
     screenScope: kotlinx.coroutines.CoroutineScope,
     isEnglish: Boolean,
+    isExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onSave: suspend (
         selectedProfile: TraineeProfile,
         firestoreFieldName: String,
         entries: Map<String, CoachDateEntry>
     ) -> Unit
 ) {
-    var isExpanded by remember(selectedId, title) { mutableStateOf(false) }
     var expandedItem by remember(selectedId, title) { mutableStateOf<String?>(null) }
     var isSaving by remember(selectedId, title) { mutableStateOf(false) }
     var saveMessage by remember(selectedId, title) { mutableStateOf<String?>(null) }
@@ -2268,17 +3198,18 @@ private fun CoachDateSectionCard(
         val sectionAccent = coachDateSectionAccent(title)
         val sectionTitleUi = coachSectionTitleForUi(title, isEnglish)
 
-            PremiumCoachCompactSectionHeader(
-                title = sectionTitleUi,
-                subtitle = if (isExpanded) expandedSubtitle else collapsedSubtitle,
-                iconText = sectionIcon,
-                isExpanded = isExpanded,
-                accent = sectionAccent,
-                isEnglish = isEnglish,
-                onClick = {
-                    isExpanded = !isExpanded
-                }
-            )
+        PremiumCoachCompactSectionHeader(
+            title = sectionTitleUi,
+            subtitle = if (isExpanded) expandedSubtitle else collapsedSubtitle,
+            iconText = sectionIcon,
+            isExpanded = isExpanded,
+            accent = sectionAccent,
+            isEnglish = isEnglish,
+            onClick = {
+                expandedItem = null
+                onToggleExpanded()
+            }
+        )
 
             if (isExpanded) {
                 dynamicItems.forEach { itemName ->
@@ -2292,11 +3223,11 @@ private fun CoachDateSectionCard(
 
                     Surface(
                         color = Color.White,
-                        shape = RoundedCornerShape(20.dp),
-                        shadowElevation = 3.dp,
+                        shape = RoundedCornerShape(16.dp),
+                        shadowElevation = 1.dp,
                         border = BorderStroke(
                             1.dp,
-                            accent.copy(alpha = 0.18f)
+                            accent.copy(alpha = 0.16f)
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2307,8 +3238,8 @@ private fun CoachDateSectionCard(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -2385,26 +3316,49 @@ private fun CoachDateSectionCard(
                             }
 
                             if (isItemExpanded) {
-                                OutlinedTextField(
-                                    value = currentEntry.date,
-                                    onValueChange = { newValue ->
-                                        val current = stateMap[selectedId]
-                                            .orEmpty()
-                                            .toMutableMap()
+                                var showItemDatePicker by remember(selectedId, title, itemName) {
+                                    mutableStateOf(false)
+                                }
 
-                                        val oldEntry = current[itemName] ?: CoachDateEntry()
-                                        current[itemName] = oldEntry.copy(date = newValue)
-                                        stateMap[selectedId] = current
-                                    },
-                                    label = { Text(coachTr(isEnglish, "תאריך", "Date")) },
-                                    placeholder = { Text("YYYY-MM-DD") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                        textAlign = coachTextAlign(isEnglish)
+                                PremiumCoachDateField(
+                                    label = coachTr(isEnglish, "תאריך", "Date"),
+                                    value = currentEntry.date,
+                                    placeholder = coachTr(
+                                        isEnglish,
+                                        "בחר תאריך מלוח השנה",
+                                        "Choose a date from calendar"
                                     ),
-                                    shape = RoundedCornerShape(16.dp)
+                                    accent = sectionAccent,
+                                    isEnglish = isEnglish,
+                                    onClick = {
+                                        showItemDatePicker = true
+                                    }
                                 )
+
+                                if (showItemDatePicker) {
+                                    PremiumCoachDatePickerDialog(
+                                        title = coachTr(
+                                            isEnglish,
+                                            "בחר תאריך עבור ${coachDateItemNameForUi(itemName, false)}",
+                                            "Choose date for ${coachDateItemNameForUi(itemName, true)}"
+                                        ),
+                                        selectedDate = currentEntry.date,
+                                        accent = sectionAccent,
+                                        isEnglish = isEnglish,
+                                        onDismiss = {
+                                            showItemDatePicker = false
+                                        },
+                                        onDateSelected = { newDate ->
+                                            val current = stateMap[selectedId]
+                                                .orEmpty()
+                                                .toMutableMap()
+
+                                            val oldEntry = current[itemName] ?: CoachDateEntry()
+                                            current[itemName] = oldEntry.copy(date = newDate)
+                                            stateMap[selectedId] = current
+                                        }
+                                    )
+                                }
 
                                 OutlinedTextField(
                                     value = currentEntry.description,
@@ -2543,38 +3497,125 @@ private fun CoachDateSectionCard(
                     }
                 }
             }
-        }
     }
+}
 
 @Composable
 private fun LabeledField(
     label: String,
     value: String,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
 ) {
     val textAlign = coachTextAlign(isEnglish)
     val horizontalAlignment = coachHorizontalAlignment(isEnglish)
+    val cleanValue = value.ifBlank { "—" }
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        horizontalAlignment = horizontalAlignment
+    val iconText = when {
+        label.contains("גיל") || label.contains("Age") -> "🎂"
+        label.contains("ותק") || label.contains("Seniority") -> "🕒"
+        label.contains("דרגה") || label.contains("Rank") -> "🏅"
+        label.contains("סניף") || label.contains("Branch") -> "📍"
+        label.contains("קבוצה") || label.contains("Group") -> "👥"
+        label.contains("נוכחות") || label.contains("Attendance") -> "📊"
+        else -> "•"
+    }
+
+    Surface(
+        color = Color(0xFFF4F7FB),
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = 3.dp,
+        border = BorderStroke(
+            1.dp,
+            Color(0xFFD7E2F0)
+        ),
+        modifier = modifier.heightIn(min = 78.dp)
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF607D8B),
-            textAlign = textAlign,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Text(
-            text = value.ifBlank { "—" },
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF263238),
-            textAlign = textAlign,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF3FF),
+                            Color(0xFFF8FBFF)
+                        )
+                    )
+                )
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (!isEnglish) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE2E8F0)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = iconText,
+                        fontSize = 16.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(Modifier.width(8.dp))
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+                horizontalAlignment = horizontalAlignment
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    ),
+                    color = Color(0xFF64748B),
+                    textAlign = textAlign,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = cleanValue,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    ),
+                    color = Color(0xFF0F172A),
+                    textAlign = textAlign,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            if (isEnglish) {
+                Spacer(Modifier.width(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE2E8F0)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = iconText,
+                        fontSize = 16.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
     }
 }
 
