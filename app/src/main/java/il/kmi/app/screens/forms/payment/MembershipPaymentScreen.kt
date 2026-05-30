@@ -8,16 +8,15 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Business
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Description
@@ -25,10 +24,8 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneIphone
-import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.LocalPhone
@@ -74,6 +71,12 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
+import androidx.compose.foundation.border
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+
+//==========================================================================
 
 private const val MISSING_BRANCH_HE = "הסניף שלי לא מופיע"
 private const val MISSING_BRANCH_EN = "My branch is not listed"
@@ -543,8 +546,8 @@ fun MembershipPaymentScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 PremiumPaymentHeader(
                     title = title,
@@ -632,25 +635,57 @@ fun MembershipPaymentScreen(
                             label = {
                                 Text(
                                     text = if (isEnglish) "Branch Name" else "שם הסניף",
-                                    color = Color.White.copy(alpha = 0.78f)
+                                    color = Color.White.copy(alpha = 0.78f),
+                                    fontSize = 10.sp,
+                                    lineHeight = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Business,
-                                    contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.72f)
-                                )
+                            leadingIcon = if (isEnglish) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Business,
+                                        contentDescription = null,
+                                        tint = Color.White.copy(alpha = 0.72f),
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
+                            } else {
+                                null
                             },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(
-                                    expanded = branchExpanded
-                                )
+                            trailingIcon = if (isEnglish) {
+                                {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(
+                                        expanded = branchExpanded
+                                    )
+                                }
+                            } else {
+                                {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(
+                                            expanded = branchExpanded
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.Business,
+                                            contentDescription = null,
+                                            tint = Color.White.copy(alpha = 0.72f),
+                                            modifier = Modifier.size(19.dp)
+                                        )
+                                    }
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(60.dp)
                                 .menuAnchor(),
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 13.sp,
+                                lineHeight = 16.sp,
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                             ),
                             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
@@ -734,7 +769,7 @@ fun MembershipPaymentScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
@@ -743,8 +778,8 @@ fun MembershipPaymentScreen(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(38.dp)
-                                        .padding(8.dp),
+                                        .size(32.dp)
+                                        .padding(7.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -757,7 +792,7 @@ fun MembershipPaymentScreen(
 
                             Text(
                                 text = payerSameToggleText,
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = Color.White,
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                 modifier = Modifier
@@ -849,51 +884,116 @@ fun MembershipPaymentScreen(
                             } else {
                                 "תשלום דמי חבר הוא סופי לאחר אישור הפעולה, למעט מקרים של תשלום כפול בטעות או טעות אחרת בתום לב, בכפוף לבדיקת העמותה."
                             },
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.90f),
                             textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp)
+                                .padding(12.dp)
                         )
-                    }
-
-                    TextButton(
-                        onClick = onReadFullPolicy,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Description,
-                            contentDescription = null,
-                            modifier = Modifier.padding(end = 6.dp)
-                        )
-                        Text(readPolicyText)
                     }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = if (isEnglish) {
+                            Arrangement.Start
+                        } else {
+                            Arrangement.End
+                        }
                     ) {
-                        Checkbox(
-                            checked = policyAccepted,
-                            onCheckedChange = { policyAccepted = it }
-                        )
-
-                        Text(
-                            text = if (isEnglish) {
-                                "I have read and agree to the cancellation and refund policy."
+                        TextButton(
+                            onClick = onReadFullPolicy,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color(0xFFBDA7FF)
+                            )
+                        ) {
+                            if (isEnglish) {
+                                Icon(
+                                    imageVector = Icons.Default.Description,
+                                    contentDescription = null,
+                                    modifier = Modifier.padding(end = 6.dp)
+                                )
+                                Text(readPolicyText)
                             } else {
-                                "קראתי ואני מאשר/ת את מדיניות הביטולים וההחזרים."
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.92f),
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                Text(readPolicyText)
+                                Icon(
+                                    imageVector = Icons.Default.Description,
+                                    contentDescription = null,
+                                    modifier = Modifier.padding(start = 6.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = if (policyAccepted) {
+                            Color(0xFF19C37D).copy(alpha = 0.16f)
+                        } else {
+                            Color(0xFF24365E)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(
+                                width = 1.5.dp,
+                                color = if (policyAccepted) {
+                                    Color(0xFF7CFFB2)
+                                } else {
+                                    Color(0xFF7CFFB2).copy(alpha = 0.55f)
+                                },
+                                shape = RoundedCornerShape(18.dp)
+                            )
+                    ) {
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .padding(start = 4.dp)
-                        )
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isEnglish) {
+                                Checkbox(
+                                    checked = policyAccepted,
+                                    onCheckedChange = { policyAccepted = it },
+                                    modifier = Modifier.size(34.dp),
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = Color(0xFF19C37D),
+                                        uncheckedColor = Color(0xFF7CFFB2),
+                                        checkmarkColor = Color.White
+                                    )
+                                )
+
+                                Text(
+                                    text = "I have read and agree to the cancellation and refund policy.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.94f),
+                                    textAlign = TextAlign.Left,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(start = 8.dp)
+                                )
+                            } else {
+                                Text(
+                                    text = "קראתי ואני מאשר/ת את מדיניות הביטולים וההחזרים.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.94f),
+                                    textAlign = TextAlign.Right,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 8.dp)
+                                )
+
+                                Checkbox(
+                                    checked = policyAccepted,
+                                    onCheckedChange = { policyAccepted = it },
+                                    modifier = Modifier.size(34.dp),
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = Color(0xFF19C37D),
+                                        uncheckedColor = Color(0xFF7CFFB2),
+                                        checkmarkColor = Color.White
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -1117,8 +1217,8 @@ private fun SectionCard(
         )
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1145,8 +1245,9 @@ private fun SectionCard(
 
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
                     textAlign = textAlign,
                     modifier = Modifier.weight(1f)
                 )
@@ -1173,37 +1274,68 @@ private fun FormTextField(
     isEnglish: Boolean
 ) {
     val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(60.dp),
         enabled = enabled,
         singleLine = true,
         shape = RoundedCornerShape(14.dp),
         label = {
             Text(
                 text = label,
-                color = Color.White.copy(alpha = 0.78f)
+                color = Color.White.copy(alpha = 0.78f),
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = textAlign,
+                modifier = Modifier.fillMaxWidth()
             )
         },
-        leadingIcon = {
-            Icon(
-                imageVector = leadingIcon,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.72f)
-            )
+        leadingIcon = if (isEnglish) {
+            {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.72f),
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+        } else {
+            null
+        },
+        trailingIcon = if (isEnglish) {
+            null
+        } else {
+            {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.72f),
+                    modifier = Modifier.size(19.dp)
+                )
+            }
         },
         placeholder = {
             if (placeholder.isNotBlank()) {
                 Text(
                     text = placeholder,
-                    color = Color.White.copy(alpha = 0.42f)
+                    color = Color.White.copy(alpha = 0.42f),
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         },
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        textStyle = MaterialTheme.typography.bodyLarge.copy(
-            textAlign = textAlign
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            textAlign = textAlign,
+            fontSize = 13.sp,
+            lineHeight = 16.sp
         ),
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
             focusedContainerColor = Color(0xFF24365E),
@@ -1225,6 +1357,10 @@ private fun FormTextField(
             focusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
             unfocusedLeadingIconColor = Color.White.copy(alpha = 0.62f),
             disabledLeadingIconColor = Color.White.copy(alpha = 0.38f),
+
+            focusedTrailingIconColor = Color.White.copy(alpha = 0.82f),
+            unfocusedTrailingIconColor = Color.White.copy(alpha = 0.62f),
+            disabledTrailingIconColor = Color.White.copy(alpha = 0.38f),
 
             cursorColor = Color.White
         )

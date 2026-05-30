@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCard
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.PersonOff
@@ -37,7 +36,6 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -66,11 +64,19 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import il.kmi.app.ui.KmiTopBar
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.sp
+
+
+//=====================================================================
 
 private const val MEMBERSHIP_REQUIRED_AMOUNT = 150.0
 
@@ -364,6 +370,15 @@ fun PaymentsReportScreen(
     val paidText = if (isEnglish) "Paid 150" else "שילמו"
     val unpaidText = if (isEnglish) "Not paid 150" else "לא שילמו"
 
+    val screenLayoutDirection =
+        if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    val screenTextAlign =
+        if (isEnglish) TextAlign.Left else TextAlign.Right
+
+    val screenHorizontalAlign =
+        if (isEnglish) Alignment.Start else Alignment.End
+
     val allBranchesLabel = if (isEnglish) "All Branches" else "כל הסניפים"
 
     val branchOptions = remember(isEnglish, items) {
@@ -434,7 +449,17 @@ fun PaymentsReportScreen(
         }
 
     Scaffold(
-        containerColor = Color.Transparent
+        containerColor = Color.Transparent,
+        topBar = {
+            KmiTopBar(
+                title = title,
+                onHome = onClose,
+                showTopHome = false,
+                lockSearch = true,
+                showBottomActions = true,
+                currentLang = if (isEnglish) "en" else "he"
+            )
+        }
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -453,7 +478,6 @@ fun PaymentsReportScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .statusBarsPadding()
                     .navigationBarsPadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 14.dp)
@@ -467,63 +491,66 @@ fun PaymentsReportScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 18.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.Top
+                        CompositionLocalProvider(
+                            LocalLayoutDirection provides screenLayoutDirection
                         ) {
                             Column(
-                                modifier = Modifier.weight(1f),
-                                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = screenHorizontalAlign,
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Text(
-                                    text = title,
-                                    style = MaterialTheme.typography.headlineMedium,
+                                    text = if (isEnglish) {
+                                        "Premium payments dashboard"
+                                    } else {
+                                        "דשבורד תשלומים פרימיום"
+                                    },
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontSize = 17.sp,
+                                        lineHeight = 21.sp
+                                    ),
                                     color = Color.White,
-                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                                    modifier = Modifier.fillMaxWidth()
+                                    fontWeight = FontWeight.ExtraBold,
+                                    textAlign = screenTextAlign,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1
                                 )
 
-                                Spacer(Modifier.height(6.dp))
-
                                 Text(
-                                    text = if (isEnglish)
-                                        "Premium payments dashboard for coaches and admins"
-                                    else
-                                        "דשבורד תשלומים פרימיום למאמנים ולמנהלים",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.White.copy(alpha = 0.80f),
-                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                                    modifier = Modifier.fillMaxWidth()
+                                    text = if (isEnglish) {
+                                        "For trainees, coaches and managers"
+                                    } else {
+                                        "למתאמנים, למאמנים ולמנהלים"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 13.sp,
+                                        lineHeight = 17.sp
+                                    ),
+                                    color = Color.White.copy(alpha = 0.76f),
+                                    textAlign = screenTextAlign,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1
                                 )
 
-                                Spacer(Modifier.height(10.dp))
-
                                 Text(
-                                    text = if (isEnglish)
+                                    text = if (isEnglish) {
                                         "Collected ₪${"%.0f".format(totalPaid)} of ₪${"%.0f".format(totalRequired)}"
-                                    else
-                                        "נגבה ₪${"%.0f".format(totalPaid)} מתוך ₪${"%.0f".format(totalRequired)}",
-                                    style = MaterialTheme.typography.titleMedium,
+                                    } else {
+                                        "נגבה ₪${"%.0f".format(totalPaid)} מתוך ₪${"%.0f".format(totalRequired)}"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 13.sp,
+                                        lineHeight = 17.sp
+                                    ),
                                     color = Color.White,
-                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                                    modifier = Modifier.fillMaxWidth()
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = screenTextAlign,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1
                                 )
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(18.dp),
-                                color = Color.White.copy(alpha = 0.10f)
-                            ) {
-                                IconButton(onClick = onClose) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = if (isEnglish) "Close" else "סגור",
-                                        tint = Color.White
-                                    )
-                                }
                             }
                         }
 
@@ -532,141 +559,74 @@ fun PaymentsReportScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Surface(
+                            SummaryCard(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(132.dp),
-                                shape = RoundedCornerShape(24.dp),
-                                color = Color(0xFF1DA1F2)
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                                    verticalArrangement = Arrangement.SpaceBetween,
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(18.dp),
-                                        color = Color.White.copy(alpha = 0.18f)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.TrendingUp,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.padding(10.dp)
-                                        )
-                                    }
+                                    .height(96.dp),
+                                title = if (isEnglish) "Collection" else "אחוז גבייה",
+                                value = "${"%.0f".format(collectionPercent)}%",
+                                icon = Icons.Default.TrendingUp,
+                                selected = false,
+                                baseColor = Color(0xFF1DA1F2),
+                                selectedColor = Color(0xFF0284C7),
+                                onClick = {}
+                            )
 
-                                    Text(
-                                        text = if (isEnglish) "Collection" else "אחוז גבייה",
-                                        color = Color.White.copy(alpha = 0.78f),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1
-                                    )
-
-                                    Text(
-                                        text = "${"%.0f".format(collectionPercent)}%",
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                onClick = { filter = "ALL" },
+                            SummaryCard(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(132.dp),
-                                shape = RoundedCornerShape(24.dp),
-                                color = Color(0xFF8B5CF6),
-                                tonalElevation = 6.dp
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 14.dp, vertical = 14.dp),
-                                    verticalArrangement = Arrangement.SpaceBetween,
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(18.dp),
-                                        color = Color.White.copy(alpha = 0.18f)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Groups,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.padding(10.dp)
-                                        )
-                                    }
-
-                                    Text(
-                                        text = if (isEnglish) "Trainees" else "מתאמנים",
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1
-                                    )
-
-                                    Text(
-                                        text = items.size.toString(),
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1
-                                    )
+                                    .height(96.dp),
+                                title = if (isEnglish) "Trainees" else "מתאמנים",
+                                value = items.size.toString(),
+                                icon = Icons.Default.Groups,
+                                selected = filter == "ALL",
+                                baseColor = Color(0xFF8B5CF6),
+                                selectedColor = Color(0xFF7C3AED),
+                                onClick = {
+                                    filter = "ALL"
                                 }
-                            }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SummaryCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(96.dp),
+                                title = unpaidText,
+                                value = unpaidCount.toString(),
+                                icon = Icons.Default.PersonOff,
+                                selected = filter == "UNPAID",
+                                baseColor = Color(0xFFFF7A59),
+                                selectedColor = Color(0xFFFF5A36),
+                                onClick = {
+                                    filter = "UNPAID"
+                                }
+                            )
+
+                            SummaryCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(96.dp),
+                                title = paidText,
+                                value = paidCount.toString(),
+                                icon = Icons.Default.Paid,
+                                selected = filter == "PAID",
+                                baseColor = Color(0xFF22C55E),
+                                selectedColor = Color(0xFF16A34A),
+                                onClick = {
+                                    filter = "PAID"
+                                }
+                            )
                         }
                     }
                 }
 
-                Spacer(Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    SummaryCard(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(138.dp),
-                        title = unpaidText,
-                        value = unpaidCount.toString(),
-                        icon = Icons.Default.PersonOff,
-                        selected = filter == "UNPAID",
-                        baseColor = Color(0xFFFF7A59),
-                        selectedColor = Color(0xFFFF5A36),
-                        onClick = {
-                            filter = "UNPAID"
-                        }
-                    )
-
-                    SummaryCard(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(138.dp),
-                        title = paidText,
-                        value = paidCount.toString(),
-                        icon = Icons.Default.Paid,
-                        selected = filter == "PAID",
-                        baseColor = Color(0xFF22C55E),
-                        selectedColor = Color(0xFF16A34A),
-                        onClick = {
-                            filter = "PAID"
-                        }
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -685,7 +645,7 @@ fun PaymentsReportScreen(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold,
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                         )
 
                         BranchDropdown(
@@ -832,45 +792,45 @@ fun PaymentsReportScreen(
                 }
             }
 
-            manualDialogItem?.let { selected ->
-                ManualPaymentDialog(
-                    isEnglish = isEnglish,
-                    item = selected,
-                    onDismiss = { manualDialogItem = null },
-                    onSave = { amount, method, notes ->
-                        screenScope.launch {
-                            runCatching {
-                                saveManualMembershipPaymentToFirestore(
-                                    item = selected,
-                                    amountToAdd = amount,
-                                    method = method,
-                                    notes = notes
-                                )
-                            }.onSuccess { updatedItem ->
-                                items = items.map { current ->
-                                    if (current.traineeId == selected.traineeId) {
-                                        updatedItem
-                                    } else {
-                                        current
+                manualDialogItem?.let { selected ->
+                    ManualPaymentDialog(
+                        isEnglish = isEnglish,
+                        item = selected,
+                        onDismiss = { manualDialogItem = null },
+                        onSave = { amount, method, notes ->
+                            screenScope.launch {
+                                runCatching {
+                                    saveManualMembershipPaymentToFirestore(
+                                        item = selected,
+                                        amountToAdd = amount,
+                                        method = method,
+                                        notes = notes
+                                    )
+                                }.onSuccess { updatedItem ->
+                                    items = items.map { current ->
+                                        if (current.traineeId == selected.traineeId) {
+                                            updatedItem
+                                        } else {
+                                            current
+                                        }
                                     }
+
+                                    onSaveManualPayment(
+                                        selected.traineeId,
+                                        amount,
+                                        method,
+                                        notes
+                                    )
+
+                                    manualDialogItem = null
+                                }.onFailure { error ->
+                                    paymentsError = error.localizedMessage ?: "Failed saving payment"
+                                    manualDialogItem = null
                                 }
-
-                                onSaveManualPayment(
-                                    selected.traineeId,
-                                    amount,
-                                    method,
-                                    notes
-                                )
-
-                                manualDialogItem = null
-                            }.onFailure { error ->
-                                paymentsError = error.localizedMessage ?: "Failed saving payment"
-                                manualDialogItem = null
                             }
                         }
-                    }
-                )
-            }
+                    )
+                }
         }
     }
 }
@@ -887,41 +847,46 @@ private fun SummaryCard(
     onClick: () -> Unit
 ) {
     Card(
-        modifier = modifier
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(26.dp),
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) selectedColor else baseColor
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 10.dp else 6.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (selected) 10.dp else 6.dp
+        )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = Color.White.copy(alpha = if (selected) 0.22f else 0.16f)
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White.copy(alpha = if (selected) 0.22f else 0.14f)
             ) {
                 Box(
-                    modifier = Modifier.padding(10.dp),
+                    modifier = Modifier.padding(5.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = Color.White
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
 
             Text(
                 text = title,
-                color = Color.White.copy(alpha = 0.86f),
-                style = MaterialTheme.typography.labelLarge,
+                color = Color.White.copy(alpha = 0.90f),
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp
+                ),
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 maxLines = 1
@@ -930,7 +895,10 @@ private fun SummaryCard(
             Text(
                 text = value,
                 color = Color.White,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 20.sp,
+                    lineHeight = 22.sp
+                ),
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Center,
                 maxLines = 1
@@ -982,48 +950,62 @@ private fun BranchDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded }
-    ) {
-        OutlinedTextField(
-            value = selectedBranch,
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(),
-            label = {
-                Text(if (isEnglish) "Branch" else "סניף")
-            },
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-            },
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
-            ),
-            colors = reportFieldColors()
-        )
+    val dropdownLayoutDirection =
+        if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
 
-        ExposedDropdownMenu(
+    val dropdownTextAlign =
+        if (isEnglish) TextAlign.Left else TextAlign.Right
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides dropdownLayoutDirection
+    ) {
+        ExposedDropdownMenuBox(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onExpandedChange = { expanded = !expanded }
         ) {
-            branchOptions.forEach { branch ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = branch,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    onClick = {
-                        onBranchSelected(branch)
-                        expanded = false
-                    }
-                )
+            OutlinedTextField(
+                value = selectedBranch,
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+                label = {
+                    Text(
+                        text = if (isEnglish) "Branch" else "סניף",
+                        textAlign = dropdownTextAlign,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                },
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    textAlign = dropdownTextAlign
+                ),
+                colors = reportFieldColors()
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                branchOptions.forEach { branch ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = branch,
+                                textAlign = dropdownTextAlign,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        onClick = {
+                            onBranchSelected(branch)
+                            expanded = false
+                        }
+                    )
+                }
             }
         }
     }
@@ -1324,6 +1306,7 @@ private fun paymentMethodLabel(
         "CASH" -> if (isEnglish) "Cash" else "מזומן"
         "CREDIT_CARD" -> if (isEnglish) "Credit card" else "כרטיס אשראי"
         "BANK_TRANSFER" -> if (isEnglish) "Bank transfer" else "העברה בנקאית"
+        "BIT" -> if (isEnglish) "bit" else "ביט"
         "WEBSITE" -> if (isEnglish) "Website payment" else "תשלום באתר"
         "MANUAL" -> if (isEnglish) "Manual" else "ידני"
         else -> method.name

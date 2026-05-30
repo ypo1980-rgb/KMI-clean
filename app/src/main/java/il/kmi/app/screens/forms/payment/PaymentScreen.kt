@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -61,6 +62,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
+
+//==================================================================================
+
+private enum class CheckoutPaymentMethod {
+    CREDIT_CARD,
+    BIT
+}
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -80,7 +92,13 @@ fun PaymentScreen(
         expiry: String,
         cvv: String,
         installments: Int
-    ) -> Unit
+    ) -> Unit,
+    onBitPayClicked: (
+        cardHolderName: String,
+        idNumber: String,
+        phone: String,
+        email: String
+    ) -> Unit = { _, _, _, _ -> }
 ) {
     var cardHolderName by remember { mutableStateOf("") }
     var idNumber by remember { mutableStateOf("") }
@@ -91,6 +109,18 @@ fun PaymentScreen(
     var cvv by remember { mutableStateOf("") }
 
     val installmentOptions = listOf(1, 2, 3, 4, 6, 12)
+    var selectedPaymentMethod by remember {
+        mutableStateOf(CheckoutPaymentMethod.CREDIT_CARD)
+    }
+
+    val isCreditCardSelected =
+        selectedPaymentMethod == CheckoutPaymentMethod.CREDIT_CARD
+
+    val isBitSelected =
+        selectedPaymentMethod == CheckoutPaymentMethod.BIT
+
+    val paymentMethodTitle =
+        if (isEnglish) "Choose payment method" else "בחר אמצעי תשלום"
     var installmentsExpanded by remember { mutableStateOf(false) }
     var installments by remember { mutableStateOf(1) }
 
@@ -106,18 +136,34 @@ fun PaymentScreen(
     val fieldPhone = if (isEnglish) "Phone number" else "טלפון"
     val fieldEmail = if (isEnglish) "Email" else "אימייל"
     val fieldCardNumber = if (isEnglish) "Card number" else "מספר כרטיס"
-    val fieldExpiry = if (isEnglish) "Expiry (MM/YY)" else "תוקף (MM/YY)"
-    val fieldCvv = if (isEnglish) "CVV" else "CVV"
+    val fieldExpiry = if (isEnglish) "MM/YY" else "תוקף"
+    val fieldCvv = "CVV"
     val fieldInstallments = if (isEnglish) "Installments" else "מספר תשלומים"
 
-    val isFormValid =
+    val screenTextAlign =
+        if (isEnglish) TextAlign.Left else TextAlign.Right
+
+    val screenHorizontalAlignment =
+        if (isEnglish) Alignment.Start else Alignment.End
+
+    val headerLayoutDirection = LayoutDirection.Ltr
+    val personalDetailsValid =
         cardHolderName.isNotBlank() &&
                 idNumber.length >= 8 &&
                 phone.length >= 9 &&
-                email.contains("@") &&
-                cardNumber.filter { it.isDigit() }.length >= 12 &&
+                email.contains("@")
+
+    val cardDetailsValid =
+        cardNumber.filter { it.isDigit() }.length >= 12 &&
                 expiry.length >= 4 &&
                 cvv.length in 3..4
+
+    val isFormValid =
+        if (isBitSelected) {
+            personalDetailsValid
+        } else {
+            personalDetailsValid && cardDetailsValid
+        }
 
     Box(
         modifier = Modifier
@@ -140,43 +186,54 @@ fun PaymentScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            CompositionLocalProvider(
+                LocalLayoutDirection provides headerLayoutDirection
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.10f),
-                    tonalElevation = 0.dp,
-                    modifier = Modifier.size(42.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onClose) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = closeDesc,
-                            tint = Color.White
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.10f),
+                        tonalElevation = 0.dp,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        IconButton(onClick = onClose) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = closeDesc,
+                                tint = Color.White
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = screenHorizontalAlignment
+                    ) {
+                        Text(
+                            text = title,
+                            color = Color.White,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = screenTextAlign,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = subtitle,
+                            color = Color.White.copy(alpha = 0.78f),
+                            fontSize = 13.sp,
+                            lineHeight = 20.sp,
+                            textAlign = screenTextAlign,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                Column(
-                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                ) {
-                    Text(
-                        text = title,
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
-                    )
-                    Text(
-                        text = subtitle,
-                        color = Color.White.copy(alpha = 0.78f),
-                        fontSize = 13.sp,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
-                    )
                 }
             }
 
@@ -196,7 +253,10 @@ fun PaymentScreen(
                         shape = RoundedCornerShape(24.dp)
                     )
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -242,9 +302,49 @@ fun PaymentScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = paymentMethodTitle,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        PaymentMethodChoiceCard(
+                            modifier = Modifier.weight(1f),
+                            title = if (isEnglish) "Credit card" else "אשראי",
+                            icon = { Icon(Icons.Outlined.CreditCard, null) },
+                            selected = isCreditCardSelected,
+                            onClick = {
+                                selectedPaymentMethod = CheckoutPaymentMethod.CREDIT_CARD
+                            }
+                        )
+
+                        PaymentMethodChoiceCard(
+                            modifier = Modifier.weight(1f),
+                            title = if (isEnglish) "bit" else "ביט",
+                            icon = { Icon(Icons.Outlined.Phone, null) },
+                            selected = isBitSelected,
+                            onClick = {
+                                selectedPaymentMethod = CheckoutPaymentMethod.BIT
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     PremiumTextField(
                         value = cardHolderName,
@@ -254,7 +354,7 @@ fun PaymentScreen(
                         isEnglish = isEnglish
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     PremiumTextField(
                         value = idNumber,
@@ -265,7 +365,7 @@ fun PaymentScreen(
                         isEnglish = isEnglish
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     PremiumTextField(
                         value = phone,
@@ -276,7 +376,7 @@ fun PaymentScreen(
                         isEnglish = isEnglish
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     PremiumTextField(
                         value = email,
@@ -287,106 +387,145 @@ fun PaymentScreen(
                         isEnglish = isEnglish
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    PremiumTextField(
-                        value = cardNumber,
-                        onValueChange = {
-                            cardNumber = formatCardNumber(it)
-                        },
-                        label = fieldCardNumber,
-                        leadingIcon = { Icon(Icons.Outlined.CreditCard, null) },
-                        keyboardType = KeyboardType.Number,
-                        isEnglish = isEnglish
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        maxItemsInEachRow = 2
-                    ) {
-                        Box(modifier = Modifier.fillMaxWidth(0.48f)) {
-                            PremiumTextField(
-                                value = expiry,
-                                onValueChange = { expiry = formatExpiry(it) },
-                                label = fieldExpiry,
-                                leadingIcon = { Icon(Icons.Outlined.CalendarMonth, null) },
-                                keyboardType = KeyboardType.Number,
-                                isEnglish = isEnglish
-                            )
-                        }
-
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            PremiumTextField(
-                                value = cvv,
-                                onValueChange = { cvv = it.filter { ch -> ch.isDigit() }.take(4) },
-                                label = fieldCvv,
-                                leadingIcon = { Icon(Icons.Outlined.Lock, null) },
-                                keyboardType = KeyboardType.Number,
-                                isEnglish = isEnglish
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    ExposedDropdownMenuBox(
-                        expanded = installmentsExpanded,
-                        onExpandedChange = { installmentsExpanded = !installmentsExpanded }
-                    ) {
-                        OutlinedTextField(
-                            value = installments.toString(),
-                            onValueChange = {},
-                            readOnly = true,
-                            singleLine = true,
-                            label = { Text(fieldInstallments) },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = installmentsExpanded)
+                    if (isCreditCardSelected) {
+                        PremiumTextField(
+                            value = cardNumber,
+                            onValueChange = {
+                                cardNumber = formatCardNumber(it)
                             },
-                            colors = premiumFieldColors(),
-                            shape = RoundedCornerShape(18.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(MenuAnchorType.PrimaryNotEditable, true),
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                color = Color.White,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
-                            )
+                            label = fieldCardNumber,
+                            leadingIcon = { Icon(Icons.Outlined.CreditCard, null) },
+                            keyboardType = KeyboardType.Number,
+                            isEnglish = isEnglish
                         )
 
-                        ExposedDropdownMenu(
-                            expanded = installmentsExpanded,
-                            onDismissRequest = { installmentsExpanded = false }
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.Top
                         ) {
-                            installmentOptions.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.toString()) },
-                                    onClick = {
-                                        installments = option
-                                        installmentsExpanded = false
-                                    }
+                            Box(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                PremiumTextField(
+                                    value = expiry,
+                                    onValueChange = { expiry = formatExpiry(it) },
+                                    label = fieldExpiry,
+                                    leadingIcon = { Icon(Icons.Outlined.CalendarMonth, null) },
+                                    keyboardType = KeyboardType.Number,
+                                    isEnglish = isEnglish
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                PremiumTextField(
+                                    value = cvv,
+                                    onValueChange = {
+                                        cvv = it.filter { ch -> ch.isDigit() }.take(4)
+                                    },
+                                    label = fieldCvv,
+                                    leadingIcon = { Icon(Icons.Outlined.Lock, null) },
+                                    keyboardType = KeyboardType.Number,
+                                    isEnglish = isEnglish
                                 )
                             }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        ExposedDropdownMenuBox(
+                            expanded = installmentsExpanded,
+                            onExpandedChange = { installmentsExpanded = !installmentsExpanded }
+                        ) {
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides if (isEnglish) {
+                                    LayoutDirection.Ltr
+                                } else {
+                                    LayoutDirection.Rtl
+                                }
+                            ) {
+                                OutlinedTextField(
+                                    value = installments.toString(),
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    singleLine = true,
+                                    label = {
+                                        Text(
+                                            text = fieldInstallments,
+                                            fontSize = 10.sp,
+                                            lineHeight = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(
+                                            expanded = installmentsExpanded
+                                        )
+                                    },
+                                    colors = premiumFieldColors(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(60.dp)
+                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, true),
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        lineHeight = 15.sp,
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                                    )
+                                )
+                            }
+
+                            ExposedDropdownMenu(
+                                expanded = installmentsExpanded,
+                                onDismissRequest = { installmentsExpanded = false }
+                            ) {
+                                installmentOptions.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.toString()) },
+                                        onClick = {
+                                            installments = option
+                                            installmentsExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
 
                     Button(
                         onClick = {
-                            onPayClicked(
-                                cardHolderName,
-                                idNumber,
-                                phone,
-                                email,
-                                cardNumber,
-                                expiry,
-                                cvv,
-                                installments
-                            )
+                            if (isBitSelected) {
+                                onBitPayClicked(
+                                    cardHolderName,
+                                    idNumber,
+                                    phone,
+                                    email
+                                )
+                            } else {
+                                onPayClicked(
+                                    cardHolderName,
+                                    idNumber,
+                                    phone,
+                                    email,
+                                    cardNumber,
+                                    expiry,
+                                    cvv,
+                                    installments
+                                )
+                            }
                         },
                         enabled = isFormValid,
                         shape = RoundedCornerShape(18.dp),
@@ -399,7 +538,11 @@ fun PaymentScreen(
                             .height(56.dp)
                     ) {
                         Text(
-                            text = payNowText,
+                            text = if (isBitSelected) {
+                                if (isEnglish) "Continue to bit" else "המשך לתשלום בביט"
+                            } else {
+                                payNowText
+                            },
                             color = Color(0xFF06251A),
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp
@@ -421,7 +564,64 @@ fun PaymentScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun PaymentMethodChoiceCard(
+    modifier: Modifier = Modifier,
+    title: String,
+    icon: @Composable () -> Unit,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(84.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = if (selected) {
+            Color(0xFF19C37D).copy(alpha = 0.22f)
+        } else {
+            Color.White.copy(alpha = 0.07f)
+        },
+        tonalElevation = if (selected) 6.dp else 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .border(
+                    width = 1.dp,
+                    color = if (selected) {
+                        Color(0xFF7CFFB2).copy(alpha = 0.75f)
+                    } else {
+                        Color.White.copy(alpha = 0.14f)
+                    },
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .padding(horizontal = 8.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier.size(18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                icon()
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = title,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                textAlign = TextAlign.Center,
+                maxLines = 2
+            )
         }
     }
 }
@@ -435,38 +635,75 @@ private fun PremiumTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     isEnglish: Boolean
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        label = { Text(label) },
-        leadingIcon = leadingIcon,
-        visualTransformation = VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        colors = premiumFieldColors(),
-        shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth(),
-        textStyle = MaterialTheme.typography.bodyLarge.copy(
-            color = Color.White,
-            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+    val fieldTextAlign =
+        if (isEnglish) TextAlign.Start else TextAlign.End
+
+    val fieldLayoutDirection =
+        if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides fieldLayoutDirection
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            label = {
+                Text(
+                    text = label,
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = fieldTextAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            leadingIcon = leadingIcon,
+            trailingIcon = null,
+            visualTransformation = VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            shape = RoundedCornerShape(16.dp),
+            colors = premiumFieldColors(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                color = Color.White,
+                fontSize = 12.sp,
+                lineHeight = 15.sp,
+                textAlign = fieldTextAlign
+            )
         )
-    )
+    }
 }
 
 @Composable
 private fun premiumFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = Color.White,
     unfocusedTextColor = Color.White,
-    focusedContainerColor = Color.White.copy(alpha = 0.08f),
-    unfocusedContainerColor = Color.White.copy(alpha = 0.06f),
-    disabledContainerColor = Color.White.copy(alpha = 0.04f),
+
+    focusedContainerColor = Color(0xFF24365E),
+    unfocusedContainerColor = Color(0xFF24365E),
+    disabledContainerColor = Color(0xFF1E2E4F),
+
     focusedBorderColor = Color(0xFF7CFFB2),
-    unfocusedBorderColor = Color.White.copy(alpha = 0.16f),
+    unfocusedBorderColor = Color(0xFF5B6F95),
+    disabledBorderColor = Color(0xFF3A4A68),
+
     focusedLabelColor = Color(0xFFB9FFD7),
-    unfocusedLabelColor = Color.White.copy(alpha = 0.72f),
+    unfocusedLabelColor = Color.White.copy(alpha = 0.82f),
+    disabledLabelColor = Color.White.copy(alpha = 0.45f),
+
     cursorColor = Color(0xFF7CFFB2),
+
     focusedLeadingIconColor = Color(0xFFB9FFD7),
-    unfocusedLeadingIconColor = Color.White.copy(alpha = 0.72f)
+    unfocusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
+    disabledLeadingIconColor = Color.White.copy(alpha = 0.45f),
+
+    focusedTrailingIconColor = Color(0xFFB9FFD7),
+    unfocusedTrailingIconColor = Color.White.copy(alpha = 0.82f),
+    disabledTrailingIconColor = Color.White.copy(alpha = 0.45f)
 )
 
 private fun formatCardNumber(input: String): String {

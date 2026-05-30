@@ -8,6 +8,7 @@ enum class PaymentStatus {
 
 enum class PaymentMethod {
     CREDIT_CARD,
+    BIT,
     WEBSITE,
     CASH,
     BANK_TRANSFER,

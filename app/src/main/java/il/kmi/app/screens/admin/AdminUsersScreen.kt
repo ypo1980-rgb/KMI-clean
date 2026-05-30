@@ -45,6 +45,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.saveable.rememberSaveable
+
+//=====================================================================
 
 private fun adminTr(isEnglish: Boolean, he: String, en: String): String =
     if (isEnglish) en else he
@@ -1364,140 +1373,379 @@ private fun FilterRow(
     belts: List<String>,
     ageBuckets: List<String>
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Text(
-            text = adminTr(isEnglish, "פילטרים", "Filters"),
-            style = MaterialTheme.typography.titleSmall,
-            color = Color(0xFFE5E7EB),
-            fontWeight = FontWeight.SemiBold,
-            textAlign = textAlign,
-            modifier = Modifier.fillMaxWidth()
+    var filtersExpanded by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    val activeFiltersCount = listOfNotNull(
+        genderFilter,
+        regionFilter,
+        beltFilter,
+        ageBucketFilter
+    ).size
+
+    val selectedFiltersSummary = buildList {
+        genderFilter?.let { gender ->
+            add(
+                when (gender) {
+                    "male" -> adminTr(isEnglish, "זכר", "Male")
+                    "female" -> adminTr(isEnglish, "נקבה", "Female")
+                    else -> gender
+                }
+            )
+        }
+
+        regionFilter?.let {
+            add(it)
+        }
+
+        beltFilter?.let {
+            add(it)
+        }
+
+        ageBucketFilter?.let {
+            add(adminAgeBucketLabel(it, isEnglish))
+        }
+    }.joinToString(" • ")
+
+    val collapsedSummary = if (activeFiltersCount == 0) {
+        adminTr(
+            isEnglish,
+            "אין פילטרים פעילים",
+            "No active filters"
         )
+    } else {
+        selectedFiltersSummary
+    }
 
-        // מין
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            val chipColors = FilterChipDefaults.filterChipColors(
-                containerColor = Color(0xFF0B1220),              // ✅ רקע ברור לכפתור לא-נבחר
-                labelColor = Color(0xFFE5E7EB),                  // ✅ טקסט בהיר
-                selectedContainerColor = Color(0xFF0EA5E9),      // ✅ נבחר
-                selectedLabelColor = Color(0xFF020617)           // ✅ טקסט כהה על נבחר
-            )
-
-            FilterChip(
-                selected = genderFilter == null,
-                onClick = { onGenderChange(null) },
-                label = { Text(adminTr(isEnglish, "הכל", "All")) },
-                colors = chipColors
-            )
-            FilterChip(
-                selected = genderFilter == "male",
-                onClick = { onGenderChange("male") },
-                label = { Text(adminTr(isEnglish, "זכר", "Male")) },
-                colors = chipColors
-            )
-            FilterChip(
-                selected = genderFilter == "female",
-                onClick = { onGenderChange("female") },
-                label = { Text(adminTr(isEnglish, "נקבה", "Female")) },
-                colors = chipColors
-            )
-        }
-
-        // אזור
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            val chipColors = FilterChipDefaults.filterChipColors(
-                containerColor = Color(0xFF0B1220),
-                labelColor = Color(0xFFE5E7EB),
-                selectedContainerColor = Color(0xFF0EA5E9),
-                selectedLabelColor = Color(0xFF020617)
-            )
-
-            FilterChip(
-                selected = regionFilter == null,
-                onClick = { onRegionChange(null) },
-                label = { Text(adminTr(isEnglish, "כל האזורים", "All regions")) },
-                colors = chipColors
-            )
-            regions.forEach { region ->
-                FilterChip(
-                    selected = regionFilter == region,
-                    onClick = { onRegionChange(region) },
-                    label = { Text(region) },
-                    colors = chipColors
-                )
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF0B1220).copy(alpha = 0.92f)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (filtersExpanded) {
+                Color(0xFF38BDF8).copy(alpha = 0.75f)
+            } else {
+                Color(0xFF38BDF8).copy(alpha = 0.35f)
             }
-        }
-
-        // חגורה  🔹 תוקן – שורה נגללת אופקית
-        Row(
+        )
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            val chipColors = FilterChipDefaults.filterChipColors(
-                containerColor = Color(0xFF0B1220),
-                labelColor = Color(0xFFE5E7EB),
-                selectedContainerColor = Color(0xFF0EA5E9),
-                selectedLabelColor = Color(0xFF020617)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color(0xFF020617).copy(alpha = 0.75f))
+                    .clickable {
+                        filtersExpanded = !filtersExpanded
+                    }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (isEnglish) {
+                    Arrangement.Start
+                } else {
+                    Arrangement.End
+                }
+            ) {
+                if (isEnglish) {
+                    Text(
+                        text = if (filtersExpanded) "▴" else "▾",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF38BDF8),
+                        fontWeight = FontWeight.Black
+                    )
 
-            FilterChip(
-                selected = beltFilter == null,
-                onClick = { onBeltChange(null) },
-                label = { Text(adminTr(isEnglish, "כל החגורות", "All belts")) },
-                colors = chipColors
-            )
-            belts.forEach { belt ->
-                FilterChip(
-                    selected = beltFilter == belt,
-                    onClick = { onBeltChange(belt) },
-                    label = { Text(belt) },
-                    colors = chipColors
-                )
+                    Spacer(Modifier.width(10.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = if (filtersExpanded) {
+                                adminTr(isEnglish, "הסתר פילטרים", "Hide filters")
+                            } else {
+                                adminTr(isEnglish, "פתח פילטרים", "Show filters")
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color(0xFFE5E7EB),
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Left,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Text(
+                            text = collapsedSummary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (activeFiltersCount == 0) {
+                                Color(0xFF94A3B8)
+                            } else {
+                                Color(0xFF7DD3FC)
+                            },
+                            textAlign = TextAlign.Left,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            text = if (filtersExpanded) {
+                                adminTr(isEnglish, "הסתר פילטרים", "Hide filters")
+                            } else {
+                                adminTr(isEnglish, "פתח פילטרים", "Show filters")
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            color = Color(0xFFE5E7EB),
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Text(
+                            text = collapsedSummary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (activeFiltersCount == 0) {
+                                Color(0xFF94A3B8)
+                            } else {
+                                Color(0xFF7DD3FC)
+                            },
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(Modifier.width(10.dp))
+
+                    Text(
+                        text = if (filtersExpanded) "▴" else "▾",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF38BDF8),
+                        fontWeight = FontWeight.Black
+                    )
+                }
             }
-        }
 
-        // קבוצת גיל
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            val chipColors = FilterChipDefaults.filterChipColors(
-                containerColor = Color(0xFF0B1220),
-                labelColor = Color(0xFFE5E7EB),
-                selectedContainerColor = Color(0xFF0EA5E9),
-                selectedLabelColor = Color(0xFF020617)
-            )
+            AnimatedVisibility(
+                visible = filtersExpanded,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (activeFiltersCount > 0) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = if (isEnglish) {
+                                Arrangement.Start
+                            } else {
+                                Arrangement.End
+                            }
+                        ) {
+                            FilterChip(
+                                selected = false,
+                                onClick = {
+                                    onGenderChange(null)
+                                    onRegionChange(null)
+                                    onBeltChange(null)
+                                    onAgeBucketChange(null)
+                                },
+                                label = {
+                                    Text(
+                                        adminTr(
+                                            isEnglish,
+                                            "נקה את כל הפילטרים",
+                                            "Clear all filters"
+                                        )
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = Color(0xFF1E293B),
+                                    labelColor = Color(0xFFE5E7EB),
+                                    selectedContainerColor = Color(0xFF0EA5E9),
+                                    selectedLabelColor = Color(0xFF020617)
+                                )
+                            )
+                        }
+                    }
 
-            FilterChip(
-                selected = ageBucketFilter == null,
-                onClick = { onAgeBucketChange(null) },
-                label = { Text(adminTr(isEnglish, "כל הגילאים", "All ages")) },
-                colors = chipColors
-            )
-            ageBuckets.forEach { bucket ->
-                FilterChip(
-                    selected = ageBucketFilter == bucket,
-                    onClick = { onAgeBucketChange(bucket) },
-                    label = { Text(adminAgeBucketLabel(bucket, isEnglish)) },
-                    colors = chipColors
-                )
+                    Text(
+                        text = adminTr(isEnglish, "מין", "Gender"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFBAE6FD),
+                        fontWeight = FontWeight.Bold,
+                        textAlign = textAlign,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val chipColors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color(0xFF0B1220),
+                            labelColor = Color(0xFFE5E7EB),
+                            selectedContainerColor = Color(0xFF0EA5E9),
+                            selectedLabelColor = Color(0xFF020617)
+                        )
+
+                        FilterChip(
+                            selected = genderFilter == null,
+                            onClick = { onGenderChange(null) },
+                            label = { Text(adminTr(isEnglish, "הכל", "All")) },
+                            colors = chipColors
+                        )
+
+                        FilterChip(
+                            selected = genderFilter == "male",
+                            onClick = { onGenderChange("male") },
+                            label = { Text(adminTr(isEnglish, "זכר", "Male")) },
+                            colors = chipColors
+                        )
+
+                        FilterChip(
+                            selected = genderFilter == "female",
+                            onClick = { onGenderChange("female") },
+                            label = { Text(adminTr(isEnglish, "נקבה", "Female")) },
+                            colors = chipColors
+                        )
+                    }
+
+                    Text(
+                        text = adminTr(isEnglish, "אזור", "Region"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFBAE6FD),
+                        fontWeight = FontWeight.Bold,
+                        textAlign = textAlign,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val chipColors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color(0xFF0B1220),
+                            labelColor = Color(0xFFE5E7EB),
+                            selectedContainerColor = Color(0xFF0EA5E9),
+                            selectedLabelColor = Color(0xFF020617)
+                        )
+
+                        FilterChip(
+                            selected = regionFilter == null,
+                            onClick = { onRegionChange(null) },
+                            label = { Text(adminTr(isEnglish, "כל האזורים", "All regions")) },
+                            colors = chipColors
+                        )
+
+                        regions.forEach { region ->
+                            FilterChip(
+                                selected = regionFilter == region,
+                                onClick = { onRegionChange(region) },
+                                label = { Text(region) },
+                                colors = chipColors
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = adminTr(isEnglish, "חגורה", "Belt"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFBAE6FD),
+                        fontWeight = FontWeight.Bold,
+                        textAlign = textAlign,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val chipColors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color(0xFF0B1220),
+                            labelColor = Color(0xFFE5E7EB),
+                            selectedContainerColor = Color(0xFF0EA5E9),
+                            selectedLabelColor = Color(0xFF020617)
+                        )
+
+                        FilterChip(
+                            selected = beltFilter == null,
+                            onClick = { onBeltChange(null) },
+                            label = { Text(adminTr(isEnglish, "כל החגורות", "All belts")) },
+                            colors = chipColors
+                        )
+
+                        belts.forEach { belt ->
+                            FilterChip(
+                                selected = beltFilter == belt,
+                                onClick = { onBeltChange(belt) },
+                                label = { Text(belt) },
+                                colors = chipColors
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = adminTr(isEnglish, "קבוצת גיל", "Age group"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFBAE6FD),
+                        fontWeight = FontWeight.Bold,
+                        textAlign = textAlign,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val chipColors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color(0xFF0B1220),
+                            labelColor = Color(0xFFE5E7EB),
+                            selectedContainerColor = Color(0xFF0EA5E9),
+                            selectedLabelColor = Color(0xFF020617)
+                        )
+
+                        FilterChip(
+                            selected = ageBucketFilter == null,
+                            onClick = { onAgeBucketChange(null) },
+                            label = { Text(adminTr(isEnglish, "כל הגילאים", "All ages")) },
+                            colors = chipColors
+                        )
+
+                        ageBuckets.forEach { bucket ->
+                            FilterChip(
+                                selected = ageBucketFilter == bucket,
+                                onClick = { onAgeBucketChange(bucket) },
+                                label = { Text(adminAgeBucketLabel(bucket, isEnglish)) },
+                                colors = chipColors
+                            )
+                        }
+                    }
+                }
             }
         }
     }
