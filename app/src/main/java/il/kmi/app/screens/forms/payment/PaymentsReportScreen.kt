@@ -118,12 +118,108 @@ private fun paymentMethodToFirestore(method: PaymentMethod): String {
     return method.name
 }
 
+private fun String?.cleanPaymentText(): String {
+    return this
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        .orEmpty()
+}
+
+private fun String.looksLikeTechnicalId(): Boolean {
+    val clean = trim()
+
+    return clean.length >= 18 &&
+            clean.none { it.isWhitespace() } &&
+            clean.any { it.isDigit() } &&
+            clean.any { it.isLetter() }
+}
+
+private fun String?.validDisplayNameOrNull(): String? {
+    val clean = cleanPaymentText()
+
+    return clean.takeIf {
+        it.isNotBlank() &&
+                !it.looksLikeTechnicalId() &&
+                !it.contains("@") &&
+                it.length <= 70
+    }
+}
+
+private fun DocumentSnapshot.paymentStringFromAny(vararg keys: String): String {
+    keys.forEach { key ->
+        getString(key)
+            ?.cleanPaymentText()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+    }
+
+    val dataMap = data ?: return ""
+
+    keys.forEach { key ->
+        val value = dataMap[key]
+        if (value is String && value.trim().isNotBlank()) {
+            return value.trim()
+        }
+    }
+
+    val nestedKeys = listOf("profile", "personal", "trainee", "student", "user", "details")
+    nestedKeys.forEach { nestedKey ->
+        val nested = dataMap[nestedKey] as? Map<*, *> ?: return@forEach
+
+        keys.forEach { key ->
+            val value = nested[key]
+            if (value is String && value.trim().isNotBlank()) {
+                return value.trim()
+            }
+        }
+    }
+
+    return ""
+}
+
 private fun DocumentSnapshot.paymentUserName(): String {
-    return getString("fullName")?.takeIf { it.isNotBlank() }
-        ?: getString("name")?.takeIf { it.isNotBlank() }
-        ?: getString("displayName")?.takeIf { it.isNotBlank() }
-        ?: getString("email")?.takeIf { it.isNotBlank() }
-        ?: id
+    val firstName = paymentStringFromAny(
+        "firstName",
+        "first_name",
+        "firstname",
+        "traineeFirstName",
+        "trainee_first_name",
+        "studentFirstName",
+        "student_first_name",
+        "privateName",
+        "private_name"
+    )
+
+    val lastName = paymentStringFromAny(
+        "lastName",
+        "last_name",
+        "lastname",
+        "familyName",
+        "family_name",
+        "traineeLastName",
+        "trainee_last_name",
+        "studentLastName",
+        "student_last_name"
+    )
+
+    val combinedName = listOf(firstName, lastName)
+        .filter { it.isNotBlank() }
+        .joinToString(" ")
+        .validDisplayNameOrNull()
+
+    return paymentStringFromAny(
+        "fullName",
+        "full_name",
+        "displayName",
+        "display_name",
+        "name",
+        "traineeName",
+        "trainee_name",
+        "studentName",
+        "student_name"
+    ).validDisplayNameOrNull()
+        ?: combinedName
+        ?: ""
 }
 
 private fun DocumentSnapshot.paymentUserPhone(): String {
@@ -152,13 +248,13 @@ private fun DocumentSnapshot.isPaymentRelevantTrainee(): Boolean {
             getString("role")
                 ?: getString("userType")
                 ?: getString("type")
-                ?: ""
+                ?: paymentStringFromAny("role", "userType", "type")
             ).trim().lowercase()
 
     val statusText = (
             getString("status")
                 ?: getString("active")
-                ?: ""
+                ?: paymentStringFromAny("status", "active")
             ).trim().lowercase()
 
     val isActive = getBoolean("isActive") != false &&
@@ -168,14 +264,19 @@ private fun DocumentSnapshot.isPaymentRelevantTrainee(): Boolean {
             statusText != "לא פעיל"
 
     val isTrainee =
-        role.isBlank() ||
-                role == "trainee" ||
+        role == "trainee" ||
+                role == "student" ||
                 role.contains("trainee") ||
                 role.contains("student") ||
                 role.contains("מתאמן") ||
                 role.contains("חניך")
 
-    return isActive && isTrainee
+    val hasUsableProfile =
+        paymentUserName().isNotBlank() ||
+                paymentUserPhone().isNotBlank() ||
+                paymentUserBranch().isNotBlank()
+
+    return isActive && (isTrainee || hasUsableProfile)
 }
 
 private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
@@ -236,12 +337,15 @@ private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
 
             PaymentReportItem(
                 traineeId = traineeId,
-                fullName = paymentDoc?.getString("fullName")
+                fullName = paymentDoc?.getString("fullName").validDisplayNameOrNull()
+                    ?: paymentDoc?.getString("full_name").validDisplayNameOrNull()
+                    ?: paymentDoc?.getString("traineeName").validDisplayNameOrNull()
+                    ?: paymentDoc?.getString("trainee_name").validDisplayNameOrNull()
                     ?: userDoc.paymentUserName(),
-                branchName = paymentDoc?.getString("branchName")
-                    ?: userDoc.paymentUserBranch(),
-                phone = paymentDoc?.getString("phone")
-                    ?: userDoc.paymentUserPhone(),
+                branchName = paymentDoc?.getString("branchName").cleanPaymentText()
+                    .ifBlank { userDoc.paymentUserBranch() },
+                phone = paymentDoc?.getString("phone").cleanPaymentText()
+                    .ifBlank { userDoc.paymentUserPhone() },
                 requiredAmount = requiredAmount,
                 paidAmount = paidAmount,
                 status = status,
@@ -249,6 +353,11 @@ private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
                 paymentDate = paymentDoc?.getString("paymentDate").orEmpty(),
                 notes = paymentDoc?.getString("notes").orEmpty()
             )
+        }
+        .filter { item ->
+            item.fullName.isNotBlank() &&
+                    item.fullName != "שם חסר" &&
+                    !item.fullName.looksLikeTechnicalId()
         }
         .sortedWith(
             compareBy<PaymentReportItem> { it.branchName }
@@ -361,7 +470,22 @@ fun PaymentsReportScreen(
             items = realItems
             isLoadingPayments = false
         }.onFailure { error ->
-            paymentsError = error.localizedMessage ?: "Unknown error"
+            val rawMessage = error.localizedMessage.orEmpty()
+
+            paymentsError = if (rawMessage.contains("PERMISSION_DENIED", ignoreCase = true) ||
+                rawMessage.contains("insufficient permissions", ignoreCase = true)
+            ) {
+                if (isEnglish) {
+                    "You do not have permission to load payment data. Please check Firestore rules."
+                } else {
+                    "אין הרשאה לטעון את נתוני התשלומים מהשרת. צריך לבדוק הרשאות Firestore למנהל/מאמן."
+                }
+            } else {
+                rawMessage.ifBlank {
+                    if (isEnglish) "Unknown loading error" else "שגיאה לא ידועה בטעינת התשלומים"
+                }
+            }
+
             isLoadingPayments = false
         }
     }
@@ -642,7 +766,10 @@ fun PaymentsReportScreen(
                         Text(
                             text = if (isEnglish) "Search & filters" else "חיפוש וסינון",
                             color = Color.White,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 15.sp,
+                                lineHeight = 18.sp
+                            ),
                             fontWeight = FontWeight.ExtraBold,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
@@ -658,18 +785,31 @@ fun PaymentsReportScreen(
                         OutlinedTextField(
                             value = query,
                             onValueChange = { query = it },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(58.dp),
                             singleLine = true,
                             label = {
                                 Text(
-                                    if (isEnglish)
+                                    text = if (isEnglish)
                                         "Search by name / phone / branch"
                                     else
-                                        "חיפוש לפי שם / טלפון / סניף"
+                                        "חיפוש לפי שם / טלפון / סניף",
+                                    fontSize = 11.sp,
+                                    lineHeight = 13.sp,
+                                    maxLines = 1
                                 )
                             },
-                            leadingIcon = { Icon(Icons.Default.Search, null) },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            textStyle = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 13.sp,
+                                lineHeight = 16.sp,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
                             ),
                             colors = reportFieldColors()
@@ -687,7 +827,10 @@ fun PaymentsReportScreen(
                             else
                                 "תוצאות: ${filteredItems.size}",
                             color = Color.White.copy(alpha = 0.80f),
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                                lineHeight = 15.sp
+                            ),
                             textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -1020,7 +1163,7 @@ private fun FilterChipSimple(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(58.dp),
+        modifier = modifier.height(50.dp),
         shape = RoundedCornerShape(20.dp),
         color = if (selected) Color(0xFF7B57D1) else Color.White.copy(alpha = 0.10f),
         tonalElevation = if (selected) 5.dp else 0.dp
@@ -1034,7 +1177,10 @@ private fun FilterChipSimple(
             Text(
                 text = text,
                 color = Color.White,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp
+                ),
                 fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 maxLines = 2
@@ -1051,54 +1197,98 @@ private fun PaymentReportRow(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(26.dp),
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF2A3D66)),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
+            CompositionLocalProvider(
+                LocalLayoutDirection provides LayoutDirection.Ltr
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    Text(
-                        text = item.fullName,
-                        color = Color.White,
-                        style = MaterialTheme.typography.titleLarge,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (!isEnglish) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = statusColor(item.status).copy(alpha = 0.18f)
+                        ) {
+                            Text(
+                                text = statusLabel(item.status, isEnglish),
+                                color = statusColor(item.status),
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    lineHeight = 13.sp
+                                ),
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
 
-                    Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
 
-                    Text(
-                        text = "${item.branchName} • ${item.phone}",
-                        color = Color.White.copy(alpha = 0.74f),
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                    ) {
+                        Text(
+                            text = item.fullName,
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 14.sp,
+                                lineHeight = 17.sp
+                            ),
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 2
+                        )
 
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = statusColor(item.status).copy(alpha = 0.18f)
-                ) {
-                    Text(
-                        text = statusLabel(item.status, isEnglish),
-                        color = statusColor(item.status),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = TextAlign.Center
-                    )
+                        Spacer(Modifier.height(3.dp))
+
+                        Text(
+                            text = listOf(item.branchName, item.phone)
+                                .filter { it.isNotBlank() }
+                                .joinToString(" • "),
+                            color = Color.White.copy(alpha = 0.72f),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 10.sp,
+                                lineHeight = 13.sp
+                            ),
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1
+                        )
+                    }
+
+                    if (isEnglish) {
+                        Spacer(Modifier.width(8.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = statusColor(item.status).copy(alpha = 0.18f)
+                        ) {
+                            Text(
+                                text = statusLabel(item.status, isEnglish),
+                                color = statusColor(item.status),
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    lineHeight = 13.sp
+                                ),
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1106,11 +1296,14 @@ private fun PaymentReportRow(
 
             Text(
                 text = if (isEnglish)
-                    "Membership fee: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
+                    "Fee: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
                 else
                     "דמי חבר: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}",
                 color = Color.White,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp
+                ),
                 fontWeight = FontWeight.Bold,
                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                 modifier = Modifier.fillMaxWidth()
@@ -1141,7 +1334,12 @@ private fun PaymentReportRow(
                 Icon(Icons.Default.AddCard, contentDescription = null)
                 Spacer(Modifier.height(0.dp).width(8.dp))
                 Text(
-                    text = if (isEnglish) "Add Membership Payment" else "הוסף דמי חבר"
+                    text = if (isEnglish) "Add Membership Payment" else "הוסף דמי חבר",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp
+                    ),
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -1197,22 +1395,68 @@ private fun ManualPaymentDialog(
                     expanded = expanded,
                     onExpandedChange = { expanded = !expanded }
                 ) {
-                    OutlinedTextField(
-                        value = paymentMethodLabel(method, isEnglish),
-                        onValueChange = {},
-                        readOnly = true,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(),
-                        label = { Text(if (isEnglish) "Payment Method" else "אמצעי תשלום") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                        },
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
-                        ),
-                        colors = reportFieldColors()
-                    )
+                            .menuAnchor()
+                    ) {
+                        Text(
+                            text = if (isEnglish) "Payment Method" else "אמצעי תשלום",
+                            color = Color.White.copy(alpha = 0.82f),
+                            fontSize = 12.sp,
+                            lineHeight = 14.sp,
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = if (isEnglish) 4.dp else 0.dp,
+                                    end = if (isEnglish) 0.dp else 4.dp,
+                                    bottom = 4.dp
+                                )
+                        )
+
+                        Surface(
+                            onClick = { expanded = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(58.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0xFF24365E)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (!isEnglish) {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(
+                                        expanded = expanded
+                                    )
+
+                                    Spacer(Modifier.width(8.dp))
+                                }
+
+                                Text(
+                                    text = paymentMethodLabel(method, isEnglish),
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    lineHeight = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                if (isEnglish) {
+                                    Spacer(Modifier.width(8.dp))
+
+                                    ExposedDropdownMenuDefaults.TrailingIcon(
+                                        expanded = expanded
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     ExposedDropdownMenu(
                         expanded = expanded,
@@ -1223,7 +1467,9 @@ private fun ManualPaymentDialog(
                                 text = {
                                     Text(
                                         text = paymentMethodLabel(option, isEnglish),
-                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                        fontSize = 14.sp,
+                                        lineHeight = 17.sp,
+                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 },

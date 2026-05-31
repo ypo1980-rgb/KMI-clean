@@ -25,9 +25,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -61,7 +64,11 @@ import androidx.core.view.doOnPreDraw
 import shareCurrentScreen
 import androidx.compose.runtime.saveable.rememberSaveable
 import il.kmi.app.ui.assistant.ui.AiAssistantDialog
-import il.kmi.app.search.KmiSearchBridge
+import androidx.compose.ui.AbsoluteAlignment
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import il.kmi.shared.localization.AppLanguageManager
 
 //===============================================================================
@@ -172,6 +179,7 @@ fun KmiTopBar(
     // כדי שלא תהיה כותרת כפולה. משלב זה והלאה נשאר הכול כמו אצלך.
 
     val ctx = LocalContext.current
+    val density = LocalDensity.current
     val languageManager = remember { AppLanguageManager(ctx) }
     val currentLangResolved = languageManager.getCurrentLanguage().code
     val isEnglish = currentLangResolved == "en"
@@ -254,6 +262,10 @@ fun KmiTopBar(
 
 // 🔵 דיאלוג עוזר חכם (AI)
     var showAiDialog by rememberSaveable { mutableStateOf(false) }
+
+    // ✅ טור פעולות צדדי במקום סרגל אייקונים אופקי פתוח תמיד
+    var quickActionsExpanded by rememberSaveable { mutableStateOf(false) }
+
     // היה:
     // val broadcastTooLong by derivedStateOf { broadcastText.length > MAX_BROADCAST_CHARS }
     // צריך לזכור את ה-state:
@@ -309,9 +321,9 @@ fun KmiTopBar(
 
     val topBarHeight = 56.dp
 
-    // ✅ הסרגל התחתון כולל עכשיו אייקון + טקסט קטן מתחתיו.
-    // לכן מגדילים את הגובה כדי שהכיתוב לא ייחתך.
-    val bottomBarHeight = 86.dp
+    // ✅ טור האייקונים נפתח כ-overlay מעל המסך,
+    // לכן ה-TopBar עצמו נשאר בגובה הכותרת בלבד.
+    val quickActionsWidth = 78.dp
 
     // Back בטוח
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
@@ -332,19 +344,19 @@ fun KmiTopBar(
         }
     }
 
-    val showBottomActionsEffective = showBottomActions && !hideBottomForShare
+    val showQuickActions = showBottomActions && !hideBottomForShare
 
     // --- מעטפת עליונה ---
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(topBarHeight + if (showBottomActionsEffective) bottomBarHeight else 0.dp)
+            .height(topBarHeight)
     ) {
         Spacer(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .height(if (showBottomActionsEffective) bottomBarHeight else 0.dp)
+                .height(0.dp)
         )
 
         Surface(
@@ -379,7 +391,8 @@ fun KmiTopBar(
                     modifier = Modifier
                         .fillMaxHeight()
                         .padding(start = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (showMenu) {
                         PremiumActionIcon(
@@ -393,8 +406,6 @@ fun KmiTopBar(
                         Spacer(Modifier.width(8.dp))
                     }
 
-                    Spacer(Modifier.width(8.dp))
-
                     if (onBack != null) {
                         PremiumActionIcon(
                             icon = if (useCloseIcon) {
@@ -407,8 +418,6 @@ fun KmiTopBar(
                             contentDescription = if (useCloseIcon) "סגור" else "חזור",
                             onClick = { performBackSafe() }
                         )
-                    } else {
-                        Spacer(Modifier.width(4.dp))
                     }
                 }
             },
@@ -558,87 +567,150 @@ fun KmiTopBar(
             null
         }
 
-        AnimatedVisibility(
-            visible = showBottomActionsEffective,
-            enter = androidx.compose.animation.fadeIn() +
-                    androidx.compose.animation.slideInVertically { -it / 3 },
-            exit = androidx.compose.animation.fadeOut() +
-                    androidx.compose.animation.slideOutVertically { -it / 3 },
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .offset(y = topBarHeight)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(bottomBarHeight)
-                    .background(Color.White)
-                    .zIndex(100f)
-            ) {
-                DividerLine()
-
-                Box(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .background(Color.Transparent)
+        if (showQuickActions) {
+            Popup(
+                alignment = AbsoluteAlignment.TopRight,
+                offset = IntOffset(
+                    x = with(density) { (-14).dp.roundToPx() },
+                    y = with(density) { (topBarHeight + 8.dp).roundToPx() }
+                ),
+                properties = PopupProperties(
+                    focusable = false,
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false,
+                    clippingEnabled = false
                 )
+            ) {
+                PremiumFloatingQuickActionsButton(
+                    expanded = quickActionsExpanded,
+                    onClick = {
+                        quickActionsExpanded = !quickActionsExpanded
+                    }
+                )
+            }
+        }
 
-                // ✅ הסרגל עצמו כבר כולל labels מתחת לאייקונים.
-                // ✅ תיקון מצב כהה:
-                // הסרגל יושב על רקע לבן, לכן עוטפים אותו ב־KmiLightTheme
-                // כדי שהטקסטים הקטנים מתחת לאייקונים יהיו כהים וברורים גם כשהמכשיר במצב כהה.
-                KmiLightTheme {
-                    il.kmi.app.screens.BottomActionsBarEdgeToEdge(
-                        // בית: נעול/פתוח לפי homeEnabledForBar
-                        onHome = if (onHome != null) {
-                            {
-                                focusManager.clearFocus(force = true)
-                                onHome()
+        if (showQuickActions && quickActionsExpanded) {
+            Popup(
+                alignment = AbsoluteAlignment.TopRight,
+                offset = IntOffset(
+                    x = with(density) { (-10).dp.roundToPx() },
+                    y = with(density) { (topBarHeight + 58.dp).roundToPx() }
+                ),
+                properties = PopupProperties(
+                    focusable = false,
+                    dismissOnBackPress = true,
+                    dismissOnClickOutside = true,
+                    clippingEnabled = false
+                )
+            ) {
+                AnimatedVisibility(
+                    visible = true,
+                    enter = androidx.compose.animation.fadeIn() +
+                            androidx.compose.animation.slideInHorizontally { it / 3 },
+                    exit = androidx.compose.animation.fadeOut() +
+                            androidx.compose.animation.slideOutHorizontally { it / 3 }
+                ) {
+                    Surface(
+                        modifier = Modifier.width(quickActionsWidth),
+                        shape = RoundedCornerShape(22.dp),
+                        color = Color.White,
+                        shadowElevation = 12.dp,
+                        tonalElevation = 0.dp,
+                        border = BorderStroke(1.dp, Color(0x14000000))
+                    ) {
+                        KmiLightTheme {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                VerticalQuickActionItem(
+                                    icon = Icons.Filled.Search,
+                                    label = if (isEnglish) "Search" else "חיפוש",
+                                    tint = Color(0xFF10B981),
+                                    background = Color(0x1A10B981),
+                                    enabled = !lockSearch && onSearch != null,
+                                    onClick = {
+                                        quickActionsExpanded = false
+                                        onSearch?.invoke()
+                                    }
+                                )
+
+                                VerticalQuickActionItem(
+                                    icon = Icons.Filled.Home,
+                                    label = if (isEnglish) "Home" else "בית",
+                                    tint = if (lockHome) {
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                    } else {
+                                        Color(0xFF2563EB)
+                                    },
+                                    background = if (lockHome) {
+                                        Color(0x14000000)
+                                    } else {
+                                        Color(0x1A2563EB)
+                                    },
+                                    enabled = onHome != null,
+                                    onClick = {
+                                        if (lockHome) {
+                                            android.widget.Toast
+                                                .makeText(
+                                                    ctx,
+                                                    homeDisabledToast ?: "אתה כבר במסך הבית 🙂",
+                                                    android.widget.Toast.LENGTH_SHORT
+                                                )
+                                                .show()
+                                        } else {
+                                            quickActionsExpanded = false
+                                            focusManager.clearFocus(force = true)
+                                            onHome?.invoke()
+                                        }
+                                    }
+                                )
+
+                                VerticalQuickActionItem(
+                                    icon = Icons.Filled.Settings,
+                                    label = if (isEnglish) "Settings" else "הגדרות",
+                                    tint = Color(0xFFF59E0B),
+                                    background = Color(0x1AF59E0B),
+                                    enabled = showSettingsAllowed,
+                                    onClick = {
+                                        quickActionsExpanded = false
+                                        focusManager.clearFocus(force = true)
+                                        DrawerBridge.openSettings()
+                                    }
+                                )
+
+                                VerticalQuickActionItem(
+                                    icon = Icons.Filled.Lightbulb,
+                                    label = if (isEnglish) "AI" else "עוזר",
+                                    tint = Color(0xFF8B5CF6),
+                                    background = Color(0x1A8B5CF6),
+                                    enabled = !isInsideAssistant,
+                                    onClick = {
+                                        if (!isInsideAssistant) {
+                                            quickActionsExpanded = false
+                                            showAiDialog = true
+                                        }
+                                    }
+                                )
+
+                                VerticalQuickActionItem(
+                                    icon = Icons.Filled.Share,
+                                    label = if (isEnglish) "Share" else "שתף",
+                                    tint = Color(0xFFEC4899),
+                                    background = Color(0x1AEC4899),
+                                    enabled = true,
+                                    onClick = {
+                                        quickActionsExpanded = false
+                                        runKmiShare()
+                                    }
+                                )
                             }
-                        } else null,
-                        homeEnabled = homeEnabledForBar,
-
-                        // כדי שלא ינעל חיפוש/שאר האייקונים – תמיד true
-                        isRegistered = true,
-                        homeDisabledToast = homeToastForBar,
-
-                        // חיפוש – נעול רק אם lockSearch = true
-                        onSearch = if (lockSearch) null else { { onSearch?.invoke() } },
-
-                        onSettings = if (showSettingsAllowed) {
-                            {
-                                focusManager.clearFocus(force = true)
-                                DrawerBridge.openSettings()
-                            }
-                        } else null,
-                        currentLang = currentLangResolved,
-
-                        onShare = {
-                            runKmiShare()
-                        },
-
-                        onTts = ttsHandler,
-                        onFont = fontHandler,
-                        onNext = onNext,
-                        whatsAppIconRes = whatsAppIconRes,
-                        accessibilityIconRes = accessibilityIconRes,
-
-                        // חיפוש תרגילים + בחירת תוצאה
-                        searchProvider = { q -> KmiSearchBridge.searchExercises(q) },
-                        onPickSearchResult = { id: String ->
-                            onPickSearchResult?.invoke(id) ?: onOpenExercise?.invoke(id)
-                        },
-
-                        // 🔵 פה – אייקון ה-AI בסרגל התחתון
-                        onOpenAi = {
-                            if (isInsideAssistant) {
-                                return@BottomActionsBarEdgeToEdge
-                            }
-                            showAiDialog = true
                         }
-                    )
+                    }
                 }
             }
         }
@@ -646,7 +718,7 @@ fun KmiTopBar(
         // לוגו אופציונלי
         if (showLogoInBar && logoRes != null) {
             val logoSz = logoSize.coerceIn(40.dp, 72.dp)
-            val baseOffset = topBarHeight + if (showBottomActionsEffective) bottomBarHeight else 0.dp
+            val baseOffset = topBarHeight
 
             Box(
                 modifier = Modifier
@@ -666,11 +738,11 @@ fun KmiTopBar(
             }
         }
 
-        if (showBottomActionsEffective) {
+        if (showQuickActions && quickActionsExpanded) {
             Spacer(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .height(bottomBarHeight)
+                    .align(Alignment.TopEnd)
+                    .height(0.dp)
             )
         }
     }
@@ -869,6 +941,166 @@ fun PremiumActionIcon(
             contentDescription = contentDescription,
             tint = Color(0xFF4B478F),
             modifier = Modifier.size(19.dp)
+        )
+    }
+}
+
+@Composable
+private fun PremiumTextActionIcon(
+    text: String,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    var pressed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(110)
+            pressed = false
+        }
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.76f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.28f,
+            stiffness = Spring.StiffnessVeryLow
+        ),
+        label = "textIconBounce"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(30.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFFE6E6EE))
+            .clickable {
+                pressed = true
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = Color(0xFF4B478F),
+            fontSize = 19.sp,
+            lineHeight = 19.sp,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun PremiumFloatingQuickActionsButton(
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    var pressed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(110)
+            pressed = false
+        }
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.82f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.34f,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "floatingQuickActionsButton"
+    )
+
+    Surface(
+        modifier = Modifier
+            .size(44.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable {
+                pressed = true
+                onClick()
+            },
+        shape = CircleShape,
+        color = if (expanded) Color(0xFF312E81) else Color.White,
+        shadowElevation = 10.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (expanded) {
+                Color.White.copy(alpha = 0.18f)
+            } else {
+                Color(0xFFE5E7EB)
+            }
+        )
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Apps,
+                contentDescription = if (expanded) "סגור פעולות" else "פתח פעולות",
+                tint = if (expanded) Color.White else Color(0xFF4B478F),
+                modifier = Modifier.size(23.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun VerticalQuickActionItem(
+    icon: ImageVector,
+    label: String,
+    tint: Color,
+    background: Color,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val itemAlpha = if (enabled) 1f else 0.38f
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(enabled = enabled) { onClick() }
+            .padding(vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(background.copy(alpha = background.alpha * itemAlpha)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = tint.copy(alpha = itemAlpha),
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        Spacer(Modifier.height(3.dp))
+
+        Text(
+            text = label,
+            color = Color(0xFF1F2937).copy(alpha = itemAlpha),
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

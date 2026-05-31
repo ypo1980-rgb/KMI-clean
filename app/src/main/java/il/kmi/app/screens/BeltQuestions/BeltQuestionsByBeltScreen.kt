@@ -276,6 +276,22 @@ private fun SharedContentRepo.SubTopic.totalExercisesCountDeep(): Int {
     return directCount + nestedCount
 }
 
+private fun topicExercisesCountForCurrentBelt(
+    belt: Belt,
+    topicTitle: String
+): Int {
+    val cleanTopicTitle = topicTitle.trim()
+
+    return SharedContentRepo
+        .getSubTopicsFor(
+            belt = belt,
+            topicTitle = cleanTopicTitle
+        )
+        .sumOf { subTopic ->
+            subTopic.totalExercisesCountDeep()
+        }
+}
+
 private fun subTopicStatsLineForUi(
     subTopic: SharedContentRepo.SubTopic,
     lang: AppLanguage
@@ -1281,9 +1297,9 @@ private fun TopicsCardForBelt(
         rawTopicTitles.associateWith { title -> topicDetailsFor(belt, title) }
     }
 
-    val countStatsByTitle = remember(belt, rawTopicTitles) {
+    val exerciseCountByTitle = remember(belt, rawTopicTitles) {
         rawTopicTitles.associateWith { title ->
-            ExerciseCountProvider.topicStats(
+            topicExercisesCountForCurrentBelt(
                 belt = belt,
                 topicTitle = title
             )
@@ -1423,13 +1439,12 @@ private fun TopicsCardForBelt(
                             .distinct()
                             .toList()
 
-                        val stats = countStatsByTitle[title]
-                            ?: ExerciseCountProvider.topicStats(
+                        val itemCount = exerciseCountByTitle[title]
+                            ?: topicExercisesCountForCurrentBelt(
                                 belt = belt,
                                 topicTitle = title
                             )
 
-                        val itemCount = stats.exerciseCount
                         val subCount = subTitles.size
                         val hasSubs = subCount > 0
 
