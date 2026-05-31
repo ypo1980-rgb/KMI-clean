@@ -25,10 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -72,7 +70,6 @@ import androidx.compose.ui.window.PopupProperties
 import il.kmi.shared.localization.AppLanguageManager
 
 //===============================================================================
-
 
 // ====== Colors & Theme ======
 private val White        = Color(0xFFFFFFFF)
@@ -395,11 +392,8 @@ fun KmiTopBar(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (showMenu) {
-                        PremiumActionIcon(
-                            icon = Icons.Filled.Menu,
-                            tint = Color(0xFF312E81),
-                            background = Color(0x334F46E5),
-                            contentDescription = "תפריט",
+                        PremiumMenuImageIcon(
+                            contentDescription = if (isEnglish) "Menu" else "תפריט",
                             onClick = { openDrawerClick() }
                         )
                     } else {
@@ -571,8 +565,8 @@ fun KmiTopBar(
             Popup(
                 alignment = AbsoluteAlignment.TopRight,
                 offset = IntOffset(
-                    x = with(density) { (-14).dp.roundToPx() },
-                    y = with(density) { (topBarHeight + 8.dp).roundToPx() }
+                    x = with(density) { (0).dp.roundToPx() },
+                    y = with(density) { (topBarHeight + 5.dp).roundToPx() }
                 ),
                 properties = PopupProperties(
                     focusable = false,
@@ -946,6 +940,50 @@ fun PremiumActionIcon(
 }
 
 @Composable
+private fun PremiumMenuImageIcon(
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    var pressed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(110)
+            pressed = false
+        }
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.80f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.32f,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "premiumMenuImageIcon"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(46.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable {
+                pressed = true
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.kmi_premium_menu),
+            contentDescription = contentDescription,
+            modifier = Modifier.size(39.dp)
+        )
+    }
+}
+
+@Composable
 private fun PremiumTextActionIcon(
     text: String,
     contentDescription: String,
@@ -1010,7 +1048,7 @@ private fun PremiumFloatingQuickActionsButton(
     }
 
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.82f else 1f,
+        targetValue = if (pressed) 0.84f else 1f,
         animationSpec = spring(
             dampingRatio = 0.34f,
             stiffness = Spring.StiffnessLow
@@ -1018,40 +1056,25 @@ private fun PremiumFloatingQuickActionsButton(
         label = "floatingQuickActionsButton"
     )
 
-    Surface(
+    Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(46.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
+            .clip(RoundedCornerShape(14.dp))
             .clickable {
                 pressed = true
                 onClick()
             },
-        shape = CircleShape,
-        color = if (expanded) Color(0xFF312E81) else Color.White,
-        shadowElevation = 10.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (expanded) {
-                Color.White.copy(alpha = 0.18f)
-            } else {
-                Color(0xFFE5E7EB)
-            }
-        )
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Apps,
-                contentDescription = if (expanded) "סגור פעולות" else "פתח פעולות",
-                tint = if (expanded) Color.White else Color(0xFF4B478F),
-                modifier = Modifier.size(23.dp)
-            )
-        }
+        Image(
+            painter = painterResource(id = R.drawable.kmi_quick_actions_menu),
+            contentDescription = if (expanded) "סגור פעולות" else "פתח פעולות",
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
