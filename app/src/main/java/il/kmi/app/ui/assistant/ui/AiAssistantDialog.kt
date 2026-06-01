@@ -114,6 +114,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+
 
 //======================================================
 
@@ -1798,7 +1803,7 @@ fun AiAssistantDialog(
                         isInsideAssistant = true,
                         useCloseIcon = false,
                         onBack = null,
-                    // ✅ בית במסך הזה = סגירת הדיאלוג וחזרה למסך שמאחוריו
+                        // ✅ בית במסך הזה = סגירת הדיאלוג וחזרה למסך שמאחוריו
                         onHome = {
                             stopListeningHard()
                             stopSpeaking()
@@ -1843,6 +1848,39 @@ fun AiAssistantDialog(
                         // ✅ לא להציג הודעת חסימה כאן
                         homeDisabledToast = null
                     )
+
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 10.dp, top = 2.dp, bottom = 2.dp),
+                            horizontalArrangement = Arrangement.Start
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(38.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF5B4BB7).copy(alpha = 0.92f),
+                                shadowElevation = 4.dp,
+                                tonalElevation = 0.dp
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        stopListeningHard()
+                                        stopSpeaking()
+                                        onDismiss()
+                                    },
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = if (isEnglish) "Close" else "סגור",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     Spacer(Modifier.height(4.dp))
 

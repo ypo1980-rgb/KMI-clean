@@ -17,6 +17,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -68,6 +69,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import il.kmi.shared.localization.AppLanguageManager
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Density
 
 //===============================================================================
 
@@ -320,7 +328,7 @@ fun KmiTopBar(
 
     // ✅ טור האייקונים נפתח כ-overlay מעל המסך,
     // לכן ה-TopBar עצמו נשאר בגובה הכותרת בלבד.
-    val quickActionsWidth = 78.dp
+    val quickActionsWidth = 66.dp
 
     // Back בטוח
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
@@ -341,7 +349,16 @@ fun KmiTopBar(
         }
     }
 
-    val showQuickActions = showBottomActions && !hideBottomForShare
+    val providedDrawerForQuickActions = LocalAppDrawerState.current
+
+    val isDrawerOpenForQuickActions =
+        providedDrawerForQuickActions?.currentValue == DrawerValue.Open ||
+                providedDrawerForQuickActions?.targetValue == DrawerValue.Open
+
+    val showQuickActions =
+        showBottomActions &&
+                !hideBottomForShare &&
+                !isDrawerOpenForQuickActions
 
     // --- מעטפת עליונה ---
     Box(
@@ -374,9 +391,11 @@ fun KmiTopBar(
             windowInsets = WindowInsets(0),
 
             navigationIcon = {
-                val providedDrawer = LocalAppDrawerState.current
+                val providedDrawer = providedDrawerForQuickActions
                 val scopeOpen = rememberCoroutineScope()
                 val openDrawerClick: () -> Unit = {
+                    quickActionsExpanded = false
+
                     when {
                         onOpenDrawer != null -> onOpenDrawer()
                         providedDrawer != null -> scopeOpen.launch { providedDrawer.open() }
@@ -392,10 +411,15 @@ fun KmiTopBar(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (showMenu) {
-                        PremiumMenuImageIcon(
-                            contentDescription = if (isEnglish) "Menu" else "תפריט",
-                            onClick = { openDrawerClick() }
-                        )
+                        Box(
+                            modifier = Modifier.offset(x = (-6).dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            PremiumMenuImageIcon(
+                                contentDescription = if (isEnglish) "Menu" else "תפריט",
+                                onClick = { openDrawerClick() }
+                            )
+                        }
                     } else {
                         Spacer(Modifier.width(8.dp))
                     }
@@ -565,8 +589,8 @@ fun KmiTopBar(
             Popup(
                 alignment = AbsoluteAlignment.TopRight,
                 offset = IntOffset(
-                    x = with(density) { (0).dp.roundToPx() },
-                    y = with(density) { (topBarHeight + 5.dp).roundToPx() }
+                    x = with(density) { (-4).dp.roundToPx() },
+                    y = with(density) { (topBarHeight - 1.dp).roundToPx() }
                 ),
                 properties = PopupProperties(
                     focusable = false,
@@ -575,9 +599,9 @@ fun KmiTopBar(
                     clippingEnabled = false
                 )
             ) {
-                PremiumFloatingQuickActionsButton(
+                IconsRailAttachedHandle(
                     expanded = quickActionsExpanded,
-                    onClick = {
+                    onToggle = {
                         quickActionsExpanded = !quickActionsExpanded
                     }
                 )
@@ -589,7 +613,7 @@ fun KmiTopBar(
                 alignment = AbsoluteAlignment.TopRight,
                 offset = IntOffset(
                     x = with(density) { (-10).dp.roundToPx() },
-                    y = with(density) { (topBarHeight + 58.dp).roundToPx() }
+                    y = with(density) { (topBarHeight + 36.dp).roundToPx() }
                 ),
                 properties = PopupProperties(
                     focusable = false,
@@ -954,9 +978,9 @@ private fun PremiumMenuImageIcon(
     }
 
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.80f else 1f,
+        targetValue = if (pressed) 0.84f else 1f,
         animationSpec = spring(
-            dampingRatio = 0.32f,
+            dampingRatio = 0.34f,
             stiffness = Spring.StiffnessLow
         ),
         label = "premiumMenuImageIcon"
@@ -975,11 +999,42 @@ private fun PremiumMenuImageIcon(
             },
         contentAlignment = Alignment.Center
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.kmi_premium_menu),
-            contentDescription = contentDescription,
-            modifier = Modifier.size(39.dp)
-        )
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF8B5CF6),
+                            Color(0xFF6D4ED8),
+                            Color(0xFF3B1F82)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.28f),
+                    shape = RoundedCornerShape(11.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier.width(20.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                repeat(3) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color.White)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1033,10 +1088,47 @@ private fun PremiumTextActionIcon(
     }
 }
 
+private class IconsRailAttachedTabShape : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+        val w = size.width
+        val h = size.height
+
+        val path = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(w, 0f)
+
+            // צד ימין מחובר לכותרת ויורד בעדינות
+            lineTo(w, h * 0.56f)
+
+            // קימור פרימיום אל החוד התחתון
+            cubicTo(
+                w, h * 0.72f,
+                w * 0.76f, h * 0.86f,
+                w * 0.50f, h
+            )
+
+            cubicTo(
+                w * 0.24f, h * 0.86f,
+                0f, h * 0.72f,
+                0f, h * 0.56f
+            )
+
+            lineTo(0f, 0f)
+            close()
+        }
+
+        return Outline.Generic(path)
+    }
+}
+
 @Composable
-private fun PremiumFloatingQuickActionsButton(
+private fun IconsRailAttachedHandle(
     expanded: Boolean,
-    onClick: () -> Unit
+    onToggle: () -> Unit
 ) {
     var pressed by remember { mutableStateOf(false) }
 
@@ -1047,33 +1139,49 @@ private fun PremiumFloatingQuickActionsButton(
         }
     }
 
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.84f else 1f,
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.95f else 1f,
         animationSpec = spring(
-            dampingRatio = 0.34f,
+            dampingRatio = 0.38f,
             stiffness = Spring.StiffnessLow
         ),
-        label = "floatingQuickActionsButton"
+        label = "iconsRailAttachedHandlePress"
+    )
+
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spring(
+            dampingRatio = 0.48f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "iconsRailAttachedHandleArrow"
     )
 
     Box(
         modifier = Modifier
-            .size(46.dp)
+            .size(width = 46.dp, height = 36.dp)
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                scaleX = pressScale
+                scaleY = pressScale
             }
-            .clip(RoundedCornerShape(14.dp))
+            .clip(IconsRailAttachedTabShape())
+            .background(Color.White)
             .clickable {
                 pressed = true
-                onClick()
+                onToggle()
             },
         contentAlignment = Alignment.Center
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.kmi_quick_actions_menu),
-            contentDescription = if (expanded) "סגור פעולות" else "פתח פעולות",
-            modifier = Modifier.fillMaxSize()
+        Icon(
+            imageVector = Icons.Rounded.KeyboardArrowDown,
+            contentDescription = if (expanded) "סגור סרגל אייקונים" else "פתח סרגל אייקונים",
+            tint = Color(0xFF6D4ED8),
+            modifier = Modifier
+                .size(21.dp)
+                .offset(y = 4.dp)
+                .graphicsLayer {
+                    rotationZ = arrowRotation
+                }
         )
     }
 }
