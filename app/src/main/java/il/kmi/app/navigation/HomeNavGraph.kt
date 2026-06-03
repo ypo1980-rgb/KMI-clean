@@ -506,10 +506,21 @@ fun NavGraphBuilder.homeNavGraph(
         )
     }
 
-    // ---- מסך מבחן פנימי ----
+    // ----- מסך מבחן פנימי -----
     composable(route = Route.InternalExam.route) {
         InternalExamEntryScreen(
-            onBack = { nav.popBackStack() }
+            onBack = {
+                nav.popBackStack()
+            },
+            onHome = {
+                nav.navigate(Route.Home.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                    popUpTo(Route.Home.route) {
+                        inclusive = false
+                    }
+                }
+            }
         )
     }
 

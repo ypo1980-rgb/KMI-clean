@@ -1015,6 +1015,7 @@ fun InternalExamScreen(
     var hasUnsavedChanges by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
     var showResumeDialog by remember { mutableStateOf(false) }
+    var showFinishExamConfirmDialog by remember { mutableStateOf(false) }
     var pendingLoadedDraft by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
 
     var isSavingFinalResult by remember { mutableStateOf(false) }
@@ -1461,61 +1462,7 @@ fun InternalExamScreen(
                             return@BottomActionBar
                         }
 
-                        scope.launch {
-                            isSavingFinalResult = true
-
-                            runCatching {
-                                saveExamDraftAwait(
-                                    context = ctx,
-                                    traineeName = activeName,
-                                    belt = belt,
-                                    marksMap = marksMap
-                                )
-
-                                val resultId = saveCompletedInternalExamResult(
-                                    traineeName = activeName,
-                                    belt = belt,
-                                    marksMap = marksMap
-                                )
-
-                                deleteExamDraftAfterCompletion(
-                                    traineeName = activeName,
-                                    belt = belt
-                                )
-
-                                resultId
-                            }.onSuccess {
-                                pushRecentTrainee(ctx, activeName, 20)
-                                saveLastTrainee(ctx, activeName)
-
-                                hasUnsavedChanges = false
-                                resumeCheckedKey = "${belt.name}_${internalExamTraineeKey(activeName)}"
-
-                                Toast.makeText(
-                                    ctx,
-                                    examTr(
-                                        isEnglish,
-                                        "המבחן הסתיים ונשמר כתוצאה סופית",
-                                        "The exam was finished and saved"
-                                    ),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-
-                                onBack()
-                            }.onFailure { error ->
-                                Toast.makeText(
-                                    ctx,
-                                    examTr(
-                                        isEnglish,
-                                        "סיום המבחן נכשל",
-                                        "Finishing the exam failed"
-                                    ) + ": ${error.localizedMessage ?: ""}",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-
-                            isSavingFinalResult = false
-                        }
+                        showFinishExamConfirmDialog = true
                     },
                     onExportPdf = onExportPdf
                 )
@@ -1537,6 +1484,123 @@ fun InternalExamScreen(
                     }
                 )
             }
+        }
+
+        if (showFinishExamConfirmDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = {
+                    if (!isSavingFinalResult) {
+                        showFinishExamConfirmDialog = false
+                    }
+                },
+                title = {
+                    Text(
+                        text = examTr(
+                            isEnglish,
+                            "סיום מבחן",
+                            "Finish exam"
+                        )
+                    )
+                },
+                text = {
+                    Text(
+                        text = examTr(
+                            isEnglish,
+                            "לאחר אישור סיום המבחן, לא ניתן יהיה להמשיך לערוך את המבחן.\nהתוצאה תישמר כתוצאה סופית בהיסטוריית המבחנים.",
+                            "After confirming, this exam can no longer be continued or edited.\nThe result will be saved as a final result in the exam history."
+                        )
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        enabled = !isSavingFinalResult,
+                        onClick = {
+                            val activeName = traineeName.trim()
+
+                            if (activeName.isBlank() || marksMap.isEmpty()) {
+                                showFinishExamConfirmDialog = false
+                                return@Button
+                            }
+
+                            scope.launch {
+                                isSavingFinalResult = true
+
+                                runCatching {
+                                    saveExamDraftAwait(
+                                        context = ctx,
+                                        traineeName = activeName,
+                                        belt = belt,
+                                        marksMap = marksMap
+                                    )
+
+                                    val resultId = saveCompletedInternalExamResult(
+                                        traineeName = activeName,
+                                        belt = belt,
+                                        marksMap = marksMap
+                                    )
+
+                                    deleteExamDraftAfterCompletion(
+                                        traineeName = activeName,
+                                        belt = belt
+                                    )
+
+                                    removeRecentTraineeAfterCompletion(
+                                        traineeName = activeName
+                                    )
+
+                                    resultId
+                                }.onSuccess {
+                                    marksMap.clear()
+
+                                    hasUnsavedChanges = false
+                                    showFinishExamConfirmDialog = false
+                                    resumeCheckedKey = "${belt.name}_${internalExamTraineeKey(activeName)}"
+
+                                    Toast.makeText(
+                                        ctx,
+                                        examTr(
+                                            isEnglish,
+                                            "המבחן הסתיים ונשמר בהיסטוריית המבחנים",
+                                            "The exam was finished and saved to exam history"
+                                        ),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+
+                                    onBack()
+                                }.onFailure { error ->
+                                    Toast.makeText(
+                                        ctx,
+                                        examTr(
+                                            isEnglish,
+                                            "סיום המבחן נכשל",
+                                            "Finishing the exam failed"
+                                        ) + ": ${error.localizedMessage ?: ""}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+
+                                isSavingFinalResult = false
+                            }
+                        }
+                    ) {
+                        Text(
+                            text = if (isSavingFinalResult) {
+                                examTr(isEnglish, "שומר...", "Saving...")
+                            } else {
+                                examTr(isEnglish, "אישור", "Confirm")
+                            }
+                        )
+                    }
+                },
+                dismissButton = {
+                    Button(
+                        enabled = !isSavingFinalResult,
+                        onClick = { showFinishExamConfirmDialog = false }
+                    ) {
+                        Text(examTr(isEnglish, "ביטול", "Cancel"))
+                    }
+                }
+            )
         }
 
         if (showResumeDialog) {
@@ -1922,7 +1986,8 @@ private fun SubTopicHeader(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InternalExamEntryScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onHome: () -> Unit
 ) {
     val ctx = LocalContext.current
     val isEnglish = rememberIsEnglish()
@@ -1935,6 +2000,9 @@ fun InternalExamEntryScreen(
 
     var recentTrainees by remember { mutableStateOf<List<String>>(emptyList()) }
     var recentCompletedResults by remember { mutableStateOf<List<RecentInternalExamResultUi>>(emptyList()) }
+    var showExamHistoryDialog by remember { mutableStateOf(false) }
+    var examHistoryResultToDelete by remember { mutableStateOf<RecentInternalExamResultUi?>(null) }
+    var isDeletingExamHistoryResult by remember { mutableStateOf(false) }
     var isLoadingCompletedPreview by remember { mutableStateOf(false) }
     var completedPreviewSession by remember { mutableStateOf<InternalExamSession?>(null) }
     var expanded by remember { mutableStateOf(false) }
@@ -1961,7 +2029,7 @@ fun InternalExamEntryScreen(
         // לא בוחרים נבחן אוטומטית.
         // המשתמש צריך לבחור נבחן מהרשימה או ללחוץ על "נבחן חדש".
         recentTrainees = loadRecentTrainees(ctx, 20)
-        recentCompletedResults = loadRecentCompletedExamResults(limit = 8)
+        recentCompletedResults = loadRecentCompletedExamResults(limit = 20)
     }
 
     LaunchedEffect(expanded) {
@@ -2073,7 +2141,7 @@ fun InternalExamEntryScreen(
                                 }
 
                                 recentTrainees = loadRecentTrainees(ctx, 20)
-                                recentCompletedResults = loadRecentCompletedExamResults(limit = 8)
+                                recentCompletedResults = loadRecentCompletedExamResults(limit = 20)
                                 completedPreviewSession = null
                                 expanded = false
                                 allowTraineeKeyboard = false
@@ -2130,6 +2198,92 @@ fun InternalExamEntryScreen(
         )
     }
 
+    examHistoryResultToDelete?.let { resultToDelete ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = {
+                if (!isDeletingExamHistoryResult) {
+                    examHistoryResultToDelete = null
+                }
+            },
+            title = {
+                Text(
+                    text = examTr(
+                        isEnglish,
+                        "מחיקת מבחן מההיסטוריה",
+                        "Delete exam from history"
+                    )
+                )
+            },
+            text = {
+                Text(
+                    text = examTr(
+                        isEnglish,
+                        "האם למחוק את המבחן של \"${resultToDelete.traineeName}\" מהיסטוריית המבחנים?\nהמחיקה היא סופית ולא תשפיע על מבחנים אחרים.",
+                        "Delete \"${resultToDelete.traineeName}\" from the exam history?\nThis action is final and will not affect other exams."
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    enabled = !isDeletingExamHistoryResult,
+                    onClick = {
+                        scope.launch {
+                            isDeletingExamHistoryResult = true
+
+                            runCatching {
+                                deleteCompletedInternalExamResult(
+                                    resultId = resultToDelete.resultId
+                                )
+                            }.onSuccess {
+                                recentCompletedResults = loadRecentCompletedExamResults(limit = 20)
+                                completedPreviewSession = null
+                                examHistoryResultToDelete = null
+
+                                Toast.makeText(
+                                    ctx,
+                                    examTr(
+                                        isEnglish,
+                                        "המבחן נמחק מהיסטוריית המבחנים",
+                                        "The exam was deleted from history"
+                                    ),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }.onFailure { error ->
+                                Toast.makeText(
+                                    ctx,
+                                    examTr(
+                                        isEnglish,
+                                        "מחיקת המבחן נכשלה",
+                                        "Deleting the exam failed"
+                                    ) + ": ${error.localizedMessage ?: ""}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+
+                            isDeletingExamHistoryResult = false
+                        }
+                    }
+                ) {
+                    Text(
+                        text = if (isDeletingExamHistoryResult) {
+                            examTr(isEnglish, "מוחק...", "Deleting...")
+                        } else {
+                            examTr(isEnglish, "מחק", "Delete")
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                Button(
+                    enabled = !isDeletingExamHistoryResult,
+                    onClick = { examHistoryResultToDelete = null }
+                ) {
+                    Text(examTr(isEnglish, "ביטול", "Cancel"))
+                }
+            }
+        )
+    }
+
     if (!examStarted) {
         Scaffold(
             topBar = {
@@ -2143,7 +2297,8 @@ fun InternalExamEntryScreen(
                     showTopSearch = true,
                     showSettings = true,
                     showTopShare = false,
-                    centerTitle = true
+                    centerTitle = true,
+                    onHome = onHome
                 )
             }
         ) { padding ->
@@ -2242,7 +2397,7 @@ fun InternalExamEntryScreen(
 
                                         scope.launch {
                                             recentTrainees = loadRecentTrainees(ctx, 20)
-                                            recentCompletedResults = loadRecentCompletedExamResults(limit = 8)
+                                            recentCompletedResults = loadRecentCompletedExamResults(limit = 20)
                                         }
                                     }
                                 },
@@ -2586,43 +2741,177 @@ fun InternalExamEntryScreen(
                         }
                     }
 
-                    RecentCompletedExamResultsCard(
-                        results = recentCompletedResults,
-                        isEnglish = isEnglish,
-                        currentBelt = currentBelt,
-                        onOpenResult = { result ->
-                            if (isLoadingCompletedPreview) {
-                                return@RecentCompletedExamResultsCard
-                            }
-
+                    PremiumExamSetupButton(
+                        text = examTr(isEnglish, "היסטוריית מבחנים", "Exam history"),
+                        icon = "📚",
+                        startColor = Color(0xFF0F172A),
+                        centerColor = Color(0xFF334155),
+                        endColor = Color(0xFF7C3AED),
+                        textFontSize = 21.sp,
+                        textLineHeight = 22.sp,
+                        onClick = {
                             scope.launch {
-                                isLoadingCompletedPreview = true
-
-                                runCatching {
-                                    loadCompletedInternalExamSessionForPdf(
-                                        resultId = result.resultId
-                                    ) ?: error("Missing completed exam data")
-                                }.onSuccess { completedSession ->
-                                    completedPreviewSession = completedSession
-                                }.onFailure { error ->
-                                    Toast.makeText(
-                                        ctx,
-                                        examTr(
-                                            isEnglish,
-                                            "פתיחת המבחן האחרון נכשלה",
-                                            "Opening the recent exam failed"
-                                        ) + ": ${error.localizedMessage ?: ""}",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-
-                                isLoadingCompletedPreview = false
+                                recentCompletedResults = loadRecentCompletedExamResults(limit = 20)
+                                showExamHistoryDialog = true
                             }
                         }
                     )
                 }
             }
         }
+
+        if (showExamHistoryDialog) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { showExamHistoryDialog = false }
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(30.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = examBeltMainColor(currentBelt).copy(alpha = 0.28f)
+                    ),
+                    shadowElevation = 24.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    listOf(
+                                        Color.White,
+                                        examBeltSoftColor(currentBelt).copy(alpha = 0.78f),
+                                        Color.White
+                                    )
+                                )
+                            )
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = examTr(isEnglish, "היסטוריית מבחנים", "Exam history"),
+                                modifier = Modifier.weight(1f),
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                color = Color(0xFF111827),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 21.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            Surface(
+                                onClick = { showExamHistoryDialog = false },
+                                shape = CircleShape,
+                                color = Color.White.copy(alpha = 0.80f),
+                                border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "×",
+                                        color = Color(0xFF334155),
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 22.sp,
+                                        lineHeight = 22.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = examTr(
+                                isEnglish,
+                                "כאן מופיעים מבחנים שהסתיימו ונשמרו כתוצאה סופית.",
+                                "Completed exams saved as final results appear here."
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            color = Color(0xFF64748B),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp
+                        )
+
+                        Divider(color = Color(0xFFCBD5E1).copy(alpha = 0.70f))
+
+                        if (recentCompletedResults.isEmpty()) {
+                            Text(
+                                text = examTr(
+                                    isEnglish,
+                                    "אין עדיין מבחנים שהושלמו.",
+                                    "No completed exams yet."
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                textAlign = TextAlign.Center,
+                                color = Color(0xFF475569),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 420.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(recentCompletedResults.take(20)) { result ->
+                                    CompletedExamHistoryRow(
+                                        result = result,
+                                        isEnglish = isEnglish,
+                                        currentBelt = currentBelt,
+                                        onDeleteClick = {
+                                            examHistoryResultToDelete = result
+                                        },
+                                        onClick = {
+                                            if (isLoadingCompletedPreview) {
+                                                return@CompletedExamHistoryRow
+                                            }
+
+                                            scope.launch {
+                                                isLoadingCompletedPreview = true
+
+                                                runCatching {
+                                                    loadCompletedInternalExamSessionForPdf(
+                                                        resultId = result.resultId
+                                                    ) ?: error("Missing completed exam data")
+                                                }.onSuccess { completedSession ->
+                                                    showExamHistoryDialog = false
+                                                    completedPreviewSession = completedSession
+                                                }.onFailure { error ->
+                                                    Toast.makeText(
+                                                        ctx,
+                                                        examTr(
+                                                            isEnglish,
+                                                            "פתיחת המבחן מההיסטוריה נכשלה",
+                                                            "Opening the exam from history failed"
+                                                        ) + ": ${error.localizedMessage ?: ""}",
+                                                        Toast.LENGTH_LONG
+                                                    ).show()
+                                                }
+
+                                                isLoadingCompletedPreview = false
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         completedPreviewSession?.let { previewSession ->
             CompletedExamPreviewDialog(
                 session = previewSession,
@@ -2667,7 +2956,7 @@ fun InternalExamEntryScreen(
 
                     scope.launch {
                         recentTrainees = loadRecentTrainees(ctx, 20)
-                        recentCompletedResults = loadRecentCompletedExamResults(limit = 8)
+                        recentCompletedResults = loadRecentCompletedExamResults(limit = 20)
                     }
                 },
                 sharedMarksMap = marksMap,
@@ -2686,6 +2975,7 @@ private fun CompletedExamPreviewDialog(
     onSharePdf: () -> Unit
 ) {
     val context = LocalContext.current
+
     val score10 = if (session.maxScore == 0.0) {
         0.0
     } else {
@@ -2694,6 +2984,8 @@ private fun CompletedExamPreviewDialog(
 
     val answeredCount = session.marks.count { it != null }
     val dateText = session.date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss
@@ -2722,40 +3014,24 @@ private fun CompletedExamPreviewDialog(
                     )
                     .padding(horizontal = 18.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                horizontalAlignment = horizontalAlignment
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = examBeltMainColor(currentBelt).copy(alpha = 0.20f),
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = examBeltDarkColor(currentBelt).copy(alpha = 0.18f)
-                        ),
-                        modifier = Modifier.size(54.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "${session.percent}%",
-                                color = examBeltDarkColor(currentBelt),
-                                fontWeight = FontWeight.Black,
-                                fontSize = 15.sp,
-                                maxLines = 1
-                            )
-                        }
+                    if (isEnglish) {
+                        CompletedExamPreviewPercentBadge(
+                            percent = session.percent,
+                            currentBelt = currentBelt
+                        )
                     }
-
-                    Spacer(Modifier.width(12.dp))
 
                     Column(
                         modifier = Modifier.weight(1f),
-                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                        horizontalAlignment = horizontalAlignment,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
                             text = examTr(
@@ -2764,54 +3040,63 @@ private fun CompletedExamPreviewDialog(
                                 "Completed exam preview"
                             ),
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            textAlign = textAlign,
                             color = Color(0xFF111827),
                             fontWeight = FontWeight.Black,
-                            fontSize = 20.sp,
-                            maxLines = 1,
+                            fontSize = 21.sp,
+                            lineHeight = 24.sp,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
 
                         Text(
                             text = session.traineeName,
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            textAlign = textAlign,
                             color = Color(0xFF475569),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 17.sp,
+                            lineHeight = 19.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (!isEnglish) {
+                        CompletedExamPreviewPercentBadge(
+                            percent = session.percent,
+                            currentBelt = currentBelt
                         )
                     }
                 }
 
                 Divider(color = Color(0xFFCBD5E1).copy(alpha = 0.55f))
 
-                PreviewInfoLine(
+                CompletedExamPreviewInfoLine(
                     label = examTr(isEnglish, "חגורה", "Belt"),
                     value = examBeltNameForUi(session.belt, isEnglish),
                     isEnglish = isEnglish
                 )
 
-                PreviewInfoLine(
+                CompletedExamPreviewInfoLine(
                     label = examTr(isEnglish, "תאריך", "Date"),
                     value = dateText,
                     isEnglish = isEnglish
                 )
 
-                PreviewInfoLine(
+                CompletedExamPreviewInfoLine(
                     label = examTr(isEnglish, "ציון", "Score"),
                     value = "${score10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${session.percent}%)",
                     isEnglish = isEnglish
                 )
 
-                PreviewInfoLine(
+                CompletedExamPreviewInfoLine(
                     label = examTr(isEnglish, "תרגילים שנוקדו", "Scored exercises"),
                     value = answeredCount.toString(),
                     isEnglish = isEnglish
                 )
 
-                PreviewInfoLine(
+                CompletedExamPreviewInfoLine(
                     label = examTr(isEnglish, "סטטוס", "Status"),
                     value = examStatusText(session.percent, isEnglish),
                     isEnglish = isEnglish
@@ -2827,8 +3112,8 @@ private fun CompletedExamPreviewDialog(
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(20.dp),
+                            .height(48.dp),
+                        shape = RoundedCornerShape(18.dp),
                         color = Color.White.copy(alpha = 0.78f),
                         border = BorderStroke(
                             width = 1.dp,
@@ -2855,8 +3140,8 @@ private fun CompletedExamPreviewDialog(
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(20.dp),
+                            .height(48.dp),
+                        shape = RoundedCornerShape(18.dp),
                         color = Color.White.copy(alpha = 0.86f),
                         border = BorderStroke(
                             width = 1.dp,
@@ -2913,15 +3198,15 @@ private fun CompletedExamPreviewDialog(
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(20.dp),
+                            .height(48.dp),
+                        shape = RoundedCornerShape(18.dp),
                         color = Color.Transparent,
                         shadowElevation = 12.dp
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .clip(RoundedCornerShape(20.dp))
+                                .clip(RoundedCornerShape(18.dp))
                                 .clickable { onSharePdf() }
                                 .background(
                                     brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
@@ -2938,7 +3223,7 @@ private fun CompletedExamPreviewDialog(
                                 text = examTr(isEnglish, "שתף PDF", "PDF"),
                                 color = Color.White,
                                 fontWeight = FontWeight.Black,
-                                fontSize = 15.sp,
+                                fontSize = 14.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -2951,58 +3236,275 @@ private fun CompletedExamPreviewDialog(
 }
 
 @Composable
-private fun PreviewInfoLine(
+private fun CompletedExamPreviewPercentBadge(
+    percent: Int,
+    currentBelt: Belt
+) {
+    Surface(
+        shape = CircleShape,
+        color = examBeltMainColor(currentBelt).copy(alpha = 0.18f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = examBeltDarkColor(currentBelt).copy(alpha = 0.18f)
+        ),
+        modifier = Modifier.size(58.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "$percent%",
+                color = examBeltDarkColor(currentBelt),
+                fontWeight = FontWeight.Black,
+                fontSize = 16.sp,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompletedExamPreviewInfoLine(
     label: String,
     value: String,
     isEnglish: Boolean
 ) {
-    Row(
+    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+        horizontalAlignment = horizontalAlignment,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        if (isEnglish) {
-            Text(
-                text = label,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Left,
-                color = Color(0xFF64748B),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 13.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        Text(
+            text = label,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = textAlign,
+            color = Color(0xFF64748B),
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 12.5.sp,
+            lineHeight = 14.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
 
-            Text(
-                text = value,
-                modifier = Modifier.weight(1.35f),
-                textAlign = TextAlign.Right,
-                color = Color(0xFF111827),
-                fontWeight = FontWeight.Black,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        } else {
-            Text(
-                text = value,
-                modifier = Modifier.weight(1.35f),
-                textAlign = TextAlign.Left,
-                color = Color(0xFF111827),
-                fontWeight = FontWeight.Black,
-                fontSize = 14.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        Text(
+            text = value,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = textAlign,
+            color = Color(0xFF111827),
+            fontWeight = FontWeight.Black,
+            fontSize = 16.sp,
+            lineHeight = 19.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
 
-            Text(
-                text = label,
+private fun internalExamResultDateText(completedAtMillis: Long): String {
+    if (completedAtMillis <= 0L) return "—"
+
+    return runCatching {
+        java.time.Instant.ofEpochMilli(completedAtMillis)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
+            .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+    }.getOrDefault("—")
+}
+
+@Composable
+private fun CompletedExamHistoryRow(
+    result: RecentInternalExamResultUi,
+    isEnglish: Boolean,
+    currentBelt: Belt,
+    onDeleteClick: () -> Unit,
+    onClick: () -> Unit
+) {
+    val dateText = internalExamResultDateText(result.completedAtMillis)
+    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        color = examBeltSoftColor(currentBelt).copy(alpha = 0.78f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = examBeltDarkColor(currentBelt).copy(alpha = 0.14f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 9.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            if (isEnglish) {
+                CompletedExamScoreBubble(
+                    percent = result.percent,
+                    currentBelt = currentBelt
+                )
+            }
+
+            Column(
                 modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Right,
-                color = Color(0xFF64748B),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 13.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                horizontalAlignment = horizontalAlignment,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
+                    ) {
+                        if (isEnglish) {
+                            Text(
+                                text = "📄",
+                                fontSize = 13.sp,
+                                lineHeight = 13.sp,
+                                maxLines = 1,
+                                modifier = Modifier.padding(end = 5.dp)
+                            )
+
+                            Text(
+                                text = result.traineeName,
+                                textAlign = TextAlign.Left,
+                                color = Color(0xFF111827),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 16.sp,
+                                lineHeight = 18.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Text(
+                                text = "📄",
+                                fontSize = 13.sp,
+                                lineHeight = 13.sp,
+                                maxLines = 1,
+                                modifier = Modifier.padding(end = 5.dp)
+                            )
+
+                            Text(
+                                text = result.traineeName,
+                                textAlign = TextAlign.Right,
+                                color = Color(0xFF111827),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 16.sp,
+                                lineHeight = 18.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = result.beltName,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = textAlign,
+                    color = Color(0xFF475569),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = examTr(
+                        isEnglish,
+                        "תאריך: $dateText",
+                        "Date: $dateText"
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = textAlign,
+                    color = Color(0xFF475569),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = examTr(
+                        isEnglish,
+                        "ציון: ${result.score10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${result.percent}%)",
+                        "Score: ${result.score10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${result.percent}%)"
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = textAlign,
+                    color = Color(0xFF64748B),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.2.sp,
+                    lineHeight = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Surface(
+                onClick = onDeleteClick,
+                shape = CircleShape,
+                color = Color(0xFFFFF1F2),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = Color(0xFFFCA5A5)
+                ),
+                modifier = Modifier.size(26.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🗑",
+                        fontSize = 12.sp,
+                        lineHeight = 12.sp,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            if (!isEnglish) {
+                CompletedExamScoreBubble(
+                    percent = result.percent,
+                    currentBelt = currentBelt
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompletedExamScoreBubble(
+    percent: Int,
+    currentBelt: Belt
+) {
+    Surface(
+        shape = CircleShape,
+        color = examBeltMainColor(currentBelt).copy(alpha = 0.22f),
+        modifier = Modifier.size(42.dp)
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "$percent%",
+                color = examBeltDarkColor(currentBelt),
+                fontWeight = FontWeight.Black,
+                fontSize = 12.sp,
+                maxLines = 1
             )
         }
     }
@@ -3715,6 +4217,8 @@ private fun PremiumExamSetupButton(
     startColor: Color,
     centerColor: Color,
     endColor: Color,
+    textFontSize: androidx.compose.ui.unit.TextUnit = 25.sp,
+    textLineHeight: androidx.compose.ui.unit.TextUnit = 26.sp,
     onClick: () -> Unit
 ) {
     Surface(
@@ -3787,8 +4291,8 @@ private fun PremiumExamSetupButton(
                     text = text,
                     color = Color.White,
                     fontWeight = FontWeight.Black,
-                    fontSize = 25.sp,
-                    lineHeight = 26.sp,
+                    fontSize = textFontSize,
+                    lineHeight = textLineHeight,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = TextStyle(
@@ -4534,17 +5038,25 @@ private suspend fun loadRecentCompletedExamResults(
         FirebaseFirestore.getInstance()
             .collection("internalExamResults")
             .whereEqualTo("coachUid", coachUid)
-            .whereEqualTo("status", "completed")
-            .orderBy("completedAtMillis", Query.Direction.DESCENDING)
-            .limit(limit.toLong())
+            .limit(80)
             .get()
             .await()
             .documents
+            .asSequence()
+            .filter { doc ->
+                val status = doc.getString("status") ?: "completed"
+                status == "completed"
+            }
             .mapNotNull { doc ->
                 val traineeName = doc.getString("traineeName")
                     ?.trim()
                     ?.takeIf { it.isNotBlank() }
                     ?: return@mapNotNull null
+
+                val completedAtMillis =
+                    doc.getLong("completedAtMillis")
+                        ?: doc.getLong("updatedAtMillis")
+                        ?: 0L
 
                 val beltName =
                     doc.getString("beltHeb")
@@ -4558,9 +5070,14 @@ private suspend fun loadRecentCompletedExamResults(
                     beltName = beltName,
                     score10 = doc.getDouble("score10") ?: 0.0,
                     percent = (doc.getLong("percent") ?: 0L).toInt(),
-                    completedAtMillis = doc.getLong("completedAtMillis") ?: 0L
+                    completedAtMillis = completedAtMillis
                 )
             }
+            .sortedByDescending { it.completedAtMillis }
+            .take(limit)
+            .toList()
+    }.onFailure {
+        it.printStackTrace()
     }.getOrDefault(emptyList())
 }
 
@@ -4684,6 +5201,62 @@ private fun pushRecentTrainee(context: Context, name: String, limit: Int = 20) {
             ),
             SetOptions.merge()
         )
+}
+
+private suspend fun removeRecentTraineeAfterCompletion(
+    traineeName: String
+) {
+    val cleanName = traineeName.trim()
+    if (cleanName.isBlank()) return
+
+    val coachUid = internalExamCoachUid() ?: return
+    val traineeKey = internalExamTraineeKey(cleanName)
+
+    FirebaseFirestore.getInstance()
+        .collection("internalExamRecentTrainees")
+        .document(coachUid)
+        .collection("trainees")
+        .document(traineeKey)
+        .delete()
+        .await()
+}
+
+private suspend fun deleteCompletedInternalExamResult(
+    resultId: String
+) {
+    val cleanResultId = resultId.trim()
+    if (cleanResultId.isBlank()) return
+
+    val coachUid = internalExamCoachUid() ?: return
+    val db = FirebaseFirestore.getInstance()
+
+    val directRef = db.collection("internalExamResults")
+        .document(cleanResultId)
+
+    val directSnap = directRef.get().await()
+
+    if (directSnap.exists()) {
+        val docCoachUid = directSnap.getString("coachUid")
+
+        if (docCoachUid == coachUid) {
+            directRef.delete().await()
+            return
+        }
+    }
+
+    val querySnap = db.collection("internalExamResults")
+        .whereEqualTo("coachUid", coachUid)
+        .whereEqualTo("resultId", cleanResultId)
+        .get()
+        .await()
+
+    val batch = db.batch()
+
+    querySnap.documents.forEach { doc ->
+        batch.delete(doc.reference)
+    }
+
+    batch.commit().await()
 }
 
 private suspend fun deleteTraineeAndExamHistory(
