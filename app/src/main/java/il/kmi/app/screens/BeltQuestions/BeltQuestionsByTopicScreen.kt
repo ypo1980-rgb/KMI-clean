@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,12 +54,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -74,6 +72,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+
+//==================================================================
 
 
 // ✅ FIX: פונקציית נרמול אחת בלבד, ברמת קובץ (נראית לכולם, אין forward-ref ואין אמביגיוטי)
@@ -499,69 +499,20 @@ fun BeltQuestionsByTopicScreen(
                     }
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Surface(
-                    onClick = { quickMenuExpanded = true },
-                    shape = RoundedCornerShape(18.dp),
-                    shadowElevation = 10.dp,
-                    color = Color.White,
-                    border = BorderStroke(
-                        1.dp,
-                        effectiveBelt.color.copy(alpha = 0.22f)
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp)
-                        .height(60.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                    colors = listOf(
-                                        effectiveBelt.color.copy(alpha = 0.10f),
-                                        Color.White,
-                                        effectiveBelt.color.copy(alpha = 0.05f)
-                                    )
-                                )
-                            )
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Menu,
-                            contentDescription = null,
-                            tint = effectiveBelt.color,
-                            modifier = Modifier.size(18.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Text(
-                            text = if (isEnglish) "Quick View" else "מבט מהיר",
-                            fontWeight = FontWeight.Bold,
-                            color = effectiveBelt.color,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(88.dp))
+                // ✅ אין יותר כפתור תחתון של "מבט מהיר".
+                // התפריט המהיר נפתח עכשיו מהמלבן הצדדי כמו במסך לפי חגורה.
+                Spacer(modifier = Modifier.height(24.dp))
             }
 
             FloatingQuickMenu(
                 belt = effectiveBelt,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, bottom = 84.dp)
+                    // ✅ אותו מלבן צדדי כמו במסך תרגילים לפי חגורה
+                    .align(Alignment.CenterStart)
                     .zIndex(999f),
                 expanded = quickMenuExpanded,
                 onExpandedChange = { quickMenuExpanded = it },
-                triggerMode = QuickMenuTriggerMode.BottomBar,
+                triggerMode = QuickMenuTriggerMode.SideRail,
                 includePractice = true,
                 hasFullAccess = hasAccess,
                 onLockedItemClick = { onOpenSubscription() },
@@ -1480,8 +1431,20 @@ internal fun TopicsBySubjectCard(
     CompositionLocalProvider(
         LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
     ) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
+        val scrollState = rememberScrollState()
+
+        val showScrollHint by remember {
+            derivedStateOf {
+                scrollState.value < scrollState.maxValue
+            }
+        }
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
             tonalElevation = 1.dp,
             shadowElevation = if (isDarkMode) 8.dp else 6.dp,
             color = if (isDarkMode) {
@@ -1501,13 +1464,6 @@ internal fun TopicsBySubjectCard(
             Box(
                 modifier = Modifier.fillMaxWidth()
             ) {
-                val scrollState = rememberScrollState()
-
-                val showScrollHint by remember {
-                    derivedStateOf {
-                        scrollState.value < scrollState.maxValue
-                    }
-                }
 
                 Column(
                     modifier = Modifier
@@ -1515,7 +1471,7 @@ internal fun TopicsBySubjectCard(
                         .heightIn(max = 420.dp)
                         .verticalScroll(scrollState)
                         .padding(vertical = 4.dp, horizontal = 8.dp)
-                        .padding(bottom = if (showScrollHint) 26.dp else 8.dp),
+                        .padding(bottom = if (showScrollHint) 10.dp else 8.dp),
                     verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
                     Text(
@@ -1921,86 +1877,96 @@ internal fun TopicsBySubjectCard(
                         )
                     }
                 }
+            }
+            }
 
-                if (showScrollHint) {
-                    val scrollHintPulse = rememberInfiniteTransition(label = "scrollHintPulse")
+            if (showScrollHint) {
+                Spacer(Modifier.height(10.dp))
 
-                    val arrowOffsetY by scrollHintPulse.animateFloat(
-                        initialValue = -2f,
-                        targetValue = 5f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(
-                                durationMillis = 850,
-                                easing = FastOutSlowInEasing
-                            ),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "scrollHintArrowOffset"
-                    )
-
-                    val arrowAlpha by scrollHintPulse.animateFloat(
-                        initialValue = 0.42f,
-                        targetValue = 0.90f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(
-                                durationMillis = 850,
-                                easing = FastOutSlowInEasing
-                            ),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "scrollHintArrowAlpha"
-                    )
-
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 8.dp)
-                            .zIndex(5f),
-                        shape = RoundedCornerShape(999.dp),
-                        color = if (isDarkMode) {
-                            Color(0xFF334155).copy(alpha = 0.88f)
-                        } else {
-                            Color(0xFFEDE9FE).copy(alpha = 0.96f)
-                        },
-                        shadowElevation = 5.dp,
-                        tonalElevation = 1.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = if (isDarkMode) {
-                                Color.White.copy(alpha = 0.16f)
-                            } else {
-                                Color(0xFF8B5CF6).copy(alpha = 0.26f)
-                            }
-                        )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(46.dp)
-                                .height(30.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.KeyboardArrowDown,
-                                contentDescription = if (isEnglish) {
-                                    "More items below"
-                                } else {
-                                    "יש עוד פריטים למטה"
-                                },
-                                tint = if (isDarkMode) {
-                                    Color.White.copy(alpha = arrowAlpha)
-                                } else {
-                                    Color(0xFF6D28D9).copy(alpha = arrowAlpha)
-                                },
-                                modifier = Modifier
-                                    .size(22.dp)
-                                    .graphicsLayer {
-                                        translationY = arrowOffsetY
-                                    }
-                            )
-                        }
-                    }
-                }
+                PremiumScrollDownHint(
+                    currentBelt = currentBelt,
+                    isDarkMode = isDarkMode,
+                    isEnglish = isEnglish
+                )
             }
         }
     }
 }
+
+@Composable
+private fun PremiumScrollDownHint(
+        currentBelt: Belt,
+        isDarkMode: Boolean,
+        isEnglish: Boolean
+    ) {
+        val scrollHintPulse = rememberInfiniteTransition(label = "premiumScrollHintPulse")
+
+        val arrowOffsetY by scrollHintPulse.animateFloat(
+            initialValue = -1.5f,
+            targetValue = 3.5f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 900,
+                    easing = FastOutSlowInEasing
+                ),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "premiumScrollHintOffset"
+        )
+
+        val arrowAlpha by scrollHintPulse.animateFloat(
+            initialValue = 0.58f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 900,
+                    easing = FastOutSlowInEasing
+                ),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "premiumScrollHintAlpha"
+        )
+
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = if (isDarkMode) {
+                Color(0xFF162033).copy(alpha = 0.98f)
+            } else {
+                Color.White.copy(alpha = 0.98f)
+            },
+            shadowElevation = 10.dp,
+            tonalElevation = 2.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (isDarkMode) {
+                    Color.White.copy(alpha = 0.14f)
+                } else {
+                    currentBelt.color.copy(alpha = 0.28f)
+                }
+            )
+        ) {
+            Box(
+                modifier = Modifier.size(width = 58.dp, height = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardDoubleArrowDown,
+                    contentDescription = if (isEnglish) {
+                        "More items below"
+                    } else {
+                        "יש עוד פריטים למטה"
+                    },
+                    tint = if (isDarkMode) {
+                        Color.White.copy(alpha = arrowAlpha)
+                    } else {
+                        currentBelt.color.copy(alpha = arrowAlpha)
+                    },
+                    modifier = Modifier
+                        .size(22.dp)
+                        .graphicsLayer {
+                            translationY = arrowOffsetY
+                        }
+                )
+            }
+        }
+    }

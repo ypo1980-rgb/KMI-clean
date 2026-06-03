@@ -573,6 +573,15 @@ fun MainNavHost(
                     onClose = {
                         nav.popBackStack()
                     },
+                    onHome = {
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = true
+                            popUpTo(nav.graph.startDestinationId) {
+                                inclusive = false
+                            }
+                        }
+                    },
                     onSubmit = { fullName, phone, email, subject, message ->
                         // כאן תדבר בהמשך לשרת / Firebase / Firestore
                     }
@@ -584,6 +593,15 @@ fun MainNavHost(
                     isEnglish = isEnglish,
                     onClose = {
                         nav.popBackStack()
+                    },
+                    onHome = {
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = true
+                            popUpTo(nav.graph.startDestinationId) {
+                                inclusive = false
+                            }
+                        }
                     }
                 )
             }
@@ -841,10 +859,21 @@ fun MainNavHost(
                 )
             }
 
-            // 🔐 אזור מנהל – ניהול משתמשים
+            // אזור מנהל - ניהול משתמשים 🔐
             composable(route = Route.AdminUsers.route) {
                 il.kmi.app.screens.admin.AdminUsersScreen(
-                    onBack = { nav.popBackStack() }
+                    onBack = {
+                        nav.popBackStack()
+                    },
+                    onHome = {
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = true
+                            popUpTo(nav.graph.startDestinationId) {
+                                inclusive = false
+                            }
+                        }
+                    }
                 )
             }
 
@@ -973,7 +1002,16 @@ fun MainNavHost(
             // --- NEW: Rate us ---
             composable(Route.RateUs.route) {
                 RateUsScreen(
-                    onClose = { nav.popBackStack() }
+                    onClose = { nav.popBackStack() },
+                    onHome = {
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = true
+                            popUpTo(nav.graph.startDestinationId) {
+                                inclusive = false
+                            }
+                        }
+                    }
                 )
             }
         }   // <-- NavHost

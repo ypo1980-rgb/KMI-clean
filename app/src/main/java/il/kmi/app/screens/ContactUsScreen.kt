@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -57,6 +56,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import il.kmi.app.ui.KmiTopBar
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import com.google.firebase.auth.FirebaseAuth
@@ -64,6 +64,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+
+//===================================================================
 
 private suspend fun persistContactRequestToFirestore(
     fullName: String,
@@ -163,6 +165,8 @@ private suspend fun persistContactRequestToFirestore(
 fun ContactUsScreen(
     isEnglish: Boolean? = null,
     onClose: () -> Unit = {},
+    onHome: () -> Unit = {},
+    onOpenExercise: ((String) -> Unit)? = null,
     onSubmit: (
         fullName: String,
         phone: String,
@@ -256,6 +260,36 @@ fun ContactUsScreen(
                 message.isNotBlank()
 
     Scaffold(
+        topBar = {
+            KmiTopBar(
+                title = title,
+                centerTitle = true,
+                showMenu = false,
+                onBack = null,
+
+                // ✅ מפעיל את אייקון הבית בסרגל האייקונים הצדדי
+                onHome = onHome,
+
+                // ✅ מאפשר לחיצה על תוצאת חיפוש, אם המסך שמעל מעביר ניווט לתרגיל
+                onOpenExercise = onOpenExercise,
+
+                showBottomActions = true,
+                showRoleBadge = false,
+                showModePill = false,
+
+                // ✅ חובה להיות false כדי שאייקון החיפוש בסרגל הצדדי יעבוד
+                lockSearch = false,
+
+                // ✅ הבית לא נעול במסך צור קשר
+                lockHome = false,
+
+                // ✅ שלא יופיעו אייקוני בית/חיפוש בכותרת העליונה עצמה,
+                // אלא רק בסרגל האייקונים הצדדי כמו בשאר המסכים
+                showTopHome = false,
+                showTopSearch = false,
+                showTopShare = false
+            )
+        },
         containerColor = Color.Transparent,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
@@ -276,21 +310,8 @@ fun ContactUsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .statusBarsPadding()
             ) {
-                // ✅ כותרת גלובלית + סרגל אייקונים נשארים קבועים ולא נגללים
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                ) {
-                    SideScreenTopBar(
-                        title = title,
-                        onClose = onClose
-                    )
-                }
-
-                // ✅ רק התוכן שמתחת לכותרת נגלל
+                // ✅ רק התוכן שמתחת ל־KmiTopBar הגלובלי נגלל
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

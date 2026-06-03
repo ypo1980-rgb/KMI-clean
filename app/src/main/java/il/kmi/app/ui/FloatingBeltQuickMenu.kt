@@ -65,7 +65,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 enum class QuickMenuTriggerMode {
     Fab,
-    BottomBar
+    BottomBar,
+
+    // ✅ מפעיל צדדי למסך "תרגילים לפי חגורה"
+    SideRail
 }
 
 private data class QuickMenuItemUi(
@@ -203,6 +206,78 @@ private fun ModernGlowFab(    accentColor: Color,
                         .graphicsLayer { rotationZ = iconRotation }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SideRailQuickMenuTrigger(
+    accentColor: Color,
+    expanded: Boolean,
+    onClick: () -> Unit
+) {
+    val iconRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 500f),
+        label = "sideRailIconRotation"
+    )
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(
+            topEnd = 18.dp,
+            bottomEnd = 18.dp,
+            topStart = 0.dp,
+            bottomStart = 0.dp
+        ),
+        color = Color.Transparent,
+        shadowElevation = 12.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color.White.copy(alpha = 0.72f)
+        ),
+        modifier = Modifier
+            .width(42.dp)
+            .height(86.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = 0.84f),
+                            accentColor,
+                            accentColor.copy(alpha = 0.88f)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.22f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+
+            Icon(
+                imageVector = Icons.Filled.Menu,
+                contentDescription = if (expanded) "סגור תפריט מהיר" else "פתח תפריט מהיר",
+                tint = Color.White,
+                modifier = Modifier
+                    .size(26.dp)
+                    .graphicsLayer {
+                        rotationZ = iconRotation
+                    }
+            )
         }
     }
 }
@@ -408,11 +483,15 @@ fun FloatingQuickMenu(
         menuVisibilityState.targetState = expanded
     }
 
+    // ✅ מוריד את טריגר התפריט המהיר והפאנל שלו מעט למטה
+    val sideRailVerticalOffset = 88.dp
+
     Box(
         modifier = modifier,
         contentAlignment = when (triggerMode) {
             QuickMenuTriggerMode.BottomBar -> Alignment.BottomCenter
             QuickMenuTriggerMode.Fab -> if (isEnglish) Alignment.BottomStart else Alignment.BottomEnd
+            QuickMenuTriggerMode.SideRail -> Alignment.CenterStart
         }
     ) {
         if (menuVisibilityState.currentState || menuVisibilityState.targetState) {
@@ -437,6 +516,14 @@ fun FloatingQuickMenu(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .offset(y = (-6).dp)
+
+                QuickMenuTriggerMode.SideRail -> Modifier
+                    .align(Alignment.CenterStart)
+                    .wrapContentSize()
+                    .offset(
+                        x = 46.dp,
+                        y = sideRailVerticalOffset
+                    )
             }
         ) {
             Box(
@@ -451,14 +538,16 @@ fun FloatingQuickMenu(
                     QuickMenuTriggerMode.Fab ->
                         if (isEnglish) BiasAbsoluteAlignment(-1f, 1f)
                         else BiasAbsoluteAlignment(1f, 1f)
+
+                    QuickMenuTriggerMode.SideRail -> Alignment.CenterStart
                 }
             ) {
                 Column(
                     modifier = Modifier.wrapContentSize(),
-                    horizontalAlignment = if (triggerMode == QuickMenuTriggerMode.BottomBar) {
-                        Alignment.CenterHorizontally
-                    } else {
-                        if (isEnglish) Alignment.Start else Alignment.End
+                    horizontalAlignment = when (triggerMode) {
+                        QuickMenuTriggerMode.BottomBar -> Alignment.CenterHorizontally
+                        QuickMenuTriggerMode.SideRail -> Alignment.Start
+                        QuickMenuTriggerMode.Fab -> if (isEnglish) Alignment.Start else Alignment.End
                     }
                 ) {
                     Spacer(Modifier.height(6.dp))
@@ -484,22 +573,50 @@ fun FloatingQuickMenu(
         }
 
         val shouldShowTrigger =
-            triggerMode == QuickMenuTriggerMode.Fab &&
+            (triggerMode == QuickMenuTriggerMode.Fab ||
+                    triggerMode == QuickMenuTriggerMode.SideRail) &&
                     !menuVisibilityState.currentState &&
                     !menuVisibilityState.targetState
 
         if (shouldShowTrigger) {
             Box(
-                modifier = Modifier.align(
-                    if (isEnglish) Alignment.BottomEnd else Alignment.BottomStart
-                ),
+                modifier = Modifier
+                    .align(
+                        when (triggerMode) {
+                            QuickMenuTriggerMode.SideRail -> Alignment.CenterStart
+                            QuickMenuTriggerMode.Fab ->
+                                if (isEnglish) Alignment.BottomEnd else Alignment.BottomStart
+                            QuickMenuTriggerMode.BottomBar -> Alignment.BottomCenter
+                        }
+                    )
+                    .offset(
+                        y = if (triggerMode == QuickMenuTriggerMode.SideRail) {
+                            sideRailVerticalOffset
+                        } else {
+                            0.dp
+                        }
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                ModernGlowFab(
-                    accentColor = accentColor,
-                    expanded = expanded,
-                    onClick = { onExpandedChange(true) }
-                )
+                when (triggerMode) {
+                    QuickMenuTriggerMode.SideRail -> {
+                        SideRailQuickMenuTrigger(
+                            accentColor = accentColor,
+                            expanded = expanded,
+                            onClick = { onExpandedChange(true) }
+                        )
+                    }
+
+                    QuickMenuTriggerMode.Fab -> {
+                        ModernGlowFab(
+                            accentColor = accentColor,
+                            expanded = expanded,
+                            onClick = { onExpandedChange(true) }
+                        )
+                    }
+
+                    QuickMenuTriggerMode.BottomBar -> Unit
+                }
             }
         }
     }
@@ -516,8 +633,8 @@ private fun PremiumQuickMenuPanel(
     onLockedItemClick: () -> Unit,
     onClose: () -> Unit
 ) {
-    val panelWidth = 214.dp
-    val panelShape = RoundedCornerShape(22.dp)
+    val panelWidth = 190.dp
+    val panelShape = RoundedCornerShape(20.dp)
 
     // ✅ המלל מקבל את צבע החגורה, אבל בצורה כהה/יוקרתית מספיק לקריאה.
     val textColor = when {
@@ -575,7 +692,7 @@ private fun PremiumQuickMenuPanel(
                     color = borderAccent,
                     shape = panelShape
                 )
-                .padding(horizontal = 10.dp, vertical = 10.dp)
+                .padding(horizontal = 8.dp, vertical = 8.dp)
         ) {
             // ✅ ברק עדין מאוד בחלק העליון — מראה פרימיום
             Box(
@@ -611,6 +728,8 @@ private fun PremiumQuickMenuPanel(
                                 text = title,
                                 color = titleAccent,
                                 fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp,
+                                lineHeight = 16.sp,
                                 textAlign = TextAlign.Start,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -635,6 +754,8 @@ private fun PremiumQuickMenuPanel(
                                 text = title,
                                 color = titleAccent,
                                 fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp,
+                                lineHeight = 16.sp,
                                 textAlign = TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -653,7 +774,7 @@ private fun PremiumQuickMenuPanel(
                     }
                 }
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(6.dp))
 
                 items.forEachIndexed { index, item ->
                     val lockedForUi = menuLocked && item.isLocked
@@ -699,12 +820,12 @@ private fun PremiumQuickMenuRow(
     isEnglish: Boolean,
     isLocked: Boolean = false,
     onClick: () -> Unit
-){
+) {
     val lockPulse = rememberInfiniteTransition(label = "quickMenuLockPulse")
 
     val lockScale by lockPulse.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.08f,
+        initialValue = 0.90f,
+        targetValue = 1.00f,
         animationSpec = infiniteRepeatable(
             animation = tween(900, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
@@ -713,8 +834,8 @@ private fun PremiumQuickMenuRow(
     )
 
     val lockGlowAlpha by lockPulse.animateFloat(
-        initialValue = 0.08f,
-        targetValue = 0.22f,
+        initialValue = 0.05f,
+        targetValue = 0.14f,
         animationSpec = infiniteRepeatable(
             animation = tween(900, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
@@ -725,9 +846,9 @@ private fun PremiumQuickMenuRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 12.dp),
+            .padding(horizontal = 4.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isEnglish) {
@@ -736,7 +857,7 @@ private fun PremiumQuickMenuRow(
                 accentColor = accentColor
             )
 
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(7.dp))
 
             Row(
                 modifier = Modifier.weight(1f),
@@ -747,15 +868,16 @@ private fun PremiumQuickMenuRow(
                     text = text,
                     color = textColor,
                     fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
                     textAlign = TextAlign.Start,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f)
                 )
 
                 if (isLocked) {
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(5.dp))
 
                     PremiumAnimatedLockIcon(
                         accentColor = lockColor,
@@ -777,22 +899,23 @@ private fun PremiumQuickMenuRow(
                         glowAlpha = lockGlowAlpha
                     )
 
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(5.dp))
                 }
 
                 Text(
                     text = text,
                     color = textColor,
                     fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
                     textAlign = TextAlign.Right,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(7.dp))
 
             PremiumQuickMenuIcon(
                 icon = icon,
@@ -808,18 +931,15 @@ private fun PremiumAnimatedLockIcon(
     scale: Float,
     glowAlpha: Float
 ) {
-    // ✅ אותו מנעול כמו במסך "לפי נושאים":
-    // Emoji אמיתי, לא Icon וקטורי, ולכן נראה יותר פרימיום/אמיתי.
     Text(
         text = "🔒",
-        fontSize = 15.sp,
-        lineHeight = 15.sp,
-        modifier = Modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                alpha = 1f
-            }
+        fontSize = 12.sp,
+        lineHeight = 12.sp,
+        modifier = Modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+            alpha = 1f
+        }
     )
 }
 
@@ -830,7 +950,7 @@ private fun PremiumQuickMenuIcon(
 ) {
     Box(
         modifier = Modifier
-            .size(24.dp)
+            .size(20.dp)
             .clip(CircleShape)
             .background(accentColor.copy(alpha = 0.12f))
             .border(
@@ -844,7 +964,7 @@ private fun PremiumQuickMenuIcon(
             imageVector = icon,
             contentDescription = null,
             tint = accentColor,
-            modifier = Modifier.size(14.dp)
+            modifier = Modifier.size(12.dp)
         )
     }
 }

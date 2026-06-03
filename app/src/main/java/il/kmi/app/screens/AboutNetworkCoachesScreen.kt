@@ -63,6 +63,7 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.database.KmiDatabaseRepository
+import il.kmi.app.ui.KmiTopBar
 import kotlinx.coroutines.tasks.await
 
 private data class NetworkCoachInfo(
@@ -410,7 +411,9 @@ private fun firstHebrewLetter(name: String): String {
 @Composable
 fun AboutNetworkCoachesScreen(
     isEnglish: Boolean,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onHome: () -> Unit = {},
+    onOpenExercise: ((String) -> Unit)? = null
 ) {
     var coaches by remember { mutableStateOf<List<NetworkCoachInfo>>(fallbackNetworkCoaches) }
     var isLoading by remember { mutableStateOf(true) }
@@ -468,6 +471,36 @@ fun AboutNetworkCoachesScreen(
     val fieldBorderColor = Color(0xFFB8C4D9)
 
     Scaffold(
+        topBar = {
+            KmiTopBar(
+                title = tr("אודות המאמנים ברשת", "About Network Coaches"),
+                centerTitle = true,
+                showMenu = false,
+                onBack = null,
+
+                // ✅ מפעיל את אייקון הבית בסרגל האייקונים הצדדי
+                onHome = onHome,
+
+                // ✅ מאפשר פתיחת תרגיל מתוך החיפוש הגלובלי אם הניווט מועבר מבחוץ
+                onOpenExercise = onOpenExercise,
+
+                showBottomActions = true,
+                showRoleBadge = false,
+                showModePill = false,
+
+                // ✅ החיפוש בסרגל הצדדי פעיל
+                lockSearch = false,
+
+                // ✅ הבית פעיל במסך מאמנים ברשת
+                lockHome = false,
+
+                // ✅ לא מציגים בית/חיפוש בכותרת העליונה עצמה
+                // הם נשארים רק בסרגל האייקונים הצדדי
+                showTopHome = false,
+                showTopSearch = false,
+                showTopShare = false
+            )
+        },
         containerColor = Color.Transparent
     ) { innerPadding ->
         Box(
@@ -492,11 +525,6 @@ fun AboutNetworkCoachesScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = horizontal
             ) {
-                SideScreenTopBar(
-                    title = tr("אודות המאמנים ברשת", "About Network Coaches"),
-                    onClose = onClose
-                )
-
                 Column(
                     modifier = Modifier
                         .fillMaxSize()

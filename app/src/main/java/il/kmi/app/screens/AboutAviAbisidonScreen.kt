@@ -1,25 +1,20 @@
 package il.kmi.app.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import android.app.Activity
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -30,8 +25,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.res.painterResource
 import il.kmi.app.R
-import il.kmi.app.ui.rememberHapticsGlobal
-import il.kmi.app.ui.rememberClickSoundGlobal
 
 //=========================================================================
 
@@ -41,10 +34,6 @@ fun AboutAviAbisidonScreen(
     onClose: () -> Unit,
     onHome: () -> Unit
 ) {
-
-    // ⭐ helpers גלובליים – לקרוא פעם אחת בתחילת המסך
-    val haptic = rememberHapticsGlobal()
-    val clickSound = rememberClickSoundGlobal()
 
     val contextLang = LocalContext.current
     val langManager = remember { AppLanguageManager(contextLang) }
@@ -57,21 +46,39 @@ fun AboutAviAbisidonScreen(
     }
 
     val cardTitle = if (isEnglish) "Avi Abisidon" else "אבי אביסידון"
-    val closeCd = if (isEnglish) "Close" else "סגור"
 
     Scaffold(
-        // טופבר רגיל – בלי X, רק שם המסך
+        // ✅ TopBar גלובלי עם אייקון סרגל צד + מצב מאמן/מתאמן
         topBar = {
             il.kmi.app.ui.KmiTopBar(
                 title = screenTitle,
                 centerTitle = true,
-                showMenu = false,
+
+                // ✅ מציג אייקון סרגל צד בכותרת
+                showMenu = true,
+
+                // ✅ בלי אייקון חזור בכותרת
                 onBack = null,
-                showRoleBadge = false,
+
+                // ✅ מציג מצב מאמן/מתאמן
+                showRoleBadge = true,
+                showModePill = true,
+
+                // ✅ בית פעיל דרך הניווט שהמסך מקבל מבחוץ
                 onHome = onHome,
+
+                // ✅ לא מציגים בית/חיפוש בכותרת העליונה עצמה
+                // אלא רק בסרגל האייקונים הצדדי
                 showTopHome = false,
+                showTopSearch = false,
+                showTopShare = false,
+
+                // ✅ סרגל האייקונים הצדדי נשאר פעיל
                 showBottomActions = true,
-                lockSearch = true,
+
+                // ✅ החיפוש בסרגל הצדדי יהיה פעיל
+                lockSearch = false,
+
                 lockHome = false,
                 currentLang = if (isEnglish) "en" else "he",
                 onToggleLanguage = {
@@ -98,10 +105,14 @@ fun AboutAviAbisidonScreen(
             // הכרטיס
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                color = Color.White,
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 1.dp,
-                shadowElevation = 2.dp
+                color = Color(0xFFEAF2FF),
+                shape = RoundedCornerShape(20.dp),
+                tonalElevation = 2.dp,
+                shadowElevation = 4.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = Color(0xFFD8E3F5)
+                )
             ) {
                 CompositionLocalProvider(
                     LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
@@ -395,34 +406,6 @@ fun AboutAviAbisidonScreen(
                     }
                 }
             }
-
-            // כפתור סגירה "X" – עם צליל ורטט חזק
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = (-8).dp, y = 12.dp)
-                    .size(22.dp) // כמעט צמוד לאיקס
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f))
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                        shape = CircleShape
-                    )
-                    .clickable {
-                        clickSound()
-                        haptic(true)   // רטט חזק
-                        onClose()
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = closeCd,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
         }
     }
 }
@@ -434,10 +417,17 @@ private fun Bulleted(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
+        horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
+        verticalAlignment = Alignment.Top
     ) {
         if (isEnglish) {
-            Text("•", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = "•",
+                style = MaterialTheme.typography.bodyLarge
+            )
+
+            Spacer(Modifier.width(8.dp))
+
             Text(
                 text = text,
                 style = MaterialTheme.typography.bodyLarge,
@@ -445,15 +435,20 @@ private fun Bulleted(
                 modifier = Modifier.weight(1f)
             )
         } else {
+            // ✅ בעברית: הנקודה מופיעה בצד ימין
+            Text(
+                text = "•",
+                style = MaterialTheme.typography.bodyLarge
+            )
+
+            Spacer(Modifier.width(8.dp))
+
             Text(
                 text = text,
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Right,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
+                modifier = Modifier.weight(1f)
             )
-            Text("•", style = MaterialTheme.typography.bodyLarge)
         }
     }
 }

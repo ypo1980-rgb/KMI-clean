@@ -768,81 +768,9 @@ internal fun BeltPangoLayout(
                                     accessMode = accessMode
                                 )
 
-                                Spacer(Modifier.height(10.dp))
-
-                                Surface(
-                                    onClick = {
-                                        clickSound()
-                                        haptic(true)
-                                        quickMenuExpanded = true
-                                    },
-                                    shape = RoundedCornerShape(18.dp),
-                                    shadowElevation = 10.dp,
-                                    color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
-                                        Color(0xFF101827)
-                                    } else {
-                                        Color.White
-                                    },
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
-                                            Color.White.copy(alpha = 0.12f)
-                                        } else {
-                                            currentBelt.color.copy(alpha = 0.22f)
-                                        }
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp)
-                                        .height(60.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                brush = Brush.verticalGradient(
-                                                    colors = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
-                                                        listOf(
-                                                            Color(0xFF1E293B),
-                                                            currentBelt.color.copy(alpha = 0.16f),
-                                                            Color(0xFF0F172A)
-                                                        )
-                                                    } else {
-                                                        listOf(
-                                                            currentBelt.color.copy(alpha = 0.10f),
-                                                            Color.White,
-                                                            currentBelt.color.copy(alpha = 0.05f)
-                                                        )
-                                                    }
-                                                )
-                                            )
-                                            .padding(horizontal = 16.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Menu,
-                                            contentDescription = null,
-                                            tint = currentBelt.color,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-
-                                        Spacer(Modifier.width(8.dp))
-
-                                        Text(
-                                            text = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) {
-                                                "Quick View"
-                                            } else {
-                                                "מבט מהיר"
-                                            },
-                                            fontWeight = FontWeight.Bold,
-                                            color = currentBelt.color,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                    }
-                                }
-
-                                Spacer(Modifier.height(8.dp))
+                                // ✅ אין יותר כפתור תחתון של "מבט מהיר".
+                                // התפריט המהיר נפתח עכשיו מהמלבן הצדדי כמו במצב "לפי חגורה".
+                                Spacer(Modifier.height(24.dp))
                             }
                         }
                     }
@@ -879,16 +807,15 @@ internal fun BeltPangoLayout(
                 FloatingQuickMenu(
                     belt = currentBelt,
                     modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .navigationBarsPadding()
-                        .padding(
-                            start = 18.dp,
-                            bottom = 72.dp
-                        )
+                        // ✅ מלבן צדדי בצד שמאל של המסך
+                        .align(Alignment.CenterStart)
                         .zIndex(999f),
                     expanded = quickMenuExpanded,
                     onExpandedChange = { quickMenuExpanded = it },
-                    triggerMode = QuickMenuTriggerMode.Fab,
+
+                    // ✅ במקום הכפתור הצף העגול/מרובע הישן
+                    triggerMode = QuickMenuTriggerMode.SideRail,
+
                     includePractice = true,
                     hasFullAccess = hasUnlockedAccess,
                     onLockedItemClick = {
@@ -926,14 +853,12 @@ internal fun BeltPangoLayout(
                 FloatingQuickMenu(
                     belt = currentBelt,
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(start = 10.dp, end = 10.dp, bottom = 78.dp)
-                        .fillMaxWidth()
+                        // ✅ אותו אייקון צדדי כמו במצב "לפי חגורה"
+                        .align(Alignment.CenterStart)
                         .zIndex(999f),
                     expanded = quickMenuExpanded,
                     onExpandedChange = { quickMenuExpanded = it },
-                    triggerMode = QuickMenuTriggerMode.BottomBar,
+                    triggerMode = QuickMenuTriggerMode.SideRail,
                     includePractice = true,
                     includeAllLists = false,
                     includeSummary = false,
@@ -1363,11 +1288,17 @@ private fun TopicsCardForBelt(
 
     var expandedTopic by rememberSaveable(belt.id) { mutableStateOf<String?>(null) }
     val rowMinHeight = 60.dp
-    val visibleRows = 5
-    val listHeight = rowMinHeight * visibleRows + 8.dp
+
+    // ✅ מגדיל את גובה כרטיסיית הנושאים,
+    // כדי שתרד נמוך יותר לכיוון העיגול המרכזי.
+    val visibleRows = 6
+    val listHeight = rowMinHeight * visibleRows + 10.dp
 
     val fabSize = 120.dp
-    val desiredOverlap = fabSize / 2
+
+    // ✅ במקום להשאיר חצי עיגול רווח,
+    // משאירים רק בערך שליש גובה כדי שהכרטיס יירד יותר למטה.
+    val desiredOverlap = fabSize * 0.34f
     val fabClearance = desiredOverlap
 
     Surface(
@@ -1383,7 +1314,7 @@ private fun TopicsCardForBelt(
             .fillMaxWidth()
             .padding(horizontal = 6.dp)
             .padding(top = 0.dp)
-            .padding(bottom = fabClearance + 8.dp)
+            .padding(bottom = fabClearance + 2.dp)
     ) {
         Column(Modifier.padding(vertical = 6.dp)) {
             Text(

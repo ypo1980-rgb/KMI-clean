@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.LocalPhone
 import androidx.compose.material.icons.filled.Domain
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -75,6 +76,8 @@ import androidx.compose.foundation.border
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import il.kmi.app.ui.DrawerBridge
+import il.kmi.app.ui.KmiTopBar
 
 //==========================================================================
 
@@ -460,6 +463,7 @@ fun MembershipPaymentScreen(
     }
 
     var policyAccepted by rememberSaveable { mutableStateOf(false) }
+    var showFullRefundPolicy by rememberSaveable { mutableStateOf(false) }
     var branchExpanded by remember { mutableStateOf(false) }
 
     val missingBranchValue = if (isEnglish) MISSING_BRANCH_EN else MISSING_BRANCH_HE
@@ -526,7 +530,31 @@ fun MembershipPaymentScreen(
                 policyAccepted
 
     Scaffold(
-        containerColor = Color.Transparent
+        containerColor = Color.Transparent,
+        topBar = {
+            KmiTopBar(
+                title = title,
+                currentLang = if (isEnglish) "en" else "he",
+                showMenu = true,
+                showRoleStatus = true,
+                showSettings = true,
+                showBottomActions = true,
+                showModePill = true,
+                showRoleBadge = true,
+                showTopHome = false,
+                showTopSearch = false,
+                showTopShare = false,
+                centerTitle = true,
+                lockHome = false,
+                lockSearch = false,
+                onOpenDrawer = {
+                    DrawerBridge.open()
+                },
+                onHome = {
+                    DrawerBridge.openHome()
+                }
+            )
+        }
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -549,20 +577,10 @@ fun MembershipPaymentScreen(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                PremiumPaymentHeader(
-                    title = title,
-                    subtitle = if (isEnglish) {
-                        "Association membership fee • ₪150"
-                    } else {
-                        "דמי חבר לעמותה • 150 ₪"
-                    },
-                    isEnglish = isEnglish,
-                    onClose = onClose
-                )
-
                 ProductHeroCard(
                     isEnglish = isEnglish,
-                    amountText = if (isEnglish) "₪150.00" else "150.00 ₪"
+                    amountText = if (isEnglish) "₪150.00" else "150.00 ₪",
+                    onClose = onClose
                 )
 
                 SectionCard(
@@ -902,7 +920,10 @@ fun MembershipPaymentScreen(
                         }
                     ) {
                         TextButton(
-                            onClick = onReadFullPolicy,
+                            onClick = {
+                                showFullRefundPolicy = true
+                                onReadFullPolicy()
+                            },
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = Color(0xFFBDA7FF)
                             )
@@ -1042,6 +1063,100 @@ fun MembershipPaymentScreen(
             }
         }
     }
+
+    if (showFullRefundPolicy) {
+        AlertDialog(
+            onDismissRequest = {
+                showFullRefundPolicy = false
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showFullRefundPolicy = false
+                    }
+                ) {
+                    Text(if (isEnglish) "Close" else "סגור")
+                }
+            },
+            title = {
+                Text(
+                    text = policyTitle,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                ) {
+                    Text(
+                        text = if (isEnglish) {
+                            "1. The membership fee is a registration and association membership payment."
+                        } else {
+                            "1. דמי החבר הם תשלום עבור רישום וחברות בעמותה."
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            "2. After payment approval, the payment is considered final, except in cases of duplicate payment, technical error, or another good-faith mistake."
+                        } else {
+                            "2. לאחר אישור התשלום, התשלום נחשב סופי, למעט מקרים של תשלום כפול, תקלה טכנית או טעות אחרת בתום לב."
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            "3. Refund requests will be reviewed by the association according to the payment details, payment date, and the reason for the request."
+                        } else {
+                            "3. בקשות להחזר ייבחנו על ידי העמותה בהתאם לפרטי התשלום, מועד התשלום וסיבת הבקשה."
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            "4. If a refund is approved, it will be processed using the same payment method or another method approved by the association."
+                        } else {
+                            "4. אם יאושר החזר, הוא יבוצע באמצעי התשלום המקורי או באמצעי אחר שיאושר על ידי העמותה."
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            "5. Administrative or clearing fees may be deducted if required by the payment provider or applicable rules."
+                        } else {
+                            "5. ייתכן ניכוי עמלות טיפול או סליקה, ככל שהדבר נדרש על ידי ספק התשלום או לפי הנהלים החלים."
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            "6. By checking the approval box, the payer confirms that they have read and agreed to this cancellation and refund policy before continuing to payment."
+                        } else {
+                            "6. סימון תיבת האישור מהווה אישור לכך שהמשלם קרא והסכים למדיניות הביטולים וההחזרים לפני המעבר לתשלום."
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            containerColor = Color(0xFFF8F5FB)
+        )
+    }
 }
 
 @Composable
@@ -1109,7 +1224,8 @@ private fun PremiumPaymentHeader(
 @Composable
 private fun ProductHeroCard(
     isEnglish: Boolean,
-    amountText: String
+    amountText: String,
+    onClose: () -> Unit
 ) {
     val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
@@ -1120,25 +1236,55 @@ private fun ProductHeroCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF314875)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = horizontalAlignment
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Box(
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Surface(
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color.White.copy(alpha = 0.10f)
+                ) {
+                    IconButton(
+                        onClick = onClose,
+                        modifier = Modifier.size(46.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = if (isEnglish) "Close" else "סגור",
+                            tint = Color.White
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.align(Alignment.Center),
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0xFF8B5CF6)
+                ) {
+                    Text(
+                        text = compactAmount,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 10.dp),
+                        maxLines = 1
+                    )
+                }
+
+                Surface(
+                    modifier = Modifier.align(Alignment.CenterStart),
                     shape = RoundedCornerShape(18.dp),
                     color = Color.White.copy(alpha = 0.10f)
                 ) {
@@ -1155,24 +1301,11 @@ private fun ProductHeroCard(
                         )
                     }
                 }
-
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFF8B5CF6)
-                ) {
-                    Text(
-                        text = compactAmount,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                        maxLines = 1
-                    )
-                }
             }
 
             Text(
                 text = if (isEnglish) "Association Membership" else "חברות בעמותה",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = Color.White,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = textAlign,

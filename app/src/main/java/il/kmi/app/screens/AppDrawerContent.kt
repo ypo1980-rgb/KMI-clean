@@ -678,12 +678,13 @@ fun AppDrawerContent(
                                         color = Color.White.copy(alpha = 0.82f),
                                         fontWeight = FontWeight.Medium,
                                         fontSize = 10.sp,
-                                        lineHeight = 11.5.sp,
+                                        lineHeight = 12.sp,
                                         letterSpacing = (-0.08).sp
                                     ),
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 1,
+                                    maxLines = 2,
+                                    softWrap = true,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -759,12 +760,13 @@ fun AppDrawerContent(
                                         color = Color.White.copy(alpha = 0.82f),
                                         fontWeight = FontWeight.Medium,
                                         fontSize = 10.sp,
-                                        lineHeight = 11.5.sp,
+                                        lineHeight = 12.sp,
                                         letterSpacing = (-0.08).sp
                                     ),
                                     textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 1,
+                                    maxLines = 2,
+                                    softWrap = true,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -1064,7 +1066,7 @@ fun AppDrawerContent(
                                 } else {
                                     CoachLineItemHe(
                                         title = "ניהול משתמשים",
-                                        subtitle = "צפייה בכל המשתמשים באפליקציה",
+                                        subtitle = "צפייה בכל המשתמשים\nבאפליקציה",
                                         icon = Icons.Filled.Groups,
                                         showDivider = false,
                                         onClick = {

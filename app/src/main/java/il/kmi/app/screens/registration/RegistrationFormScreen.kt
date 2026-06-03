@@ -276,13 +276,31 @@ fun RegistrationFormScreen(
     kmiPrefs: KmiPrefs,
     startAtProfile: Boolean = false
 ) {
-    // 0=מתאמן, 1=מאמן
-    val initialIsCoach = initial.equals("coach", ignoreCase = true)
-    var selectedTab by rememberSaveable { mutableIntStateOf(if (initialIsCoach) 1 else 0) }
-    val isCoach = selectedTab == 1
-
     val ctx = LocalContext.current
     val userSp = remember(ctx) { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
+
+    // 0=מתאמן, 1=מאמן
+    // ✅ בעריכת פרופיל לא משתמשים בברירת המחדל "trainee".
+    // קודם קוראים את התפקיד הקיים מהשמירה, כדי שמאמן יישאר מאמן.
+    val savedRoleForProfile = remember(startAtProfile, initial, sp, userSp) {
+        if (startAtProfile) {
+            userSp.getString("user_role", null)
+                ?: userSp.getString("role", null)
+                ?: sp.getString("user_role", null)
+                ?: sp.getString("role", null)
+                ?: initial
+        } else {
+            initial
+        }
+    }
+
+    val initialIsCoach = savedRoleForProfile.equals("coach", ignoreCase = true)
+
+    var selectedTab by rememberSaveable(startAtProfile, savedRoleForProfile) {
+        mutableIntStateOf(if (initialIsCoach) 1 else 0)
+    }
+
+    val isCoach = selectedTab == 1
 
     val langManager = remember(ctx) {
         il.kmi.shared.localization.AppLanguageManager(ctx)
@@ -380,7 +398,11 @@ fun RegistrationFormScreen(
     // - אם ADMIN או Super Tester → לא נועלים כלום, מאפשרים בחירה חופשית
     // - אם מורשה מאמן → מעבירים לטאב מאמן ונועלים
     // - אם לא מורשה → מעבירים לטאב מתאמן ונועלים
-    LaunchedEffect(isWhitelistedCoach, isAdmin, isSuperTester) {
+    LaunchedEffect(startAtProfile, isWhitelistedCoach, isAdmin, isSuperTester) {
+        // ✅ בעריכת פרופיל לא משנים אוטומטית את התפקיד.
+        // המשתמש כבר רשום, ולכן נשארים באותו role שהיה שמור לפני הכניסה למסך.
+        if (startAtProfile) return@LaunchedEffect
+
         if (!isAdmin && !isSuperTester) {
             selectedTab = if (isWhitelistedCoach) 1 else 0
         }
@@ -655,8 +677,9 @@ fun RegistrationFormScreen(
     fun submitRegistration() {
         var valid = true
 
-        // ✅ אכיפה קשיחה רק למי שלא ADMIN ולא Super Tester
-        if (!isAdmin && !isSuperTester) {
+        // ✅ אכיפה קשיחה רק ברישום ראשוני.
+        // בעריכת פרופיל לא מחזירים אוטומטית מאמן למתאמן.
+        if (!startAtProfile && !isAdmin && !isSuperTester) {
             if (isWhitelistedCoach && !isCoach) {
                 Toast.makeText(
                     ctx,
@@ -724,8 +747,8 @@ fun RegistrationFormScreen(
             termsError = true; valid = false
         }
 
-        // אימות מאמן (רק אם לא ADMIN ולא Super Tester)
-        if (isCoach && !isAdmin && !isSuperTester) {
+        // אימות מאמן — רק ברישום ראשוני, לא בעריכת פרופיל של משתמש קיים
+        if (!startAtProfile && isCoach && !isAdmin && !isSuperTester) {
             val normalizedPhoneLocal = phone.filter { it.isDigit() }
             val normalizedEmailLocal = email.trim().lowercase()
 
@@ -745,14 +768,19 @@ fun RegistrationFormScreen(
         if (!valid) return
 
         // ✅ role סופי:
-        // ADMIN או Super Tester בוחרים לפי הטאב, אחרת לפי whitelist
-        val roleFinal = if (isAdmin || isSuperTester) {
+        // בעריכת פרופיל שומרים את התפקיד שנבחר/קיים ולא דורסים לפי whitelist.
+        // ברישום ראשוני נשארת הלוגיקה הקיימת של הרשאות מאמן.
+        val roleFinal = if (startAtProfile) {
+            if (isCoach) "coach" else "trainee"
+        } else if (isAdmin || isSuperTester) {
             if (isCoach) "coach" else "trainee"
         } else {
             if (isWhitelistedCoach) "coach" else "trainee"
         }
 
         val roleLockedBy = when {
+            startAtProfile && roleFinal == "coach" -> "profile_edit_existing_coach"
+            startAtProfile -> "profile_edit_existing_trainee"
             isAdmin -> "admin"
             isSuperTester -> "super_tester"
             isWhitelistedCoach -> "coach_whitelist"

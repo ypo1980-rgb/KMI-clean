@@ -1348,33 +1348,46 @@ fun ForumScreen(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            // ✅ מוריד את כרטיס הנעילה מעט למטה כדי שלא יתנגש
+                            // עם הידית/סרגל האייקונים הנסתר של KmiTopBar.
+                            .padding(top = 24.dp),
                         color = if (isDarkMode) {
                             Color(0xFF020617).copy(alpha = 0.92f)
                         } else {
-                            Color.White.copy(alpha = 0.94f)
+                            Color(0xFFEAF2FF)
                         },
                         shape = RoundedCornerShape(20.dp),
                         tonalElevation = 4.dp,
                         shadowElevation = 4.dp,
                         border = BorderStroke(
                             1.dp,
-                            if (isDarkMode) Color.Transparent else Color(0xFFD7E3F4)
+                            if (isDarkMode) {
+                                Color.Transparent
+                            } else {
+                                Color(0xFFD4E1F7)
+                            }
                         )
                     ) {
                         Column(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.Center,
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 26.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(22.dp),
-                                color = Color.White.copy(alpha = if (isDarkMode) 0.08f else 0.85f),
+                                color = if (isDarkMode) {
+                                    Color.White.copy(alpha = 0.08f)
+                                } else {
+                                    Color(0xFFF6F9FF)
+                                },
                                 border = BorderStroke(
                                     1.dp,
-                                    if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFD7E3F4)
+                                    if (isDarkMode) {
+                                        Color.White.copy(alpha = 0.12f)
+                                    } else {
+                                        Color(0xFFD4E1F7)
+                                    }
                                 ),
                                 modifier = Modifier.size(64.dp)
                             ) {
@@ -1388,7 +1401,7 @@ fun ForumScreen(
                                 }
                             }
 
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(14.dp))
 
                             Text(
                                 text = forumTr(isEnglish, "גישה לפורום", "Forum Access"),
@@ -1398,7 +1411,9 @@ fun ForumScreen(
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
+
                             Spacer(Modifier.height(12.dp))
+
                             Text(
                                 text = lockText,
                                 color = if (isDarkMode) Color(0xFFE5E7EB) else Color(0xFF334155),
@@ -1406,7 +1421,9 @@ fun ForumScreen(
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            Spacer(Modifier.height(16.dp))
+
+                            Spacer(Modifier.height(18.dp))
+
                             Button(
                                 onClick = onOpenSubscription,
                                 modifier = Modifier
@@ -1419,7 +1436,9 @@ fun ForumScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
+
                             Spacer(Modifier.height(12.dp))
+
                             Text(
                                 text = forumTr(
                                     isEnglish,

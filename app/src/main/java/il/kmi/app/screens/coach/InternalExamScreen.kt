@@ -13,7 +13,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -79,7 +79,7 @@ import kotlin.math.abs
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import il.kmi.app.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.unit.sp
@@ -99,6 +99,9 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import il.kmi.app.ui.KmiTopBar
 
 // ======================
 // מודלים ולוגיקה
@@ -235,6 +238,28 @@ private fun examBeltSoftColor(belt: Belt): Color =
         Belt.BLACK -> Color(0xFFE5E7EB)
         else -> Color(0xFFEDE9FE)
     }
+
+private fun examBeltDrawableRes(belt: Belt): Int =
+    when (belt) {
+        Belt.YELLOW -> R.drawable.belt_yellow
+        Belt.ORANGE -> R.drawable.belt_orange
+        Belt.GREEN -> R.drawable.belt_green
+        Belt.BLUE -> R.drawable.belt_blue
+        Belt.BROWN -> R.drawable.belt_brown
+        Belt.BLACK -> R.drawable.belt_black
+        else -> R.drawable.belt_black
+    }
+
+private fun internalExamEntryScreenBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
+    androidx.compose.ui.graphics.Brush.verticalGradient(
+        listOf(
+            Color(0xFF0F1B35),
+            Color(0xFF172A4A),
+            examBeltSoftColor(belt).copy(alpha = 0.92f),
+            Color(0xFFF8FAFC),
+            examBeltSoftColor(belt).copy(alpha = 0.84f)
+        )
+    )
 
 private fun examBeltScreenBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
     when (belt) {
@@ -1677,96 +1702,104 @@ private fun TopicHeader(
     belt: Belt,
     onClick: () -> Unit
 ) {
+    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val cardShape = RoundedCornerShape(15.dp)
+
     Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Transparent,
-        shadowElevation = if (expanded) 6.dp else 3.dp,
+        shape = cardShape,
+        color = examBeltMainColor(belt).copy(alpha = 0.045f),
+        shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color.White.copy(alpha = if (expanded) 0.42f else 0.22f)
+            color = examBeltMainColor(belt).copy(alpha = if (expanded) 0.34f else 0.18f)
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(42.dp)
+            .clip(cardShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                onClick()
+            }
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .background(brush = examBeltCardBrush(belt))
-                .padding(horizontal = 10.dp),
-            contentAlignment = Alignment.Center
+                .padding(horizontal = 9.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                shape = CircleShape,
+                color = if (expanded) {
+                    examBeltMainColor(belt).copy(alpha = 0.92f)
+                } else {
+                    examBeltDarkColor(belt).copy(alpha = 0.62f)
+                },
+                shadowElevation = 2.dp,
+                modifier = Modifier.size(23.dp)
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = if (expanded) {
-                        examBeltMainColor(belt).copy(alpha = 0.88f)
-                    } else {
-                        examBeltDarkColor(belt).copy(alpha = 0.66f)
-                    },
-                    shadowElevation = 4.dp,
-                    modifier = Modifier.size(27.dp)
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (expanded) "▲" else "▼",
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-
-                Spacer(Modifier.width(8.dp))
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = title,
-                        color = Color(0xFF111827),
+                        text = if (expanded) "▲" else "▼",
+                        color = Color.White,
                         fontWeight = FontWeight.Black,
-                        fontSize = 16.5.sp,
-                        lineHeight = 17.sp,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = if (hasSubTopics) {
-                            examTr(
-                                isEnglish,
-                                "$subTopicCount תתי נושאים • $exerciseCount תרגילים",
-                                "$subTopicCount sub-topics • $exerciseCount exercises"
-                            )
-                        } else {
-                            examTr(
-                                isEnglish,
-                                "$exerciseCount תרגילים",
-                                "$exerciseCount exercises"
-                            )
-                        },
-                        color = examBeltDarkColor(belt).copy(alpha = 0.60f),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 9.5.sp,
-                        lineHeight = 10.sp,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
+                        fontSize = 9.sp,
+                        lineHeight = 9.sp
                     )
                 }
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = horizontalAlignment,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = title,
+                    color = Color(0xFF111827),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.4.sp,
+                    lineHeight = 12.sp,
+                    textAlign = textAlign,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(1.dp))
+
+                Text(
+                    text = if (hasSubTopics) {
+                        examTr(
+                            isEnglish,
+                            "$subTopicCount תתי נושאים • $exerciseCount תרגילים",
+                            "$subTopicCount sub-topics • $exerciseCount exercises"
+                        )
+                    } else {
+                        examTr(
+                            isEnglish,
+                            "$exerciseCount תרגילים",
+                            "$exerciseCount exercises"
+                        )
+                    },
+                    color = examBeltDarkColor(belt).copy(alpha = 0.58f),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 7.2.sp,
+                    lineHeight = 7.8.sp,
+                    textAlign = textAlign,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -1781,100 +1814,106 @@ private fun SubTopicHeader(
     belt: Belt,
     onClick: () -> Unit
 ) {
+    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val cardShape = RoundedCornerShape(15.dp)
+
     Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        color = Color.Transparent,
-        shadowElevation = if (expanded) 5.dp else 2.dp,
+        shape = cardShape,
+        color = examBeltMainColor(belt).copy(alpha = 0.035f),
+        shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color.White.copy(alpha = if (expanded) 0.32f else 0.18f)
+            color = if (expanded) {
+                examBeltMainColor(belt).copy(alpha = 0.30f)
+            } else {
+                examBeltMainColor(belt).copy(alpha = 0.16f)
+            }
         ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = if (isEnglish) 10.dp else 0.dp,
-                end = if (isEnglish) 0.dp else 10.dp
+                start = if (isEnglish) 18.dp else 4.dp,
+                end = if (isEnglish) 4.dp else 18.dp,
+                top = 2.dp,
+                bottom = 2.dp
             )
             .height(42.dp)
+            .clip(cardShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                onClick()
+            }
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                        listOf(
-                            Color.White.copy(alpha = 0.98f),
-                            examBeltSoftColor(belt).copy(alpha = 0.80f),
-                            Color.White.copy(alpha = 0.96f)
-                        )
-                    )
-                )
-                .padding(horizontal = 9.dp),
-            contentAlignment = Alignment.Center
+                .padding(horizontal = 9.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                shape = CircleShape,
+                color = if (expanded) {
+                    examBeltMainColor(belt).copy(alpha = 0.90f)
+                } else {
+                    examBeltDarkColor(belt).copy(alpha = 0.56f)
+                },
+                shadowElevation = 2.dp,
+                modifier = Modifier.size(23.dp)
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = if (expanded) {
-                        examBeltMainColor(belt).copy(alpha = 0.86f)
-                    } else {
-                        examBeltDarkColor(belt).copy(alpha = 0.48f)
-                    },
-                    shadowElevation = 3.dp,
-                    modifier = Modifier.size(22.dp)
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (expanded) "−" else "+",
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-
-                Spacer(Modifier.width(7.dp))
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = title,
-                        color = Color(0xFF111827),
+                        text = if (expanded) "−" else "+",
+                        color = Color.White,
                         fontWeight = FontWeight.Black,
-                        fontSize = 13.5.sp,
-                        lineHeight = 14.sp,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = examTr(
-                            isEnglish,
-                            "$exerciseCount תרגילים",
-                            "$exerciseCount exercises"
-                        ),
-                        color = examBeltDarkColor(belt).copy(alpha = 0.56f),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 9.sp,
-                        lineHeight = 9.5.sp,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
+                        fontSize = 12.sp,
+                        lineHeight = 12.sp
                     )
                 }
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = horizontalAlignment,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = title,
+                    color = Color(0xFF111827),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.sp,
+                    lineHeight = 11.8.sp,
+                    textAlign = textAlign,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(1.dp))
+
+                Text(
+                    text = examTr(
+                        isEnglish,
+                        "$exerciseCount תרגילים",
+                        "$exerciseCount exercises"
+                    ),
+                    color = examBeltDarkColor(belt).copy(alpha = 0.56f),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 7.sp,
+                    lineHeight = 7.6.sp,
+                    textAlign = textAlign,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
     }
@@ -2092,12 +2131,27 @@ fun InternalExamEntryScreen(
     }
 
     if (!examStarted) {
-        Scaffold { padding ->
+        Scaffold(
+            topBar = {
+                KmiTopBar(
+                    title = examTr(isEnglish, "מבחן פנימי", "Internal exam"),
+                    showMenu = true,
+                    showBottomActions = true,
+                    showRoleStatus = true,
+                    showModePill = true,
+                    showTopHome = true,
+                    showTopSearch = true,
+                    showSettings = true,
+                    showTopShare = false,
+                    centerTitle = true
+                )
+            }
+        ) { padding ->
             Box(
                 modifier = Modifier
                     .padding(padding)
                     .fillMaxSize()
-                    .background(examBeltScreenBrush(currentBelt))
+                    .background(internalExamEntryScreenBrush(currentBelt))
             ) {
                 Column(
                     modifier = Modifier
@@ -2107,76 +2161,61 @@ fun InternalExamEntryScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp, start = 6.dp, end = 6.dp)
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Surface(
+                            onClick = onBack,
                             shape = CircleShape,
-                            color = Color.Transparent,
-                            shadowElevation = 14.dp,
+                            color = Color.White.copy(alpha = 0.14f),
+                            shadowElevation = 8.dp,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = Color.White.copy(alpha = 0.24f)
+                            ),
                             modifier = Modifier
-                                .size(46.dp)
+                                .size(34.dp)
                                 .align(if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd)
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                                    .clickable { onBack() }
-                                    .background(
-                                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                                            listOf(
-                                                Color.White.copy(alpha = 0.30f),
-                                                Color(0xFF7C3AED).copy(alpha = 0.78f),
-                                                Color(0xFF111827).copy(alpha = 0.96f)
-                                            )
-                                        )
-                                    ),
+                                modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "✕",
-                                    color = Color.White,
-                                    fontSize = 23.sp,
-                                    fontWeight = FontWeight.Black
+                                    text = "×",
+                                    color = Color.White.copy(alpha = 0.92f),
+                                    fontSize = 22.sp,
+                                    lineHeight = 22.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.Center
                                 )
                             }
                         }
 
                         Text(
-                            text = examTr(isEnglish, "מבחן פנימי", "Internal exam"),
-                            color = Color(0xFF111827),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = if (isEnglish) 26.sp else 28.sp,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
+                            text = examTr(
+                                isEnglish,
+                                "בחר נבחן וחגורה לפני תחילת המבחן",
+                                "Select a trainee and exam belt before starting"
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 58.dp)
-                                .align(Alignment.Center)
+                                .padding(
+                                    top = 6.dp,
+                                    start = 42.dp,
+                                    end = 42.dp
+                                )
+                                .align(Alignment.Center),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 15.sp,
+                                lineHeight = 18.sp
+                            ),
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.94f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-
-                    Text(
-                        text = examTr(
-                            isEnglish,
-                            "בחר נבחן וחגורה לפני תחילת המבחן",
-                            "Select a trainee and exam belt before starting"
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 15.sp,
-                            lineHeight = 18.sp
-                        ),
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF334155),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -2287,8 +2326,8 @@ fun InternalExamEntryScreen(
                                         focusManager.clearFocus(force = true)
                                     },
                                     modifier = Modifier
-                                        .fillMaxWidth(0.88f)
-                                        .heightIn(min = 304.dp, max = 336.dp)
+                                        .fillMaxWidth(0.55f)
+                                        .heightIn(min = 240.dp, max = 300.dp)
                                         .background(Color(0xFFF8FAFC))
                                 ) {
                                     DropdownMenuItem(
@@ -2329,7 +2368,7 @@ fun InternalExamEntryScreen(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                                 ) {
-                                                    if (!isEnglish) {
+                                                    if (isEnglish) {
                                                         Box(
                                                             modifier = Modifier
                                                                 .size(30.dp)
@@ -2358,7 +2397,7 @@ fun InternalExamEntryScreen(
                                                         textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                                                     )
 
-                                                    if (isEnglish) {
+                                                    if (!isEnglish) {
                                                         Box(
                                                             modifier = Modifier
                                                                 .size(30.dp)
@@ -3129,57 +3168,56 @@ private fun BeltSelector(
     ) {
         Surface(
             onClick = { expanded = true },
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(30.dp),
             color = Color.Transparent,
-            shadowElevation = 22.dp,
+            shadowElevation = 16.dp,
             border = BorderStroke(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.36f)
+                color = Color.White.copy(alpha = 0.32f)
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(76.dp)
+                .height(68.dp)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(28.dp))
+                    .clip(RoundedCornerShape(30.dp))
                     .background(
                         brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
                             listOf(
-                                darkColor.copy(alpha = 0.96f),
-                                mainColor.copy(alpha = if (currentBelt == Belt.YELLOW) 0.74f else 0.82f),
-                                Color(0xFF5B21B6).copy(alpha = 0.88f)
+                                Color(0xFF241653),
+                                Color(0xFF3B1F82),
+                                Color(0xFF5B35D5),
+                                Color(0xFF241653)
                             )
                         )
                     )
             ) {
-                // שכבת אור עליונה — נותנת תחושת זכוכית
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(30.dp)
+                        .height(26.dp)
                         .align(Alignment.TopCenter)
                         .background(
                             brush = androidx.compose.ui.graphics.Brush.verticalGradient(
                                 listOf(
-                                    Color.White.copy(alpha = 0.30f),
-                                    Color.White.copy(alpha = 0.08f),
+                                    Color.White.copy(alpha = 0.26f),
+                                    Color.White.copy(alpha = 0.07f),
                                     Color.Transparent
                                 )
                             )
                         )
                 )
 
-                // glow עדין בצד ימין
                 Box(
                     modifier = Modifier
-                        .size(120.dp)
-                        .align(Alignment.CenterEnd)
+                        .size(150.dp)
+                        .align(Alignment.Center)
                         .background(
                             brush = androidx.compose.ui.graphics.Brush.radialGradient(
                                 listOf(
-                                    Color.White.copy(alpha = 0.20f),
+                                    mainColor.copy(alpha = 0.22f),
                                     Color.Transparent
                                 )
                             ),
@@ -3190,25 +3228,23 @@ private fun BeltSelector(
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 14.dp),
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.18f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)),
-                        shadowElevation = 10.dp,
-                        modifier = Modifier.size(42.dp)
+                        color = Color.White.copy(alpha = 0.94f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.60f)),
+                        shadowElevation = 8.dp,
+                        modifier = Modifier.size(44.dp)
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (expanded) "▲" else "▼",
-                                color = Color.White,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 15.sp
+                                text = "🥋",
+                                fontSize = 22.sp
                             )
                         }
                     }
@@ -3217,35 +3253,35 @@ private fun BeltSelector(
 
                     Column(
                         modifier = Modifier.weight(1f),
-                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
                             text = examTr(isEnglish, "חגורה במבחן", "Exam belt"),
-                            color = Color.White.copy(alpha = 0.82f),
+                            color = Color.White.copy(alpha = 0.84f),
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             lineHeight = 13.sp,
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            textAlign = TextAlign.Center,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(1.dp))
 
                         Text(
                             text = examBeltShortNameForUi(currentBelt, isEnglish),
                             color = Color.White,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 26.sp,
-                            lineHeight = 27.sp,
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 25.sp,
+                            lineHeight = 26.sp,
+                            textAlign = TextAlign.Center,
                             maxLines = 1,
                             softWrap = false,
                             overflow = TextOverflow.Ellipsis,
                             style = TextStyle(
                                 shadow = Shadow(
-                                    color = Color.Black.copy(alpha = 0.24f),
+                                    color = Color.Black.copy(alpha = 0.34f),
                                     blurRadius = 12f
                                 )
                             ),
@@ -3257,18 +3293,20 @@ private fun BeltSelector(
 
                     Surface(
                         shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.92f),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.52f)),
-                        shadowElevation = 10.dp,
-                        modifier = Modifier.size(44.dp)
+                        color = Color.White.copy(alpha = 0.13f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                        shadowElevation = 4.dp,
+                        modifier = Modifier.size(42.dp)
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "🥋",
-                                fontSize = 22.sp
+                                text = if (expanded) "▲" else "▼",
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 16.sp
                             )
                         }
                     }
@@ -3385,35 +3423,121 @@ private fun SummaryCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = examTr(isEnglish, "סיכום מבחן", "Exam summary"),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = if (expanded) "▲" else "▼",
-                    fontWeight = FontWeight.Bold
-                )
+                if (!isEnglish) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = examTr(isEnglish, "סיכום מבחן", "Exam summary"),
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                modifier = Modifier.weight(1f),
+                                textAlign = TextAlign.Right
+                            )
+
+                            Text(
+                                text = if (expanded) "▲" else "▼",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(Modifier.height(4.dp))
+
+                        Text(
+                            text = examTr(
+                                isEnglish,
+                                "מצטבר: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)",
+                                "Total: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)"
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            textAlign = TextAlign.Right
+                        )
+
+                        Text(
+                            text = summaryText,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Right
+                        )
+                    }
+
+                    Image(
+                        painter = painterResource(id = examBeltDrawableRes(currentBelt)),
+                        contentDescription = examBeltNameForUi(currentBelt, isEnglish),
+                        modifier = Modifier
+                            .width(104.dp)
+                            .height(34.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = examBeltDrawableRes(currentBelt)),
+                        contentDescription = examBeltNameForUi(currentBelt, isEnglish),
+                        modifier = Modifier
+                            .width(104.dp)
+                            .height(34.dp),
+                        contentScale = ContentScale.Fit
+                    )
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = examTr(isEnglish, "סיכום מבחן", "Exam summary"),
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                modifier = Modifier.weight(1f),
+                                textAlign = TextAlign.Left
+                            )
+
+                            Text(
+                                text = if (expanded) "▲" else "▼",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(Modifier.height(4.dp))
+
+                        Text(
+                            text = examTr(
+                                isEnglish,
+                                "מצטבר: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)",
+                                "Total: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)"
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            textAlign = TextAlign.Left
+                        )
+
+                        Text(
+                            text = summaryText,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Left
+                        )
+                    }
+                }
             }
-
-            Spacer(Modifier.height(4.dp))
-
-            // ✅ תמיד מוצג (קומפקטי)
-            Text(
-                // ✅ מצטבר 0–10
-                text = examTr(
-                    isEnglish,
-                    "מצטבר: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)",
-                    "Total: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)"
-                ),
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-            )
-            Text(
-                text = summaryText,
-                style = MaterialTheme.typography.bodySmall
-            )
 
             // ✅ פירוט רק כשפותחים
             if (expanded && beltScores.isNotEmpty()) {
@@ -3463,28 +3587,22 @@ private fun ExerciseRow(
                 overflow = TextOverflow.Ellipsis
             )
 
-            // ✅ ציון 0..10
+            // ✅ ציון 1..10 בשתי שורות קבועות, ממורכז, ללא גלילה לצד
             androidx.compose.foundation.layout.FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(
+                    space = 10.dp,
+                    alignment = Alignment.CenterHorizontally
+                ),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
+                maxItemsInEachRow = 5
             ) {
-                val scroll = rememberScrollState()
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(scroll),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    for (v in 0..10) {
-                        ScoreChip(
-                            value = v,
-                            selected = score == v
-                        ) {
-                            onScoreChange(if (score == v) null else v)
-                        }
+                for (v in 1..10) {
+                    ScoreChip(
+                        value = v,
+                        selected = score == v
+                    ) {
+                        onScoreChange(if (score == v) null else v)
                     }
                 }
             }
@@ -3565,27 +3683,27 @@ private fun ScoreChip(
     onClick: () -> Unit
 ) {
     val base = scoreColor(value)
-    val bg = if (selected) base.copy(alpha = 0.95f) else base.copy(alpha = 0.40f)
+    val bg = if (selected) base.copy(alpha = 0.95f) else base.copy(alpha = 0.34f)
 
     Surface(
         modifier = Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .size(30.dp)
+            .clip(RoundedCornerShape(7.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) { onClick() },
         color = bg,
         border = BorderStroke(
-            width = if (selected) 2.dp else 1.5.dp,
-            color = if (selected) base else base.copy(alpha = 0.85f)
+            width = if (selected) 1.8.dp else 1.2.dp,
+            color = if (selected) base else base.copy(alpha = 0.82f)
         ),
-        shadowElevation = 0.dp
+        shadowElevation = if (selected) 2.dp else 0.dp
     ) {
         OutlinedNumberText(
             text = value.toString(),
-            fontSizeSp = 13,
-            strokeWidthPx = 5f
+            fontSizeSp = 11,
+            strokeWidthPx = 4f
         )
     }
 }
@@ -3600,37 +3718,37 @@ private fun PremiumExamSetupButton(
     onClick: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(30.dp),
         color = Color.Transparent,
-        shadowElevation = 24.dp,
+        shadowElevation = 18.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color.White.copy(alpha = 0.34f)
+            color = Color.White.copy(alpha = 0.32f)
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .height(66.dp)
+            .height(60.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(28.dp))
+                .clip(RoundedCornerShape(30.dp))
                 .clickable { onClick() }
                 .background(
                     brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
                         listOf(
-                            startColor.copy(alpha = 0.98f),
-                            centerColor.copy(alpha = 0.92f),
-                            Color(0xFF7C3AED).copy(alpha = 0.94f)
+                            Color(0xFF4C1D95),
+                            Color(0xFF6D28D9),
+                            Color(0xFF7C3AED),
+                            Color(0xFF4C1D95)
                         )
                     )
                 )
         ) {
-            // shine עליון
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(28.dp)
+                    .height(24.dp)
                     .align(Alignment.TopCenter)
                     .background(
                         brush = androidx.compose.ui.graphics.Brush.verticalGradient(
@@ -3643,7 +3761,6 @@ private fun PremiumExamSetupButton(
                     )
             )
 
-            // glow מרכזי עדין
             Box(
                 modifier = Modifier
                     .size(150.dp)
@@ -3651,7 +3768,7 @@ private fun PremiumExamSetupButton(
                     .background(
                         brush = androidx.compose.ui.graphics.Brush.radialGradient(
                             listOf(
-                                Color.White.copy(alpha = 0.16f),
+                                Color.White.copy(alpha = 0.18f),
                                 Color.Transparent
                             )
                         ),
@@ -3662,16 +3779,34 @@ private fun PremiumExamSetupButton(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 14.dp),
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
+                Text(
+                    text = text,
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 25.sp,
+                    lineHeight = 26.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.30f),
+                            blurRadius = 12f
+                        )
+                    )
+                )
+
+                Spacer(Modifier.width(14.dp))
+
                 Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = Color.White.copy(alpha = 0.20f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.26f)),
-                    shadowElevation = 10.dp,
-                    modifier = Modifier.size(46.dp)
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                    shadowElevation = 4.dp,
+                    modifier = Modifier.size(42.dp)
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -3679,30 +3814,12 @@ private fun PremiumExamSetupButton(
                     ) {
                         Text(
                             text = icon,
-                            fontSize = 24.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Black,
                             color = Color.White
                         )
                     }
                 }
-
-                Spacer(Modifier.width(14.dp))
-
-                Text(
-                    text = text,
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 25.sp,
-                    lineHeight = 26.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(
-                        shadow = Shadow(
-                            color = Color.Black.copy(alpha = 0.26f),
-                            blurRadius = 12f
-                        )
-                    )
-                )
             }
         }
     }
@@ -3777,24 +3894,24 @@ private fun ChangeBeltBottomBar(
     onChangeBelt: () -> Unit
 ) {
     Surface(
-        tonalElevation = 6.dp,
-        shadowElevation = 16.dp,
-        color = examBeltSoftColor(belt).copy(alpha = 0.96f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        color = examBeltSoftColor(belt).copy(alpha = 0.58f),
         modifier = Modifier.fillMaxWidth()
     ) {
         Surface(
-            shape = RoundedCornerShape(26.dp),
+            shape = RoundedCornerShape(20.dp),
             color = Color.Transparent,
-            shadowElevation = 14.dp,
+            shadowElevation = 6.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp)
-                .height(60.dp)
+                .padding(horizontal = 22.dp, vertical = 5.dp)
+                .height(40.dp)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(26.dp))
+                    .clip(RoundedCornerShape(20.dp))
                     .clickable { onChangeBelt() }
                     .background(
                         brush = examBeltButtonBrush(belt)
@@ -3807,16 +3924,17 @@ private fun ChangeBeltBottomBar(
                 ) {
                     Text(
                         text = "🥋",
-                        fontSize = 23.sp
+                        fontSize = 16.sp
                     )
 
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
 
                     Text(
                         text = examTr(isEnglish, "מעבר לחגורה אחרת", "Change belt"),
                         color = Color.White,
                         fontWeight = FontWeight.Black,
-                        fontSize = 17.sp,
+                        fontSize = 13.2.sp,
+                        lineHeight = 14.sp,
                         maxLines = 1,
                         softWrap = false,
                         overflow = TextOverflow.Ellipsis
@@ -3843,65 +3961,33 @@ private fun BottomActionBar(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            val score10 = if (session.maxScore == 0.0) {
-                0.0
-            } else {
-                (session.totalScore / session.maxScore) * 10.0
-            }
-
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = Color.White.copy(alpha = 0.90f),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = Color(0xFF111827).copy(alpha = 0.10f)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = 14.dp,
+                    end = 14.dp,
+                    top = 0.dp,
+                    bottom = 9.dp
                 ),
-                shadowElevation = 3.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 58.dp)
-            ) {
-                Text(
-                    text = examTr(
-                        isEnglish,
-                        "ציון כולל במבחן:\n${score10.coerceIn(0.0, 10.0).toScoreString()} / 10\n(${session.percent}%)",
-                        "Overall exam score:\n${score10.coerceIn(0.0, 10.0).toScoreString()} / 10\n(${session.percent}%)"
-                    ),
-                    color = Color(0xFF111827),
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontWeight = FontWeight.Black,
-                        fontSize = 13.sp,
-                        lineHeight = 15.sp
-                    ),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    maxLines = 3,
-                    overflow = TextOverflow.Clip
-                )
-            }
-
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(19.dp),
                     color = Color.Transparent,
-                    shadowElevation = 12.dp,
+                    shadowElevation = 7.dp,
                     modifier = Modifier
                         .weight(1f)
-                        .height(50.dp)
+                        .height(40.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(22.dp))
+                            .clip(RoundedCornerShape(19.dp))
                             .clickable(enabled = !isSaving) { onSave() }
                             .background(
                                 brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
@@ -3916,33 +4002,35 @@ private fun BottomActionBar(
                     ) {
                         Text(
                             text = if (isSaving) {
-                                "⏳  ${examTr(isEnglish, "שומר...", "Saving...")}"
+                                "⏳ ${examTr(isEnglish, "שומר...", "Saving...")}"
                             } else if (finishMode) {
-                                "🏁  ${examTr(isEnglish, "סיום מבחן", "Finish exam")}"
+                                "🏁 ${examTr(isEnglish, "סיום מבחן", "Finish exam")}"
                             } else {
-                                "💾  ${examTr(isEnglish, "שמור", "Save")}"
+                                "💾 ${examTr(isEnglish, "שמור", "Save")}"
                             },
                             color = Color.White,
                             fontWeight = FontWeight.Black,
-                            fontSize = 19.sp,
+                            fontSize = 13.4.sp,
+                            lineHeight = 14.sp,
                             maxLines = 1,
+                            softWrap = false,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(19.dp),
                     color = Color.Transparent,
-                    shadowElevation = 12.dp,
+                    shadowElevation = 7.dp,
                     modifier = Modifier
                         .weight(1f)
-                        .height(50.dp)
+                        .height(40.dp)
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(22.dp))
+                            .clip(RoundedCornerShape(19.dp))
                             .clickable { onExportPdf() }
                             .background(
                                 brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
@@ -3956,11 +4044,13 @@ private fun BottomActionBar(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "📤  ${examTr(isEnglish, "שתף", "Share")}",
+                            text = "📤 ${examTr(isEnglish, "שתף", "Share")}",
                             color = Color.White,
                             fontWeight = FontWeight.Black,
-                            fontSize = 19.sp,
+                            fontSize = 13.4.sp,
+                            lineHeight = 14.sp,
                             maxLines = 1,
+                            softWrap = false,
                             overflow = TextOverflow.Ellipsis
                         )
                     }

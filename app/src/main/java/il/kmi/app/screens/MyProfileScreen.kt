@@ -23,7 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -36,13 +38,14 @@ import androidx.compose.ui.unit.sp
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.prefs.KmiPrefs
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.Image
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
-import android.app.Activity
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.zIndex
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -50,6 +53,7 @@ import kotlinx.coroutines.tasks.await
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.R
 
 
 //-----------------------------------------------------------------------------
@@ -58,6 +62,13 @@ import il.kmi.app.ui.KmiTopBar
 data class UserProfileInfo(
     val userName: String = "שם המשתמש",
     val belt: String = "חגורה XXX",
+
+    // ✅ משמש לציור תמונת החגורה לפי צבע הדרגה הנוכחית
+    val currentBeltId: String = "",
+
+    // ✅ משמש לציור תמונת החגורה הבאה בכרטיס התחתון
+    val trainingTowardsBeltId: String = "",
+
     val branch: String = "סניף - XXX",
     val branchAddress: String = "כתובת הסניף - XXX",
     val group: String = "קבוצה - XXX",
@@ -97,6 +108,32 @@ private fun profileHorizontalAlignment(isEnglish: Boolean): Alignment.Horizontal
 
 private fun profileLayoutDirection(isEnglish: Boolean): LayoutDirection {
     return if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+}
+
+private fun profileBeltDrawableForRawId(rawId: String?): Int {
+    return when (rawId?.trim().orEmpty()) {
+        "white", "לבנה" -> R.drawable.belt_white
+        "yellow", "צהובה" -> R.drawable.belt_yellow
+        "orange", "כתומה" -> R.drawable.belt_orange
+        "green", "ירוקה" -> R.drawable.belt_green
+        "blue", "כחולה" -> R.drawable.belt_blue
+        "brown", "חומה" -> R.drawable.belt_brown
+
+        "black",
+        "שחורה",
+        "שחורה דאן 1",
+        "black_dan_2",
+        "black_dan_3",
+        "black_dan_4",
+        "black_dan_5",
+        "black_dan_6",
+        "black_dan_7",
+        "black_dan_8",
+        "black_dan_9",
+        "black_dan_10" -> R.drawable.belt_black
+
+        else -> R.drawable.belt_white
+    }
 }
 
 private fun shareProfileScreenApp(
@@ -173,6 +210,32 @@ private fun nextTraineeRankDisplayName(rawId: String?): String {
         "black_dan_10" -> "—"
 
         else -> "—"
+    }
+}
+
+private fun nextTraineeRankId(rawId: String?): String {
+    return when (rawId?.trim().orEmpty()) {
+        "white", "לבנה" -> "yellow"
+        "yellow", "צהובה" -> "orange"
+        "orange", "כתומה" -> "green"
+        "green", "ירוקה" -> "blue"
+        "blue", "כחולה" -> "brown"
+        "brown", "חומה" -> "black"
+
+        "black",
+        "שחורה",
+        "שחורה דאן 1" -> "black_dan_2"
+
+        "black_dan_2", "שחורה דאן 2" -> "black_dan_3"
+        "black_dan_3", "שחורה דאן 3" -> "black_dan_4"
+        "black_dan_4", "שחורה דאן 4" -> "black_dan_5"
+        "black_dan_5", "שחורה דאן 5" -> "black_dan_6"
+        "black_dan_6", "שחורה דאן 6" -> "black_dan_7"
+        "black_dan_7", "שחורה דאן 7" -> "black_dan_8"
+        "black_dan_8", "שחורה דאן 8" -> "black_dan_9"
+        "black_dan_9", "שחורה דאן 9" -> "black_dan_10"
+
+        else -> ""
     }
 }
 
@@ -607,21 +670,37 @@ fun MyProfileScreen(
                 }
             }
 
-        // ✅ אימון הבא + מאמן – קודם branches.json, ואם אין התאמה fallback ל־TrainingCatalog
-        val dbUpcoming = if (primaryBranch.isNotBlank()) {
-            nextTrainingFromDatabase(primaryBranch, group)
-        } else {
-            null
-        }
+        // ✅ אימון הבא + מאמן – בודק את כל הסניפים של המשתמש ולא רק את הראשון
+        val dbUpcoming = branchesList
+            .mapNotNull { branchName ->
+                nextTrainingFromDatabase(
+                    branchName = branchName,
+                    groupName = group
+                )
+            }
+            .minByOrNull { it.cal.timeInMillis }
 
-        val upcoming = if (dbUpcoming == null && primaryBranch.isNotBlank()) {
+        val upcoming = if (dbUpcoming == null && branchesList.isNotEmpty()) {
             val savedRegion = prefStr(
                 kmiPrefs.region,
                 sp.getString("region", ""),
-                userSp.getString("region", "")
+                userSp.getString("region", ""),
+                firestoreProfile.region
             ).ifBlank { "השרון" }
 
-            TrainingCatalog.upcomingFor(savedRegion, primaryBranch, group, count = 1).firstOrNull()
+            branchesList
+                .asSequence()
+                .mapNotNull { branchName ->
+                    TrainingCatalog
+                        .upcomingFor(
+                            region = savedRegion,
+                            branch = branchName,
+                            group = group,
+                            count = 1
+                        )
+                        .firstOrNull()
+                }
+                .minByOrNull { it.cal.timeInMillis }
         } else {
             null
         }
@@ -661,6 +740,7 @@ fun MyProfileScreen(
 
         // ✅ הדרגה הבאה בתור, כולל דאן 2–10
         val nextBeltText: String = nextTraineeRankDisplayNameForUi(beltId, isEnglish)
+        val nextBeltId: String = nextTraineeRankId(beltId)
 
         // --- תיקון: כתובות לסניפים מרובים (שורה לכל סניף) ---
         fun fallbackCityVenue(b: String): String {
@@ -701,6 +781,8 @@ fun MyProfileScreen(
                 }
             },
             belt = beltHeb,
+            currentBeltId = beltId,
+            trainingTowardsBeltId = nextBeltId,
             branch = branchDisplay,
             branchAddress = branchAddressResolved,
             group = group.ifBlank { "—" },
@@ -826,19 +908,14 @@ private fun UserProfileCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape),
-        color = Color(0x14FFFFFF), // שקיפות עדינה – אפקט זכוכית
-        contentColor = Color.White,
+        color = Color(0xFFEAF2FF),
+        contentColor = Color(0xFF111827),
         shape = shape,
-        tonalElevation = 0.dp,
-        shadowElevation = 12.dp,
+        tonalElevation = 2.dp,
+        shadowElevation = 4.dp,
         border = BorderStroke(
             width = 1.dp,
-            brush = Brush.linearGradient(
-                listOf(
-                    Color.White.copy(alpha = 0.55f),
-                    Color.White.copy(alpha = 0.12f)
-                )
-            )
+            color = Color(0xFFD8E3F5)
         )
     ) {
         Column(
@@ -846,13 +923,38 @@ private fun UserProfileCard(
                 .padding(horizontal = 22.dp, vertical = 22.dp),
             horizontalAlignment = profileHorizontalAlignment(isEnglish)
         ) {
-            // כותרת ראשית + X באותה שורה
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            // כותרת + חגורה באלכסון בצד כדי לחסוך מקום אנכי
+            if (isEnglish) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
                 ) {
-                    if (isEnglish) {
+                    Box(
+                        modifier = Modifier
+                            .width(118.dp)
+                            .height(76.dp),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        ProfileBeltImage(
+                            rawBeltId = info.currentBeltId,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // ✅ מוריד מעט את החגורה כדי שלא תישב גבוה מדי
+                                .offset(x = 4.dp, y = (-16).dp),
+                            imageHeight = 84.dp,
+                            horizontalPadding = 0.dp,
+                            rotateDegrees = -24f,
+                            flipHorizontally = false
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.Start
+                    ) {
                         Text(
                             text = info.userName,
                             style = MaterialTheme.typography.headlineSmall.copy(
@@ -862,37 +964,36 @@ private fun UserProfileCard(
                             ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = Color.White,
-                            modifier = Modifier.weight(1f),
+                            color = Color(0xFF111827),
+                            modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Left
                         )
 
-                        IconButton(
-                            onClick = onClose,
-                            modifier = Modifier.size(42.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = "Close",
-                                tint = Color.White,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-                    } else {
-                        IconButton(
-                            onClick = onClose,
-                            modifier = Modifier.size(42.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = "סגור",
-                                tint = Color.White,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
+                        Spacer(Modifier.height(6.dp))
 
-                        Spacer(Modifier.width(8.dp))
-
+                        Text(
+                            text = info.belt,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF31528A)
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Left
+                        )
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.End
+                    ) {
                         Text(
                             text = info.userName,
                             style = MaterialTheme.typography.headlineSmall.copy(
@@ -902,39 +1003,58 @@ private fun UserProfileCard(
                             ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = Color.White,
-                            modifier = Modifier.weight(1f),
+                            color = Color(0xFF111827),
+                            modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Right
+                        )
+
+                        Spacer(Modifier.height(6.dp))
+
+                        Text(
+                            text = info.belt,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF31528A)
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Right
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .width(118.dp)
+                            .height(82.dp),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        ProfileBeltImage(
+                            rawBeltId = info.currentBeltId,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // ✅ מוריד את החגורה מעט למטה כדי שלא תיצמד לחלק העליון
+                                .offset(x = 4.dp, y = (-12).dp),
+                            imageHeight = 84.dp,
+                            horizontalPadding = 0.dp,
+                            rotateDegrees = -24f,
+                            flipHorizontally = false
                         )
                     }
                 }
             }
 
-            // תת-כותרת – חגורה
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = info.belt,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFBFD7FF)
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = profileTextAlign(isEnglish)
-            )
-
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(2.dp))
 
             Button(
                 onClick = onEditProfile,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.White.copy(alpha = 0.18f),
+                    containerColor = Color(0xFF6D55AA),
                     contentColor = Color.White
                 ),
                 border = BorderStroke(
                     1.dp,
-                    Color.White.copy(alpha = 0.42f)
+                    Color(0xFF8E7BC4)
                 )
             ) {
                 Text(
@@ -949,7 +1069,7 @@ private fun UserProfileCard(
 
             // מפריד דק
             Spacer(Modifier.height(16.dp))
-            Divider(color = Color.White.copy(alpha = 0.16f), thickness = 1.dp)
+            Divider(color = Color(0xFFBFD0E8), thickness = 1.dp)
             Spacer(Modifier.height(10.dp))
 
             // ─────────────────────────────────────────────
@@ -1012,8 +1132,6 @@ private fun UserProfileCard(
 
             // --- פרטי חשבון ---
             Spacer(Modifier.height(6.dp))
-            Divider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
-            Spacer(Modifier.height(6.dp))
 
             LabeledValueBlock(
                 label = profileTr(isEnglish, "מייל:", "Email:"),
@@ -1038,7 +1156,7 @@ private fun UserProfileCard(
 
             // מפריד קטן לפני השורה התחתונה
             Spacer(Modifier.height(8.dp))
-            Divider(color = Color.White.copy(alpha = 0.10f), thickness = 1.dp)
+            Divider(color = Color(0xFFBFD0E8), thickness = 1.dp)
             Spacer(Modifier.height(8.dp))
 
             // שורת הדגשה תחתונה – “מתאמן לחגורה”
@@ -1051,16 +1169,10 @@ private fun UserProfileCard(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(22.dp),
-                color = Color.White.copy(alpha = 0.11f),
+                color = Color(0xFFDDEAFF),
                 border = BorderStroke(
                     1.dp,
-                    Brush.linearGradient(
-                        listOf(
-                            Color(0xFFBFD7FF).copy(alpha = 0.70f),
-                            Color(0xFF7AB2FF).copy(alpha = 0.30f),
-                            Color.White.copy(alpha = 0.18f)
-                        )
-                    )
+                    Color(0xFFBFD0E8)
                 ),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp
@@ -1069,7 +1181,7 @@ private fun UserProfileCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalAlignment = profileHorizontalAlignment(isEnglish)
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = profileTr(
@@ -1078,10 +1190,10 @@ private fun UserProfileCard(
                             "Training toward belt"
                         ),
                         style = MaterialTheme.typography.bodySmall.copy(
-                            color = Color.White.copy(alpha = 0.76f),
+                            color = Color(0xFF52627A),
                             fontWeight = FontWeight.SemiBold
                         ),
-                        textAlign = profileTextAlign(isEnglish),
+                        textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1093,16 +1205,54 @@ private fun UserProfileCard(
                         text = trainingTargetText,
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFFEAF2FF)
+                            color = Color(0xFF1E3A8A)
                         ),
-                        textAlign = profileTextAlign(isEnglish),
+                        textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    // ✅ תמונת חגורה לפי החגורה הבאה שאליה המתאמן מתקדם
+                    ProfileBeltImage(
+                        rawBeltId = info.trainingTowardsBeltId,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
+    }
+}
+@Composable
+private fun ProfileBeltImage(
+    rawBeltId: String?,
+    modifier: Modifier = Modifier,
+    imageHeight: Dp = 70.dp,
+    horizontalPadding: Dp = 18.dp,
+    rotateDegrees: Float = 0f,
+    flipHorizontally: Boolean = false
+) {
+    val beltDrawable = profileBeltDrawableForRawId(rawBeltId)
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(id = beltDrawable),
+            contentDescription = "Belt image",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(imageHeight)
+                .padding(horizontal = horizontalPadding)
+                .graphicsLayer {
+                    scaleX = if (flipHorizontally) -1f else 1f
+                    rotationZ = rotateDegrees
+                },
+            contentScale = ContentScale.Fit
+        )
     }
 }
 
@@ -1121,29 +1271,31 @@ private fun LabeledValueBlock(
             .padding(vertical = 6.dp),
         horizontalAlignment = profileHorizontalAlignment(isEnglish)
     ) {
-        // תגית
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall.copy(
-                color = Color.White.copy(alpha = 0.78f),
+                color = Color(0xFF52627A),
                 fontWeight = FontWeight.Medium
             ),
             textAlign = profileTextAlign(isEnglish),
             modifier = Modifier.fillMaxWidth()
         )
+
         Spacer(Modifier.height(2.dp))
-        // ערך
+
         Text(
             text = value,
             style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color(0xFF111827)
             ),
             textAlign = profileTextAlign(isEnglish),
             modifier = Modifier.fillMaxWidth()
         )
+
         Spacer(Modifier.height(8.dp))
-        Divider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
+
+        Divider(color = Color(0xFFBFD0E8), thickness = 1.dp)
     }
 }
 
@@ -1174,7 +1326,7 @@ private fun PasswordRow(
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall.copy(
-                color = Color.White.copy(alpha = 0.78f),
+                color = Color(0xFF52627A),
                 fontWeight = FontWeight.Medium
             ),
             textAlign = profileTextAlign(isEnglish)
@@ -1186,7 +1338,7 @@ private fun PasswordRow(
                 text = if (visible) password else "••••••••",
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = Color(0xFF111827)
                 ),
                 textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left
             )
@@ -1199,7 +1351,7 @@ private fun PasswordRow(
                     } else {
                         profileTr(isEnglish, "הצג סיסמה", "Show password")
                     },
-                    tint = Color.White.copy(alpha = 0.9f)
+                    tint = Color(0xFF52627A)
                 )
             }
         }

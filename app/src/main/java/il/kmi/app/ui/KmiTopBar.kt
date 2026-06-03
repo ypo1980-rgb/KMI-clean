@@ -20,6 +20,7 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -62,7 +63,8 @@ import kotlinx.coroutines.launch
 import androidx.core.view.doOnPreDraw
 import shareCurrentScreen
 import androidx.compose.runtime.saveable.rememberSaveable
-import il.kmi.app.ui.assistant.ui.AiAssistantDialog
+import androidx.compose.foundation.lazy.items
+import il.kmi.app.search.KmiSearchBridge
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -76,6 +78,7 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Density
+import il.kmi.app.ui.assistant.ui.AiAssistantDialog
 
 //===============================================================================
 
@@ -271,6 +274,10 @@ fun KmiTopBar(
     // ✅ טור פעולות צדדי במקום סרגל אייקונים אופקי פתוח תמיד
     var quickActionsExpanded by rememberSaveable { mutableStateOf(false) }
 
+    // ✅ חיפוש גלובאלי מתוך טור האייקונים החדש
+    var showGlobalSearch by rememberSaveable { mutableStateOf(false) }
+    var globalSearchQuery by rememberSaveable { mutableStateOf("") }
+
     // היה:
     // val broadcastTooLong by derivedStateOf { broadcastText.length > MAX_BROADCAST_CHARS }
     // צריך לזכור את ה-state:
@@ -324,11 +331,16 @@ fun KmiTopBar(
             }
         }
 
-    val topBarHeight = 56.dp
+    val shouldShowRolePillBelowTitle =
+        showRoleBadge && userRole?.isNotBlank() == true
+
+    // ✅ מצב המשתמש מוצג עכשיו כתג קטן בפינה,
+    // לכן לא צריך לתת לו גובה מרכזי גדול בכותרת.
+    val topBarHeight = if (shouldShowRolePillBelowTitle) 68.dp else 64.dp
 
     // ✅ טור האייקונים נפתח כ-overlay מעל המסך,
     // לכן ה-TopBar עצמו נשאר בגובה הכותרת בלבד.
-    val quickActionsWidth = 66.dp
+    val quickActionsWidth = 58.dp
 
     // Back בטוח
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
@@ -440,37 +452,10 @@ fun KmiTopBar(
                 }
             },
 
+            // ✅ הכותרת כבר לא מוצגת דרך ה-title slot של TopAppBar,
+            // כדי שלא תוסט בגלל אייקון התפריט / actions.
             title = {
-                val titleAlignment = if (centerTitle) Alignment.Center else Alignment.CenterEnd
-                val titleTextAlign = if (centerTitle) TextAlign.Center else TextAlign.End
-
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = titleAlignment
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = 20.sp,
-                            lineHeight = 24.sp
-                        ),
-                        fontWeight = FontWeight.ExtraBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = titleTextAlign,
-
-                        // ✅ צבע קבוע וברור לכותרות המסכים גם במצב כהה
-                        // ה-TopBar עצמו לבן, לכן לא משתמשים כאן ב-onSurface של ה-Theme.
-                        color = Color(0xFF111827),
-
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .basicMarquee(
-                                iterations = Int.MAX_VALUE,
-                                velocity = 30.dp
-                            )
-                    )
-                }
+                Spacer(modifier = Modifier.fillMaxSize())
             },
 
             actions = {
@@ -479,15 +464,6 @@ fun KmiTopBar(
                         modifier = Modifier.fillMaxHeight(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (showRoleBadge && userRole?.isNotBlank() == true) {
-                            Box(
-                                modifier = Modifier.fillMaxHeight(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                RoleSquareBadge(isCoach = isCoachForPill)
-                            }
-                            Spacer(Modifier.width(8.dp))
-                        }
 
                         // ⬅️ בית + חיפוש + שפה
                         if (showTopHome && onHome != null) {
@@ -564,6 +540,55 @@ fun KmiTopBar(
             )
         )
 
+        // ✅ כותרת Overlay ממורכזת לפי כל רוחב הסרגל,
+        // ללא תלות באייקון התפריט או באייקונים בצדדים.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(topBarHeight)
+                .padding(
+                    start = 58.dp,
+                    end = 58.dp,
+                    bottom = if (shouldShowRolePillBelowTitle) 4.dp else 0.dp
+                )
+                .zIndex(12f),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 20.sp,
+                    lineHeight = 24.sp
+                ),
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                color = Color(0xFF111827),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .basicMarquee(
+                        iterations = Int.MAX_VALUE,
+                        velocity = 30.dp
+                    )
+            )
+        }
+
+        if (shouldShowRolePillBelowTitle) {
+            Box(
+                modifier = Modifier
+                    .align(AbsoluteAlignment.BottomLeft)
+                    .padding(start = 8.dp, bottom = 3.dp)
+                    .zIndex(20f)
+            ) {
+                RoleInlinePill(
+                    isCoach = isCoachForPill,
+                    isEnglish = isEnglish
+                )
+            }
+        }
+
         Divider(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -612,7 +637,7 @@ fun KmiTopBar(
             Popup(
                 alignment = AbsoluteAlignment.TopRight,
                 offset = IntOffset(
-                    x = with(density) { (-10).dp.roundToPx() },
+                    x = with(density) { (-2).dp.roundToPx() },
                     y = with(density) { (topBarHeight + 36.dp).roundToPx() }
                 ),
                 properties = PopupProperties(
@@ -631,29 +656,53 @@ fun KmiTopBar(
                 ) {
                     Surface(
                         modifier = Modifier.width(quickActionsWidth),
-                        shape = RoundedCornerShape(22.dp),
-                        color = Color.White,
-                        shadowElevation = 12.dp,
-                        tonalElevation = 0.dp,
-                        border = BorderStroke(1.dp, Color(0x14000000))
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.Transparent,
+                        shadowElevation = 18.dp,
+                        tonalElevation = 0.dp
                     ) {
-                        KmiLightTheme {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 6.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.White.copy(alpha = 0.98f),
+                                            Color(0xFFF8F7FF),
+                                            Color.White.copy(alpha = 0.98f)
+                                        )
+                                    ),
+                                    shape = RoundedCornerShape(22.dp)
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = Color(0xFFE7DDFB),
+                                    shape = RoundedCornerShape(22.dp)
+                                )
+                                .padding(horizontal = 2.dp, vertical = 6.dp)
+                        ) {
+                            KmiLightTheme {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
                                 VerticalQuickActionItem(
                                     icon = Icons.Filled.Search,
                                     label = if (isEnglish) "Search" else "חיפוש",
                                     tint = Color(0xFF10B981),
                                     background = Color(0x1A10B981),
-                                    enabled = !lockSearch && onSearch != null,
+                                    enabled = !lockSearch,
                                     onClick = {
                                         quickActionsExpanded = false
+                                        focusManager.clearFocus(force = true)
+
+                                        // אם מסך חיצוני רוצה להגיב לחיפוש — נשאיר לו אפשרות.
                                         onSearch?.invoke()
+
+                                        // החיפוש הגלובאלי האמיתי נפתח כאן.
+                                        globalSearchQuery = ""
+                                        showGlobalSearch = true
                                     }
                                 )
 
@@ -732,6 +781,7 @@ fun KmiTopBar(
                 }
             }
         }
+        }
 
         // לוגו אופציונלי
         if (showLogoInBar && logoRes != null) {
@@ -765,14 +815,379 @@ fun KmiTopBar(
         }
     }
 
-    // === דיאלוג עוזר חכם (AI) — בלוק יחיד ותקין ===
+    // === דיאלוג עוזר חכם (AI) ===
     if (showAiDialog) {
         AiAssistantDialog(
-            onDismiss = { showAiDialog = false },
+            onDismiss = {
+                showAiDialog = false
+            },
             onOpenDrawer = {
+                showAiDialog = false
                 DrawerBridge.open()
             }
         )
+    }
+
+    // === חיפוש גלובאלי מתפריט האייקונים הצדדי ===
+    if (showGlobalSearch) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showGlobalSearch = false
+                globalSearchQuery = ""
+            },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp),
+            containerColor = Color.Transparent,
+            tonalElevation = 0.dp,
+            dragHandle = {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 10.dp, bottom = 4.dp)
+                        .width(42.dp)
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color(0xFF111827).copy(alpha = 0.42f))
+                )
+            }
+        ) {
+            val searchTitle = if (isEnglish) "Global Search" else "חיפוש גלובאלי"
+            val searchLabel = if (isEnglish) {
+                "Search exercise"
+            } else {
+                "חפש תרגיל"
+            }
+
+            val searchHint = if (isEnglish) {
+                "Type a word to search all exercises."
+            } else {
+                "הקלד מילה כדי לחפש בכל התרגילים."
+            }
+
+            val noResultsText = if (isEnglish) {
+                "No results found"
+            } else {
+                "לא נמצאו תוצאות"
+            }
+
+            val searchLayoutDirection =
+                if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+            val searchTextAlign =
+                if (isEnglish) TextAlign.Left else TextAlign.Right
+
+            val searchHorizontalAlignment =
+                if (isEnglish) Alignment.Start else Alignment.End
+
+            val results = remember(globalSearchQuery) {
+                val q = globalSearchQuery.trim()
+                if (q.length < 2) {
+                    emptyList()
+                } else {
+                    runCatching {
+                        KmiSearchBridge.searchExercises(q)
+                    }.getOrElse {
+                        emptyList()
+                    }
+                }
+            }
+
+            val sheetDirection = if (isEnglish) {
+                LayoutDirection.Ltr
+            } else {
+                LayoutDirection.Rtl
+            }
+
+            CompositionLocalProvider(LocalLayoutDirection provides sheetDirection) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFFF8F5FB),
+                                    Color(0xFFEDE7F6),
+                                    Color(0xFFF9F6FC)
+                                )
+                            )
+                        )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 18.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        horizontalAlignment = searchHorizontalAlignment
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(28.dp),
+                            color = Color.Transparent,
+                            shadowElevation = 10.dp,
+                            tonalElevation = 0.dp
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        brush = Brush.linearGradient(
+                                            colors = listOf(
+                                                Color(0xFF0F1B35),
+                                                Color(0xFF243B6B),
+                                                Color(0xFF5B4BB7)
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(28.dp)
+                                    )
+                                    .padding(horizontal = 18.dp, vertical = 18.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    horizontalAlignment = searchHorizontalAlignment
+                                ) {
+                                    Text(
+                                        text = searchTitle,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = searchTextAlign,
+                                        fontSize = 24.sp,
+                                        lineHeight = 28.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White
+                                    )
+
+                                    Text(
+                                        text = searchHint,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = searchTextAlign,
+                                        fontSize = 13.sp,
+                                        lineHeight = 17.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color.White.copy(alpha = 0.78f)
+                                    )
+                                }
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            color = Color.White,
+                            shadowElevation = 8.dp,
+                            tonalElevation = 0.dp,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = Color(0xFFE9DDF7)
+                            )
+                        ) {
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides searchLayoutDirection
+                            ) {
+                                OutlinedTextField(
+                                    value = globalSearchQuery,
+                                    onValueChange = { globalSearchQuery = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 20.sp,
+                                        lineHeight = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = searchTextAlign,
+                                        color = Color(0xFF111827)
+                                    ),
+                                    label = {
+                                        Text(
+                                            text = searchLabel,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = searchTextAlign,
+                                            fontSize = 13.sp,
+                                            lineHeight = 16.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    },
+                                    placeholder = {
+                                        Text(
+                                            text = searchLabel,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = searchTextAlign,
+                                            fontSize = 20.sp,
+                                            lineHeight = 24.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF64748B)
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Search,
+                                            contentDescription = searchLabel,
+                                            tint = Color(0xFF10B981),
+                                            modifier = Modifier.size(25.dp)
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (globalSearchQuery.isNotBlank()) {
+                                            IconButton(onClick = { globalSearchQuery = "" }) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Close,
+                                                    contentDescription = if (isEnglish) "Clear" else "נקה",
+                                                    tint = Color(0xFF6D4ED8)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(18.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = Color(0xFFFDFBFF),
+                                        unfocusedContainerColor = Color(0xFFFDFBFF),
+                                        focusedBorderColor = Color(0xFF8B5CF6),
+                                        unfocusedBorderColor = Color(0xFFE5DDF2),
+                                        focusedLabelColor = Color(0xFF6D4ED8),
+                                        unfocusedLabelColor = Color(0xFF64748B),
+                                        cursorColor = Color(0xFF6D4ED8)
+                                    )
+                                )
+                            }
+                        }
+
+                        when {
+                            globalSearchQuery.trim().length < 2 -> {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = Color.White.copy(alpha = 0.72f),
+                                    shadowElevation = 3.dp,
+                                    tonalElevation = 0.dp
+                                ) {
+                                    Text(
+                                        text = searchHint,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                                        textAlign = searchTextAlign,
+                                        color = Color(0xFF64748B),
+                                        fontSize = 15.sp,
+                                        lineHeight = 20.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+
+                            results.isEmpty() -> {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = Color(0xFFFFF7ED),
+                                    shadowElevation = 3.dp,
+                                    tonalElevation = 0.dp
+                                ) {
+                                    Text(
+                                        text = "$noResultsText: ${globalSearchQuery.trim()}",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                                        textAlign = searchTextAlign,
+                                        color = Color(0xFF9A3412),
+                                        fontSize = 15.sp,
+                                        lineHeight = 20.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            else -> {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 420.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    items(
+                                        items = results,
+                                        key = { hit -> hit.id ?: hit.title }
+                                    ) { hit ->
+                                        val rawKey = (hit.id ?: hit.title).trim()
+
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    val resolved =
+                                                        il.kmi.app.domain.ContentRepo.resolveItemKey(rawKey)
+
+                                                    val stableKey = if (resolved != null) {
+                                                        val fixedSub =
+                                                            il.kmi.app.domain.ContentRepo.findSubTopicTitleForItem(
+                                                                belt = resolved.belt,
+                                                                topicTitle = resolved.topicTitle,
+                                                                itemTitle = resolved.itemTitle
+                                                            ) ?: (resolved.subTopicTitle ?: "")
+
+                                                        listOf(
+                                                            resolved.belt.name,
+                                                            resolved.topicTitle,
+                                                            fixedSub,
+                                                            resolved.itemTitle
+                                                        ).joinToString("::")
+                                                    } else {
+                                                        rawKey
+                                                    }
+
+                                                    showGlobalSearch = false
+                                                    globalSearchQuery = ""
+                                                    onPickSearchResult?.invoke(stableKey)
+                                                        ?: onOpenExercise?.invoke(stableKey)
+                                                },
+                                            shape = RoundedCornerShape(22.dp),
+                                            color = Color.White,
+                                            tonalElevation = 0.dp,
+                                            shadowElevation = 6.dp,
+                                            border = BorderStroke(
+                                                width = 1.dp,
+                                                color = Color(0xFFECE4F6)
+                                            )
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                                                horizontalAlignment = searchHorizontalAlignment
+                                            ) {
+                                                Text(
+                                                    text = hit.title,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    textAlign = searchTextAlign,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 16.sp,
+                                                    lineHeight = 20.sp,
+                                                    color = Color(0xFF111827)
+                                                )
+
+                                                if (!hit.subtitle.isNullOrBlank()) {
+                                                    Text(
+                                                        text = hit.subtitle!!,
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        textAlign = searchTextAlign,
+                                                        fontSize = 13.sp,
+                                                        lineHeight = 17.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color(0xFF64748B)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+                    }
+                }
+            }
+        }
     }
 
     // === יריעת שידור מאמן ===
@@ -1159,7 +1574,7 @@ private fun IconsRailAttachedHandle(
 
     Box(
         modifier = Modifier
-            .size(width = 46.dp, height = 36.dp)
+            .size(width = 46.dp, height = 28.dp)
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
@@ -1177,8 +1592,8 @@ private fun IconsRailAttachedHandle(
             contentDescription = if (expanded) "סגור סרגל אייקונים" else "פתח סרגל אייקונים",
             tint = Color(0xFF6D4ED8),
             modifier = Modifier
-                .size(21.dp)
-                .offset(y = 4.dp)
+                .size(18.dp)
+                .offset(y = 2.dp)
                 .graphicsLayer {
                     rotationZ = arrowRotation
                 }
@@ -1200,38 +1615,49 @@ private fun VerticalQuickActionItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(14.dp))
             .clickable(enabled = enabled) { onClick() }
-            .padding(vertical = 5.dp),
+            .padding(vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(34.dp)
+                .shadow(
+                    elevation = if (enabled) 2.dp else 0.dp,
+                    shape = CircleShape,
+                    clip = false
+                )
                 .clip(CircleShape)
                 .background(background.copy(alpha = background.alpha * itemAlpha)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = tint.copy(alpha = itemAlpha),
-                modifier = Modifier.size(22.dp)
-            )
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = tint.copy(alpha = itemAlpha),
+                    modifier = Modifier.size(17.dp)
+                )
+            }
         }
 
-        Spacer(Modifier.height(3.dp))
+        Spacer(Modifier.height(1.dp))
 
         Text(
             text = label,
-            color = Color(0xFF1F2937).copy(alpha = itemAlpha),
-            fontSize = 10.sp,
-            lineHeight = 12.sp,
-            fontWeight = FontWeight.Bold,
+            color = Color(0xFF111827).copy(alpha = itemAlpha),
+            fontSize = 8.5.sp,
+            lineHeight = 10.sp,
+            fontWeight = FontWeight.ExtraBold,
             textAlign = TextAlign.Center,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -1475,6 +1901,55 @@ private fun RoleSquareBadge(isCoach: Boolean) {
             lineHeight = 13.sp,
             maxLines = 2,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+    }
+}
+
+/** תג מצב קטן ושקט בפינה השמאלית התחתונה של הכותרת */
+@Composable
+private fun RoleInlinePill(
+    isCoach: Boolean,
+    isEnglish: Boolean
+) {
+    val bg = if (isCoach) {
+        Color(0xFF2A1F52)
+    } else {
+        Color(0xFF1E2947)
+    }
+
+    val accent = if (isCoach) {
+        Color(0xFFD8B4FE)
+    } else {
+        Color(0xFFBFDBFE)
+    }
+
+    val label = when {
+        isEnglish && isCoach -> "Coach"
+        isEnglish && !isCoach -> "Trainee"
+        !isEnglish && isCoach -> "מאמן"
+        else -> "מתאמן"
+    }
+
+    Surface(
+        color = bg.copy(alpha = 0.94f),
+        contentColor = Color.White,
+        shape = RoundedCornerShape(999.dp),
+        shadowElevation = 1.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = accent.copy(alpha = 0.30f)
+        )
+    ) {
+        Text(
+            text = label,
+            textAlign = TextAlign.Center,
+            color = Color.White,
+            fontSize = 8.5.sp,
+            lineHeight = 9.5.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.5.dp)
         )
     }
 }

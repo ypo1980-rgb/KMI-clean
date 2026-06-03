@@ -8,12 +8,19 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -22,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.draw.clip
+import il.kmi.app.ui.KmiTopBar
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -35,6 +44,8 @@ import il.kmi.shared.localization.AppLanguageManager
 @Composable
 fun RateUsScreen(
     onClose: () -> Unit,
+    onHome: () -> Unit = {},
+    onOpenExercise: ((String) -> Unit)? = null,
     supportEmail: String = "ypo1980@gmail.com",
     playStoreAppId: String = ""
 ) {
@@ -50,133 +61,202 @@ fun RateUsScreen(
         "הדירוג שלכם עוזר לנו להשתפר ולגדול."
     }
 
-    var stars by remember { mutableStateOf(5) }
+    // ✅ מתחילים בלי סימון כדי שהמשתמש יבחר דירוג בעצמו
+    var stars by remember { mutableStateOf(0) }
     var feedback by remember { mutableStateOf("") }
-    val lowRating = stars <= 3
+
+    // ✅ דירוג נמוך רק אחרי שהמשתמש באמת לחץ על 1–3
+    val lowRating = stars in 1..3
 
     CompositionLocalProvider(
         LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
     ) {
         Scaffold(
             topBar = {
-                SideScreenTopBar(
+                KmiTopBar(
                     title = screenTitle,
-                    onClose = onClose
+                    centerTitle = true,
+
+                    // ✅ מציג אייקון סרגל צד בכותרת כמו בשאר המסכים
+                    showMenu = true,
+
+                    // ✅ בלי איקס ובלי חזור
+                    onBack = null,
+
+                    // ✅ מאפשר אייקון בית פעיל אם מעבירים אותו מה-NavHost
+                    onHome = onHome,
+
+                    // ✅ מאפשר חיפוש גלובלי אם תרצה להשתמש בו מה-KmiTopBar
+                    onOpenExercise = onOpenExercise,
+
+                    // ✅ מציג סרגל אייקונים נסתר + מצב מאמן/מתאמן
+                    showBottomActions = true,
+                    showRoleBadge = true,
+                    showModePill = true,
+
+                    // ✅ לא להציג אייקוני חיפוש/בית בכותרת עצמה
+                    // אלא רק בסרגל הצד
+                    showTopHome = false,
+                    showTopSearch = false,
+                    showTopShare = false,
+
+                    // ✅ החיפוש לא נעול
+                    lockSearch = false,
+                    lockHome = false
                 )
             },
-            containerColor = Color(0xFFF7F7FA)
+            containerColor = Color.Transparent
         ) { padding ->
 
-            Surface(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFFF8F5FF),
+                                Color(0xFFF1F5FF),
+                                Color(0xFFEAF6FF)
+                            )
+                        )
+                    )
                     .padding(padding)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                color = Color.White,
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 1.dp,
-                shadowElevation = 2.dp
             ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    Text(
-                        text = heroTitle,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = heroSubtitle,
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    StarsRow(
-                        value = stars,
-                        onChange = { stars = it },
-                        isEnglish = isEnglish
-                    )
-
-                    if (lowRating) {
-                        OutlinedTextField(
-                            value = feedback,
-                            onValueChange = { feedback = it },
-                            label = {
-                                Text(if (isEnglish) "What can we improve?" else "מה נוכל לשפר?")
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 3,
-                            textStyle = LocalTextStyle.current.copy(
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
-                            )
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // ✅ מורידים את הכרטיס למטה כמו במסך פורום הסניף
+                            .padding(top = 24.dp),
+                        color = Color(0xFFEAF2FF),
+                        shape = RoundedCornerShape(20.dp),
+                        tonalElevation = 2.dp,
+                        shadowElevation = 4.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            Color(0xFFD8E3F5)
                         )
-
-                        Button(
-                            onClick = {
-                                sendFeedbackEmail(
-                                    ctx,
-                                    supportEmail,
-                                    if (isEnglish) "App feedback ($stars★)" else "משוב מהאפליקציה (דירוג $stars★)",
-                                    feedback
-                                )
-                                markRated(ctx)
-                                onClose()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Text(if (isEnglish) "Send Feedback" else "שליחת משוב")
-                        }
-
-                        Text(
-                            text = if (isEnglish) "We read every message 🙏" else "אנחנו קוראים כל משוב 🙏",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
-                        Button(
-                            onClick = {
-                                openPlayStoreForApp(ctx, playStoreAppId)
-                                markRated(ctx)
-                                onClose()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 22.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                if (isEnglish) {
-                                    "Rate Us on Google Play"
-                                } else {
-                                    "דרגו אותנו בחנות Google Play"
-                                }
+                                text = heroTitle,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
                             )
-                        }
 
-                        TextButton(
-                            onClick = {
-                                sendFeedbackEmail(
-                                    ctx,
-                                    supportEmail,
-                                    if (isEnglish) "Feedback ($stars★)" else "משוב (דירוג $stars★)",
-                                    ""
+                            Text(
+                                text = heroSubtitle,
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            StarsRow(
+                                value = stars,
+                                onChange = { stars = it },
+                                isEnglish = isEnglish
+                            )
+
+                            if (stars == 0) {
+                                Text(
+                                    text = if (isEnglish) {
+                                        "Tap a star to choose your rating"
+                                    } else {
+                                        "לחצו על כוכב כדי לבחור דירוג"
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFF6B5CA5),
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
+                            } else if (lowRating) {
+                                OutlinedTextField(
+                                    value = feedback,
+                                    onValueChange = { feedback = it },
+                                    label = {
+                                        Text(if (isEnglish) "What can we improve?" else "מה נוכל לשפר?")
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    minLines = 3,
+                                    textStyle = LocalTextStyle.current.copy(
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+                                    )
+                                )
+
+                                Button(
+                                    onClick = {
+                                        sendFeedbackEmail(
+                                            ctx,
+                                            supportEmail,
+                                            if (isEnglish) "App feedback ($stars★)" else "משוב מהאפליקציה (דירוג $stars★)",
+                                            feedback
+                                        )
+                                        markRated(ctx)
+                                        onClose()
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    Text(if (isEnglish) "Send Feedback" else "שליחת משוב")
+                                }
+
+                                Text(
+                                    text = if (isEnglish) "We read every message 🙏" else "אנחנו קוראים כל משוב 🙏",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else {
+                                Button(
+                                    onClick = {
+                                        openPlayStoreForApp(ctx, playStoreAppId)
+                                        markRated(ctx)
+                                        onClose()
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                ) {
+                                    Text(
+                                        if (isEnglish) {
+                                            "Rate Us on Google Play"
+                                        } else {
+                                            "דרגו אותנו בחנות Google Play"
+                                        }
+                                    )
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        sendFeedbackEmail(
+                                            ctx,
+                                            supportEmail,
+                                            if (isEnglish) "Feedback ($stars★)" else "משוב (דירוג $stars★)",
+                                            ""
+                                        )
+                                    }
+                                ) {
+                                    Text(if (isEnglish) "Or send feedback instead" else "או שלחו לנו משוב במקום")
+                                }
                             }
-                        ) {
-                            Text(if (isEnglish) "Or send feedback instead" else "או שלחו לנו משוב במקום")
                         }
                     }
                 }
@@ -194,23 +274,60 @@ private fun StarsRow(
     isEnglish: Boolean
 ) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(
+            space = 10.dp,
+            alignment = Alignment.CenterHorizontally
+        ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         for (i in 1..5) {
-            val filled = i <= value
-            FilledIconToggleButton(
-                checked = filled,
-                onCheckedChange = {
-                    onChange(i)
-                }
+            val filled = value > 0 && i <= value
+
+            val circleColor = if (filled) {
+                ratingColorForStep(i)
+            } else {
+                Color(0xFFE1E7F2)
+            }
+
+            val starTint = if (filled) {
+                Color.White
+            } else {
+                Color(0xFF7A6AAE)
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(circleColor)
+                    .clickable {
+                        onChange(i)
+                    },
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (filled) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                    contentDescription = if (isEnglish) "$i stars" else "$i כוכבים"
+                    imageVector = if (filled) {
+                        Icons.Filled.Star
+                    } else {
+                        Icons.Outlined.StarBorder
+                    },
+                    contentDescription = if (isEnglish) "$i stars" else "$i כוכבים",
+                    tint = starTint,
+                    modifier = Modifier.size(25.dp)
                 )
             }
         }
+    }
+}
+
+private fun ratingColorForStep(step: Int): Color {
+    return when (step) {
+        1 -> Color(0xFFE53935) // אדום
+        2 -> Color(0xFFFB8C00) // כתום
+        3 -> Color(0xFFFBC02D) // צהוב
+        4 -> Color(0xFF8BC34A) // ירוק בהיר
+        else -> Color(0xFF2E7D32) // ירוק
     }
 }
 

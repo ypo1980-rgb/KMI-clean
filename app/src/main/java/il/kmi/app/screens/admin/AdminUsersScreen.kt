@@ -637,7 +637,8 @@ object AdminUsersPreloadCache {
 // ===========================
 @Composable
 fun AdminUsersScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onHome: () -> Unit = onBack
 ) {
     val contextLang = LocalContext.current
     val langManager = remember { AppLanguageManager(contextLang) }
@@ -816,9 +817,21 @@ fun AdminUsersScreen(
 
             KmiTopBar(
                 title = adminTr(isEnglish, "ניהול משתמשים", "User management"),
-                onHome = onBack,        // NavGraph מההורה callback לפי הביתה
-                showTopHome = false,    // למנוע אייקון בית
-                lockSearch = true,
+
+                // ✅ מפעיל את אייקון הבית בסרגל האייקונים הצדדי
+                onHome = onHome,
+
+                // ✅ לא מציגים בית/חיפוש בכותרת העליונה עצמה,
+                // אלא רק בסרגל האייקונים הצדדי כמו בשאר המסכים
+                showTopHome = false,
+                showTopSearch = false,
+
+                // ✅ חובה false כדי שאייקון החיפוש בסרגל הצדדי יעבוד
+                lockSearch = false,
+
+                // ✅ הבית לא נעול
+                lockHome = false,
+
                 showBottomActions = true,
                 currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
                 onToggleLanguage = {
