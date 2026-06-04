@@ -964,7 +964,7 @@ fun AppDrawerContent(
                                     )
                                 } else {
                                     CoachLineItemHe(
-                                        title = "סימון נוכחות",
+                                        title = "עדכון נוכחות",
                                         icon = Icons.Filled.Assessment,
                                         onClick = {
                                             onClose()

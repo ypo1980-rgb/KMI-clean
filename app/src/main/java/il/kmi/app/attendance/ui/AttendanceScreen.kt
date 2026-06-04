@@ -1259,7 +1259,7 @@ private fun AttendanceReadonlyPickerField(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(
@@ -1271,9 +1271,15 @@ private fun AttendanceReadonlyPickerField(
                         text = label,
                         color = Color(0xFFBFDBFE),
                         style = MaterialTheme.typography.labelSmall.merge(
-                            TextStyle(textDirection = textDirection)
+                            TextStyle(
+                                textDirection = textDirection,
+                                fontSize = 10.sp,
+                                lineHeight = 12.sp
+                            )
                         ),
                         textAlign = align,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -1281,11 +1287,15 @@ private fun AttendanceReadonlyPickerField(
                         text = value.ifBlank { "—" },
                         color = Color.White,
                         fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.bodyMedium.merge(
-                            TextStyle(textDirection = textDirection)
+                        style = MaterialTheme.typography.bodySmall.merge(
+                            TextStyle(
+                                textDirection = textDirection,
+                                fontSize = 12.sp,
+                                lineHeight = 15.sp
+                            )
                         ),
                         textAlign = align,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1335,14 +1345,31 @@ private fun AttendanceDropdownField(
             value = selected.ifBlank { "—" },
             onValueChange = {},
             readOnly = true,
-            singleLine = true,
-            label = { Text(label) },
+            singleLine = false,
+            minLines = 1,
+            maxLines = 2,
+            label = {
+                Text(
+                    text = label,
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
             textStyle = LocalTextStyle.current.copy(
                 textAlign = align,
-                textDirection = textDirection
+                textDirection = textDirection,
+                fontSize = 12.sp,
+                lineHeight = 15.sp
             ),
             trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                Text(
+                    text = "▼",
+                    color = Color(0xFFBFDBFE),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
             },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Color.White,
@@ -1356,6 +1383,7 @@ private fun AttendanceDropdownField(
             modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth()
+                .heightIn(min = 54.dp)
         )
 
         ExposedDropdownMenu(
