@@ -23,6 +23,8 @@ data class AttendanceUiState(
     val date: LocalDate = LocalDate.now(),
     val branch: String = "",
     val groupKey: String = "",
+    val availableBranches: List<String> = emptyList(),
+    val availableGroups: List<String> = emptyList(),
     val sessionId: Long? = null,
     val members: List<GroupMember> = emptyList(),
     val records: List<AttendanceRecord> = emptyList(),
@@ -79,6 +81,8 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
     private val _date = MutableStateFlow(LocalDate.now())
     private val _branch = MutableStateFlow("")
     private val _groupKey = MutableStateFlow("")
+    private val _availableBranches = MutableStateFlow<List<String>>(emptyList())
+    private val _availableGroups = MutableStateFlow<List<String>>(emptyList())
     private val _sessionId = MutableStateFlow<Long?>(null)
 
     // 🔄 טיקט רענון – כשמעלים אותו, זורם חדש מתחבר למקורות (ועושה re-query)
@@ -109,8 +113,10 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         combine(
             headerFlow,
             membersFlow,
-            recordsFlow
-        ) { h, members, records ->
+            recordsFlow,
+            _availableBranches,
+            _availableGroups
+        ) { h, members, records, availableBranches, availableGroups ->
 
             val map: Map<Long, AttendanceStatus> =
                 records.associate { it.memberId to it.status }
@@ -119,6 +125,8 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 date = h.first,
                 branch = h.second,
                 groupKey = h.third,
+                availableBranches = availableBranches,
+                availableGroups = availableGroups,
                 sessionId = h.fourth,
                 members = members,
                 records = records,
@@ -162,36 +170,173 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setContext(date: LocalDate, branch: String, groupKey: String) {
-        fun String.norm(): String = trim()
-            .replace('־', '-')
-            .replace('–', '-')
-            .replace('—', '-')
-            .replace(Regex("\\s+"), " ")
+        val branches = collectAttendanceOptions(
+            incoming = branch,
+            prefKeys = listOf(
+                "active_branch",
+                "branch",
+                "branches",
+                "coach_branch",
+                "coach_branches",
+                "coachBranches"
+            )
+        )
 
-        // ✅ תמיד נשתמש בסניף "פעיל" אחד:
-        // אם מגיע CSV (כמה סניפים) – ניקח את הראשון.
-        // אם קיים active_branch (מהרישום החדש) – נשתמש בו תמיד
+        val groups = collectAttendanceOptions(
+            incoming = groupKey,
+            prefKeys = listOf(
+                "active_group",
+                "group",
+                "groupKey",
+                "groups",
+                "coach_group",
+                "coach_groups",
+                "coachGroups"
+            )
+        )
+
         val sp = getApplication<Application>()
             .getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
 
-        val active = (sp.getString("active_branch", "") ?: "").trim()
+        val activeBranch = sp.getString("active_branch", "")?.normAttendanceOption().orEmpty()
+        val activeGroup = sp.getString("active_group", "")?.normAttendanceOption().orEmpty()
 
-        val branchOne = if (active.isNotBlank()) {
-            active.norm()
-        } else {
-            branch.norm()
-                .split(",")
-                .map { it.trim() }
-                .firstOrNull { it.isNotBlank() }
-                ?.norm()
-                ?: ""
+        val selectedBranch = when {
+            _branch.value.isNotBlank() && branches.contains(_branch.value) -> _branch.value
+            activeBranch.isNotBlank() && branches.contains(activeBranch) -> activeBranch
+            branches.isNotEmpty() -> branches.first()
+            else -> branch.normAttendanceOption()
+        }
+
+        val selectedGroup = when {
+            _groupKey.value.isNotBlank() && groups.contains(_groupKey.value) -> _groupKey.value
+            activeGroup.isNotBlank() && groups.contains(activeGroup) -> activeGroup
+            groups.isNotEmpty() -> groups.first()
+            else -> groupKey.normAttendanceOption()
+        }
+
+        _availableBranches.value = branches.ifEmpty {
+            listOfNotNull(selectedBranch.takeIf { it.isNotBlank() })
+        }
+
+        _availableGroups.value = groups.ifEmpty {
+            listOfNotNull(selectedGroup.takeIf { it.isNotBlank() })
         }
 
         _date.value = date
-        _branch.value = branchOne
-        _groupKey.value = groupKey.norm()
+        _branch.value = selectedBranch
+        _groupKey.value = selectedGroup
+        _sessionId.value = null
 
         ensureSession()
+        _refreshTick.update { it + 1 }
+    }
+
+    private fun String.normAttendanceOption(): String = trim()
+        .replace('־', '-')
+        .replace('–', '-')
+        .replace('—', '-')
+        .replace(Regex("\\s+"), " ")
+
+    private fun splitAttendanceOptions(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+
+        return raw
+            .replace(" • ", ",")
+            .replace("|", ",")
+            .replace("\n", ",")
+            .split(',', ';', '；')
+            .map { it.normAttendanceOption() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    private fun collectAttendanceOptions(
+        incoming: String,
+        prefKeys: List<String>
+    ): List<String> {
+        val sp = getApplication<Application>()
+            .getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+
+        val fromIncoming = splitAttendanceOptions(incoming)
+
+        fun readPrefOptionValues(key: String): List<String> {
+            val raw: Any? = sp.all[key]
+
+            return when (raw) {
+                is String -> {
+                    splitAttendanceOptions(raw)
+                }
+
+                is Set<*> -> {
+                    raw
+                        .mapNotNull { it?.toString() }
+                        .flatMap { splitAttendanceOptions(it) }
+                }
+
+                is List<*> -> {
+                    raw
+                        .mapNotNull { it?.toString() }
+                        .flatMap { splitAttendanceOptions(it) }
+                }
+
+                else -> {
+                    emptyList()
+                }
+            }
+        }
+
+        val fromPrefs = prefKeys.flatMap { key ->
+            readPrefOptionValues(key)
+        }
+
+        return (fromIncoming + fromPrefs)
+            .map { it.normAttendanceOption() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    fun selectAttendanceDate(date: LocalDate) {
+        _date.value = date
+        _sessionId.value = null
+        ensureSession()
+        _refreshTick.update { it + 1 }
+    }
+
+    fun selectBranch(branch: String) {
+        val clean = branch.normAttendanceOption()
+        if (clean.isBlank()) return
+        if (_branch.value == clean) return
+
+        _branch.value = clean
+        _sessionId.value = null
+
+        getApplication<Application>()
+            .getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+            .edit()
+            .putString("active_branch", clean)
+            .apply()
+
+        ensureSession()
+        _refreshTick.update { it + 1 }
+    }
+
+    fun selectGroup(groupKey: String) {
+        val clean = groupKey.normAttendanceOption()
+        if (clean.isBlank()) return
+        if (_groupKey.value == clean) return
+
+        _groupKey.value = clean
+        _sessionId.value = null
+
+        getApplication<Application>()
+            .getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+            .edit()
+            .putString("active_group", clean)
+            .apply()
+
+        ensureSession()
+        _refreshTick.update { it + 1 }
     }
 
     fun ensureSession() {

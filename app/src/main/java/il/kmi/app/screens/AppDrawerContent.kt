@@ -910,11 +910,23 @@ fun AppDrawerContent(
 
                                 if (isEnglish) {
                                     CoachLineItemEn(
-                                        title = "Attendance Report",
+                                        title = "Mark Attendance",
                                         icon = Icons.Filled.Assessment,
                                         onClick = {
                                             onClose()
-                                            onOpenCoachAttendance()
+
+                                            runCatching {
+                                                onOpenCoachAttendance()
+                                            }.onFailure {
+                                                Toast.makeText(
+                                                    contextLang,
+                                                    tr(
+                                                        "לא ניתן לפתוח דו״ח נוכחות כרגע",
+                                                        "Unable to open attendance report right now"
+                                                    ),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
                                         }
                                     )
                                     CoachLineItemEn(
@@ -952,11 +964,23 @@ fun AppDrawerContent(
                                     )
                                 } else {
                                     CoachLineItemHe(
-                                        title = "דו״ח נוכחות",
+                                        title = "סימון נוכחות",
                                         icon = Icons.Filled.Assessment,
                                         onClick = {
                                             onClose()
-                                            onOpenCoachAttendance()
+
+                                            runCatching {
+                                                onOpenCoachAttendance()
+                                            }.onFailure {
+                                                Toast.makeText(
+                                                    contextLang,
+                                                    tr(
+                                                        "לא ניתן לפתוח דו״ח נוכחות כרגע",
+                                                        "Unable to open attendance report right now"
+                                                    ),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
                                         }
                                     )
                                     CoachLineItemHe(

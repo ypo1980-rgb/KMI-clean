@@ -1135,8 +1135,10 @@ fun CoachTraineesScreen(
             // 2) פרטים מ-Firestore (belt + birthDate -> age) לפי שם, עם נרמול קשוח
             fun String.normKey(): String = this
                 .trim()
-                .replace('־', '-')   // maqaf
-                .replace('–', '-')   // en-dash
+                .replace('־', '-')
+                .replace('–', '-')
+                .replace('—', '-')
+                .replace(Regex("""[."'\u05F3\u05F4,;:()\[\]{}]"""), "")
                 .replace(Regex("\\s+"), " ")
                 .lowercase(Locale("he", "IL"))
 
@@ -1153,15 +1155,263 @@ fun CoachTraineesScreen(
                 }
             }
 
-            fun ageFromBirthDate(birthDate: String?): Int {
-                // birthDate אצלך: "1980-10-13"
-                val s = birthDate?.trim().orEmpty()
-                if (s.isBlank()) return 0
-                return runCatching {
-                    val dob = java.time.LocalDate.parse(s) // ISO-8601
-                    val now = java.time.LocalDate.now()
-                    java.time.Period.between(dob, now).years
-                }.getOrDefault(0)
+            fun beltFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): String {
+                val raw = (
+                        doc.getString("belt")
+                            ?: doc.getString("currentBelt")
+                            ?: doc.getString("current_belt")
+                            ?: doc.getString("beltName")
+                            ?: doc.getString("belt_name")
+                            ?: doc.getString("currentBeltName")
+                            ?: doc.getString("currentBeltId")
+                            ?: doc.getString("beltId")
+                            ?: doc.getString("belt_id")
+                            ?: ""
+                        ).trim()
+
+                if (raw.isBlank()) return ""
+
+                val clean = raw
+                    .lowercase(Locale.US)
+                    .replace("_", " ")
+                    .replace("-", " ")
+                    .trim()
+
+                return when {
+                    clean == "white" || clean.contains("white") || clean == "לבנה" || clean.contains("לבנ") -> "לבנה"
+                    clean == "yellow" || clean.contains("yellow") || clean == "צהובה" || clean.contains("צהוב") -> "צהובה"
+                    clean == "orange" || clean.contains("orange") || clean == "כתומה" || clean.contains("כתומ") -> "כתומה"
+                    clean == "green" || clean.contains("green") || clean == "ירוקה" || clean.contains("ירוק") -> "ירוקה"
+                    clean == "blue" || clean.contains("blue") || clean == "כחולה" || clean.contains("כחול") -> "כחולה"
+                    clean == "brown" || clean.contains("brown") || clean == "חומה" || clean.contains("חומ") -> "חומה"
+                    clean == "black" || clean.contains("black") || clean == "שחורה" || clean.contains("שחור") -> "שחורה"
+                    else -> beltHeb(raw)
+                }
+            }
+
+            fun seniorityFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): String {
+                val textValue = (
+                        doc.getString("seniority")
+                            ?: doc.getString("trainingSeniority")
+                            ?: doc.getString("training_seniority")
+                            ?: doc.getString("yearsTraining")
+                            ?: doc.getString("years_training")
+                            ?: doc.getString("experience")
+                            ?: doc.getString("trainingExperience")
+                            ?: ""
+                        ).trim()
+
+                if (textValue.isNotBlank()) return textValue
+
+                val numericYears = (
+                        doc.getLong("seniorityYears")
+                            ?: doc.getLong("trainingYears")
+                            ?: doc.getLong("yearsTraining")
+                            ?: doc.getLong("years_training")
+                            ?: doc.getLong("experienceYears")
+                            ?: doc.getLong("experience_years")
+                        )?.toDouble()
+
+                if (numericYears != null && numericYears > 0.0) {
+                    val formatted = if (numericYears % 1.0 == 0.0) {
+                        numericYears.toInt().toString()
+                    } else {
+                        String.format(Locale.US, "%.1f", numericYears)
+                    }
+
+                    return "$formatted שנים"
+                }
+
+                val startRaw = doc.get("trainingStartDate")
+                    ?: doc.get("training_start_date")
+                    ?: doc.get("startTrainingDate")
+                    ?: doc.get("startedTrainingAt")
+
+                val startAge = when (startRaw) {
+                    is String -> runCatching {
+                        java.time.LocalDate.parse(startRaw.trim())
+                    }.getOrNull()
+
+                    is com.google.firebase.Timestamp -> runCatching {
+                        startRaw.toDate()
+                            .toInstant()
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                    }.getOrNull()
+
+                    is java.util.Date -> runCatching {
+                        startRaw.toInstant()
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                    }.getOrNull()
+
+                    is Number -> runCatching {
+                        Instant.ofEpochMilli(startRaw.toLong())
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                    }.getOrNull()
+
+                    else -> null
+                }
+
+                if (startAge != null) {
+                    val years = java.time.Period.between(startAge, java.time.LocalDate.now()).years
+                    if (years > 0) return "$years שנים"
+                }
+
+                return ""
+            }
+
+            fun ageFromBirthDateRaw(raw: Any?): Int {
+                fun yearsFromDate(dob: java.time.LocalDate): Int {
+                    val years = java.time.Period.between(dob, java.time.LocalDate.now()).years
+                    return years.coerceIn(0, 120)
+                }
+
+                return when (raw) {
+                    is String -> {
+                        val s = raw.trim()
+                        if (s.isBlank()) return 0
+
+                        runCatching {
+                            yearsFromDate(java.time.LocalDate.parse(s))
+                        }.getOrElse {
+                            runCatching {
+                                val parts = s.split("/", ".", "-")
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() }
+
+                                if (parts.size == 3) {
+                                    val a = parts[0].toInt()
+                                    val b = parts[1].toInt()
+                                    val c = parts[2].toInt()
+
+                                    val dob = if (a > 1900) {
+                                        java.time.LocalDate.of(a, b, c)
+                                    } else {
+                                        java.time.LocalDate.of(c, b, a)
+                                    }
+
+                                    yearsFromDate(dob)
+                                } else {
+                                    0
+                                }
+                            }.getOrDefault(0)
+                        }
+                    }
+
+                    is com.google.firebase.Timestamp -> {
+                        runCatching {
+                            yearsFromDate(
+                                raw.toDate()
+                                    .toInstant()
+                                    .atZone(ZoneId.systemDefault())
+                                    .toLocalDate()
+                            )
+                        }.getOrDefault(0)
+                    }
+
+                    is java.util.Date -> {
+                        runCatching {
+                            yearsFromDate(
+                                raw.toInstant()
+                                    .atZone(ZoneId.systemDefault())
+                                    .toLocalDate()
+                            )
+                        }.getOrDefault(0)
+                    }
+
+                    is Number -> {
+                        runCatching {
+                            yearsFromDate(
+                                Instant.ofEpochMilli(raw.toLong())
+                                    .atZone(ZoneId.systemDefault())
+                                    .toLocalDate()
+                            )
+                        }.getOrDefault(0)
+                    }
+
+                    is Map<*, *> -> {
+                        val day = (
+                                raw["day"]
+                                    ?: raw["birthDay"]
+                                    ?: raw["birth_day"]
+                                    ?: raw["dd"]
+                                )?.toString()?.toIntOrNull()
+
+                        val month = (
+                                raw["month"]
+                                    ?: raw["birthMonth"]
+                                    ?: raw["birth_month"]
+                                    ?: raw["mm"]
+                                )?.toString()?.toIntOrNull()
+
+                        val year = (
+                                raw["year"]
+                                    ?: raw["birthYear"]
+                                    ?: raw["birth_year"]
+                                    ?: raw["yyyy"]
+                                )?.toString()?.toIntOrNull()
+
+                        if (day != null && month != null && year != null) {
+                            runCatching {
+                                yearsFromDate(java.time.LocalDate.of(year, month, day))
+                            }.getOrDefault(0)
+                        } else {
+                            0
+                        }
+                    }
+
+                    else -> 0
+                }
+            }
+
+            fun ageFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): Int {
+                val directAge = (
+                        doc.getLong("age")
+                            ?: doc.getLong("traineeAge")
+                            ?: doc.getLong("ageYears")
+                        )?.toInt()
+
+                if (directAge != null && directAge in 1..120) return directAge
+
+                val fromBirthDate = ageFromBirthDateRaw(
+                    doc.get("birthDate")
+                        ?: doc.get("birth_date")
+                        ?: doc.get("dateOfBirth")
+                        ?: doc.get("dob")
+                )
+
+                if (fromBirthDate > 0) return fromBirthDate
+
+                val day = (
+                        doc.getLong("birthDay")
+                            ?: doc.getLong("birth_day")
+                            ?: doc.getLong("day")
+                        )?.toInt()
+
+                val month = (
+                        doc.getLong("birthMonth")
+                            ?: doc.getLong("birth_month")
+                            ?: doc.getLong("month")
+                        )?.toInt()
+
+                val year = (
+                        doc.getLong("birthYear")
+                            ?: doc.getLong("birth_year")
+                            ?: doc.getLong("year")
+                        )?.toInt()
+
+                return if (day != null && month != null && year != null) {
+                    runCatching {
+                        java.time.Period.between(
+                            java.time.LocalDate.of(year, month, day),
+                            java.time.LocalDate.now()
+                        ).years.coerceIn(0, 120)
+                    }.getOrDefault(0)
+                } else {
+                    0
+                }
             }
 
             data class FireUserInfo(
@@ -1240,9 +1490,7 @@ fun CoachTraineesScreen(
                 val groupMatches =
                     groupNorm.isBlank() ||
                             docGroups.any { docGroup ->
-                                docGroup == groupNorm ||
-                                        docGroup.contains(groupNorm) ||
-                                        groupNorm.contains(docGroup)
+                                docGroup == groupNorm
                             }
 
                 return branchMatches && groupMatches
@@ -1295,7 +1543,6 @@ fun CoachTraineesScreen(
                     distinctDirect
                 } else {
                     Firebase.firestore.collection("users")
-                        .whereEqualTo("role", "trainee")
                         .get()
                         .await()
                         .documents
@@ -1315,13 +1562,9 @@ fun CoachTraineesScreen(
                     ?: doc.getString("displayName")
                     ?: continue).normKey()
 
-                val beltRaw = doc.getString("belt").orEmpty()
-                val age = ageFromBirthDate(doc.getString("birthDate"))
-                val seniority =
-                    doc.getString("seniority")
-                        ?: doc.getString("trainingSeniority")
-                        ?: doc.getString("yearsTraining")
-                        ?: ""
+                val belt = beltFromDoc(doc)
+                val age = ageFromDoc(doc)
+                val seniority = seniorityFromDoc(doc)
 
                 fun readStringMap(fieldName: String): Map<String, String> {
                     val raw = doc.get(fieldName) as? Map<*, *> ?: emptyMap<Any, Any>()
@@ -1366,7 +1609,7 @@ fun CoachTraineesScreen(
                 userInfoByName[n] = FireUserInfo(
                     userDocId = doc.id,
                     age = age,
-                    beltHeb = beltHeb(beltRaw),
+                    beltHeb = belt,
                     seniority = seniority,
                     beltAwardDates = beltAwardDates,
                     beltAwardDescriptions = beltAwardDescriptions,

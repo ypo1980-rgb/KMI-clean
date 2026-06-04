@@ -6,6 +6,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
+import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -435,7 +437,72 @@ fun MainApp(
                                     // מאמן
                                     isCoach = isCoach,
                                     onOpenCoachAttendance = {
-                                        nav.navigate("attendance")
+                                        fun cleanAttendancePart(raw: String?): String =
+                                            raw.orEmpty()
+                                                .replace(" • ", ",")
+                                                .replace("|", ",")
+                                                .replace("\n", ",")
+                                                .split(',', ';', '；')
+                                                .map {
+                                                    it.trim()
+                                                        .replace('־', '-')
+                                                        .replace('–', '-')
+                                                        .replace('—', '-')
+                                                        .replace(Regex("\\s+"), " ")
+                                                }
+                                                .firstOrNull { it.isNotBlank() }
+                                                .orEmpty()
+
+                                        val branch = cleanAttendancePart(
+                                            spUser.getString("active_branch", null)
+                                                ?: spUser.getString("branch", null)
+                                                ?: spUser.getString("branches", null)
+                                                ?: spUser.getString("coach_branch", null)
+                                                ?: spUser.getString("coach_branches", null)
+                                                ?: spUser.getString("coachBranches", null)
+                                        )
+
+                                        val groupKey = cleanAttendancePart(
+                                            spUser.getString("active_group", null)
+                                                ?: spUser.getString("groupKey", null)
+                                                ?: spUser.getString("group", null)
+                                                ?: spUser.getString("age_group", null)
+                                                ?: spUser.getString("age_groups", null)
+                                                ?: spUser.getString("groups", null)
+                                                ?: spUser.getString("coach_group", null)
+                                                ?: spUser.getString("coach_groups", null)
+                                                ?: spUser.getString("coachGroups", null)
+                                        )
+
+                                        if (branch.isBlank() || groupKey.isBlank()) {
+                                            Toast.makeText(
+                                                ctxInner,
+                                                if (isEnglish) {
+                                                    "Missing branch or group for attendance."
+                                                } else {
+                                                    "חסר סניף או קבוצה לפתיחת סימון נוכחות."
+                                                },
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        } else {
+                                            runCatching {
+                                                nav.navigate(
+                                                    "attendance/mark/${Uri.encode(branch)}/${Uri.encode(groupKey)}"
+                                                ) {
+                                                    launchSingleTop = true
+                                                }
+                                            }.onFailure {
+                                                Toast.makeText(
+                                                    ctxInner,
+                                                    if (isEnglish) {
+                                                        "Unable to open attendance."
+                                                    } else {
+                                                        "לא ניתן לפתוח סימון נוכחות."
+                                                    },
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        }
                                     },
                                     onOpenCoachPaymentsReport = {
                                         nav.navigate(Route.PaymentsReport.route)

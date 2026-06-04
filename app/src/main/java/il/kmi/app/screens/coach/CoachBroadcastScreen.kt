@@ -383,22 +383,18 @@ fun CoachBroadcastScreen(
         fun expandGroupAliases(raw: String): List<String> {
             val n = raw.norm()
 
+            // ✅ התאמת קבוצות חייבת להיות מדויקת.
+            // לא מפרקים "נוער + בוגרים" ל-"נוער" ו-"בוגרים",
+            // כדי שלא יתערבבו רשימות מתאמנים בין קבוצות שונות.
             return buildList {
                 add(n)
                 addAll(splitTokensNorm(n))
 
-                if (n.contains("נוער") && n.contains("בוגרים")) {
-                    add("נוער")
-                    add("בוגרים")
-                    add("נוער ובוגרים")
-                    add("נוער + בוגרים")
+                when (n.lowercase()) {
+                    "children", "kids" -> add("ילדים")
+                    "youth" -> add("נוער")
+                    "adults", "adult" -> add("בוגרים")
                 }
-
-                if (n.contains("children", ignoreCase = true)) add("ילדים")
-                if (n.contains("kids", ignoreCase = true)) add("ילדים")
-                if (n.contains("youth", ignoreCase = true)) add("נוער")
-                if (n.contains("adults", ignoreCase = true)) add("בוגרים")
-                if (n.contains("adult", ignoreCase = true)) add("בוגרים")
             }
                 .map { it.norm() }
                 .filter { it.isNotBlank() }
@@ -517,6 +513,24 @@ fun CoachBroadcastScreen(
             }
         }
 
+        fun matchesExactGroupToken(tokens: List<String>, candidates: Set<String>): Boolean {
+            if (tokens.isEmpty() || candidates.isEmpty()) return false
+
+            val cleanTokens = tokens
+                .map { it.norm() }
+                .filter { it.isNotBlank() }
+                .toSet()
+
+            val cleanCandidates = candidates
+                .map { it.norm() }
+                .filter { it.isNotBlank() }
+                .toSet()
+
+            return cleanTokens.any { token ->
+                token in cleanCandidates
+            }
+        }
+
         fun DocumentSnapshot.displayNameOrPhone(phone: String): String {
             return getString("fullName")?.takeIf { it.isNotBlank() }
                 ?: getString("name")?.takeIf { it.isNotBlank() }
@@ -579,13 +593,13 @@ fun CoachBroadcastScreen(
                 .filter { it.isTraineeRole() }
                 .filter { matchesAnyToken(it.branchTokensNorm(), branchCandidateSet) }
                 .filter {
-                    // במצב קבוצות: אם אין אף קבוצה מסומנת — לא מציגים נמענים.
-                    // רק קבוצות שסומנו בפועל יטענו מתאמנים.
+                    // ✅ במצב קבוצות — התאמה מדויקת בלבד.
+                    // "בוגרים" לא ימשוך "נוער + בוגרים", ולהפך.
                     if (sendScope == "branch") {
                         true
                     } else {
                         groupCandidateSet.isNotEmpty() &&
-                                matchesAnyToken(it.groupTokensNorm(), groupCandidateSet)
+                                matchesExactGroupToken(it.groupTokensNorm(), groupCandidateSet)
                     }
                 }
                 .mapNotNull { doc ->
@@ -748,7 +762,7 @@ fun CoachBroadcastScreen(
                 branchMatchedDocs
                     .asSequence()
                     .filter { doc ->
-                        matchesAnyToken(
+                        matchesExactGroupToken(
                             tokens = doc.groupTokensNorm(),
                             candidates = groupCandidates
                         )

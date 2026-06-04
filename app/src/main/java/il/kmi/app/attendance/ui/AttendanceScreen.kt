@@ -48,9 +48,12 @@ import il.kmi.app.domain.Explanations
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.screens.parseSearchKey
 import android.app.Activity
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import java.time.YearMonth
 
 //========================================================================
 
@@ -62,7 +65,7 @@ fun AttendanceScreen(
     branch: String,
     groupKey: String,
     onOpenMemberStats: (memberId: Long?, name: String) -> Unit,
-    onOpenGroupStats: (branch: String, groupKey: String) -> Unit,   // ✅ חדש
+    onOpenGroupStats: (branch: String, groupKey: String) -> Unit,
     onHomeClick: () -> Unit = {}
 ) {
     // הקשר למסך
@@ -92,24 +95,20 @@ fun AttendanceScreen(
 
 
 
-// ✅ סניף נבחר למסך (לא רשימת סניפים)
-// אם מגיע CSV – ניקח את הראשון (עד שתוסיף UI בחירה מסודר)
-    // ✅ סניף נבחר למסך (לא רשימת סניפים)
-    // אם ה-state עדיין ריק (בהתחלה), נשתמש בפרמטרים שהגיעו למסך
+    // ✅ מקור אמת למסך: הבחירה הפעילה מתוך ה-ViewModel
+    // לא חותכים יותר CSV ולא לוקחים אוטומטית רק את הסניף הראשון.
     val effectiveBranchRaw = remember(state.branch, branch) {
         (state.branch.takeIf { it.isNotBlank() } ?: branch).trim()
     }
+
     val effectiveGroupRaw = remember(state.groupKey, groupKey) {
         (state.groupKey.takeIf { it.isNotBlank() } ?: groupKey).trim()
     }
 
-    val selectedBranch = remember(effectiveBranchRaw) {
-        effectiveBranchRaw
-            .split(",")
-            .map { it.trim() }
-            .firstOrNull { it.isNotBlank() }
-            ?: effectiveBranchRaw.trim()
-    }
+    val selectedBranch = effectiveBranchRaw
+    val selectedGroup = effectiveGroupRaw
+
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
 
     fun String.nameKey(): String = this
         .trim()
@@ -139,7 +138,7 @@ fun AttendanceScreen(
     // ===== טעינה אוטומטית של מתאמנים מה־users לפי סניף + קבוצה =====
     var bootstrapKey by rememberSaveable { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(effectiveBranchRaw, effectiveGroupRaw) {
+    LaunchedEffect(state.date, effectiveBranchRaw, effectiveGroupRaw) {
 
         fun String.norm(): String = trim()
             .replace('־', '-')
@@ -148,11 +147,11 @@ fun AttendanceScreen(
             .replace(Regex("\\s+"), " ")
 
         val branchBase = selectedBranch.norm()
-        val groupBase  = effectiveGroupRaw.norm()
+        val groupBase  = selectedGroup.norm()
 
         if (branchBase.isBlank()) return@LaunchedEffect
 
-        val key = "$branchBase|$groupBase"
+        val key = "${state.date}|$branchBase|$groupBase"
         if (bootstrapKey == key) return@LaunchedEffect
 
         val hasRealServerMembers = state.members.any {
@@ -339,6 +338,20 @@ fun AttendanceScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 120.dp) // ✅ מקום ל-FAB + כפתור שמירה
             ) {
+                item {
+                    AttendanceSelectionCard(
+                        selectedDate = state.date,
+                        selectedBranch = selectedBranch,
+                        selectedGroup = selectedGroup,
+                        availableBranches = state.availableBranches,
+                        availableGroups = state.availableGroups,
+                        isEnglish = isEnglish,
+                        onDateClick = { showDatePicker = true },
+                        onBranchSelected = { vm.selectBranch(it) },
+                        onGroupSelected = { vm.selectGroup(it) }
+                    )
+                }
+
                 item {
                     AttendanceHeroCard(
                         branch = state.branch,
@@ -614,7 +627,7 @@ fun AttendanceScreen(
                         }
 
                         OutlinedButton(
-                            onClick = { onOpenGroupStats(state.branch, state.groupKey) },
+                            onClick = { onOpenGroupStats(selectedBranch, selectedGroup) },
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                             shape = RoundedCornerShape(20.dp),
                             contentPadding = compactPadding,
@@ -625,6 +638,311 @@ fun AttendanceScreen(
                         ) {
                             // ✅ טקסט קצר יותר אם עדיין צפוף: "נתונים"
                             BtnText(tr("סטטיסטיקה", "Stats"))
+                        }
+                    }
+                }
+            }
+        }
+
+        // ===== בחירת תאריך אימון =====
+        if (showDatePicker) {
+            var visibleMonth by remember(state.date) {
+                mutableStateOf(YearMonth.from(state.date))
+            }
+
+            val selectedDate = state.date
+
+            val firstDayOfMonth = remember(visibleMonth) {
+                visibleMonth.atDay(1)
+            }
+
+            // Sunday = 0, Monday = 1 ... Saturday = 6
+            val leadingEmptyDays = remember(firstDayOfMonth) {
+                firstDayOfMonth.dayOfWeek.value % 7
+            }
+
+            val daysInMonth = remember(visibleMonth) {
+                visibleMonth.lengthOfMonth()
+            }
+
+            val monthLocale = if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
+
+            val monthTitle = remember(visibleMonth, isEnglish) {
+                visibleMonth.atDay(1)
+                    .format(DateTimeFormatter.ofPattern("MMMM yyyy", monthLocale))
+            }
+
+            val selectedTitle = remember(selectedDate, isEnglish) {
+                selectedDate.format(
+                    DateTimeFormatter.ofPattern("EEEE · d MMMM yyyy", monthLocale)
+                )
+            }
+
+            Dialog(
+                onDismissRequest = { showDatePicker = false }
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp),
+                    shape = RoundedCornerShape(30.dp),
+                    color = Color.Transparent,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 18.dp
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(30.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color(0xFF111827),
+                                        Color(0xFF1E3A8A),
+                                        Color(0xFF2563EB),
+                                        Color(0xFF22D3EE)
+                                    )
+                                )
+                            )
+                            .padding(1.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(29.dp),
+                            color = Color(0xFF0F172A).copy(alpha = 0.96f),
+                            tonalElevation = 0.dp
+                        ) {
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides if (isEnglish) {
+                                    LayoutDirection.Ltr
+                                } else {
+                                    LayoutDirection.Rtl
+                                }
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                        ) {
+                                            Text(
+                                                text = tr("בחירת תאריך אימון", "Select training date"),
+                                                color = Color(0xFFBFDBFE),
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+
+                                            Spacer(Modifier.height(4.dp))
+
+                                            Text(
+                                                text = selectedTitle,
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Black,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+
+                                        Spacer(Modifier.width(10.dp))
+
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Color.White.copy(alpha = 0.12f),
+                                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
+                                        ) {
+                                            Text(
+                                                text = "📅",
+                                                fontSize = 22.sp,
+                                                modifier = Modifier.padding(10.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Divider(color = Color.White.copy(alpha = 0.16f))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        IconButton(
+                                            onClick = { visibleMonth = visibleMonth.minusMonths(1) }
+                                        ) {
+                                            Text(
+                                                text = if (isEnglish) "‹" else "›",
+                                                color = Color.White,
+                                                fontSize = 32.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        Text(
+                                            text = monthTitle,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.weight(1f)
+                                        )
+
+                                        IconButton(
+                                            onClick = { visibleMonth = visibleMonth.plusMonths(1) }
+                                        ) {
+                                            Text(
+                                                text = if (isEnglish) "›" else "‹",
+                                                color = Color.White,
+                                                fontSize = 32.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+
+                                    val weekDays = if (isEnglish) {
+                                        listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+                                    } else {
+                                        listOf("א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳")
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .background(Color.White.copy(alpha = 0.08f))
+                                            .padding(vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        weekDays.forEach { dayName ->
+                                            Text(
+                                                text = dayName,
+                                                color = Color(0xFF67E8F9),
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 13.sp,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+
+                                    val cells = buildList<Int?> {
+                                        repeat(leadingEmptyDays) { add(null) }
+                                        for (day in 1..daysInMonth) add(day)
+                                        while (size % 7 != 0) add(null)
+                                    }
+
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(22.dp))
+                                            .background(Color.White.copy(alpha = 0.07f))
+                                            .padding(horizontal = 6.dp, vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        cells.chunked(7).forEach { week ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                week.forEach { day ->
+                                                    val cellDate = day?.let { visibleMonth.atDay(it) }
+                                                    val isSelected = cellDate == selectedDate
+                                                    val isToday = cellDate == LocalDate.now()
+
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .height(40.dp),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        if (day != null && cellDate != null) {
+                                                            Surface(
+                                                                modifier = Modifier
+                                                                    .size(34.dp)
+                                                                    .clickable {
+                                                                        vm.selectAttendanceDate(cellDate)
+                                                                        showDatePicker = false
+                                                                    },
+                                                                shape = CircleShape,
+                                                                color = when {
+                                                                    isSelected -> Color(0xFF22D3EE)
+                                                                    isToday -> Color.White.copy(alpha = 0.14f)
+                                                                    else -> Color.Transparent
+                                                                },
+                                                                border = when {
+                                                                    isSelected -> null
+                                                                    isToday -> BorderStroke(1.dp, Color(0xFF22D3EE))
+                                                                    else -> null
+                                                                }
+                                                            ) {
+                                                                Box(
+                                                                    modifier = Modifier.fillMaxSize(),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    Text(
+                                                                        text = day.toString(),
+                                                                        color = if (isSelected) {
+                                                                            Color(0xFF020617)
+                                                                        } else {
+                                                                            Color.White
+                                                                        },
+                                                                        fontWeight = FontWeight.Black,
+                                                                        fontSize = 16.sp,
+                                                                        textAlign = TextAlign.Center
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = if (isEnglish) Arrangement.End else Arrangement.Start,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        TextButton(
+                                            onClick = { showDatePicker = false }
+                                        ) {
+                                            Text(
+                                                text = tr("ביטול", "Cancel"),
+                                                color = Color(0xFFBFDBFE),
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        Spacer(Modifier.width(8.dp))
+
+                                        Button(
+                                            onClick = {
+                                                vm.selectAttendanceDate(LocalDate.now())
+                                                showDatePicker = false
+                                            },
+                                            shape = RoundedCornerShape(999.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFF22D3EE),
+                                                contentColor = Color(0xFF020617)
+                                            )
+                                        ) {
+                                            Text(
+                                                text = tr("היום", "Today"),
+                                                fontWeight = FontWeight.Black
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -806,6 +1124,259 @@ fun AttendanceScreen(
                     )
                 }
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AttendanceSelectionCard(
+    selectedDate: LocalDate,
+    selectedBranch: String,
+    selectedGroup: String,
+    availableBranches: List<String>,
+    availableGroups: List<String>,
+    isEnglish: Boolean,
+    onDateClick: () -> Unit,
+    onBranchSelected: (String) -> Unit,
+    onGroupSelected: (String) -> Unit
+) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+
+    val dateText = remember(selectedDate, isEnglish) {
+        val locale = if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
+        selectedDate.format(DateTimeFormatter.ofPattern("EEEE · d.M.yyyy", locale))
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White.copy(alpha = 0.10f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+        tonalElevation = 0.dp
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.08f),
+                                Color(0xFF1D4ED8).copy(alpha = 0.16f)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                horizontalAlignment = horizontal,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = tr("בחירת אימון לנוכחות", "Select attendance class"),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall.merge(
+                        TextStyle(textDirection = textDirection)
+                    ),
+                    textAlign = align,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                AttendanceReadonlyPickerField(
+                    label = tr("תאריך אימון", "Training date"),
+                    value = dateText,
+                    isEnglish = isEnglish,
+                    onClick = onDateClick
+                )
+
+                AttendanceDropdownField(
+                    label = tr("סניף", "Branch"),
+                    selected = selectedBranch,
+                    options = availableBranches.ifEmpty {
+                        listOfNotNull(selectedBranch.takeIf { it.isNotBlank() })
+                    },
+                    isEnglish = isEnglish,
+                    onSelected = onBranchSelected
+                )
+
+                AttendanceDropdownField(
+                    label = tr("קבוצה", "Group"),
+                    selected = selectedGroup,
+                    options = availableGroups.ifEmpty {
+                        listOfNotNull(selectedGroup.takeIf { it.isNotBlank() })
+                    },
+                    isEnglish = isEnglish,
+                    onSelected = onGroupSelected
+                )
+
+                Text(
+                    text = tr(
+                        "הרשימה למטה תיטען לפי תאריך + סניף + קבוצה.",
+                        "The list below loads by date + branch + group."
+                    ),
+                    color = Color(0xFFBFDBFE),
+                    style = MaterialTheme.typography.labelSmall.merge(
+                        TextStyle(textDirection = textDirection)
+                    ),
+                    textAlign = align,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttendanceReadonlyPickerField(
+    label: String,
+    value: String,
+    isEnglish: Boolean,
+    onClick: () -> Unit
+) {
+    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+    val textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        color = Color.Transparent,
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color.White.copy(alpha = 0.30f)
+        )
+    ) {
+        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = horizontal,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = label,
+                        color = Color(0xFFBFDBFE),
+                        style = MaterialTheme.typography.labelSmall.merge(
+                            TextStyle(textDirection = textDirection)
+                        ),
+                        textAlign = align,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = value.ifBlank { "—" },
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium.merge(
+                            TextStyle(textDirection = textDirection)
+                        ),
+                        textAlign = align,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                Text(
+                    text = "▼",
+                    color = Color(0xFFBFDBFE),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AttendanceDropdownField(
+    label: String,
+    selected: String,
+    options: List<String>,
+    isEnglish: Boolean,
+    onSelected: (String) -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
+    val cleanOptions = remember(options, selected) {
+        (options + selected)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = {
+            if (cleanOptions.size > 1) expanded = !expanded
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        OutlinedTextField(
+            value = selected.ifBlank { "—" },
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(label) },
+            textStyle = LocalTextStyle.current.copy(
+                textAlign = align,
+                textDirection = textDirection
+            ),
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedLabelColor = Color(0xFFBFDBFE),
+                unfocusedLabelColor = Color(0xFFBFDBFE),
+                focusedBorderColor = Color(0xFF38BDF8),
+                unfocusedBorderColor = Color.White.copy(alpha = 0.30f),
+                cursorColor = Color.White
+            ),
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth()
+        )
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            cleanOptions.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = option,
+                            textAlign = align,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelected(option)
+                    }
+                )
+            }
         }
     }
 }
