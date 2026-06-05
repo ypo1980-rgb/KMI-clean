@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -76,6 +77,7 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.sp
@@ -456,6 +458,29 @@ fun HomeScreen(
                 }
             }
 
+            // =========================
+            // ⭐ הודעות מהמאמן – state ברמת Box כדי שגם הכרטיס וגם הדיאלוג יכירו אותו
+            // =========================
+            val currentUid = remember {
+                FirebaseAuth.getInstance().currentUser?.uid
+            }
+
+            data class CoachHomeMessage(
+                val text: String,
+                val coachName: String,
+                val sentAt: java.util.Date?,
+                val branch: String,
+                val group: String
+            )
+
+            var recentCoachMessages by remember {
+                mutableStateOf<List<CoachHomeMessage>>(emptyList())
+            }
+
+            var showCoachMessagesDialog by rememberSaveable {
+                mutableStateOf(false)
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -564,56 +589,390 @@ fun HomeScreen(
                 // === KMI_MULTI_GROUPS (FIX) ===
 
                 // =========================
-                // ⭐ הודעות מהמאמן – Firestore (לפי UID)
+                // ⭐ הודעות מהמאמן – Firestore
+                // מציגים הודעה אחרונה בכרטיס + 5 הודעות אחרונות בדיאלוג
                 // =========================
-                val currentUid = remember {
-                    FirebaseAuth.getInstance().currentUser?.uid
-                }
+                DisposableEffect(currentUid, userSp) {
+                    val uid = currentUid.orEmpty().trim()
 
-                var lastCoachMessage by remember { mutableStateOf<String?>(null) }
-                var lastCoachFrom by remember { mutableStateOf<String?>(null) }
-                var lastCoachSentAt by remember { mutableStateOf<java.util.Date?>(null) }
+                    val currentEmail = FirebaseAuth.getInstance()
+                        .currentUser
+                        ?.email
+                        ?.trim()
+                        .orEmpty()
 
-                DisposableEffect(currentUid) {
-                    if (currentUid == null) {
-                        lastCoachMessage = null
-                        lastCoachFrom = null
-                        lastCoachSentAt = null
+                    fun normalizePhone(raw: String): String =
+                        raw.filter { it.isDigit() }
+
+                    fun normalizeText(raw: String): String =
+                        raw.trim()
+                            .replace('־', '-')
+                            .replace('–', '-')
+                            .replace('—', '-')
+                            .replace(Regex("\\s+"), " ")
+                            .lowercase(java.util.Locale("he", "IL"))
+
+                    fun prefsAsList(vararg keys: String): List<String> {
+                        val out = mutableListOf<String>()
+
+                        keys.forEach { key ->
+                            when (val value = userSp.all[key]) {
+                                is String -> {
+                                    value
+                                        .removePrefix("[")
+                                        .removeSuffix("]")
+                                        .split(',', ';', '|', '\n')
+                                        .map { it.trim().trim('"') }
+                                        .filter { it.isNotBlank() }
+                                        .forEach { out += it }
+                                }
+
+                                is Set<*> -> {
+                                    value
+                                        .mapNotNull { it?.toString()?.trim() }
+                                        .filter { it.isNotBlank() }
+                                        .forEach { out += it }
+                                }
+
+                                is List<*> -> {
+                                    value
+                                        .mapNotNull { it?.toString()?.trim() }
+                                        .filter { it.isNotBlank() }
+                                        .forEach { out += it }
+                                }
+                            }
+                        }
+
+                        return out.distinct()
+                    }
+
+                    val currentPhones = prefsAsList(
+                        "phone",
+                        "phoneNumber",
+                        "phone_number",
+                        "user_phone",
+                        "mobile"
+                    )
+                        .map { normalizePhone(it) }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+
+                    val currentNames = prefsAsList(
+                        "fullName",
+                        "full_name",
+                        "name",
+                        "displayName",
+                        "user_name"
+                    )
+
+                    val currentBranches = prefsAsList(
+                        "active_branch",
+                        "branch",
+                        "branches",
+                        "branches_json",
+                        "selected_branches"
+                    )
+                        .map { normalizeText(it) }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+
+                    val currentGroups = prefsAsList(
+                        "active_group",
+                        "group",
+                        "groups",
+                        "groups_json",
+                        "selected_groups",
+                        "age_group",
+                        "age_groups"
+                    )
+                        .map {
+                            normalizeText(
+                                il.kmi.app.training.TrainingCatalog
+                                    .normalizeGroupName(it)
+                                    .ifBlank { it }
+                            )
+                        }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+
+                    fun stringListFromDoc(
+                        doc: com.google.firebase.firestore.DocumentSnapshot,
+                        vararg keys: String
+                    ): List<String> {
+                        val out = mutableListOf<String>()
+
+                        keys.forEach { key ->
+                            when (val value = doc.get(key)) {
+                                is String -> {
+                                    value
+                                        .removePrefix("[")
+                                        .removeSuffix("]")
+                                        .split(',', ';', '|', '\n')
+                                        .map { it.trim().trim('"') }
+                                        .filter { it.isNotBlank() }
+                                        .forEach { out += it }
+                                }
+
+                                is List<*> -> {
+                                    value
+                                        .mapNotNull { it?.toString()?.trim() }
+                                        .filter { it.isNotBlank() }
+                                        .forEach { out += it }
+                                }
+
+                                is Set<*> -> {
+                                    value
+                                        .mapNotNull { it?.toString()?.trim() }
+                                        .filter { it.isNotBlank() }
+                                        .forEach { out += it }
+                                }
+                            }
+                        }
+
+                        return out.distinct()
+                    }
+
+                    fun firstStringFromDoc(
+                        doc: com.google.firebase.firestore.DocumentSnapshot,
+                        vararg keys: String
+                    ): String {
+                        keys.forEach { key ->
+                            when (val value = doc.get(key)) {
+                                is String -> {
+                                    val clean = value.trim()
+                                    if (clean.isNotBlank()) return clean
+                                }
+
+                                is List<*> -> {
+                                    val clean = value
+                                        .mapNotNull { it?.toString()?.trim() }
+                                        .firstOrNull { it.isNotBlank() }
+
+                                    if (!clean.isNullOrBlank()) return clean
+                                }
+
+                                is Set<*> -> {
+                                    val clean = value
+                                        .mapNotNull { it?.toString()?.trim() }
+                                        .firstOrNull { it.isNotBlank() }
+
+                                    if (!clean.isNullOrBlank()) return clean
+                                }
+                            }
+                        }
+
+                        return ""
+                    }
+
+                    fun docTargetsCurrentUser(
+                        doc: com.google.firebase.firestore.DocumentSnapshot
+                    ): Boolean {
+                        if (
+                            uid.isBlank() &&
+                            currentEmail.isBlank() &&
+                            currentPhones.isEmpty() &&
+                            currentNames.isEmpty() &&
+                            currentBranches.isEmpty() &&
+                            currentGroups.isEmpty()
+                        ) {
+                            return false
+                        }
+
+                        val uidTargets = stringListFromDoc(
+                            doc,
+                            "targetUids",
+                            "targetUid",
+                            "recipientUids",
+                            "recipientUid",
+                            "uids",
+                            "userIds",
+                            "participantIds",
+                            "selectedUids"
+                        )
+
+                        if (uid.isNotBlank() && uidTargets.any { it.trim() == uid }) {
+                            return true
+                        }
+
+                        val emailTargets = stringListFromDoc(
+                            doc,
+                            "targetEmails",
+                            "targetEmail",
+                            "recipientEmails",
+                            "recipientEmail",
+                            "emails",
+                            "selectedEmails"
+                        )
+
+                        if (
+                            currentEmail.isNotBlank() &&
+                            emailTargets.any { it.equals(currentEmail, ignoreCase = true) }
+                        ) {
+                            return true
+                        }
+
+                        val phoneTargets = stringListFromDoc(
+                            doc,
+                            "targetPhones",
+                            "targetPhone",
+                            "recipientPhones",
+                            "recipientPhone",
+                            "phones",
+                            "selectedPhones"
+                        ).map { normalizePhone(it) }
+
+                        if (
+                            currentPhones.isNotEmpty() &&
+                            phoneTargets.any { target ->
+                                currentPhones.any { current -> current == target }
+                            }
+                        ) {
+                            return true
+                        }
+
+                        val nameTargets = stringListFromDoc(
+                            doc,
+                            "targetNames",
+                            "targetName",
+                            "recipientNames",
+                            "recipientName",
+                            "names",
+                            "selectedNames"
+                        )
+
+                        if (
+                            currentNames.isNotEmpty() &&
+                            nameTargets.any { target ->
+                                currentNames.any { current ->
+                                    current.trim().equals(target.trim(), ignoreCase = true)
+                                }
+                            }
+                        ) {
+                            return true
+                        }
+
+                        val docBranches = stringListFromDoc(
+                            doc,
+                            "branch",
+                            "branches",
+                            "branchName",
+                            "branch_name",
+                            "targetBranch",
+                            "targetBranches",
+                            "selectedBranch",
+                            "selectedBranches"
+                        ).map { normalizeText(it) }
+
+                        val docGroups = stringListFromDoc(
+                            doc,
+                            "group",
+                            "groups",
+                            "groupKey",
+                            "group_key",
+                            "targetGroup",
+                            "targetGroups",
+                            "selectedGroup",
+                            "selectedGroups"
+                        ).map {
+                            normalizeText(
+                                il.kmi.app.training.TrainingCatalog
+                                    .normalizeGroupName(it)
+                                    .ifBlank { it }
+                            )
+                        }
+
+                        val branchMatches =
+                            docBranches.isNotEmpty() &&
+                                    currentBranches.any { current ->
+                                        docBranches.any { it == current }
+                                    }
+
+                        val groupMatches =
+                            docGroups.isNotEmpty() &&
+                                    currentGroups.any { current ->
+                                        docGroups.any { it == current }
+                                    }
+
+                        return branchMatches && groupMatches
+                    }
+
+                    if (
+                        uid.isBlank() &&
+                        currentEmail.isBlank() &&
+                        currentPhones.isEmpty() &&
+                        currentNames.isEmpty() &&
+                        currentBranches.isEmpty() &&
+                        currentGroups.isEmpty()
+                    ) {
+                        recentCoachMessages = emptyList()
                         onDispose { }
                     } else {
                         val db = FirebaseFirestore.getInstance()
+
                         val query = db.collection("coachBroadcasts")
-                            .whereArrayContains("targetUids", currentUid)
                             .orderBy("createdAt", Query.Direction.DESCENDING)
-                            .limit(1)
+                            .limit(40)
 
                         val reg = query.addSnapshotListener { snap, e ->
                             if (e != null) {
-                                // אם יש שגיאה – לא מוחקים את ההודעה האחרונה שכבר מוצגת
                                 return@addSnapshotListener
                             }
 
-                            if (snap != null && !snap.isEmpty) {
-                                val doc = snap.documents.first()
+                            recentCoachMessages = snap
+                                ?.documents
+                                .orEmpty()
+                                .filter { docTargetsCurrentUser(it) }
+                                .mapNotNull { doc ->
+                                    val text = (
+                                            doc.getString("text")
+                                                ?: doc.getString("message")
+                                                ?: doc.getString("body")
+                                                ?: doc.getString("content")
+                                            )
+                                        ?.trim()
+                                        .orEmpty()
 
-                                lastCoachMessage = doc.getString("text")
-                                    ?: doc.getString("message")
-
-                                lastCoachFrom = doc.getString("coachName")
-                                    ?: doc.getString("coach_name")
-                                            ?: "המאמן"
-
-                                lastCoachSentAt = doc.getTimestamp("createdAt")?.toDate()
-                            } else {
-                                lastCoachMessage = null
-                                lastCoachFrom = null
-                                lastCoachSentAt = null
-                            }
+                                    if (text.isBlank()) {
+                                        null
+                                    } else {
+                                        CoachHomeMessage(
+                                            text = text,
+                                            coachName = (
+                                                    doc.getString("coachName")
+                                                        ?: doc.getString("coach_name")
+                                                        ?: doc.getString("senderName")
+                                                        ?: doc.getString("fromName")
+                                                        ?: "המאמן"
+                                                    ).trim(),
+                                            sentAt = doc.getTimestamp("createdAt")?.toDate()
+                                                ?: doc.getTimestamp("sentAt")?.toDate()
+                                                ?: doc.getTimestamp("timestamp")?.toDate(),
+                                            branch = firstStringFromDoc(
+                                                doc,
+                                                "branch",
+                                                "branchName",
+                                                "branch_name",
+                                                "targetBranch",
+                                                "selectedBranch"
+                                            ),
+                                            group = firstStringFromDoc(
+                                                doc,
+                                                "group",
+                                                "groupKey",
+                                                "group_key",
+                                                "targetGroup",
+                                                "selectedGroup"
+                                            )
+                                        )
+                                    }
+                                }
+                                .take(5)
                         }
 
                         onDispose { reg.remove() }
                     }
                 }
+
                 // =========================
 
                 fun readSelectedBranches(sp: SharedPreferences): List<String> {
@@ -1300,7 +1659,7 @@ fun HomeScreen(
                         .weight(1f)
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = 104.dp)
+                    contentPadding = PaddingValues(top = 6.dp, bottom = 28.dp)
                 ) {
 
                     if (upcoming.isEmpty()) {
@@ -1382,12 +1741,18 @@ fun HomeScreen(
                         Spacer(Modifier.height(6.dp))
                     }
 
-                    // ===== כרטיס הודעות מהמאמן – מעודכן להציג הודעה אחרונה =====
+                    // ===== כרטיס הודעות מהמאמן – הודעה אחרונה + דיאלוג הודעות אחרונות =====
                     item {
-
-                        val msg = lastCoachMessage?.trim()
+                        val latestMessage = recentCoachMessages.firstOrNull()
+                        val msg = latestMessage?.text?.trim()
+                        val extraCount = (recentCoachMessages.size - 1).coerceAtLeast(0)
 
                         Surface(
+                            onClick = {
+                                if (recentCoachMessages.isNotEmpty()) {
+                                    showCoachMessagesDialog = true
+                                }
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
@@ -1399,20 +1764,17 @@ fun HomeScreen(
                                 Color(0xFF7DD3FC)
                             )
                         ) {
-
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(14.dp),
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-
-                                // 👤 אייקון מאמן
                                 Surface(
                                     shape = CircleShape,
                                     color = Color(0xFFE0F2FE),
-                                    modifier = Modifier.size(40.dp)
+                                    modifier = Modifier.size(42.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Person,
@@ -1423,56 +1785,180 @@ fun HomeScreen(
                                 }
 
                                 Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = latestMessage?.coachName
+                                                ?.takeIf { it.isNotBlank() }
+                                                ?: if (isEnglish) "Coach" else "המאמן",
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0C4A6E),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
 
-                                    // שם המאמן
-                                    Text(
-                                        text = lastCoachFrom?.takeIf { it.isNotBlank() } ?: "המאמן",
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF0C4A6E),
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
+                                        if (recentCoachMessages.isNotEmpty()) {
+                                            Surface(
+                                                onClick = {
+                                                    showCoachMessagesDialog = true
+                                                },
+                                                shape = RoundedCornerShape(999.dp),
+                                                color = Color(0xFFE0F2FE),
+                                                border = androidx.compose.foundation.BorderStroke(
+                                                    1.dp,
+                                                    Color(0xFF7DD3FC)
+                                                )
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Email,
+                                                        contentDescription = if (isEnglish) {
+                                                            "Recent messages"
+                                                        } else {
+                                                            "הודעות אחרונות"
+                                                        },
+                                                        tint = Color(0xFF0369A1),
+                                                        modifier = Modifier.size(15.dp)
+                                                    )
+
+                                                    Text(
+                                                        text = if (isEnglish) {
+                                                            "Messages"
+                                                        } else {
+                                                            "הודעות"
+                                                        },
+                                                        color = Color(0xFF0369A1),
+                                                        fontWeight = FontWeight.Bold,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        maxLines = 1
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
 
                                     Spacer(Modifier.height(4.dp))
 
                                     if (msg.isNullOrEmpty()) {
-
                                         Text(
-                                            text = if (isEnglish)
+                                            text = if (isEnglish) {
                                                 "No new messages right now"
-                                            else
-                                                "אין הודעות חדשות כרגע",
+                                            } else {
+                                                "אין הודעות חדשות כרגע"
+                                            },
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = Color(0xFF64748B)
                                         )
-
                                     } else {
-
-                                        val shortMsg = if (msg.length > 140)
-                                            msg.take(140) + "..."
-                                        else msg
-
                                         Text(
-                                            text = shortMsg,
+                                            text = msg,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = Color(0xFF1E293B)
+                                            color = Color(0xFF1E293B),
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
                                         )
+
+                                        val branchGroupLine = buildString {
+                                            val b = latestMessage.branch.trim()
+                                            val g = latestMessage.group.trim()
+
+                                            if (b.isNotBlank()) {
+                                                append(if (isEnglish) "Branch: " else "סניף: ")
+                                                append(b)
+                                            }
+
+                                            if (g.isNotBlank()) {
+                                                if (isNotBlank()) append(" · ")
+                                                append(if (isEnglish) "Group: " else "קבוצה: ")
+                                                append(g)
+                                            }
+                                        }
+
+                                        if (branchGroupLine.isNotBlank()) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                text = branchGroupLine,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color(0xFF475569),
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
 
                                     Spacer(Modifier.height(6.dp))
 
-                                    val timeText = lastCoachSentAt?.let {
+                                    val timeText = latestMessage?.sentAt?.let {
                                         java.text.SimpleDateFormat(
-                                            "dd/MM/yyyy HH:mm",
+                                            "dd/MM/yyyy · HH:mm",
                                             java.util.Locale("he", "IL")
                                         ).format(it)
-                                    } ?: ""
+                                    }.orEmpty()
 
-                                    if (timeText.isNotBlank()) {
-                                        Text(
-                                            text = timeText,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF64748B)
-                                        )
+                                    val openRecentText = if (extraCount > 0) {
+                                        if (isEnglish) {
+                                            "Open recent messages · +$extraCount more"
+                                        } else {
+                                            "פתח הודעות אחרונות"
+                                        }
+                                    } else {
+                                        if (isEnglish) {
+                                            "Open recent messages"
+                                        } else {
+                                            "פתח הודעות אחרונות"
+                                        }
+                                    }
+
+                                    if (timeText.isNotBlank() || recentCoachMessages.isNotEmpty()) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            if (timeText.isNotBlank()) {
+                                                Text(
+                                                    text = timeText,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontSize = 11.2.sp,
+                                                        lineHeight = 13.sp
+                                                    ),
+                                                    color = Color(0xFF64748B),
+                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
+
+                                            if (recentCoachMessages.isNotEmpty()) {
+                                                Spacer(Modifier.height(3.dp))
+
+                                                Text(
+                                                    text = openRecentText,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontSize = 11.2.sp,
+                                                        lineHeight = 13.sp
+                                                    ),
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF0369A1),
+                                                    textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            showCoachMessagesDialog = true
+                                                        }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1480,7 +1966,7 @@ fun HomeScreen(
                     }
                 }
 
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(1.dp))
 
                 var bubbleOffset by remember { mutableStateOf(0f) }
 
@@ -1501,7 +1987,7 @@ fun HomeScreen(
                         .fillMaxWidth()
                         .navigationBarsPadding()
                         .imePadding()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .padding(horizontal = 12.dp, vertical = 1.dp)
                 ) {
                     Surface(
                         onClick = {
@@ -1668,17 +2154,13 @@ fun HomeScreen(
             AnimatedVisibility(
                 visible = fabExpanded,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(bottom = 138.dp),
+                    // ✅ כמו מסך החגורות: התפריט נפתח מהצד, ליד הטאב
+                    .align(Alignment.CenterStart)
+                    .padding(start = 42.dp),
                 enter =
                     fadeIn(animationSpec = tween(180)) +
                             scaleIn(
                                 initialScale = 0.92f,
-                                animationSpec = tween(220)
-                            ) +
-                            androidx.compose.animation.slideInVertically(
-                                initialOffsetY = { it / 8 },
                                 animationSpec = tween(220)
                             ),
                 exit =
@@ -1686,56 +2168,356 @@ fun HomeScreen(
                             scaleOut(
                                 targetScale = 0.96f,
                                 animationSpec = tween(160)
-                            ) +
-                            androidx.compose.animation.slideOutVertically(
-                                targetOffsetY = { it / 10 },
-                                animationSpec = tween(160)
                             )
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            start = if (isEnglish) 16.dp else 0.dp,
-                            end = if (isEnglish) 0.dp else 16.dp
-                        ),
-                    contentAlignment =
-                        if (isEnglish) BiasAbsoluteAlignment(-1f, 1f)
-                        else BiasAbsoluteAlignment(1f, 1f)
-                ) {
-                    HomePremiumQuickMenuPanel(
-                        title = if (isEnglish) "Quick Menu" else "תפריט מהיר",
-                        isEnglish = isEnglish,
-                        items = quickMenuItems,
-                        onClose = { fabExpanded = false }
-                    )
-                }
+                HomePremiumQuickMenuPanel(
+                    title = if (isEnglish) "Quick Menu" else "תפריט מהיר",
+                    isEnglish = isEnglish,
+                    items = quickMenuItems,
+                    onClose = { fabExpanded = false }
+                )
             }
 
             AnimatedVisibility(
                 visible = showFab && !fabExpanded,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter),
+                    // ✅ בדיוק כמו במסך החגורות: צד שמאל פיזי של המסך
+                    .align(Alignment.CenterStart),
                 enter = fadeIn() + scaleIn(),
                 exit = fadeOut() + scaleOut()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 18.dp, end = 18.dp, bottom = 88.dp),
-                    horizontalArrangement =
-                        if (isEnglish) Arrangement.Absolute.Right
-                        else Arrangement.Absolute.Left
-                ) {
-                    ModernHomeQuickFab(
-                        onClick = {
-                            clickSound()
-                            haptic(true)
-                            fabExpanded = true
+                ModernHomeQuickFab(
+                    isEnglish = isEnglish,
+                    onClick = {
+                        clickSound()
+                        haptic(true)
+                        fabExpanded = true
+                    }
+                )
+            }
+
+            if (showCoachMessagesDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showCoachMessagesDialog = false
+                    },
+                    shape = RoundedCornerShape(30.dp),
+                    containerColor = Color(0xFFF4F1FB),
+                    tonalElevation = 10.dp,
+                    title = {
+                        Text(
+                            text = if (isEnglish) {
+                                "Recent coach messages"
+                            } else {
+                                "הודעות אחרונות מהמאמן"
+                            },
+                            fontWeight = FontWeight.Black,
+                            fontSize = 16.sp,
+                            lineHeight = 18.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color(0xFF0F172A),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    text = {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 430.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (recentCoachMessages.isEmpty()) {
+                                item {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = Color.White.copy(alpha = 0.94f),
+                                        shadowElevation = 6.dp,
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            Color(0xFFE2E8F0)
+                                        )
+                                    ) {
+                                        Text(
+                                            text = if (isEnglish) {
+                                                "No messages right now."
+                                            } else {
+                                                "אין הודעות כרגע."
+                                            },
+                                            color = Color(0xFF64748B),
+                                            fontWeight = FontWeight.SemiBold,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp, vertical = 18.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                items(
+                                    items = recentCoachMessages,
+                                    key = { message ->
+                                        buildString {
+                                            append(message.sentAt?.time ?: 0L)
+                                            append("|")
+                                            append(message.coachName)
+                                            append("|")
+                                            append(message.text.take(40))
+                                        }
+                                    }
+                                ) { message ->
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .shadow(
+                                                elevation = 10.dp,
+                                                shape = RoundedCornerShape(22.dp),
+                                                clip = false
+                                            ),
+                                        shape = RoundedCornerShape(22.dp),
+                                        color = Color.Transparent,
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            Color(0xFFD6E4F0)
+                                        )
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        colors = listOf(
+                                                            Color(0xFFF8FCFF),
+                                                            Color(0xFFF1F7FB)
+                                                        )
+                                                    )
+                                                )
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(5.dp)
+                                                        .fillMaxHeight()
+                                                        .background(
+                                                            Brush.verticalGradient(
+                                                                colors = listOf(
+                                                                    Color(0xFF38BDF8),
+                                                                    Color(0xFF7C3AED)
+                                                                )
+                                                            )
+                                                        )
+                                                )
+
+                                                Column(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                                                    horizontalAlignment = if (isEnglish) {
+                                                        Alignment.Start
+                                                    } else {
+                                                        Alignment.End
+                                                    }
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = if (isEnglish) {
+                                                            Arrangement.Start
+                                                        } else {
+                                                            Arrangement.End
+                                                        }
+                                                    ) {
+                                                        if (isEnglish) {
+                                                            Surface(
+                                                                shape = CircleShape,
+                                                                color = Color(0xFFE0F2FE),
+                                                                border = androidx.compose.foundation.BorderStroke(
+                                                                    1.dp,
+                                                                    Color(0xFFBAE6FD)
+                                                                )
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Filled.Person,
+                                                                    contentDescription = null,
+                                                                    tint = Color(0xFF0369A1),
+                                                                    modifier = Modifier
+                                                                        .size(30.dp)
+                                                                        .padding(6.dp)
+                                                                )
+                                                            }
+
+                                                            Spacer(Modifier.width(8.dp))
+                                                        }
+
+                                                        Text(
+                                                            text = message.coachName.ifBlank {
+                                                                if (isEnglish) "Coach" else "המאמן"
+                                                            },
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            color = Color(0xFF0B5E8E),
+                                                            fontSize = 17.sp,
+                                                            lineHeight = 20.sp,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                            modifier = Modifier.weight(1f)
+                                                        )
+
+                                                        if (!isEnglish) {
+                                                            Spacer(Modifier.width(8.dp))
+
+                                                            Surface(
+                                                                shape = CircleShape,
+                                                                color = Color(0xFFE0F2FE),
+                                                                border = androidx.compose.foundation.BorderStroke(
+                                                                    1.dp,
+                                                                    Color(0xFFBAE6FD)
+                                                                )
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Filled.Person,
+                                                                    contentDescription = null,
+                                                                    tint = Color(0xFF0369A1),
+                                                                    modifier = Modifier
+                                                                        .size(30.dp)
+                                                                        .padding(6.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Spacer(Modifier.height(7.dp))
+
+                                                    Text(
+                                                        text = message.text,
+                                                        color = Color(0xFF1E293B),
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 16.sp,
+                                                        lineHeight = 20.sp,
+                                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    )
+
+                                                    val branchGroupLine = buildString {
+                                                        val b = message.branch.trim()
+                                                        val g = message.group.trim()
+
+                                                        if (b.isNotBlank()) {
+                                                            append(if (isEnglish) "Branch: " else "סניף: ")
+                                                            append(b)
+                                                        }
+
+                                                        if (g.isNotBlank()) {
+                                                            if (isNotBlank()) append(" · ")
+                                                            append(if (isEnglish) "Group: " else "קבוצה: ")
+                                                            append(g)
+                                                        }
+                                                    }
+
+                                                    if (branchGroupLine.isNotBlank()) {
+                                                        Spacer(Modifier.height(8.dp))
+
+                                                        Surface(
+                                                            shape = RoundedCornerShape(999.dp),
+                                                            color = Color(0xFFEFF6FF),
+                                                            border = androidx.compose.foundation.BorderStroke(
+                                                                1.dp,
+                                                                Color(0xFFBFDBFE)
+                                                            )
+                                                        ) {
+                                                            Text(
+                                                                text = branchGroupLine,
+                                                                color = Color(0xFF475569),
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                fontSize = 11.5.sp,
+                                                                lineHeight = 14.sp,
+                                                                maxLines = 2,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                                                            )
+                                                        }
+                                                    }
+
+                                                    val timeText = message.sentAt?.let {
+                                                        java.text.SimpleDateFormat(
+                                                            "dd/MM/yyyy · HH:mm",
+                                                            java.util.Locale("he", "IL")
+                                                        ).format(it)
+                                                    }.orEmpty()
+
+                                                    if (timeText.isNotBlank()) {
+                                                        Spacer(Modifier.height(9.dp))
+
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = if (isEnglish) {
+                                                                Arrangement.Start
+                                                            } else {
+                                                                Arrangement.End
+                                                            }
+                                                        ) {
+                                                            Surface(
+                                                                shape = RoundedCornerShape(999.dp),
+                                                                color = Color(0xFFF1F5F9)
+                                                            ) {
+                                                                Row(
+                                                                    modifier = Modifier.padding(
+                                                                        horizontal = 9.dp,
+                                                                        vertical = 4.dp
+                                                                    ),
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Filled.DateRange,
+                                                                        contentDescription = null,
+                                                                        tint = Color(0xFF64748B),
+                                                                        modifier = Modifier.size(13.dp)
+                                                                    )
+
+                                                                    Text(
+                                                                        text = timeText,
+                                                                        color = Color(0xFF64748B),
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        fontSize = 11.5.sp,
+                                                                        lineHeight = 13.sp,
+                                                                        maxLines = 1,
+                                                                        overflow = TextOverflow.Ellipsis
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    )
-                }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showCoachMessagesDialog = false
+                            }
+                        ) {
+                            Text(
+                                text = if (isEnglish) "Close" else "סגור",
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF5B21B6)
+                            )
+                        }
+                    }
+                )
             }
 
 // ===== דיאלוג תרגיל מהחיפוש =====
@@ -1859,48 +2641,57 @@ fun HomeScreen(
 
 @Composable
 private fun ModernHomeQuickFab(
+    isEnglish: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    // ✅ הטאב יושב בצד שמאל כמו במסך החגורות:
+    // צד שמאל ישר, צד ימין מעוגל.
+    val tabShape = RoundedCornerShape(
+        topStart = 0.dp,
+        bottomStart = 0.dp,
+        topEnd = 18.dp,
+        bottomEnd = 18.dp
+    )
 
     Box(
-        modifier = modifier.size(56.dp),
+        modifier = modifier
+            .width(38.dp)
+            .height(72.dp),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(74.dp)
+                .matchParentSize()
                 .background(
-                    brush = Brush.radialGradient(
+                    brush = Brush.horizontalGradient(
                         colors = listOf(
-                            Color(0xFF16A34A).copy(alpha = 0.28f),
-                            Color.Transparent
+                            Color(0xFFFFE7A3),
+                            Color(0xFFFFC247),
+                            Color(0xFFFFA928)
                         )
                     ),
-                    shape = shape
+                    shape = tabShape
                 )
-        )
-
-        Surface(
-            onClick = onClick,
-            shape = shape,
-            color = Color(0xFF16A34A),
-            shadowElevation = 12.dp,
-            border = androidx.compose.foundation.BorderStroke(
-                2.dp,
-                Color.White.copy(alpha = 0.92f)
-            ),
-            modifier = Modifier.size(56.dp)
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.72f),
+                    shape = tabShape
+                )
+                .shadow(
+                    elevation = 7.dp,
+                    shape = tabShape,
+                    clip = false
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Filled.Menu,
-                    contentDescription = "Quick Menu",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+            Icon(
+                imageVector = Icons.Filled.Menu,
+                contentDescription = if (isEnglish) "Quick menu" else "תפריט מהיר",
+                tint = Color.White,
+                modifier = Modifier.size(23.dp)
+            )
         }
     }
 }
@@ -1920,8 +2711,8 @@ private fun HomePremiumQuickMenuPanel(
         shape = panelShape,
         color = Color.White,
         tonalElevation = 0.dp,
-        shadowElevation = 16.dp,
-        modifier = Modifier.width(270.dp)
+        shadowElevation = 10.dp,
+        modifier = Modifier.width(214.dp)
     ) {
         Box(
             modifier = Modifier
@@ -1941,7 +2732,7 @@ private fun HomePremiumQuickMenuPanel(
                     color = Color(0xFF16A34A).copy(alpha = 0.34f),
                     shape = panelShape
                 )
-                .padding(horizontal = 10.dp, vertical = 10.dp)
+                .padding(horizontal = 7.dp, vertical = 6.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -1959,7 +2750,10 @@ private fun HomePremiumQuickMenuPanel(
                             textAlign = TextAlign.Start,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 13.2.sp,
+                                lineHeight = 15.sp
+                            ),
                             modifier = Modifier.weight(1f)
                         )
 
@@ -1979,7 +2773,10 @@ private fun HomePremiumQuickMenuPanel(
                             textAlign = TextAlign.Right,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 13.2.sp,
+                                lineHeight = 15.sp
+                            ),
                             modifier = Modifier.weight(1f)
                         )
 
@@ -1996,7 +2793,7 @@ private fun HomePremiumQuickMenuPanel(
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(4.dp))
 
                 items.forEachIndexed { index, item ->
                     HomePremiumQuickMenuRow(
@@ -2032,31 +2829,35 @@ private fun HomePremiumQuickMenuRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 12.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isEnglish) {
             HomePremiumQuickMenuIcon(icon)
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(7.dp))
 
             Text(
                 text = cleanText,
                 color = Color(0xFF0F172A),
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Start,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 11.4.sp,
+                    lineHeight = 13.sp,
+                    letterSpacing = (-0.15).sp
+                ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
 
             if (isLocked) {
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(5.dp))
                 Icon(
                     imageVector = Icons.Filled.Lock,
                     contentDescription = null,
                     tint = Color(0xFFF59E0B),
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(13.dp)
                 )
             }
         } else {
@@ -2065,23 +2866,27 @@ private fun HomePremiumQuickMenuRow(
                     imageVector = Icons.Filled.Lock,
                     contentDescription = null,
                     tint = Color(0xFFF59E0B),
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(13.dp)
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(5.dp))
             }
 
             Text(
                 text = cleanText,
                 color = Color(0xFF0F172A),
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Right,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.5.sp,
+                    lineHeight = 14.sp,
+                    letterSpacing = (-0.10).sp
+                ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
 
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(7.dp))
             HomePremiumQuickMenuIcon(icon)
         }
     }
@@ -2093,7 +2898,7 @@ private fun HomePremiumQuickMenuIcon(
 ) {
     Box(
         modifier = Modifier
-            .size(24.dp)
+            .size(19.dp)
             .background(Color(0xFF16A34A).copy(alpha = 0.10f), CircleShape)
             .border(
                 width = 1.dp,
@@ -2106,7 +2911,7 @@ private fun HomePremiumQuickMenuIcon(
             imageVector = icon,
             contentDescription = null,
             tint = Color(0xFF16A34A),
-            modifier = Modifier.size(14.dp)
+            modifier = Modifier.size(10.5.dp)
         )
     }
 }
@@ -2395,7 +3200,7 @@ private fun TrainingCardCompact(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .heightIn(min = 68.dp),
+            .heightIn(min = 78.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
         shape = RoundedCornerShape(16.dp)
@@ -2433,16 +3238,16 @@ private fun TrainingCardCompact(
 
             Text(
                 text = dateTimeText,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.6.sp,
-                    lineHeight = 12.sp
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 12.4.sp,
+                    lineHeight = 15.sp
                 ),
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip,
+                maxLines = 2,
+                softWrap = true,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -2540,12 +3345,12 @@ private fun NavigationChip(
             Color.Black.copy(alpha = 0.06f)
         ),
         modifier = modifier
-            .heightIn(min = 54.dp)
+            .heightIn(min = 62.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // אייקון
@@ -2586,13 +3391,14 @@ private fun NavigationChip(
                         safeAddress
                     },
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 9.sp,
-                        lineHeight = 13.sp
+                        fontSize = 10.4.sp,
+                        lineHeight = 13.8.sp
                     ),
                     // ✅ לא להשתמש כאן ב-onSurfaceVariant,
                     // כי במצב כהה הוא יוצא בהיר מדי על כרטיס לבן.
                     color = Color(0xFF475569),
                     maxLines = 2,
+                    softWrap = true,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -2665,7 +3471,7 @@ private fun NavPickerDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                            .padding(horizontal = 9.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(

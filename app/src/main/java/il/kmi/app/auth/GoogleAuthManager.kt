@@ -5,7 +5,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
@@ -25,16 +25,13 @@ object GoogleAuthManager {
         return try {
             val credentialManager = CredentialManager.create(context)
 
-            val googleIdOption = GetGoogleIdOption.Builder()
-                // חשוב: זה ה-Web Client ID שנוצר דרך google-services.json
-                .setServerClientId(context.getString(R.string.default_web_client_id))
-                // false = מאפשר לבחור גם חשבון חדש, לא רק חשבונות שכבר התחברו בעבר
-                .setFilterByAuthorizedAccounts(false)
-                .setAutoSelectEnabled(false)
+            val googleSignInOption = GetSignInWithGoogleOption.Builder(
+                context.getString(R.string.default_web_client_id)
+            )
                 .build()
 
             val request = GetCredentialRequest.Builder()
-                .addCredentialOption(googleIdOption)
+                .addCredentialOption(googleSignInOption)
                 .build()
 
             val response = credentialManager.getCredential(

@@ -45,7 +45,6 @@ import il.kmi.app.auth.UserProfileCompletion
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import il.kmi.app.FcmTokenManager
-import il.kmi.app.debug.KmiEnglishContentAudit
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -213,6 +212,62 @@ private suspend fun fetchAndPersistFullNameIfMissing(
     }
 }
 
+private fun googleLoginErrorMessage(
+    error: Throwable,
+    isEnglish: Boolean
+): String {
+    val clean = listOfNotNull(
+        error.localizedMessage,
+        error.message,
+        error.toString()
+    ).joinToString(" ")
+
+    val isCancelled =
+        error is androidx.credentials.exceptions.GetCredentialCancellationException ||
+                clean.contains("cancel", ignoreCase = true)
+
+    if (isCancelled) {
+        return if (isEnglish) {
+            "Google sign-in was cancelled."
+        } else {
+            "ההתחברות עם Google בוטלה."
+        }
+    }
+
+    val isNoCredential =
+        clean.contains("No credentials", ignoreCase = true) ||
+                clean.contains("NoCredential", ignoreCase = true) ||
+                clean.contains("credentials available", ignoreCase = true)
+
+    if (isNoCredential) {
+        return if (isEnglish) {
+            "No Google account was found on this device. Please make sure a Google account is added to the device, update Google Play services, and try again."
+        } else {
+            "לא נמצא חשבון Google זמין במכשיר. יש לוודא שמוגדר חשבון Google במכשיר, לעדכן את שירותי Google Play ולנסות שוב."
+        }
+    }
+
+    val isConfigProblem =
+        clean.contains("DEVELOPER_ERROR", ignoreCase = true) ||
+                clean.contains("ApiException: 10", ignoreCase = true) ||
+                clean.contains("invalid_audience", ignoreCase = true) ||
+                clean.contains("audience", ignoreCase = true)
+
+    if (isConfigProblem) {
+        return if (isEnglish) {
+            "Google sign-in is not configured correctly for this app version. Please update the app and try again."
+        } else {
+            "התחברות Google אינה מוגדרת נכון לגרסה הזו. יש לעדכן את האפליקציה ולנסות שוב."
+        }
+    }
+
+    return if (isEnglish) {
+        "Google sign-in failed. Please try again."
+    } else {
+        "ההתחברות עם Google נכשלה. נסה שוב."
+    }
+}
+
 /** ✅ REPLACE: חגורה מצוירת על הרקע (בלי תמונה עם לבן) */
 @Composable
 private fun BeltBadge(
@@ -354,10 +409,6 @@ fun IntroScreen(
     LaunchedEffect(Unit) {
         startAnim = true
         KmiAccess.ensureTrialStarted(userSp)
-
-        // ✅ בדיקה זמנית לפני פרסום גרסה:
-        // ב-Logcat לסנן לפי KMI_EN_AUDIT.
-        KmiEnglishContentAudit.run()
     }
 
     // ✅ FIX: משתמשים באותו userSp שממנו אתה מתחיל Trial ושבו נשמר המשתמש
@@ -535,8 +586,6 @@ fun IntroScreen(
 
                                 loginResult
                                     .onSuccess {
-                                        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-
                                         val profileStatus =
                                             UserProfileCompletion.checkAndPersistProfileStatus(ctx)
 
@@ -553,19 +602,6 @@ fun IntroScreen(
                                         isGoogleLoading = false
                                         googleFlowLocked = false
 
-                                        val debugMessage =
-                                            if (profileStatus.isComplete) {
-                                                "Google OK\nUID: $uid\nProfile complete → entering app"
-                                            } else {
-                                                "Google OK\nUID: $uid\nProfile missing → opening registration\nMissing: ${profileStatus.missingFields.joinToString(", ")}"
-                                            }
-
-                                        Toast.makeText(
-                                            ctx,
-                                            debugMessage,
-                                            Toast.LENGTH_LONG
-                                        ).show()
-
                                         if (profileStatus.isComplete) {
                                             onProfileComplete()
                                         } else {
@@ -576,24 +612,16 @@ fun IntroScreen(
                                         isGoogleLoading = false
                                         googleFlowLocked = false
 
-                                        val errorMessage = error.localizedMessage ?: error.toString()
+                                        googleError = googleLoginErrorMessage(
+                                            error = error,
+                                            isEnglish = isEnglish
+                                        )
 
-                                        googleError =
-                                            if (error is androidx.credentials.exceptions.GetCredentialCancellationException) {
-                                                if (isEnglish) {
-                                                    "Google sign-in was cancelled"
-                                                } else {
-                                                    "ההתחברות עם Google בוטלה"
-                                                }
-                                            } else {
-                                                if (isEnglish) {
-                                                    "Google sign-in failed: $errorMessage"
-                                                } else {
-                                                    "ההתחברות עם Google נכשלה: $errorMessage"
-                                                }
-                                            }
-
-                                        Toast.makeText(ctx, googleError, Toast.LENGTH_LONG).show()
+                                        Toast.makeText(
+                                            ctx,
+                                            googleError.orEmpty(),
+                                            Toast.LENGTH_LONG
+                                        ).show()
                                     }
                             }
                         },
