@@ -56,10 +56,22 @@ import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.progress.UserProgressComparison
+import il.kmi.app.progress.UserProgressRepository
+import kotlinx.coroutines.delay
 
 /* ------------------------------ MarkState (3 states) ------------------------------ */
 
 private enum class MarkState { YES, NO, NONE }
+
+private data class SummaryExerciseRow(
+    val displayTopicTitle: String,
+    val sourceTopicTitle: String,
+    val subTopicTitle: String?,
+    val statusTopicKey: String,
+    val itemRaw: String,
+    val indexInStatusGroup: Int
+)
 
 // ===== canonical בדיוק כמו MaterialsScreen =====
 
@@ -208,6 +220,22 @@ private fun topicDisplayName(topicTitle: String, isEnglish: Boolean): String {
     }
 }
 
+private fun subTopicDisplayName(
+    subTopicTitle: String?,
+    topicTitle: String,
+    isEnglish: Boolean
+): String {
+    val clean = subTopicTitle?.trim().orEmpty()
+
+    if (clean.isBlank()) {
+        return if (isEnglish) "General exercises" else "תרגילים כלליים"
+    }
+
+    if (!isEnglish) return clean
+
+    return ExerciseTitlesEn.get(clean)?.takeIf { it.isNotBlank() } ?: clean
+}
+
 private fun exerciseDisplayNameForUi(topicTitle: String, rawItem: String, isEnglish: Boolean): String {
     val topicTrim = topicTitle.trim()
 
@@ -270,7 +298,9 @@ fun ProgressMeter(
     topic: String? = null,
     modifier: Modifier = Modifier,
     meterSize: Dp = 180.dp,
-    stroke: Dp = 14.dp
+    stroke: Dp = 14.dp,
+    doneOverride: Int? = null,
+    totalOverride: Int? = null
 ) {
     var done by remember(belt, topic) { mutableStateOf(0) }
     var total by remember(belt, topic) { mutableStateOf(0) }
@@ -321,7 +351,9 @@ fun ProgressMeter(
         done = d
     }
 
-    val pct: Int = if (total == 0) 0 else (done * 100 / total)
+    val effectiveDone = doneOverride ?: done
+    val effectiveTotal = totalOverride ?: total
+    val pct: Int = if (effectiveTotal == 0) 0 else (effectiveDone * 100 / effectiveTotal)
     val bg = MaterialTheme.colorScheme.surfaceVariant
     val fg = belt.color
     val txt = MaterialTheme.colorScheme.onSurface
@@ -362,7 +394,7 @@ fun ProgressMeter(
             val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
             Text(
-                text = if (isEnglish) "$done out of $total" else "$done מתוך $total",
+                text = if (isEnglish) "$effectiveDone out of $effectiveTotal" else "$effectiveDone מתוך $effectiveTotal",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -373,6 +405,240 @@ fun ProgressMeter(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun UserProgressComparisonCard(
+    comparison: UserProgressComparison?,
+    isLoaded: Boolean,
+    belt: Belt,
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val titleText = if (isEnglish) {
+        "Your belt progress"
+    } else {
+        "המצב שלך בחגורה"
+    }
+
+    val loadingText = if (isEnglish) {
+        "Loading comparison data..."
+    } else {
+        "טוען נתוני השוואה..."
+    }
+
+    val notEnoughText = if (isEnglish) {
+        "Not enough trainees yet for a reliable comparison."
+    } else {
+        "אין עדיין מספיק נתונים להשוואה מול מתאמנים אחרים."
+    }
+
+    val c = comparison
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.92f)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = belt.color.copy(alpha = 0.28f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.98f),
+                            belt.color.copy(alpha = 0.10f),
+                            Color.White.copy(alpha = 0.96f)
+                        )
+                    )
+                )
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = if (isEnglish) {
+                    Arrangement.Start
+                } else {
+                    Arrangement.End
+                },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Insights,
+                    contentDescription = null,
+                    tint = belt.color,
+                    modifier = Modifier.size(22.dp)
+                )
+
+                Spacer(Modifier.width(8.dp))
+
+                Text(
+                    text = titleText,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF172033),
+                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                )
+            }
+
+            if (c == null) {
+                Text(
+                    text = if (isLoaded) notEnoughText else loadingText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF475467),
+                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SummaryMiniProgressChip(
+                        title = if (isEnglish) "You know" else "אתה יודע",
+                        value = "${c.userKnownPercent}%",
+                        color = belt.color,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    SummaryMiniProgressChip(
+                        title = if (isEnglish) "Average" else "ממוצע",
+                        value = "${c.averageKnownPercent}%",
+                        color = Color(0xFF2563EB),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    SummaryMiniProgressChip(
+                        title = if (isEnglish) "Trainees" else "מתאמנים",
+                        value = c.usersCount.toString(),
+                        color = Color(0xFF475467),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Text(
+                    text = if (c.hasEnoughData) {
+                        if (isEnglish) {
+                            "You are above ${c.percentileAbove}% of trainees in your belt."
+                        } else {
+                            "אתה מעל ${c.percentileAbove}% מהמתאמנים בחגורה שלך."
+                        }
+                    } else {
+                        notEnoughText
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (c.hasEnoughData) belt.color else Color(0xFF667085),
+                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryMiniProgressChip(
+    title: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.height(70.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = color.copy(alpha = 0.12f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = color.copy(alpha = 0.22f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = color,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+
+            Spacer(Modifier.height(2.dp))
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF344054),
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryToggleButton(
+    text: String,
+    iconColor: Color,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) iconColor.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.88f),
+        shadowElevation = if (selected) 6.dp else 4.dp,
+        border = BorderStroke(
+            1.dp,
+            if (selected) iconColor.copy(alpha = 0.42f) else iconColor.copy(alpha = 0.16f)
+        ),
+        modifier = modifier.height(46.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Insights,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(17.dp)
+            )
+
+            Spacer(Modifier.width(5.dp))
+
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF263238),
+                maxLines = 1,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -405,7 +671,16 @@ fun SummaryScreen(
         .collectAsState(initial = emptySet())
 
     var showProgress by rememberSaveable { mutableStateOf(false) }
+    var showComparison by rememberSaveable { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
+
+    var userProgressComparison by remember {
+        mutableStateOf<UserProgressComparison?>(null)
+    }
+
+    var userProgressComparisonLoaded by remember {
+        mutableStateOf(false)
+    }
 
     fun noteSuffixFor(topicTitle: String): String {
         val cleanTopic = topicTitle.trim().ifBlank { "כללי" }
@@ -456,51 +731,142 @@ fun SummaryScreen(
     fun hasNote(topicTitle: String, itemId: String): Boolean =
         loadNote(topicTitle, itemId).isNotBlank()
 
-    // ✅ במקום scope.launch מתוך onClick (שמייצר את השגיאה), עושים את זה כאן
-    LaunchedEffect(showProgress) {
-        if (showProgress) {
+    // ✅ כשפותחים מד התקדמות / השוואה — עולים לראש המסך
+    LaunchedEffect(showProgress, showComparison) {
+        if (showProgress || showComparison) {
             scroll.animateScrollTo(0)
         }
     }
 
     // === רשימת פריטים לפי נושא (ישירות מה-shared ContentRepo) ===
     var itemsByTopic by remember(belt, topic, subTopicFilter) {
-        mutableStateOf(LinkedHashMap<String, List<String>>())
+        mutableStateOf(LinkedHashMap<String, List<SummaryExerciseRow>>())
     }
 
     LaunchedEffect(belt, topic, subTopicFilter) {
         val beltContent = beltContentFor(belt)
         val topics = beltContent?.topics.orEmpty()
 
-        val out = LinkedHashMap<String, List<String>>()
+        val out = LinkedHashMap<String, List<SummaryExerciseRow>>()
 
-        if (topic.isNotBlank() && !subTopicFilter.isNullOrBlank()) {
-            val items = withContext(Dispatchers.Default) {
-                SharedContentRepo.getAllItemsFor(
-                    belt = belt,
-                    topicTitle = topic.trim(),
-                    subTopicTitle = subTopicFilter.trim()
-                )
+        fun rowsForTopic(
+            topicTitle: String,
+            requestedSubTopicTitle: String? = null
+        ): List<SummaryExerciseRow> {
+            val topicObj = topics.firstOrNull { norm(it.title) == norm(topicTitle) }
+                ?: return emptyList()
+
+            val rows = mutableListOf<SummaryExerciseRow>()
+
+            fun findSubTopicDeep(
+                list: List<SharedContentRepo.SubTopic>,
+                wantedTitle: String
+            ): SharedContentRepo.SubTopic? {
+                list.forEach { subTopic ->
+                    if (norm(subTopic.title) == norm(wantedTitle)) {
+                        return subTopic
+                    }
+
+                    val nested = findSubTopicDeep(
+                        list = subTopic.subTopics,
+                        wantedTitle = wantedTitle
+                    )
+
+                    if (nested != null) {
+                        return nested
+                    }
+                }
+
+                return null
+            }
+
+            fun addRowsFromSubTopicDeep(
+                subTopic: SharedContentRepo.SubTopic
+            ) {
+                val cleanSubTopicTitle = subTopic.title.trim()
+
+                subTopic.items
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
                     .distinct()
+                    .forEachIndexed { index, itemRaw ->
+                        rows += SummaryExerciseRow(
+                            displayTopicTitle = topicObj.title,
+                            sourceTopicTitle = topicObj.title,
+                            subTopicTitle = cleanSubTopicTitle,
+                            statusTopicKey = "${topicObj.title.trim()}__${cleanSubTopicTitle}",
+                            itemRaw = itemRaw,
+                            indexInStatusGroup = index
+                        )
+                    }
+
+                // ✅ חשוב: אוסף גם תתי־נושאים פנימיים,
+                // למשל הגנות -> הגנות נגד בעיטות -> בעיטות צד / בעיטות מעגליות וכו׳
+                subTopic.subTopics.forEach { nestedSubTopic ->
+                    addRowsFromSubTopicDeep(nestedSubTopic)
+                }
             }
 
-            out[topic.trim()] = items
+            if (requestedSubTopicTitle.isNullOrBlank()) {
+                topicObj.items
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .forEachIndexed { index, itemRaw ->
+                        rows += SummaryExerciseRow(
+                            displayTopicTitle = topicObj.title,
+                            sourceTopicTitle = topicObj.title,
+                            subTopicTitle = null,
+                            statusTopicKey = topicObj.title.trim(),
+                            itemRaw = itemRaw,
+                            indexInStatusGroup = index
+                        )
+                    }
+
+                topicObj.subTopics.forEach { subTopic ->
+                    addRowsFromSubTopicDeep(subTopic)
+                }
+            } else {
+                val requested = requestedSubTopicTitle.trim()
+
+                val selectedSubTopic = findSubTopicDeep(
+                    list = topicObj.subTopics,
+                    wantedTitle = requested
+                )
+
+                if (selectedSubTopic != null) {
+                    addRowsFromSubTopicDeep(selectedSubTopic)
+                }
+            }
+
+            return rows
+        }
+
+        if (topic.isNotBlank() && !subTopicFilter.isNullOrBlank()) {
+            out[topic.trim()] = withContext(Dispatchers.Default) {
+                rowsForTopic(
+                    topicTitle = topic.trim(),
+                    requestedSubTopicTitle = subTopicFilter.trim()
+                )
+            }
+
             itemsByTopic = out
             return@LaunchedEffect
         }
 
         val allTitles = topics.map { it.title }
         val orderedTitles: List<String> =
-            if (topic.isNotBlank()) listOf(topic) + allTitles.filterNot { norm(it) == norm(topic) }
-            else allTitles
+            if (topic.isNotBlank()) {
+                listOf(topic) + allTitles.filterNot { norm(it) == norm(topic) }
+            } else {
+                allTitles
+            }
 
         orderedTitles.forEach { title ->
-            val tObj = topics.firstOrNull { norm(it.title) == norm(title) }
-            val items = if (tObj == null) emptyList()
-            else (tObj.items + tObj.subTopics.flatMap { it.items }).distinct()
-            out[title] = items
+            val topicObj = topics.firstOrNull { norm(it.title) == norm(title) }
+            if (topicObj != null) {
+                out[topicObj.title] = rowsForTopic(topicObj.title)
+            }
         }
 
         itemsByTopic = out
@@ -523,39 +889,31 @@ fun SummaryScreen(
             val computed: Map<Pair<String, String>, MarkState> = withContext(Dispatchers.Default) {
                 val map = mutableMapOf<Pair<String, String>, MarkState>()
 
-                itemsByTopic.forEach { (topicTitle, items) ->
+                itemsByTopic.forEach { (topicTitle, rows) ->
 
-                    val statusTopicKey = if (
-                        topic.isNotBlank() &&
-                        !subTopicFilter.isNullOrBlank() &&
-                        norm(topicTitle) == norm(topic)
-                    ) {
-                        "${topic.trim()}__${subTopicFilter.trim()}"
-                    } else {
-                        topicTitle.trim()
-                    }
+                    val snapshotsByStatusTopicKey = rows
+                        .map { it.statusTopicKey }
+                        .distinct()
+                        .associateWith { key ->
+                            vm.getTopicStatusSnapshot(belt, key)
+                        }
 
-                    // ✅ Snapshot לפי אותו topicKey שבו MaterialsScreen שומר
-                    val topicSnap = vm.getTopicStatusSnapshot(belt, statusTopicKey)
+                    rows.forEach { row ->
+                        val topicSnap = snapshotsByStatusTopicKey[row.statusTopicKey].orEmpty()
 
-                    items.forEachIndexed { index, itemRaw ->
-                        val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
-
-                        // ✅ אותו מפתח בדיוק כמו MaterialsScreen אחרי המעבר ל-ExerciseIdentityRegistry
                         val statusId = summaryExerciseIdentityIdFor(
                             belt = belt,
-                            topicKey = statusTopicKey,
-                            topicTitle = topicTitle,
-                            index = index,
-                            item = itemRaw
+                            topicKey = row.statusTopicKey,
+                            topicTitle = row.sourceTopicTitle,
+                            index = row.indexInStatusGroup,
+                            item = row.itemRaw
                         )
 
-                        // fallback זמני רק למפתח status הישן — לא ל-canonicalId
                         val legacyStatusId = summaryLegacyStatusIdFor(
                             belt = belt,
-                            topicKey = statusTopicKey,
-                            index = index,
-                            item = itemRaw
+                            topicKey = row.statusTopicKey,
+                            index = row.indexInStatusGroup,
+                            item = row.itemRaw
                         )
 
                         val v: Boolean? = topicSnap[statusId] ?: topicSnap[legacyStatusId]
@@ -566,7 +924,6 @@ fun SummaryScreen(
                             null  -> MarkState.NONE
                         }
 
-                        // ✅ שומרים לפי statusId, לא לפי canonicalId
                         map[topicTitle to statusId] = state
                     }
                 }
@@ -588,17 +945,16 @@ fun SummaryScreen(
         topic,
         subTopicFilter
     ) {
-        itemsByTopic.mapValues { (topicTitle, items) ->
-            val total = items.size
-            val statusTopicKey = statusTopicKeyFor(topicTitle)
+        itemsByTopic.mapValues { (topicTitle, rows) ->
+            val total = rows.size
 
-            val done = items.withIndex().count { indexed ->
+            val done = rows.count { row ->
                 val statusId = summaryExerciseIdentityIdFor(
                     belt = belt,
-                    topicKey = statusTopicKey,
-                    topicTitle = topicTitle,
-                    index = indexed.index,
-                    item = indexed.value
+                    topicKey = row.statusTopicKey,
+                    topicTitle = row.sourceTopicTitle,
+                    index = row.indexInStatusGroup,
+                    item = row.itemRaw
                 )
 
                 masteredMap[topicTitle to statusId] == MarkState.YES
@@ -611,6 +967,41 @@ fun SummaryScreen(
     val overallDone = topicStats.values.sumOf { it.first }
     val overallTotal = topicStats.values.sumOf { it.second }
     val overallPct = if (overallTotal <= 0) 0 else ((overallDone * 100f) / overallTotal).toInt()
+
+    // ✅ שלב א׳ בפיצ׳ר ההשוואה:
+    // שמירת סיכום אישי של המשתמש לפי חגורה.
+    // עדיין לא מחשבים דירוג מול משתמשים אחרים ולא מציגים UI חדש.
+    LaunchedEffect(
+        belt.id,
+        overallDone,
+        overallTotal,
+        overallPct
+    ) {
+        if (overallTotal > 0) {
+            runCatching {
+                UserProgressRepository.saveUserProgress(
+                    beltId = belt.id,
+                    knownPercent = overallPct,
+                    knownCount = overallDone,
+                    totalCount = overallTotal
+                )
+
+                // נותן ל-Cloud Function זמן קצר לעדכן beltStats.
+                delay(900)
+
+                userProgressComparison =
+                    UserProgressRepository.loadBeltComparison(
+                        beltId = belt.id,
+                        userKnownPercent = overallPct
+                    )
+
+                userProgressComparisonLoaded = true
+            }.onFailure {
+                userProgressComparison = null
+                userProgressComparisonLoaded = true
+            }
+        }
+    }
 
     // === חיפוש/הסבר ===
     var explainFromSearch: Triple<Belt, String, String>? by rememberSaveable { mutableStateOf(null) }
@@ -973,7 +1364,7 @@ fun SummaryScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 0.dp, bottom = 6.dp),
+                        .padding(top = 0.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1021,38 +1412,48 @@ fun SummaryScreen(
                         }
                     }
 
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(8.dp))
 
-                    Surface(
-                        onClick = { showProgress = !showProgress },
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White.copy(alpha = 0.88f),
-                        shadowElevation = 4.dp,
-                        border = BorderStroke(
-                            1.dp,
-                            belt.color.copy(alpha = 0.16f)
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Insights,
-                                contentDescription = null,
-                                tint = belt.color,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = tr("התקדמות", "Progress"),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF263238)
-                            )
-                        }
-                    }
+                    SummaryToggleButton(
+                        text = tr("התקדמות", "Progress"),
+                        iconColor = belt.color,
+                        selected = showProgress,
+                        onClick = {
+                            showProgress = !showProgress
+                            if (showProgress) {
+                                showComparison = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Spacer(Modifier.width(8.dp))
+
+                    SummaryToggleButton(
+                        text = tr("השוואה לקבוצה", "Group comparison"),
+                        iconColor = belt.color,
+                        selected = showComparison,
+                        onClick = {
+                            showComparison = !showComparison
+                            if (showComparison) {
+                                showProgress = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
+
+            if (showComparison) {
+                UserProgressComparisonCard(
+                    comparison = userProgressComparison,
+                    isLoaded = userProgressComparisonLoaded,
+                    belt = belt,
+                    isEnglish = isEnglish,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 10.dp)
+                )
+            }
 
                 loadError?.let { err ->
                     Text(
@@ -1106,7 +1507,9 @@ fun SummaryScreen(
                                 .align(Alignment.Center)
                                 .size(200.dp),
                             meterSize = 200.dp,
-                            stroke = 16.dp
+                            stroke = 16.dp,
+                            doneOverride = overallDone,
+                            totalOverride = overallTotal
                         )
 
                         IconButton(
@@ -1166,60 +1569,49 @@ fun SummaryScreen(
                             val (done, total) = topicStats[topicTitle] ?: (0 to 0)
                             val pct = if (total > 0) (done * 100 / total) else 0
 
+                            val rowsBySubTopic = items
+                                .groupBy { row ->
+                                    row.subTopicTitle?.trim().orEmpty()
+                                }
+                                .toSortedMap(compareBy<String> { key ->
+                                    if (key.isBlank()) "000" else key
+                                })
+
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color.White.copy(alpha = 0.94f)
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                                 shape = RoundedCornerShape(18.dp)
                             ) {
                                 Column(
                                     modifier = Modifier
+                                        .fillMaxWidth()
                                         .background(
                                             brush = Brush.verticalGradient(
                                                 colors = listOf(
                                                     Color.White.copy(alpha = 0.98f),
-                                                    belt.color.copy(alpha = 0.08f),
-                                                    Color.White.copy(alpha = 0.95f)
+                                                    belt.color.copy(alpha = 0.055f),
+                                                    Color.White.copy(alpha = 0.98f)
                                                 )
                                             ),
                                             shape = RoundedCornerShape(18.dp)
                                         )
-                                        .border(
-                                            width = 1.dp,
-                                            color = belt.color.copy(alpha = 0.14f),
-                                            shape = RoundedCornerShape(18.dp)
-                                        )
-                                        .padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .width(3.dp)
-                                                .height(28.dp)
-                                                .background(
-                                                    brush = Brush.verticalGradient(
-                                                        colors = listOf(
-                                                            belt.color,
-                                                            belt.color.copy(alpha = 0.60f)
-                                                        )
-                                                    ),
-                                                    shape = RoundedCornerShape(999.dp)
-                                                )
-                                        )
-
-                                        Spacer(Modifier.width(8.dp))
-
                                         Text(
                                             text = if (isEnglish)
                                                 "${topicDisplayName(topicTitle, true)} - $pct%"
                                             else
                                                 "$topicTitle – $pct%",
                                             style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold,
+                                            fontWeight = FontWeight.ExtraBold,
                                             textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                             modifier = Modifier.weight(1f),
                                             color = Color(0xFF263238)
@@ -1235,221 +1627,258 @@ fun SummaryScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     } else {
-                                        items.forEachIndexed { index, itemRaw ->
-                                            val canonicalId = canonicalFromRepo(topicTitle, itemRaw)
+                                        rowsBySubTopic.forEach { (subTopicTitleRaw, rowsInSubTopic) ->
+                                            val subDone = rowsInSubTopic.count { row ->
+                                                val statusId = summaryExerciseIdentityIdFor(
+                                                    belt = belt,
+                                                    topicKey = row.statusTopicKey,
+                                                    topicTitle = row.sourceTopicTitle,
+                                                    index = row.indexInStatusGroup,
+                                                    item = row.itemRaw
+                                                )
 
-                                            val statusId = summaryExerciseIdentityIdFor(
-                                                belt = belt,
-                                                topicKey = statusTopicKeyFor(topicTitle),
-                                                topicTitle = topicTitle,
-                                                index = index,
-                                                item = itemRaw
-                                            )
-
-                                            val state = masteredMap[topicTitle to statusId] ?: MarkState.NONE
-
-                                            val (bg, fg, mark) = when (state) {
-                                                MarkState.YES  -> Triple(Color(0xFF4CAF50), Color.White, "✓")
-                                                MarkState.NO   -> Triple(Color(0xFFE53935), Color.White, "✗")
-                                                MarkState.NONE -> Triple(Color(0xFFE0E0E0), Color(0xFF616161), "○")
+                                                masteredMap[topicTitle to statusId] == MarkState.YES
                                             }
 
-                                            val cleanFavId = cleanItem(topicTitle, canonicalId)
-                                            val isFav = favorites.contains(cleanFavId)
-                                            val itemHasNote = hasNote(topicTitle, cleanFavId)
+                                            val subTotal = rowsInSubTopic.size
+                                            val subPct = if (subTotal > 0) (subDone * 100 / subTotal) else 0
 
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .background(
-                                                        color = if (state == MarkState.YES) {
-                                                            belt.color.copy(alpha = 0.08f)
-                                                        } else {
-                                                            Color.Transparent
-                                                        },
-                                                        shape = RoundedCornerShape(14.dp)
-                                                    )
-                                                    .border(
-                                                        width = if (state == MarkState.YES) 1.dp else 0.dp,
-                                                        color = if (state == MarkState.YES) {
-                                                            belt.color.copy(alpha = 0.12f)
-                                                        } else {
-                                                            Color.Transparent
-                                                        },
-                                                        shape = RoundedCornerShape(14.dp)
-                                                    )
-                                                    .padding(vertical = 6.dp, horizontal = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.End
+                                            Surface(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = RoundedCornerShape(16.dp),
+                                                color = belt.color.copy(alpha = 0.055f),
+                                                border = BorderStroke(
+                                                    width = 1.dp,
+                                                    color = belt.color.copy(alpha = 0.10f)
+                                                )
                                             ) {
-                                                Surface(
-                                                    modifier = Modifier.size(24.dp),
-                                                    shape = CircleShape,
-                                                    color = bg,
-                                                    shadowElevation = 2.dp,
-                                                    tonalElevation = 0.dp
-                                                ) {
-                                                    Box(contentAlignment = Alignment.Center) {
-                                                        Text(
-                                                            text = mark,
-                                                            color = fg,
-                                                            fontWeight = FontWeight.Bold
-                                                        )
-                                                    }
-                                                }
-
-                                                Spacer(Modifier.width(8.dp))
-
                                                 Column(
-                                                    modifier = Modifier.weight(1f),
-                                                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
                                                     Text(
-                                                        text = exerciseDisplayNameForUi(topicTitle, itemRaw, isEnglish),
-                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        text = if (isEnglish) {
+                                                            "${subTopicDisplayName(subTopicTitleRaw, topicTitle, true)} - $subPct%"
+                                                        } else {
+                                                            "${subTopicDisplayName(subTopicTitleRaw, topicTitle, false)} – $subPct%"
+                                                        },
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = Color(0xFF455A64),
                                                         textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        color = Color(0xFF1B1B1B)
+                                                        modifier = Modifier.fillMaxWidth()
                                                     )
 
-                                                    if (itemHasNote) {
-                                                        Text(
-                                                            text = tr("יש הערה שמורה", "Saved note exists"),
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = MaterialTheme.colorScheme.primary,
-                                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                            modifier = Modifier.fillMaxWidth()
+                                                    rowsInSubTopic.forEach { row ->
+                                                        val itemRaw = row.itemRaw
+                                                        val canonicalId = canonicalFromRepo(row.sourceTopicTitle, itemRaw)
+
+                                                        val statusId = summaryExerciseIdentityIdFor(
+                                                            belt = belt,
+                                                            topicKey = row.statusTopicKey,
+                                                            topicTitle = row.sourceTopicTitle,
+                                                            index = row.indexInStatusGroup,
+                                                            item = itemRaw
                                                         )
-                                                    }
-                                                }
 
-                                                Spacer(Modifier.width(8.dp))
+                                                        val state = masteredMap[topicTitle to statusId] ?: MarkState.NONE
 
-                                                var menuExpanded by remember { mutableStateOf(false) }
-                                                val infoScale by animateFloatAsState(
-                                                    targetValue = if (menuExpanded) 1.08f else 1f,
-                                                    animationSpec = tween(180),
-                                                    label = "summaryInfoScale"
-                                                )
-                                                val infoRotation by animateFloatAsState(
-                                                    targetValue = if (menuExpanded) 12f else 0f,
-                                                    animationSpec = tween(180),
-                                                    label = "summaryInfoRotation"
-                                                )
-
-                                                Box {
-
-                                                    Surface(
-                                                        onClick = { menuExpanded = true },
-                                                        shape = CircleShape,
-                                                        color = Color.White.copy(alpha = 0.94f),
-                                                        shadowElevation = 6.dp,
-                                                        border = BorderStroke(
-                                                            1.dp,
-                                                            belt.color.copy(alpha = 0.16f)
-                                                        ),
-                                                        modifier = Modifier
-                                                            .size(38.dp)
-                                                            .graphicsLayer {
-                                                                scaleX = infoScale
-                                                                scaleY = infoScale
-                                                            }
-                                                    ) {
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .fillMaxSize()
-                                                                .background(
-                                                                    brush = Brush.verticalGradient(
-                                                                        colors = listOf(
-                                                                            Color.White.copy(alpha = 0.98f),
-                                                                            belt.color.copy(alpha = 0.06f),
-                                                                            Color.White.copy(alpha = 0.94f)
-                                                                        )
-                                                                    ),
-                                                                    shape = CircleShape
-                                                                ),
-                                                            contentAlignment = Alignment.Center
-                                                        ) {
-                                                            Icon(
-                                                                imageVector = Icons.Filled.Info,
-                                                                contentDescription = tr("אפשרויות", "Options"),
-                                                                tint = Color(0xFF455A64),
-                                                                modifier = Modifier
-                                                                    .size(18.dp)
-                                                                    .graphicsLayer {
-                                                                        rotationZ = infoRotation
-                                                                    }
-                                                            )
+                                                        val (bg, fg, mark) = when (state) {
+                                                            MarkState.YES  -> Triple(Color(0xFF4CAF50), Color.White, "✓")
+                                                            MarkState.NO   -> Triple(Color(0xFFE53935), Color.White, "✗")
+                                                            MarkState.NONE -> Triple(Color(0xFFE0E0E0), Color(0xFF616161), "○")
                                                         }
-                                                    }
 
-                                                    DropdownMenu(
-                                                        expanded = menuExpanded,
-                                                        onDismissRequest = { menuExpanded = false },
-                                                        modifier = Modifier
-                                                            .background(
-                                                                brush = Brush.verticalGradient(
-                                                                    colors = listOf(
-                                                                        Color.White.copy(alpha = 0.99f),
-                                                                        belt.color.copy(alpha = 0.05f),
-                                                                        Color.White.copy(alpha = 0.97f)
+                                                        val cleanFavId = cleanItem(row.sourceTopicTitle, canonicalId)
+                                                        val isFav = favorites.contains(cleanFavId)
+                                                        val itemHasNote = hasNote(row.sourceTopicTitle, cleanFavId)
+
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .background(
+                                                                    color = if (state == MarkState.YES) {
+                                                                        belt.color.copy(alpha = 0.075f)
+                                                                    } else {
+                                                                        Color.Transparent
+                                                                    },
+                                                                    shape = RoundedCornerShape(14.dp)
+                                                                )
+                                                                .padding(vertical = 6.dp, horizontal = 8.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.End
+                                                        ) {
+                                                            Surface(
+                                                                modifier = Modifier.size(24.dp),
+                                                                shape = CircleShape,
+                                                                color = bg,
+                                                                shadowElevation = 2.dp,
+                                                                tonalElevation = 0.dp
+                                                            ) {
+                                                                Box(contentAlignment = Alignment.Center) {
+                                                                    Text(
+                                                                        text = mark,
+                                                                        color = fg,
+                                                                        fontWeight = FontWeight.Bold
                                                                     )
-                                                                ),
-                                                                shape = RoundedCornerShape(18.dp)
+                                                                }
+                                                            }
+
+                                                            Spacer(Modifier.width(8.dp))
+
+                                                            Column(
+                                                                modifier = Modifier.weight(1f),
+                                                                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                                            ) {
+                                                                Text(
+                                                                    text = exerciseDisplayNameForUi(row.sourceTopicTitle, itemRaw, isEnglish),
+                                                                    style = MaterialTheme.typography.bodyMedium,
+                                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    color = Color(0xFF1B1B1B)
+                                                                )
+
+                                                                if (itemHasNote) {
+                                                                    Text(
+                                                                        text = tr("יש הערה שמורה", "Saved note exists"),
+                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                        color = MaterialTheme.colorScheme.primary,
+                                                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            Spacer(Modifier.width(8.dp))
+
+                                                            var menuExpanded by remember { mutableStateOf(false) }
+                                                            val infoScale by animateFloatAsState(
+                                                                targetValue = if (menuExpanded) 1.08f else 1f,
+                                                                animationSpec = tween(180),
+                                                                label = "summaryInfoScale"
                                                             )
-                                                            .border(
-                                                                1.dp,
-                                                                belt.color.copy(alpha = 0.12f),
-                                                                RoundedCornerShape(18.dp)
+                                                            val infoRotation by animateFloatAsState(
+                                                                targetValue = if (menuExpanded) 12f else 0f,
+                                                                animationSpec = tween(180),
+                                                                label = "summaryInfoRotation"
                                                             )
-                                                    ) {
 
-                                                        DropdownMenuItem(
-                                                            text = {
-                                                                Text(
-                                                                    tr("מידע", "Info"),
-                                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                                    modifier = Modifier.fillMaxWidth()
-                                                                )
-                                                            },
-                                                            onClick = {
-                                                                menuExpanded = false
-                                                                explainFromSearch = Triple(belt, topicTitle, itemRaw)
-                                                            }
-                                                        )
+                                                            Box {
+                                                                Surface(
+                                                                    onClick = { menuExpanded = true },
+                                                                    shape = CircleShape,
+                                                                    color = Color.White.copy(alpha = 0.94f),
+                                                                    shadowElevation = 5.dp,
+                                                                    border = BorderStroke(
+                                                                        1.dp,
+                                                                        belt.color.copy(alpha = 0.14f)
+                                                                    ),
+                                                                    modifier = Modifier
+                                                                        .size(38.dp)
+                                                                        .graphicsLayer {
+                                                                            scaleX = infoScale
+                                                                            scaleY = infoScale
+                                                                        }
+                                                                ) {
+                                                                    Box(
+                                                                        modifier = Modifier
+                                                                            .fillMaxSize()
+                                                                            .background(
+                                                                                brush = Brush.verticalGradient(
+                                                                                    colors = listOf(
+                                                                                        Color.White.copy(alpha = 0.98f),
+                                                                                        belt.color.copy(alpha = 0.05f),
+                                                                                        Color.White.copy(alpha = 0.94f)
+                                                                                    )
+                                                                                ),
+                                                                                shape = CircleShape
+                                                                            ),
+                                                                        contentAlignment = Alignment.Center
+                                                                    ) {
+                                                                        Icon(
+                                                                            imageVector = Icons.Filled.Info,
+                                                                            contentDescription = tr("אפשרויות", "Options"),
+                                                                            tint = Color(0xFF455A64),
+                                                                            modifier = Modifier
+                                                                                .size(18.dp)
+                                                                                .graphicsLayer {
+                                                                                    rotationZ = infoRotation
+                                                                                }
+                                                                        )
+                                                                    }
+                                                                }
 
-                                                        DropdownMenuItem(
-                                                            text = {
-                                                                Text(
-                                                                    if (isFav)
-                                                                        tr("הסר ממועדפים", "Remove from favorites")
-                                                                    else
-                                                                        tr("הוסף למועדפים", "Add to favorites"),
-                                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                                    modifier = Modifier.fillMaxWidth()
-                                                                )
-                                                            },
-                                                            onClick = {
-                                                                menuExpanded = false
-                                                                FavoritesStore.toggle(cleanFavId)
-                                                            }
-                                                        )
+                                                                DropdownMenu(
+                                                                    expanded = menuExpanded,
+                                                                    onDismissRequest = { menuExpanded = false },
+                                                                    modifier = Modifier
+                                                                        .background(
+                                                                            brush = Brush.verticalGradient(
+                                                                                colors = listOf(
+                                                                                    Color.White.copy(alpha = 0.99f),
+                                                                                    belt.color.copy(alpha = 0.05f),
+                                                                                    Color.White.copy(alpha = 0.97f)
+                                                                                )
+                                                                            ),
+                                                                            shape = RoundedCornerShape(18.dp)
+                                                                        )
+                                                                        .border(
+                                                                            1.dp,
+                                                                            belt.color.copy(alpha = 0.12f),
+                                                                            RoundedCornerShape(18.dp)
+                                                                        )
+                                                                ) {
+                                                                    DropdownMenuItem(
+                                                                        text = {
+                                                                            Text(
+                                                                                tr("מידע", "Info"),
+                                                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                                                modifier = Modifier.fillMaxWidth()
+                                                                            )
+                                                                        },
+                                                                        onClick = {
+                                                                            menuExpanded = false
+                                                                            explainFromSearch = Triple(belt, row.sourceTopicTitle, itemRaw)
+                                                                        }
+                                                                    )
 
-                                                        DropdownMenuItem(
-                                                            text = {
-                                                                Text(
-                                                                    tr("הוסף הערה למתרגל", "Add note for trainee"),
-                                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                                    modifier = Modifier.fillMaxWidth()
-                                                                )
-                                                            },
-                                                            onClick = {
-                                                                menuExpanded = false
-                                                                noteEditorTopic = topicTitle
-                                                                noteEditorFor = cleanFavId
-                                                                noteDraft = loadNote(topicTitle, cleanFavId)
+                                                                    DropdownMenuItem(
+                                                                        text = {
+                                                                            Text(
+                                                                                if (isFav)
+                                                                                    tr("הסר ממועדפים", "Remove from favorites")
+                                                                                else
+                                                                                    tr("הוסף למועדפים", "Add to favorites"),
+                                                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                                                modifier = Modifier.fillMaxWidth()
+                                                                            )
+                                                                        },
+                                                                        onClick = {
+                                                                            menuExpanded = false
+                                                                            FavoritesStore.toggle(cleanFavId)
+                                                                        }
+                                                                    )
+
+                                                                    DropdownMenuItem(
+                                                                        text = {
+                                                                            Text(
+                                                                                tr("הוסף הערה למתרגל", "Add note for trainee"),
+                                                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                                                modifier = Modifier.fillMaxWidth()
+                                                                            )
+                                                                        },
+                                                                        onClick = {
+                                                                            menuExpanded = false
+                                                                            noteEditorTopic = row.sourceTopicTitle
+                                                                            noteEditorFor = cleanFavId
+                                                                            noteDraft = loadNote(row.sourceTopicTitle, cleanFavId)
+                                                                        }
+                                                                    )
+                                                                }
                                                             }
-                                                        )
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1460,8 +1889,6 @@ fun SummaryScreen(
                         }
                     }
                 }
-
-                Spacer(Modifier.height(12.dp))
             }
         }
     }
@@ -1472,7 +1899,7 @@ fun SummaryScreen(
 private fun createSummaryPdf(
     dir: File,
     belt: Belt,
-    itemsByTopic: Map<String, List<String>>,
+    itemsByTopic: Map<String, List<SummaryExerciseRow>>,
     masteredMap: Map<Pair<String, String>, MarkState>,
     isEnglish: Boolean = false,
     topic: String = "",
@@ -1515,22 +1942,14 @@ private fun createSummaryPdf(
         y += 22f
 
         paint.textSize = 13.5f
-        items.forEachIndexed { index, itemRaw ->
-            val statusTopicKey = if (
-                topic.isNotBlank() &&
-                !subTopicFilter.isNullOrBlank() &&
-                norm(topicTitle) == norm(topic)
-            ) {
-                "${topic.trim()}__${subTopicFilter.trim()}"
-            } else {
-                topicTitle.trim()
-            }
+        items.forEach { row ->
+            val itemRaw = row.itemRaw
 
             val statusId = summaryExerciseIdentityIdFor(
                 belt = belt,
-                topicKey = statusTopicKey,
-                topicTitle = topicTitle,
-                index = index,
+                topicKey = row.statusTopicKey,
+                topicTitle = row.sourceTopicTitle,
+                index = row.indexInStatusGroup,
                 item = itemRaw
             )
 
@@ -1569,7 +1988,7 @@ private fun createSummaryPdf(
             } else {
                 android.graphics.Paint.Align.RIGHT
             }
-            val display = exerciseDisplayNameForUi(topicTitle, itemRaw, isEnglish)
+            val display = exerciseDisplayNameForUi(row.sourceTopicTitle, itemRaw, isEnglish)
             canvas.drawText(display, textX, y, paint)
 
             val markPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {

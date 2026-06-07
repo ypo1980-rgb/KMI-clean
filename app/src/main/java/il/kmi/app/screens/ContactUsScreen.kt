@@ -264,26 +264,30 @@ fun ContactUsScreen(
             KmiTopBar(
                 title = title,
                 centerTitle = true,
-                showMenu = false,
+
+                // מציג את אייקון סרגל הצד מהטופ־בר הגלובלי
+                showMenu = true,
                 onBack = null,
 
-                // ✅ מפעיל את אייקון הבית בסרגל האייקונים הצדדי
+                // מפעיל את אייקון הבית בסרגל האייקונים הצדדי
                 onHome = onHome,
 
-                // ✅ מאפשר לחיצה על תוצאת חיפוש, אם המסך שמעל מעביר ניווט לתרגיל
+                // מאפשר לחיצה על תוצאת חיפוש, אם המסך שמעל מעביר ניווט לתרגיל
                 onOpenExercise = onOpenExercise,
 
                 showBottomActions = true,
-                showRoleBadge = false,
-                showModePill = false,
 
-                // ✅ חובה להיות false כדי שאייקון החיפוש בסרגל הצדדי יעבוד
+                // מציג את מצב המשתמש הגלובלי: מתאמן / מאמן
+                showRoleBadge = true,
+                showModePill = true,
+
+                // חובה להיות false כדי שאייקון החיפוש בסרגל הצדדי יעבוד
                 lockSearch = false,
 
-                // ✅ הבית לא נעול במסך צור קשר
+                // הבית לא נעול במסך צור קשר
                 lockHome = false,
 
-                // ✅ שלא יופיעו אייקוני בית/חיפוש בכותרת העליונה עצמה,
+                // שלא יופיעו אייקוני בית/חיפוש בכותרת העליונה עצמה,
                 // אלא רק בסרגל האייקונים הצדדי כמו בשאר המסכים
                 showTopHome = false,
                 showTopSearch = false,
@@ -323,78 +327,83 @@ fun ContactUsScreen(
                     horizontalAlignment = if (effectiveEnglish) Alignment.Start else Alignment.End
                 ) {
                     AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn() + slideInVertically { it / 4 }
-                ) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF314875)
-                        ),
-                        elevation = CardDefaults.cardElevation(
-                            defaultElevation = 10.dp,
-                            pressedElevation = 4.dp
-                        )
+                        visible = true,
+                        enter = fadeIn() + slideInVertically { it / 4 }
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 18.dp, vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                            horizontalAlignment = if (effectiveEnglish) Alignment.Start else Alignment.End
-                        ) {
-                            Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Color.White.copy(alpha = 0.90f),
-                                textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFF314875)
+                            ),
+                            elevation = CardDefaults.cardElevation(
+                                defaultElevation = 8.dp,
+                                pressedElevation = 3.dp
                             )
-
-                            HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
-
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(18.dp),
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalAlignment = if (effectiveEnglish) Alignment.Start else Alignment.End
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 14.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.SupportAgent,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.align(
-                                            if (effectiveEnglish) Alignment.CenterStart else Alignment.CenterEnd
-                                        )
-                                    )
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
+                                    color = Color.White.copy(alpha = 0.90f),
+                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
 
-                                    Text(
-                                        text = if (effectiveEnglish) {
-                                            "KAMI representative will contact you soon."
-                                        } else {
-                                            "נציג מטעם ק.מ.י יחזור אליכם בהקדם."
-                                        },
-                                        color = Color.White,
-                                        textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                ) {
+                                    Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(
-                                                start = if (effectiveEnglish) 38.dp else 0.dp,
-                                                end = if (effectiveEnglish) 0.dp else 38.dp
+                                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.SupportAgent,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.align(
+                                                if (effectiveEnglish) Alignment.CenterStart else Alignment.CenterEnd
                                             )
-                                    )
+                                        )
+
+                                        Text(
+                                            text = if (effectiveEnglish) {
+                                                "KAMI representative will contact you soon."
+                                            } else {
+                                                "נציג מטעם ק.מ.י יחזור אליכם בהקדם."
+                                            },
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = Color.White,
+                                            textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    start = if (effectiveEnglish) 34.dp else 0.dp,
+                                                    end = if (effectiveEnglish) 0.dp else 34.dp
+                                                )
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                AnimatedVisibility(
+                    AnimatedVisibility(
                     visible = true,
                     enter = fadeIn() + slideInVertically { it / 4 }
                 ) {
@@ -470,7 +479,7 @@ fun ContactUsScreen(
                                 label = {
                                     contactFieldLabel(
                                         text = if (effectiveEnglish) "Subject" else "נושא הפנייה",
-                                        color = Color(0xFF52627A)
+                                        color = if (subject.isBlank()) Color(0xFF111827) else Color.White
                                     )
                                 },
                                 leadingIcon = {
@@ -490,7 +499,7 @@ fun ContactUsScreen(
                                 label = {
                                     contactFieldLabel(
                                         text = if (effectiveEnglish) "Message" else "הודעה",
-                                        color = Color(0xFF52627A)
+                                        color = if (message.isBlank()) Color(0xFF111827) else Color.White
                                     )
                                 },
                                 textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -604,36 +613,36 @@ private fun contactFieldLabel(
 ) {
     Text(
         text = text,
+        color = color,
         style = MaterialTheme.typography.labelLarge.copy(
-            fontWeight = FontWeight.ExtraBold,
-            color = color
+            fontWeight = FontWeight.ExtraBold
         )
     )
 }
 
 @Composable
 private fun contactFieldColors() = OutlinedTextFieldDefaults.colors(
-    // ✅ רקע בהיר יותר מהכרטיס כדי שהשדות יבלטו ולא ייבלעו ברקע
+    // רקע בהיר לשדות כדי שהקלט יישאר קריא וברור
     focusedContainerColor = Color(0xFFF4F7FF),
     unfocusedContainerColor = Color(0xFFEAF0FF),
     disabledContainerColor = Color(0xFFD8E0F5),
 
-    // ✅ מסגרת ברורה יותר במצב רגיל ובפוקוס
+    // מסגרת ברורה במצב רגיל ובפוקוס
     focusedBorderColor = Color(0xFF8EA7FF),
     unfocusedBorderColor = Color.White.copy(alpha = 0.72f),
     disabledBorderColor = Color.White.copy(alpha = 0.35f),
 
-    // ✅ טקסט כהה על רקע בהיר
+    // טקסט הקלט כהה על רקע בהיר
     focusedTextColor = Color(0xFF111827),
     unfocusedTextColor = Color(0xFF111827),
     disabledTextColor = Color(0xFF111827).copy(alpha = 0.55f),
 
-    // ✅ תוויות ברורות ונקיות
+    // הכותרות הצפות של השדות לבנות על הרקע הכהה
     focusedLabelColor = Color.White,
-    unfocusedLabelColor = Color.White.copy(alpha = 0.92f),
+    unfocusedLabelColor = Color.White,
     disabledLabelColor = Color.White.copy(alpha = 0.55f),
 
-    // ✅ אייקונים כהים יותר כדי שיבלטו על הרקע החדש
+    // אייקונים כהים כדי שיבלטו בתוך השדות הבהירים
     focusedLeadingIconColor = Color(0xFF1E3A8A),
     unfocusedLeadingIconColor = Color(0xFF52627A),
     disabledLeadingIconColor = Color(0xFF52627A).copy(alpha = 0.55f),

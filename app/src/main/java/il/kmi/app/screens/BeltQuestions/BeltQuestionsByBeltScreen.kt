@@ -542,23 +542,33 @@ internal fun BeltPangoLayout(
     val belts = remember { Belt.order.filter { it != Belt.WHITE } }
     var topicsViewMode by rememberSaveable { mutableStateOf(TopicsViewMode.BY_BELT) }
 
-    val initialBelt: Belt = remember(belts, kmiPrefs) {
+    val initialBelt: Belt = remember(belts, kmiPrefs, userSp) {
         val regId =
             kmiPrefs.getStringCompat("current_belt")
                 ?: kmiPrefs.getStringCompat("belt_current")
+                ?: userSp.getString("current_belt", null)
+                ?: userSp.getString("belt_current", null)
+                ?: userSp.getString("currentBelt", null)
+                ?: userSp.getString("belt", null)
 
-        val regBelt = regId?.let { Belt.fromId(it) }
-
-        val base = when {
-            regBelt != null && regBelt != Belt.WHITE -> regBelt
-            else -> Belt.YELLOW
-        }
+        val cleanRegId = regId?.trim().orEmpty()
+        val regBelt = cleanRegId.takeIf { it.isNotBlank() }?.let { Belt.fromId(it) }
 
         val next = when {
-            regBelt == null || regBelt == Belt.WHITE -> Belt.ORANGE
+            // אם המשתמש לא נרשם עם אף חגורה — ברירת מחדל כתומה
+            cleanRegId.isBlank() || regBelt == null -> Belt.ORANGE
+
+            // אם המשתמש נרשם עם לבנה — החגורה הבאה היא צהובה
+            regBelt == Belt.WHITE -> Belt.YELLOW
+
+            // בכל שאר החגורות — עוברים לחגורה הבאה בתור
             else -> {
-                val idx = belts.indexOf(base).let { if (it < 0) 0 else it }
-                if (idx < belts.lastIndex) belts[idx + 1] else belts.first()
+                val idx = belts.indexOf(regBelt)
+                if (idx >= 0 && idx < belts.lastIndex) {
+                    belts[idx + 1]
+                } else {
+                    regBelt
+                }
             }
         }
 

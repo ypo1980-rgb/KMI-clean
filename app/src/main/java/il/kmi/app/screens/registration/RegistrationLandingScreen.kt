@@ -294,8 +294,10 @@ fun RegistrationLandingScreen(
     }
 
     // תפקיד אחרון
+    // ברירת מחדל בטוחה: משתמש קיים נכנס תמיד למסך התחברות רגיל,
+    // ורק שם ניתן לבקש מצב מאמן עם אימות שרת.
     val isCoach by remember {
-        mutableStateOf((sp.getString("user_role", null) ?: "trainee") == "coach")
+        mutableStateOf(false)
     }
 
     val bgBrush = remember {
@@ -451,7 +453,10 @@ fun RegistrationLandingScreen(
                                     Button(
                                         onClick = {
                                             playStrongFeedback()
-                                            if (isCoach) onExistingUserCoach() else onExistingUserTrainee()
+
+                                            // תמיד נכנסים למסך התחברות רגיל.
+                                            // מצב מאמן מאושר רק אחרי בדיקת הרשאה מול Firestore.
+                                            onExistingUserTrainee()
                                         },
                                         modifier = Modifier
                                             .fillMaxWidth()

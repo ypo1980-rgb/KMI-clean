@@ -9,6 +9,365 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+function normalizeDigits(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+/**
+ * ====================================================
+ * אימות וקישור מאמן לפי coachInvites
+ *
+ * תהליך:
+ * 1. המשתמש חייב להיות מחובר ל-Firebase Auth.
+ * 2. האפליקציה שולחת phoneDigits + emailLower + verificationCode.
+ * 3. הפונקציה בודקת coachInvites/{phoneDigits}.
+ * 4. אם הפרטים תקינים, הפונקציה קושרת את UID האמיתי.
+ * 5. הפונקציה יוצרת/מעדכנת authorizedCoaches/{uid}.
+ * ====================================================
+ */
+exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
+  const uid = context.auth && context.auth.uid;
+
+  if (!uid) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "User must be signed in before verifying coach access."
+    );
+  }
+
+  const phoneDigits = normalizeDigits(data && data.phoneDigits);
+  const emailLower = normalizeEmail(data && data.emailLower);
+
+  if (!phoneDigits || !emailLower) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing phoneDigits or emailLower."
+    );
+  }
+
+  const authEmail = normalizeEmail(
+    (context.auth.token && context.auth.token.email) || ""
+  );
+
+  if (!authEmail || authEmail !== emailLower) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Signed-in auth email does not match requested coach email."
+    );
+  }
+
+  const inviteRef = db.collection("coachInvites").doc(phoneDigits);
+  const inviteSnap = await inviteRef.get();
+
+  if (!inviteSnap.exists) {
+    throw new functions.https.HttpsError(
+      "not-found",
+      "Coach invite was not found."
+    );
+  }
+
+  const invite = inviteSnap.data() || {};
+
+  const inviteActive = invite.active === true;
+  const inviteRole = String(invite.role || "").trim().toLowerCase();
+  const inviteEmail = normalizeEmail(invite.emailLower || invite.email);
+  const invitePhone = normalizeDigits(invite.phoneDigits || phoneDigits);
+  const linkedUid = String(invite.linkedUid || "").trim();
+
+  if (!inviteActive) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Coach invite is not active."
+    );
+  }
+
+  if (inviteRole !== "coach") {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Invite role is not coach."
+    );
+  }
+
+  if (inviteEmail !== emailLower) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Email does not match the coach invite."
+    );
+  }
+
+  if (invitePhone !== phoneDigits) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Phone does not match the coach invite."
+    );
+  }
+
+  if (linkedUid && linkedUid !== uid) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "This coach invite is already linked to another user."
+    );
+  }
+
+  const permissions = {
+    canOpenCoachDrawer: invite.canOpenCoachDrawer === true,
+    canViewTrainees: invite.canViewTrainees === true,
+    canManageTrainees: invite.canManageTrainees === true,
+    canManageAttendance: invite.canManageAttendance === true,
+    canManageInternalExams: invite.canManageInternalExams === true,
+    canViewPaymentReports: invite.canViewPaymentReports === true,
+    canManagePayments: invite.canManagePayments === true,
+    canSendBroadcasts: invite.canSendBroadcasts === true,
+  };
+
+  const fullName = String(invite.fullName || "").trim();
+
+  const coachPayload = {
+    active: true,
+    role: "coach",
+    fullName,
+    email: emailLower,
+    emailLower,
+    phoneDigits,
+    linkedFromInvite: phoneDigits,
+    linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+    linkedAtMillis: Date.now(),
+    ...permissions,
+  };
+
+  await db.collection("authorizedCoaches").doc(uid).set(
+    coachPayload,
+    { merge: true }
+  );
+
+  await inviteRef.set(
+    {
+      linkedUid: uid,
+      linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+      linkedAtMillis: Date.now(),
+    },
+    { merge: true }
+  );
+
+  await db.collection("users").doc(uid).set(
+    {
+      role: "coach",
+      userType: "coach",
+      isCoach: true,
+      coachAuthorized: true,
+      coachInvitePhoneDigits: phoneDigits,
+      coachAuthorizedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...permissions,
+    },
+    { merge: true }
+  );
+
+  return {
+    allowed: true,
+    uid,
+    role: "coach",
+    fullName,
+    emailLower,
+    phoneDigits,
+    permissions,
+  };
+});
+
+/**
+ * ====================================================
+ * Progress Stats – סטטיסטיקת התקדמות לפי חגורה
+ *
+ * מאזין ל:
+ * userProgress/{uid}
+ *
+ * ומעדכן:
+ * beltStats/{beltId}
+ * ====================================================
+ */
+
+function safeNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function safePercent(value) {
+  return Math.max(0, Math.min(100, Math.round(safeNumber(value, 0))));
+}
+
+function bucketFieldForBucket(bucketValue) {
+  const bucket = safeNumber(bucketValue, 0);
+
+  if (bucket < 10) return "bucket_0_10";
+  if (bucket < 20) return "bucket_10_20";
+  if (bucket < 30) return "bucket_20_30";
+  if (bucket < 40) return "bucket_30_40";
+  if (bucket < 50) return "bucket_40_50";
+  if (bucket < 60) return "bucket_50_60";
+  if (bucket < 70) return "bucket_60_70";
+  if (bucket < 80) return "bucket_70_80";
+  if (bucket < 90) return "bucket_80_90";
+
+  // כולל 90 וגם 100
+  return "bucket_90_100";
+}
+
+function emptyBeltStats(beltId) {
+  return {
+    beltId,
+    usersCount: 0,
+    averageKnownPercent: 0,
+    totalKnownPercentSum: 0,
+
+    bucket_0_10: 0,
+    bucket_10_20: 0,
+    bucket_20_30: 0,
+    bucket_30_40: 0,
+    bucket_40_50: 0,
+    bucket_50_60: 0,
+    bucket_60_70: 0,
+    bucket_70_80: 0,
+    bucket_80_90: 0,
+    bucket_90_100: 0,
+  };
+}
+
+async function applyProgressDeltasToBeltStats(transaction, deltasByBeltId) {
+  const beltIds = Object.keys(deltasByBeltId || {})
+    .map((v) => String(v || "").trim())
+    .filter((v) => v.length > 0);
+
+  if (beltIds.length === 0) return;
+
+  const refsByBeltId = {};
+  const snapsByBeltId = {};
+
+  // חשוב: קודם כל קוראים את כל המסמכים.
+  // ב-Firestore Transaction אסור לבצע read אחרי write.
+  for (const beltId of beltIds) {
+    const ref = db.collection("beltStats").doc(beltId);
+    refsByBeltId[beltId] = ref;
+    snapsByBeltId[beltId] = await transaction.get(ref);
+  }
+
+  // ורק אחרי שכל הקריאות הסתיימו — מבצעים כתיבות.
+  for (const beltId of beltIds) {
+    const statsRef = refsByBeltId[beltId];
+    const statsSnap = snapsByBeltId[beltId];
+    const delta = deltasByBeltId[beltId] || {};
+
+    const current = statsSnap.exists
+      ? { ...emptyBeltStats(beltId), ...(statsSnap.data() || {}) }
+      : emptyBeltStats(beltId);
+
+    const nextUsersCount = Math.max(
+      0,
+      safeNumber(current.usersCount) + safeNumber(delta.usersCount)
+    );
+
+    const nextTotalKnownPercentSum = Math.max(
+      0,
+      safeNumber(current.totalKnownPercentSum) + safeNumber(delta.knownPercent)
+    );
+
+    const nextAverageKnownPercent =
+      nextUsersCount <= 0
+        ? 0
+        : Math.round(nextTotalKnownPercentSum / nextUsersCount);
+
+    const nextData = {
+      ...current,
+      beltId,
+      usersCount: nextUsersCount,
+      totalKnownPercentSum: nextTotalKnownPercentSum,
+      averageKnownPercent: nextAverageKnownPercent,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAtMillis: Date.now(),
+    };
+
+    const bucketDeltas = delta.bucketDeltas || {};
+    Object.keys(bucketDeltas).forEach((field) => {
+      nextData[field] = Math.max(
+        0,
+        safeNumber(current[field]) + safeNumber(bucketDeltas[field])
+      );
+    });
+
+    transaction.set(statsRef, nextData, { merge: true });
+  }
+}
+
+function addProgressDelta(deltasByBeltId, beltId, progress, direction) {
+  const cleanBeltId = String(beltId || "").trim();
+  if (!cleanBeltId) return;
+
+  const percent = safePercent(progress.knownPercent);
+  const bucket = safeNumber(progress.bucket, 0);
+  const bucketField = bucketFieldForBucket(bucket);
+
+  if (!deltasByBeltId[cleanBeltId]) {
+    deltasByBeltId[cleanBeltId] = {
+      usersCount: 0,
+      knownPercent: 0,
+      bucketDeltas: {},
+    };
+  }
+
+  deltasByBeltId[cleanBeltId].usersCount += direction;
+  deltasByBeltId[cleanBeltId].knownPercent += direction * percent;
+  deltasByBeltId[cleanBeltId].bucketDeltas[bucketField] =
+    safeNumber(deltasByBeltId[cleanBeltId].bucketDeltas[bucketField]) + direction;
+}
+
+exports.onUserProgressWritten = functions.firestore
+  .document("userProgress/{uid}")
+  .onWrite(async (change, context) => {
+    const uid = (context.params.uid || "").toString();
+
+    const beforeExists = change.before.exists;
+    const afterExists = change.after.exists;
+
+    const before = beforeExists ? (change.before.data() || {}) : null;
+    const after = afterExists ? (change.after.data() || {}) : null;
+
+    console.log("userProgress write detected:", {
+      uid,
+      beforeExists,
+      afterExists,
+      beforeBelt: before && before.beltId,
+      afterBelt: after && after.beltId,
+    });
+
+    const deltasByBeltId = {};
+
+    if (before) {
+      addProgressDelta(
+        deltasByBeltId,
+        before.beltId,
+        before,
+        -1
+      );
+    }
+
+    if (after) {
+      addProgressDelta(
+        deltasByBeltId,
+        after.beltId,
+        after,
+        1
+      );
+    }
+
+    await db.runTransaction(async (transaction) => {
+      await applyProgressDeltasToBeltStats(transaction, deltasByBeltId);
+    });
+
+    return null;
+  });
+
 // 🎙️ Google Cloud Text-to-Speech – קול גברי Neural
 const textToSpeech = require("@google-cloud/text-to-speech");
 const ttsClient = new textToSpeech.TextToSpeechClient();

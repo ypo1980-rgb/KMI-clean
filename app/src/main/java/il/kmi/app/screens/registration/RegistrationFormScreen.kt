@@ -338,10 +338,6 @@ fun RegistrationFormScreen(
                 !startAtProfile
     }
 
-    // דיאלוג קוד מאמן
-    var showCodeDialog by rememberSaveable { mutableStateOf(false) }
-    var coachCode by rememberSaveable { mutableStateOf("") }
-
     // ======== STATE של הטופס ========
     var fullName by rememberSaveable { mutableStateOf(sp.getString("fullName", "") ?: "") }
     var phone by rememberSaveable { mutableStateOf(sp.getString("phone", "") ?: "") }
@@ -387,6 +383,34 @@ fun RegistrationFormScreen(
         )
     }
 
+    // הרשאת מאמן אמיתית לעריכת פרופיל:
+    // לא מסתמכים על whitelist / super tester / בחירת טאב.
+    // רק מי שכבר אומת מול authorizedCoaches במסך ההתחברות מקבל להישאר/להיות מאמן.
+    val profileCoachAuthorized = remember(startAtProfile, sp, userSp) {
+        if (!startAtProfile) {
+            false
+        } else {
+            sp.getBoolean("coach_authorized", false) ||
+                    userSp.getBoolean("coach_authorized", false)
+        }
+    }
+
+    val profileSavedRole = remember(startAtProfile, sp, userSp) {
+        if (!startAtProfile) {
+            ""
+        } else {
+            userSp.getString("user_role", null)
+                ?: sp.getString("user_role", null)
+                ?: ""
+        }
+    }
+
+    val profileAllowsCoach = remember(startAtProfile, profileCoachAuthorized, profileSavedRole) {
+        startAtProfile &&
+                profileCoachAuthorized &&
+                profileSavedRole.equals("coach", ignoreCase = true)
+    }
+
     // ✅ חדש: ADMIN (Firestore: admins/{uid}.enabled)
     var isAdmin by rememberSaveable { mutableStateOf(false) }
 
@@ -395,13 +419,20 @@ fun RegistrationFormScreen(
     }
 
     // ✅ נעילה אוטומטית:
-    // - אם ADMIN או Super Tester → לא נועלים כלום, מאפשרים בחירה חופשית
-    // - אם מורשה מאמן → מעבירים לטאב מאמן ונועלים
-    // - אם לא מורשה → מעבירים לטאב מתאמן ונועלים
-    LaunchedEffect(startAtProfile, isWhitelistedCoach, isAdmin, isSuperTester) {
-        // ✅ בעריכת פרופיל לא משנים אוטומטית את התפקיד.
-        // המשתמש כבר רשום, ולכן נשארים באותו role שהיה שמור לפני הכניסה למסך.
-        if (startAtProfile) return@LaunchedEffect
+    // - בעריכת פרופיל: מאמן נשאר מאמן רק אם coach_authorized=true.
+    // - מי שלא מאומת כמאמן מול authorizedCoaches נשאר מתאמן בלבד.
+    // - ברישום ראשוני נשארת הלוגיקה הקיימת.
+    LaunchedEffect(
+        startAtProfile,
+        profileAllowsCoach,
+        isWhitelistedCoach,
+        isAdmin,
+        isSuperTester
+    ) {
+        if (startAtProfile) {
+            selectedTab = if (profileAllowsCoach) 1 else 0
+            return@LaunchedEffect
+        }
 
         if (!isAdmin && !isSuperTester) {
             selectedTab = if (isWhitelistedCoach) 1 else 0
@@ -767,11 +798,11 @@ fun RegistrationFormScreen(
 
         if (!valid) return
 
-        // ✅ role סופי:
-        // בעריכת פרופיל שומרים את התפקיד שנבחר/קיים ולא דורסים לפי whitelist.
-        // ברישום ראשוני נשארת הלוגיקה הקיימת של הרשאות מאמן.
+        // role סופי:
+        // בעריכת פרופיל אסור להפוך למאמן דרך הטופס.
+        // מאמן נשאר מאמן רק אם כבר יש coach_authorized=true מהתחברות מול authorizedCoaches.
         val roleFinal = if (startAtProfile) {
-            if (isCoach) "coach" else "trainee"
+            if (profileAllowsCoach) "coach" else "trainee"
         } else if (isAdmin || isSuperTester) {
             if (isCoach) "coach" else "trainee"
         } else {
@@ -779,8 +810,8 @@ fun RegistrationFormScreen(
         }
 
         val roleLockedBy = when {
-            startAtProfile && roleFinal == "coach" -> "profile_edit_existing_coach"
-            startAtProfile -> "profile_edit_existing_trainee"
+            startAtProfile && roleFinal == "coach" -> "profile_edit_server_authorized_coach"
+            startAtProfile -> "profile_edit_forced_trainee"
             isAdmin -> "admin"
             isSuperTester -> "super_tester"
             isWhitelistedCoach -> "coach_whitelist"
@@ -879,6 +910,15 @@ fun RegistrationFormScreen(
             .putBoolean("subscribeSms", subscribeSms)
             .putString("user_role", roleFinal)
             .putString("role_locked_by", roleLockedBy)
+            .putBoolean("coach_authorized", roleFinal == "coach" && profileAllowsCoach)
+            .putBoolean("can_open_coach_drawer", roleFinal == "coach" && profileAllowsCoach)
+            .putBoolean("can_view_trainees", roleFinal == "coach" && profileAllowsCoach)
+            .putBoolean("can_manage_trainees", roleFinal == "coach" && profileAllowsCoach)
+            .putBoolean("can_manage_attendance", roleFinal == "coach" && profileAllowsCoach)
+            .putBoolean("can_manage_internal_exams", roleFinal == "coach" && profileAllowsCoach)
+            .putBoolean("can_view_payment_reports", roleFinal == "coach" && profileAllowsCoach)
+            .putBoolean("can_manage_payments", roleFinal == "coach" && profileAllowsCoach)
+            .putBoolean("can_send_broadcasts", roleFinal == "coach" && profileAllowsCoach)
             .putString("gender", gender)
             .putString("branch_type", branchType)
             .putString("current_belt", beltFinal)
@@ -911,6 +951,15 @@ fun RegistrationFormScreen(
             putString("email", email.trim())
             putString("user_role", roleFinal)
             putString("role_locked_by", roleLockedBy)
+            putBoolean("coach_authorized", roleFinal == "coach" && profileAllowsCoach)
+            putBoolean("can_open_coach_drawer", roleFinal == "coach" && profileAllowsCoach)
+            putBoolean("can_view_trainees", roleFinal == "coach" && profileAllowsCoach)
+            putBoolean("can_manage_trainees", roleFinal == "coach" && profileAllowsCoach)
+            putBoolean("can_manage_attendance", roleFinal == "coach" && profileAllowsCoach)
+            putBoolean("can_manage_internal_exams", roleFinal == "coach" && profileAllowsCoach)
+            putBoolean("can_view_payment_reports", roleFinal == "coach" && profileAllowsCoach)
+            putBoolean("can_manage_payments", roleFinal == "coach" && profileAllowsCoach)
+            putBoolean("can_send_broadcasts", roleFinal == "coach" && profileAllowsCoach)
             putString("region", selectedRegion)
 
             // ✅ סניפים — שומרים גם CSV וגם JSON
@@ -1040,15 +1089,10 @@ fun RegistrationFormScreen(
                         Toast.LENGTH_SHORT
                     ).show()
 
-                    if (roleFinal == "coach") {
-                        val code = "%06d".format(java.security.SecureRandom().nextInt(1_000_000))
-                        coachCode = code
-                        sp.edit().putString("coach_code", code).apply()
-                        userSp.edit().putString("coach_code", code).apply()
-                        showCodeDialog = true
-                    } else {
-                        finishRegistrationFlow()
-                    }
+                    // אין יותר יצירת קוד מאמן מתוך האפליקציה.
+                    // הרשאת מאמן נקבעת רק דרך Firestore:
+                    // authorizedCoaches/{uid}
+                    finishRegistrationFlow()
                 }
                 .addOnFailureListener {
                     Toast.makeText(
@@ -1164,14 +1208,36 @@ fun RegistrationFormScreen(
                 selectedTab = selectedTab,
                 isEnglish = isEnglish,
                 onTabSelected = { newTab ->
-                    // ✅ ADMIN או Super Tester יכולים לבחור חופשי
+
+                    // בעריכת פרופיל לא מאפשרים להפוך למאמן מתוך הטופס.
+                    // מאמן מותר רק אם המשתמש כבר אומת מול authorizedCoaches
+                    // וההרשאה נשמרה כ-coach_authorized=true.
+                    if (startAtProfile) {
+                        if (newTab == 1 && !profileAllowsCoach) {
+                            Toast.makeText(
+                                ctx,
+                                if (isEnglish)
+                                    "Coach mode is allowed only after server authorization"
+                                else
+                                    "כניסה כמאמן מותרת רק לאחר הרשאה מהשרת",
+                                Toast.LENGTH_SHORT
+                            ).show()
+
+                            selectedTab = 0
+                            return@RegistrationTabsBilingual
+                        }
+
+                        selectedTab = if (profileAllowsCoach && newTab == 1) 1 else 0
+                        return@RegistrationTabsBilingual
+                    }
+
+                    // ADMIN או Super Tester יכולים לבחור חופשי רק ברישום ראשוני.
                     if (isAdmin || isSuperTester) {
                         selectedTab = newTab
                         return@RegistrationTabsBilingual
                     }
 
                     when {
-                        // ✅ מאמן מורשה: מותר רק טאב מאמן
                         isWhitelistedCoach -> {
                             if (newTab != 1) {
                                 Toast.makeText(
@@ -1183,7 +1249,6 @@ fun RegistrationFormScreen(
                             selectedTab = 1
                         }
 
-                        // ✅ לא מורשה: מותר רק טאב מתאמן
                         else -> {
                             if (newTab == 1) {
                                 Toast.makeText(
@@ -1343,73 +1408,6 @@ fun RegistrationFormScreen(
         }
     }
 
-    // --- דיאלוג קוד מאמן (אם רלוונטי) ---
-    if (showCodeDialog) {
-        val normalizedPhone = phone.filter { it.isDigit() }
-        val nameFromPhone = CoachWhitelist.allowedPhones[normalizedPhone]
-        val nameFromEmail = CoachWhitelist.allowedEmails[email.trim()]
-        val coachDisplayName = nameFromPhone ?: nameFromEmail ?: fullName.ifBlank {
-            if (isEnglish) "Coach" else "מאמן"
-        }
-
-        AlertDialog(
-            onDismissRequest = { /* לא נסגור לבד */ },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showCodeDialog = false
-                        finishRegistrationFlow()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Text(if (isEnglish) "OK" else "אישור")
-                }
-            },
-            title = {
-                Text(
-                    text = if (isEnglish) "Hello, $coachDisplayName" else "שלום, $coachDisplayName",
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                ) {
-                    Text(
-                        text = if (isEnglish) "Your coach code:" else "קוד המאמן שלך:",
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Text(
-                            text = coachCode,
-                            style = MaterialTheme.typography.headlineMedium,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                        )
-                    }
-                    Text(
-                        text = if (isEnglish) {
-                            "Please save your coach code for system access and advanced actions, such as sending messages to a group."
-                        } else {
-                            "עליך לשמור את קוד המאמן שהתקבל לכניסה למערכת ולפעולות מתקדמות, כמו שליחת הודעות לקבוצה."
-                        },
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        )
-    }
 }
 
 @Composable

@@ -21,6 +21,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -936,6 +938,10 @@ private fun BirthDatePicker(
     val shape = RoundedCornerShape(14.dp)
     val fieldColors = registrationLightFieldColors()
 
+    val dayFocusRequester = remember { FocusRequester() }
+    val monthFocusRequester = remember { FocusRequester() }
+    val yearFocusRequester = remember { FocusRequester() }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -944,74 +950,18 @@ private fun BirthDatePicker(
         verticalAlignment = Alignment.CenterVertically
     ) {
 
-        // יום (2 ספרות)
-        OutlinedTextField(
-            value = dayText,
-            onValueChange = { raw ->
-                val digits = raw.filter { it.isDigit() }.take(2)
-                dayText = digits
-                digits.toIntOrNull()?.let { v ->
-                    if (v in 1..31) onDayChange(v)
-                }
-            },
-            label = {
-                Text(
-                    text = if (isEnglish) "Day" else "יום",
-                    maxLines = 1,
-                    softWrap = false
-                )
-            },
-            singleLine = true,
-            shape = shape,
-            colors = fieldColors,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(0.90f)
-        )
-
-        Text(
-            text = "/",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        // חודש (2 ספרות) — מקבל יותר רוחב כדי שלא ייחתך
-        OutlinedTextField(
-            value = monthText,
-            onValueChange = { raw ->
-                val digits = raw.filter { it.isDigit() }.take(2)
-                monthText = digits
-                digits.toIntOrNull()?.let { v ->
-                    if (v in 1..12) onMonthChange(v)
-                }
-            },
-            label = {
-                Text(
-                    text = if (isEnglish) "Month" else "חודש",
-                    maxLines = 1,
-                    softWrap = false
-                )
-            },
-            singleLine = true,
-            shape = shape,
-            colors = fieldColors,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(1.15f)
-        )
-
-        Text(
-            text = "/",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
         // שנה (4 ספרות)
+        // בעברית השדה הזה מוצג בצד שמאל בגלל RTL,
+        // ולכן סדר התצוגה בפועל הוא: יום / חודש / שנה.
         OutlinedTextField(
             value = yearText,
             onValueChange = { raw ->
                 val digits = raw.filter { it.isDigit() }.take(4)
                 yearText = digits
-                digits.toIntOrNull()?.let { v ->
-                    if (v in 1950..currentYear) onYearChange(v)
+
+                val yearValue = digits.toIntOrNull()
+                if (yearValue != null && yearValue in 1950..currentYear) {
+                    onYearChange(yearValue)
                 }
             },
             label = {
@@ -1025,7 +975,86 @@ private fun BirthDatePicker(
             shape = shape,
             colors = fieldColors,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.weight(1.05f)
+            modifier = Modifier
+                .weight(1.05f)
+                .focusRequester(yearFocusRequester)
+        )
+
+        Text(
+            text = "/",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        // חודש (2 ספרות)
+        OutlinedTextField(
+            value = monthText,
+            onValueChange = { raw ->
+                val digits = raw.filter { it.isDigit() }.take(2)
+                monthText = digits
+
+                val monthValue = digits.toIntOrNull()
+                if (monthValue != null && monthValue in 1..12) {
+                    onMonthChange(monthValue)
+
+                    if (digits.length == 2) {
+                        yearFocusRequester.requestFocus()
+                    }
+                }
+            },
+            label = {
+                Text(
+                    text = if (isEnglish) "Month" else "חודש",
+                    maxLines = 1,
+                    softWrap = false
+                )
+            },
+            singleLine = true,
+            shape = shape,
+            colors = fieldColors,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier
+                .weight(1.15f)
+                .focusRequester(monthFocusRequester)
+        )
+
+        Text(
+            text = "/",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        // יום (2 ספרות)
+        // בעברית זה השדה הימני, ולכן לאחר יום תקין עוברים לחודש.
+        OutlinedTextField(
+            value = dayText,
+            onValueChange = { raw ->
+                val digits = raw.filter { it.isDigit() }.take(2)
+                dayText = digits
+
+                val dayValue = digits.toIntOrNull()
+                if (dayValue != null && dayValue in 1..31) {
+                    onDayChange(dayValue)
+
+                    if (digits.length == 2) {
+                        monthFocusRequester.requestFocus()
+                    }
+                }
+            },
+            label = {
+                Text(
+                    text = if (isEnglish) "Day" else "יום",
+                    maxLines = 1,
+                    softWrap = false
+                )
+            },
+            singleLine = true,
+            shape = shape,
+            colors = fieldColors,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier
+                .weight(0.90f)
+                .focusRequester(dayFocusRequester)
         )
     }
 }
@@ -1635,7 +1664,12 @@ private fun BeltPicker(
                             Surface(
                                 color = belt.color,
                                 tonalElevation = 0.dp,
-                                shape = MaterialTheme.shapes.small,
+                                shape = RoundedCornerShape(50),
+                                border = if (belt.id == "white") {
+                                    BorderStroke(1.5.dp, Color.Black)
+                                } else {
+                                    null
+                                },
                                 modifier = Modifier.size(14.dp)
                             ) {}
 

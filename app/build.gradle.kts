@@ -15,8 +15,8 @@ android {
         applicationId = "il.kmi.training"
         minSdk = 23
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.0.8"
+        versionCode = 13
+        versionName = "1.0.12"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -114,17 +114,19 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.3.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-functions-ktx")
     // ✅ Firebase Storage להעלאת תמונות/וידאו בפורום
     implementation("com.google.firebase:firebase-storage-ktx")
     // ✅ Firebase Cloud Messaging (FCM) להתראות Push
     implementation("com.google.firebase:firebase-messaging-ktx")
 
     // -------------------------------
-    // Google Login - Credential Manager
+    // Google Login - Credential Manager + Classic fallback
     // -------------------------------
     implementation("androidx.credentials:credentials:1.6.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.2.0")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 
     // Icons / Billing
     implementation("androidx.compose.material:material-icons-extended")

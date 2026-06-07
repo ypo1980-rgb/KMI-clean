@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.app.Activity
 import android.content.ContextWrapper
+import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
@@ -19,6 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -46,6 +48,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
@@ -53,6 +56,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -60,10 +64,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import il.kmi.app.R
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.core.view.doOnPreDraw
 import shareCurrentScreen
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import il.kmi.app.search.KmiSearchBridge
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.platform.LocalDensity
@@ -192,6 +199,7 @@ fun KmiTopBar(
     val currentLangResolved = languageManager.getCurrentLanguage().code
     val isEnglish = currentLangResolved == "en"
     val rootView = LocalView.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     var hideBottomForShare by remember { mutableStateOf(false) }
 
     fun runKmiShare() {
@@ -259,16 +267,9 @@ fun KmiTopBar(
     val MAX_BROADCAST_CHARS = 280
     val focusManager = LocalFocusManager.current
 
-// היה כאן mutableStateListOf(...) ללא remember → עוטפים ב-remember(spUser)
-    val recentMessages = remember(spUser) {
-        mutableStateListOf<RecentBroadcast>().apply {
-            addAll(spUser.getRecentBroadcasts())
-        }
-    }
-
     var historyExpanded by remember { mutableStateOf(false) }
 
-// 🔵 דיאלוג עוזר חכם (AI)
+    // 🔵 דיאלוג עוזר חכם (AI)
     var showAiDialog by rememberSaveable { mutableStateOf(false) }
 
     // ✅ טור פעולות צדדי במקום סרגל אייקונים אופקי פתוח תמיד
@@ -277,19 +278,57 @@ fun KmiTopBar(
     // ✅ חיפוש גלובאלי מתוך טור האייקונים החדש
     var showGlobalSearch by rememberSaveable { mutableStateOf(false) }
     var globalSearchQuery by rememberSaveable { mutableStateOf("") }
+    var globalSearchInputEnabled by rememberSaveable { mutableStateOf(true) }
 
-    // היה:
-    // val broadcastTooLong by derivedStateOf { broadcastText.length > MAX_BROADCAST_CHARS }
-    // צריך לזכור את ה-state:
     val broadcastTooLong by remember(broadcastText) {
         derivedStateOf { broadcastText.length > MAX_BROADCAST_CHARS }
     }
 
-    // remember מודאל – חובה ליצור עם remember
     val broadcastSheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true
     )
+
     val scope = rememberCoroutineScope()
+
+    fun hideGlobalSearchKeyboard() {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+
+        val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+
+        rootView.clearFocus()
+        imm?.hideSoftInputFromWindow(rootView.windowToken, 0)
+
+        val activityRoot = (ctx as? Activity)?.window?.decorView
+        activityRoot?.clearFocus()
+        imm?.hideSoftInputFromWindow(activityRoot?.windowToken, 0)
+
+        rootView.postDelayed({
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
+            imm?.hideSoftInputFromWindow(rootView.windowToken, 0)
+            imm?.hideSoftInputFromWindow(activityRoot?.windowToken, 0)
+        }, 80)
+    }
+
+    fun finishGlobalSearchTyping() {
+        hideGlobalSearchKeyboard()
+
+        // כיבוי קצר של TextField מכריח את Samsung Keyboard לסגור את המקלדת.
+        globalSearchInputEnabled = false
+
+        scope.launch {
+            delay(180)
+            globalSearchInputEnabled = true
+        }
+    }
+
+// היה כאן mutableStateListOf(...) ללא remember → עוטפים ב-remember(spUser)
+    val recentMessages = remember(spUser) {
+        mutableStateListOf<RecentBroadcast>().apply {
+            addAll(spUser.getRecentBroadcasts())
+        }
+    }
 
     LaunchedEffect(showBroadcastSheet) {
         if (!showBroadcastSheet) focusManager.clearFocus(force = true)
@@ -832,6 +871,7 @@ fun KmiTopBar(
     if (showGlobalSearch) {
         ModalBottomSheet(
             onDismissRequest = {
+                hideGlobalSearchKeyboard()
                 showGlobalSearch = false
                 globalSearchQuery = ""
             },
@@ -878,16 +918,241 @@ fun KmiTopBar(
             val searchHorizontalAlignment =
                 if (isEnglish) Alignment.Start else Alignment.End
 
-            val results = remember(globalSearchQuery) {
-                val q = globalSearchQuery.trim()
-                if (q.length < 2) {
+            fun normalizedSearchVariants(query: String): List<String> {
+                val q = query
+                    .replace("\u200F", "")
+                    .replace("\u200E", "")
+                    .replace("\u00A0", " ")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+
+                if (q.isBlank()) return emptyList()
+
+                val variants = linkedSetOf<String>()
+
+                fun add(value: String) {
+                    val clean = value
+                        .replace("\u200F", "")
+                        .replace("\u200E", "")
+                        .replace("\u00A0", " ")
+                        .replace(Regex("\\s+"), " ")
+                        .trim()
+
+                    if (clean.length >= 2) {
+                        variants += clean
+                    }
+                }
+
+                add(q)
+
+                // אם המשתמש הקליד בטעות "ה נגד..." או "הגנה נגד..."
+                add(q.removePrefix("ה ").trim())
+                add(q.removePrefix("ה").trim())
+
+                add(q.replace("הגנה נגד", "נגד").trim())
+                add(q.replace("הגנה", "").trim())
+                add(q.replace("ה ", "").trim())
+
+                // חיפוש מדויק להגנות נגד בעיטה לצד.
+                // חשוב: לא מוסיפים כאן "בעיטה לצד" לבד,
+                // כי זה מחזיר תרגילי בעיטה רגילים במקום תרגילי הגנה.
+                val isSideKickDefenseSearch =
+                    q.contains("הגנה נגד בעיטה לצד") ||
+                            q.contains("הגנה נגד בעיטות לצד") ||
+                            q.contains("נגד בעיטה לצד") ||
+                            q.contains("נגד בעיטות לצד") ||
+                            q.contains("הגנה חיצונית באמת") ||
+                            q.contains("הגנה חיצונית באמה") ||
+                            q.contains("באמת ימין") ||
+                            q.contains("באמת שמאל") ||
+                            q.contains("באמה ימין") ||
+                            q.contains("באמה שמאל")
+
+                if (isSideKickDefenseSearch) {
+                    add("הגנה חיצונית באמת ימין נגד בעיטה לצד")
+                    add("הגנה חיצונית באמת שמאל נגד בעיטה לצד")
+                    add("הגנה נגד בעיטה לצד - בעיטת סטירה חיצונית")
+                    add("הגנות נגד בעיטות נגד בעיטות לצד")
+                    add("הגנות נגד בעיטות")
+                    add("נגד בעיטה לצד")
+                    add("נגד בעיטות לצד")
+                }
+
+                return variants.toList()
+            }
+
+            fun normalizeForGlobalSearch(value: String): String {
+                return value
+                    .replace("\u200F", "")
+                    .replace("\u200E", "")
+                    .replace("\u00A0", " ")
+                    .replace("–", "-")
+                    .replace("—", "-")
+                    .replace("־", "-")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+            }
+
+            fun beltLabelForSearch(beltName: String): String {
+                return when (beltName.uppercase()) {
+                    "YELLOW" -> if (isEnglish) "Yellow belt" else "חגורה צהובה"
+                    "ORANGE" -> if (isEnglish) "Orange belt" else "חגורה כתומה"
+                    "GREEN" -> if (isEnglish) "Green belt" else "חגורה ירוקה"
+                    "BLUE" -> if (isEnglish) "Blue belt" else "חגורה כחולה"
+                    "BROWN" -> if (isEnglish) "Brown belt" else "חגורה חומה"
+                    "BLACK" -> if (isEnglish) "Black belt" else "חגורה שחורה"
+                    else -> beltName
+                }
+            }
+
+            fun searchSubtitleFromResolvedKey(rawKey: String, fallbackBeltName: String): String {
+                val resolved = il.kmi.app.domain.ContentRepo.resolveItemKey(rawKey)
+
+                return if (resolved != null) {
+                    val beltLabel = beltLabelForSearch(resolved.belt.name)
+
+                    if (resolved.topicTitle.isNotBlank()) {
+                        "$beltLabel • ${resolved.topicTitle}"
+                    } else {
+                        beltLabel
+                    }
+                } else {
+                    beltLabelForSearch(fallbackBeltName)
+                }
+            }
+
+            fun matchesGlobalSearchTitle(
+                title: String,
+                variants: List<String>
+            ): Boolean {
+                val normalizedTitle = normalizeForGlobalSearch(title)
+
+                return variants.any { variant ->
+                    val normalizedVariant = normalizeForGlobalSearch(variant)
+
+                    if (normalizedVariant.length < 2) {
+                        false
+                    } else {
+                        normalizedTitle.contains(normalizedVariant, ignoreCase = true) ||
+                                normalizedVariant
+                                    .split(" ")
+                                    .filter { it.length >= 2 }
+                                    .all { word ->
+                                        normalizedTitle.contains(word, ignoreCase = true)
+                                    }
+                    }
+                }
+            }
+
+            fun directExplanationSideKickDefenseResults(query: String): List<UiSearchResult> {
+                val normalizedQuery = normalizeForGlobalSearch(query)
+
+                val shouldUseDirectSideKickDefense =
+                    normalizedQuery.contains("הגנה נגד בעיטה לצד") ||
+                            normalizedQuery.contains("הגנה נגד בעיטות לצד") ||
+                            normalizedQuery.contains("נגד בעיטה לצד") ||
+                            normalizedQuery.contains("נגד בעיטות לצד")
+
+                if (!shouldUseDirectSideKickDefense) {
+                    return emptyList()
+                }
+
+                val greenBelt = il.kmi.shared.domain.Belt.GREEN
+
+                val directTitles = listOf(
+                    "הגנה חיצונית באמת ימין נגד בעיטה לצד",
+                    "הגנה חיצונית באמת שמאל נגד בעיטה לצד",
+                    "הגנה נגד בעיטה לצד - בעיטת סטירה חיצונית"
+                )
+
+                return directTitles.mapNotNull { title ->
+                    val explanation = il.kmi.app.domain.Explanations
+                        .get(
+                            belt = greenBelt,
+                            item = title,
+                            exerciseId = null
+                        )
+                        .trim()
+
+                    val isRealExplanation =
+                        explanation.isNotBlank() &&
+                                !explanation.startsWith("הסבר מפורט על:")
+
+                    if (isRealExplanation) {
+                        UiSearchResult(
+                            id = "green::הגנות::$title",
+                            title = title,
+                            subtitle = if (isEnglish) {
+                                "Green belt • Defenses"
+                            } else {
+                                "חגורה ירוקה • הגנות"
+                            }
+                        )
+                    } else {
+                        null
+                    }
+                }
+            }
+
+            val explanationSearchRows = remember {
+                il.kmi.app.domain.Explanations.auditKnownExerciseExplanations()
+            }
+
+            val results = remember(globalSearchQuery, explanationSearchRows, isEnglish) {
+                val query = globalSearchQuery.trim()
+
+                if (query.length < 2) {
                     emptyList()
                 } else {
-                    runCatching {
-                        KmiSearchBridge.searchExercises(q)
-                    }.getOrElse {
-                        emptyList()
-                    }
+                    val variants = normalizedSearchVariants(query)
+
+                    val directExplanationResults =
+                        directExplanationSideKickDefenseResults(query)
+
+                    val explanationResults = explanationSearchRows
+                        .filter { row ->
+                            matchesGlobalSearchTitle(
+                                title = row.title,
+                                variants = variants
+                            )
+                        }
+                        .map { row ->
+                            UiSearchResult(
+                                id = row.exerciseId,
+                                title = row.title,
+                                subtitle = searchSubtitleFromResolvedKey(
+                                    rawKey = row.exerciseId,
+                                    fallbackBeltName = row.belt.name
+                                )
+                            )
+                        }
+
+                    val bridgeResults = variants
+                        .flatMap { variant ->
+                            runCatching {
+                                KmiSearchBridge.searchExercises(variant)
+                            }.getOrElse {
+                                emptyList()
+                            }
+                        }
+                        .map { hit ->
+                            val rawKey = hit.id ?: hit.title
+
+                            UiSearchResult(
+                                id = rawKey,
+                                title = hit.title,
+                                subtitle = hit.subtitle
+                                    ?: searchSubtitleFromResolvedKey(
+                                        rawKey = rawKey,
+                                        fallbackBeltName = ""
+                                    )
+                            )
+                        }
+
+                    (directExplanationResults + explanationResults + bridgeResults)
+                        .distinctBy { hit ->
+                            normalizeForGlobalSearch(hit.title)
+                        }
                 }
             }
 
@@ -941,6 +1206,25 @@ fun KmiTopBar(
                                     )
                                     .padding(horizontal = 18.dp, vertical = 18.dp)
                             ) {
+                                IconButton(
+                                    onClick = {
+                                        hideGlobalSearchKeyboard()
+                                        showGlobalSearch = false
+                                        globalSearchQuery = ""
+                                    },
+                                    modifier = Modifier
+                                        .align(AbsoluteAlignment.TopLeft)
+                                        .offset(x = (-6).dp, y = (-6).dp)
+                                        .size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = if (isEnglish) "Close search" else "סגור חיפוש",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -985,15 +1269,47 @@ fun KmiTopBar(
                             ) {
                                 OutlinedTextField(
                                     value = globalSearchQuery,
-                                    onValueChange = { globalSearchQuery = it },
+                                    onValueChange = { newValue ->
+                                        val cleanValue = newValue
+                                            .replace("\n", " ")
+                                            .replace("\r", " ")
+                                            .replace(Regex("\\s+"), " ")
+
+                                        globalSearchQuery = cleanValue
+
+                                        if (cleanValue != newValue) {
+                                            finishGlobalSearchTyping()
+                                        }
+                                    },
+                                    enabled = globalSearchInputEnabled,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    singleLine = true,
-                                    textStyle = MaterialTheme.typography.titleMedium.copy(
-                                        fontSize = 20.sp,
-                                        lineHeight = 24.sp,
-                                        fontWeight = FontWeight.Bold,
+                                        .heightIn(min = 62.dp, max = 92.dp)
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    singleLine = false,
+                                    minLines = 1,
+                                    maxLines = 2,
+                                    keyboardOptions = KeyboardOptions(
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onDone = {
+                                            finishGlobalSearchTyping()
+                                        },
+                                        onSearch = {
+                                            finishGlobalSearchTyping()
+                                        },
+                                        onGo = {
+                                            finishGlobalSearchTyping()
+                                        },
+                                        onSend = {
+                                            finishGlobalSearchTyping()
+                                        }
+                                    ),
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 11.sp,
+                                        lineHeight = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
                                         textAlign = searchTextAlign,
                                         color = Color(0xFF111827)
                                     ),
@@ -1002,8 +1318,8 @@ fun KmiTopBar(
                                             text = searchLabel,
                                             modifier = Modifier.fillMaxWidth(),
                                             textAlign = searchTextAlign,
-                                            fontSize = 13.sp,
-                                            lineHeight = 16.sp,
+                                            fontSize = 10.sp,
+                                            lineHeight = 12.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
                                     },
@@ -1012,9 +1328,9 @@ fun KmiTopBar(
                                             text = searchLabel,
                                             modifier = Modifier.fillMaxWidth(),
                                             textAlign = searchTextAlign,
-                                            fontSize = 20.sp,
-                                            lineHeight = 24.sp,
-                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.5.sp,
+                                            lineHeight = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
                                             color = Color(0xFF64748B)
                                         )
                                     },
@@ -1023,16 +1339,21 @@ fun KmiTopBar(
                                             imageVector = Icons.Filled.Search,
                                             contentDescription = searchLabel,
                                             tint = Color(0xFF10B981),
-                                            modifier = Modifier.size(25.dp)
+                                            modifier = Modifier.size(21.dp)
                                         )
                                     },
                                     trailingIcon = {
                                         if (globalSearchQuery.isNotBlank()) {
-                                            IconButton(onClick = { globalSearchQuery = "" }) {
+                                            IconButton(
+                                                onClick = {
+                                                    globalSearchQuery = ""
+                                                }
+                                            ) {
                                                 Icon(
                                                     imageVector = Icons.Filled.Close,
                                                     contentDescription = if (isEnglish) "Clear" else "נקה",
-                                                    tint = Color(0xFF6D4ED8)
+                                                    tint = Color(0xFF6D4ED8),
+                                                    modifier = Modifier.size(20.dp)
                                                 )
                                             }
                                         }
@@ -1053,25 +1374,17 @@ fun KmiTopBar(
 
                         when {
                             globalSearchQuery.trim().length < 2 -> {
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = Color.White.copy(alpha = 0.72f),
-                                    shadowElevation = 3.dp,
-                                    tonalElevation = 0.dp
-                                ) {
-                                    Text(
-                                        text = searchHint,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                                        textAlign = searchTextAlign,
-                                        color = Color(0xFF64748B),
-                                        fontSize = 15.sp,
-                                        lineHeight = 20.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
+                                Text(
+                                    text = searchHint,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                                    textAlign = searchTextAlign,
+                                    color = Color(0xFF111827),
+                                    fontSize = 17.sp,
+                                    lineHeight = 22.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
                             }
 
                             results.isEmpty() -> {
@@ -1117,22 +1430,20 @@ fun KmiTopBar(
                                                         il.kmi.app.domain.ContentRepo.resolveItemKey(rawKey)
 
                                                     val stableKey = if (resolved != null) {
-                                                        val fixedSub =
-                                                            il.kmi.app.domain.ContentRepo.findSubTopicTitleForItem(
-                                                                belt = resolved.belt,
-                                                                topicTitle = resolved.topicTitle,
-                                                                itemTitle = resolved.itemTitle
-                                                            ) ?: (resolved.subTopicTitle ?: "")
-
+                                                        // שולחים מפתח פשוט ויציב להסבר:
+                                                        // belt::topic::item
+                                                        // לא מכניסים כאן subTopic, כי חלק מהמסכים מפרשים רק 3 חלקים.
                                                         listOf(
-                                                            resolved.belt.name,
+                                                            resolved.belt.id,
                                                             resolved.topicTitle,
-                                                            fixedSub,
                                                             resolved.itemTitle
                                                         ).joinToString("::")
                                                     } else {
                                                         rawKey
                                                     }
+
+                                                    keyboardController?.hide()
+                                                    focusManager.clearFocus(force = true)
 
                                                     showGlobalSearch = false
                                                     globalSearchQuery = ""
@@ -1581,7 +1892,10 @@ private fun IconsRailAttachedHandle(
             }
             .clip(IconsRailAttachedTabShape())
             .background(Color.White)
-            .clickable {
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
                 pressed = true
                 onToggle()
             },

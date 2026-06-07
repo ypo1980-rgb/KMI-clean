@@ -1,5 +1,7 @@
 package il.kmi.app.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -222,30 +224,20 @@ private fun googleLoginErrorMessage(
         error.toString()
     ).joinToString(" ")
 
-    val isCancelled =
-        error is androidx.credentials.exceptions.GetCredentialCancellationException ||
-                clean.contains("cancel", ignoreCase = true)
-
-    if (isCancelled) {
-        return if (isEnglish) {
-            "Google sign-in was cancelled."
-        } else {
-            "ההתחברות עם Google בוטלה."
-        }
-    }
+    val isRealUserCancel =
+        error is androidx.credentials.exceptions.GetCredentialCancellationException
 
     val isNoCredential =
-        clean.contains("No credentials", ignoreCase = true) ||
-                clean.contains("NoCredential", ignoreCase = true) ||
-                clean.contains("credentials available", ignoreCase = true)
+        clean.contains("NoCredential", ignoreCase = true) ||
+                clean.contains("No credentials", ignoreCase = true) ||
+                clean.contains("credentials available", ignoreCase = true) ||
+                clean.contains("no available credentials", ignoreCase = true)
 
-    if (isNoCredential) {
-        return if (isEnglish) {
-            "No Google account was found on this device. Please make sure a Google account is added to the device, update Google Play services, and try again."
-        } else {
-            "לא נמצא חשבון Google זמין במכשיר. יש לוודא שמוגדר חשבון Google במכשיר, לעדכן את שירותי Google Play ולנסות שוב."
-        }
-    }
+    val isAccountCollision =
+        clean.contains("ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL", ignoreCase = true) ||
+                clean.contains("account exists with different credential", ignoreCase = true) ||
+                clean.contains("already exists", ignoreCase = true) ||
+                clean.contains("different credential", ignoreCase = true)
 
     val isConfigProblem =
         clean.contains("DEVELOPER_ERROR", ignoreCase = true) ||
@@ -253,11 +245,48 @@ private fun googleLoginErrorMessage(
                 clean.contains("invalid_audience", ignoreCase = true) ||
                 clean.contains("audience", ignoreCase = true)
 
+    val isNetworkProblem =
+        clean.contains("network", ignoreCase = true) ||
+                clean.contains("timeout", ignoreCase = true) ||
+                clean.contains("unavailable", ignoreCase = true)
+
+    if (isNoCredential) {
+        return if (isEnglish) {
+            "No Google account was found on this device. Please make sure a Google account is added to the device, update Google Play services, and try again."
+        } else {
+            "לא נמצא חשבון Google זמין במכשיר. יש לוודא שמוגדר חשבון Google במכשיר, לעדכן את שירותי Google Play Services ולנסות שוב."
+        }
+    }
+
+    if (isRealUserCancel) {
+        return if (isEnglish) {
+            "Google sign-in was cancelled."
+        } else {
+            "ההתחברות עם Google בוטלה."
+        }
+    }
+
+    if (isAccountCollision) {
+        return if (isEnglish) {
+            "This email is already registered with another sign-in method. Please sign in using the regular login method."
+        } else {
+            "האימייל הזה כבר רשום במערכת בדרך התחברות אחרת. יש להיכנס בדרך הרגילה."
+        }
+    }
+
     if (isConfigProblem) {
         return if (isEnglish) {
             "Google sign-in is not configured correctly for this app version. Please update the app and try again."
         } else {
             "התחברות Google אינה מוגדרת נכון לגרסה הזו. יש לעדכן את האפליקציה ולנסות שוב."
+        }
+    }
+
+    if (isNetworkProblem) {
+        return if (isEnglish) {
+            "Network problem while signing in with Google. Please check your connection and try again."
+        } else {
+            "יש בעיית רשת בזמן התחברות עם Google. בדוק חיבור לאינטרנט ונסה שוב."
         }
     }
 
@@ -350,6 +379,33 @@ private fun BeltBadge(
 
 private const val SUPPRESS_NEXT_DRAWER_OPEN_KEY = "kmi_suppress_next_drawer_open"
 
+private suspend fun completeGoogleLoginAfterFirebaseAuth(
+    ctx: Context,
+    userSp: SharedPreferences,
+    legacySp: SharedPreferences,
+    onProfileComplete: () -> Unit,
+    onProfileMissing: () -> Unit
+) {
+    val profileStatus =
+        UserProfileCompletion.checkAndPersistProfileStatus(ctx)
+
+    FcmTokenManager.refreshTokenForCurrentUser(ctx)
+
+    userSp.edit()
+        .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+        .apply()
+
+    legacySp.edit()
+        .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+        .apply()
+
+    if (profileStatus.isComplete) {
+        onProfileComplete()
+    } else {
+        onProfileMissing()
+    }
+}
+
 @Composable
 fun IntroScreen(
     onContinue: () -> Unit,
@@ -370,6 +426,47 @@ fun IntroScreen(
     val isEnglish = currentLang == AppLanguage.ENGLISH
 
     val userSp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
+
+    // הקובץ השני שבו נשמרים חלק מהדגלים הישנים של האפליקציה.
+    val legacySp = remember { ctx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
+
+    val classicGoogleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        scope.launch {
+            val classicResult = GoogleAuthManager.handleClassicGoogleSignInResult(result.data)
+
+            classicResult
+                .onSuccess {
+                    isGoogleLoading = false
+                    googleFlowLocked = false
+
+                    completeGoogleLoginAfterFirebaseAuth(
+                        ctx = ctx,
+                        userSp = userSp,
+                        legacySp = legacySp,
+                        onProfileComplete = onProfileComplete,
+                        onProfileMissing = onProfileMissing
+                    )
+                }
+                .onFailure { error ->
+                    isGoogleLoading = false
+                    googleFlowLocked = false
+
+                    googleError = googleLoginErrorMessage(
+                        error = error,
+                        isEnglish = isEnglish
+                    )
+
+                    Toast.makeText(
+                        ctx,
+                        googleError.orEmpty(),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+        }
+    }
+
     var fetchedName by remember { mutableStateOf<String?>(null) }
     var didFetchName by remember { mutableStateOf(false) }
 
@@ -379,9 +476,6 @@ fun IntroScreen(
             fetchedName = fetchAndPersistFullNameIfMissing(userSp)
         }
     }
-
-    // ✅ ADD: גם הקובץ השני כדי להבין איפה נשמר בפועל
-    val legacySp = remember { ctx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
 
     val alpha by animateFloatAsState(
         targetValue = if (startAnim) 1f else 0f,
@@ -486,7 +580,7 @@ fun IntroScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 8.dp),
+                    .padding(top = 0.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -531,12 +625,12 @@ fun IntroScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(256.dp)
+                        .height(232.dp)
                         .padding(top = 0.dp, bottom = 0.dp)
                         .alpha(alpha),
                     contentAlignment = Alignment.Center
                 ) {
-                    val imageScale = (scale * 1.96f).coerceAtMost(2.14f)
+                    val imageScale = (scale * 1.84f).coerceAtMost(2.02f)
 
                     Image(
                         painter = painterResource(id = R.drawable.fighters_blackbelt),
@@ -544,7 +638,7 @@ fun IntroScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .wrapContentHeight()
-                            .offset(y = 4.dp)
+                            .offset(y = 0.dp)
                             .graphicsLayer {
                                 scaleX = imageScale
                                 scaleY = imageScale
@@ -568,7 +662,7 @@ fun IntroScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 6.dp, bottom = 14.dp),
+                        .padding(top = 12.dp, bottom = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Button(
@@ -586,42 +680,53 @@ fun IntroScreen(
 
                                 loginResult
                                     .onSuccess {
-                                        val profileStatus =
-                                            UserProfileCompletion.checkAndPersistProfileStatus(ctx)
-
-                                        FcmTokenManager.refreshTokenForCurrentUser(ctx)
-
-                                        userSp.edit()
-                                            .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
-                                            .apply()
-
-                                        legacySp.edit()
-                                            .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
-                                            .apply()
-
                                         isGoogleLoading = false
                                         googleFlowLocked = false
 
-                                        if (profileStatus.isComplete) {
-                                            onProfileComplete()
-                                        } else {
-                                            onProfileMissing()
-                                        }
+                                        completeGoogleLoginAfterFirebaseAuth(
+                                            ctx = ctx,
+                                            userSp = userSp,
+                                            legacySp = legacySp,
+                                            onProfileComplete = onProfileComplete,
+                                            onProfileMissing = onProfileMissing
+                                        )
                                     }
                                     .onFailure { error ->
-                                        isGoogleLoading = false
-                                        googleFlowLocked = false
+                                        if (GoogleAuthManager.shouldUseClassicGoogleFallback(error)) {
+                                            runCatching {
+                                                classicGoogleLauncher.launch(
+                                                    GoogleAuthManager.classicGoogleSignInIntent(ctx)
+                                                )
+                                            }.onFailure { launchError ->
+                                                isGoogleLoading = false
+                                                googleFlowLocked = false
 
-                                        googleError = googleLoginErrorMessage(
-                                            error = error,
-                                            isEnglish = isEnglish
-                                        )
+                                                googleError = googleLoginErrorMessage(
+                                                    error = launchError,
+                                                    isEnglish = isEnglish
+                                                )
 
-                                        Toast.makeText(
-                                            ctx,
-                                            googleError.orEmpty(),
-                                            Toast.LENGTH_LONG
-                                        ).show()
+                                                Toast.makeText(
+                                                    ctx,
+                                                    googleError.orEmpty(),
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        } else {
+                                            isGoogleLoading = false
+                                            googleFlowLocked = false
+
+                                            googleError = googleLoginErrorMessage(
+                                                error = error,
+                                                isEnglish = isEnglish
+                                            )
+
+                                            Toast.makeText(
+                                                ctx,
+                                                googleError.orEmpty(),
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
                                     }
                             }
                         },
@@ -706,13 +811,18 @@ fun IntroScreen(
                     }
 
                     if (!googleError.isNullOrBlank()) {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(4.dp))
 
                         Text(
                             text = googleError.orEmpty(),
                             color = Color(0xFFFFCDD2),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp
+                            ),
                             textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            softWrap = false,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
