@@ -164,6 +164,9 @@ fun KmiTopBar(
     accessibilityIconRes: Int? = null,
     onOpenDrawer: (() -> Unit)? = null,
     extraActions: @Composable RowScope.() -> Unit = {},
+    topBeltIconRes: Int? = null,
+    topBeltIconDescription: String? = null,
+    showTopBeltIcon: Boolean = false,
     onPickSearchResult: ((String) -> Unit)? = null,
     showLogoInBar: Boolean = false,
     logoRes: Int? = R.drawable.kami_logo,
@@ -198,6 +201,40 @@ fun KmiTopBar(
     val languageManager = remember { AppLanguageManager(ctx) }
     val currentLangResolved = languageManager.getCurrentLanguage().code
     val isEnglish = currentLangResolved == "en"
+
+    // ✅ תמונת חגורה אוטומטית לפי הכותרת.
+    // כך היא תופיע גם במסך נושאים וגם במסך סיכום,
+    // גם אם המסך לא העביר topBeltIconRes ידנית.
+    val resolvedTopBeltIconRes = remember(title, topBeltIconRes) {
+        topBeltIconRes ?: when {
+            title.contains("לבנה") || title.contains("White", ignoreCase = true) ->
+                R.drawable.belt_white
+
+            title.contains("צהובה") || title.contains("Yellow", ignoreCase = true) ->
+                R.drawable.belt_yellow
+
+            title.contains("כתומה") || title.contains("Orange", ignoreCase = true) ->
+                R.drawable.belt_orange
+
+            title.contains("ירוקה") || title.contains("Green", ignoreCase = true) ->
+                R.drawable.belt_green
+
+            title.contains("כחולה") || title.contains("Blue", ignoreCase = true) ->
+                R.drawable.belt_blue
+
+            title.contains("חומה") || title.contains("Brown", ignoreCase = true) ->
+                R.drawable.belt_brown
+
+            title.contains("שחורה") || title.contains("Black", ignoreCase = true) ->
+                R.drawable.belt_black
+
+            else -> null
+        }
+    }
+
+    val shouldRenderTopBeltIcon =
+        showTopBeltIcon || resolvedTopBeltIconRes != null
+
     val rootView = LocalView.current
     val keyboardController = LocalSoftwareKeyboardController.current
     var hideBottomForShare by remember { mutableStateOf(false) }
@@ -614,12 +651,34 @@ fun KmiTopBar(
             )
         }
 
+        if (shouldRenderTopBeltIcon && resolvedTopBeltIconRes != null) {
+            Box(
+                modifier = Modifier
+                    .align(AbsoluteAlignment.BottomLeft)
+                    .padding(
+                        start = 6.dp,
+                        bottom = if (shouldShowRolePillBelowTitle) 22.dp else 9.dp
+                    )
+                    .zIndex(30f)
+            ) {
+                Image(
+                    painter = painterResource(id = resolvedTopBeltIconRes),
+                    contentDescription = topBeltIconDescription ?: title,
+                    modifier = Modifier
+                        .size(50.dp)
+                        .graphicsLayer {
+                            rotationZ = -18f
+                        }
+                )
+            }
+        }
+
         if (shouldShowRolePillBelowTitle) {
             Box(
                 modifier = Modifier
                     .align(AbsoluteAlignment.BottomLeft)
                     .padding(start = 8.dp, bottom = 3.dp)
-                    .zIndex(20f)
+                    .zIndex(25f)
             ) {
                 RoleInlinePill(
                     isCoach = isCoachForPill,
@@ -653,8 +712,8 @@ fun KmiTopBar(
             Popup(
                 alignment = AbsoluteAlignment.TopRight,
                 offset = IntOffset(
-                    x = with(density) { (-4).dp.roundToPx() },
-                    y = with(density) { (topBarHeight - 1.dp).roundToPx() }
+                    x = with(density) { (8).dp.roundToPx() },
+                    y = with(density) { (topBarHeight - 5.dp).roundToPx() }
                 ),
                 properties = PopupProperties(
                     focusable = false,
@@ -1866,9 +1925,9 @@ private fun IconsRailAttachedHandle(
     }
 
     val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.95f else 1f,
+        targetValue = if (pressed) 0.94f else 1f,
         animationSpec = spring(
-            dampingRatio = 0.38f,
+            dampingRatio = 0.40f,
             stiffness = Spring.StiffnessLow
         ),
         label = "iconsRailAttachedHandlePress"
@@ -1883,35 +1942,43 @@ private fun IconsRailAttachedHandle(
         label = "iconsRailAttachedHandleArrow"
     )
 
-    Box(
+    Surface(
         modifier = Modifier
-            .size(width = 46.dp, height = 28.dp)
+            .size(width = 40.dp, height = 28.dp)
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
-            }
-            .clip(IconsRailAttachedTabShape())
-            .background(Color.White)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                pressed = true
-                onToggle()
             },
-        contentAlignment = Alignment.Center
+        onClick = {
+            pressed = true
+            onToggle()
+        },
+        shape = RoundedCornerShape(
+            topStart = 0.dp,
+            topEnd = 0.dp,
+            bottomStart = 18.dp,
+            bottomEnd = 18.dp
+        ),
+        color = Color.White,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = null
     ) {
-        Icon(
-            imageVector = Icons.Rounded.KeyboardArrowDown,
-            contentDescription = if (expanded) "סגור סרגל אייקונים" else "פתח סרגל אייקונים",
-            tint = Color(0xFF6D4ED8),
-            modifier = Modifier
-                .size(18.dp)
-                .offset(y = 2.dp)
-                .graphicsLayer {
-                    rotationZ = arrowRotation
-                }
-        )
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.KeyboardArrowDown,
+                contentDescription = if (expanded) "סגור סרגל אייקונים" else "פתח סרגל אייקונים",
+                tint = Color(0xFF4B478F),
+                modifier = Modifier
+                    .size(22.dp)
+                    .graphicsLayer {
+                        rotationZ = arrowRotation
+                    }
+            )
+        }
     }
 }
 

@@ -1245,7 +1245,7 @@ private fun StatCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.heightIn(min = 96.dp),
+        modifier = modifier.heightIn(min = 108.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF020617).copy(alpha = 0.9f)
@@ -1260,28 +1260,44 @@ private fun StatCard(
             verticalArrangement = Arrangement.Center
         ) {
 
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF9CA3AF),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 2,
-                lineHeight = 14.sp
-            )
+            // ✅ אזור כותרת גבוה יותר כדי שלא ייחתכו כותרות של 2 שורות
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF9CA3AF),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 2,
+                    lineHeight = 16.sp
+                )
+            }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(2.dp))
 
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFFE5E7EB),
-                fontWeight = FontWeight.Black,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 1,
-                lineHeight = 22.sp
-            )
+            // ✅ אזור מספר קבוע — כל המספרים באותו קו
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color(0xFFE5E7EB),
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 1,
+                    lineHeight = 24.sp
+                )
+            }
         }
     }
 }

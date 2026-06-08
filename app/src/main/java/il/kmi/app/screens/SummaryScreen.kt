@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import il.kmi.app.KmiViewModel
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.color
@@ -300,9 +301,14 @@ fun ProgressMeter(
     meterSize: Dp = 180.dp,
     stroke: Dp = 14.dp,
     doneOverride: Int? = null,
-    totalOverride: Int? = null
+    totalOverride: Int? = null,
+    knownOverride: Int? = null,
+    notKnownOverride: Int? = null,
+    unmarkedOverride: Int? = null
 ) {
-    var done by remember(belt, topic) { mutableStateOf(0) }
+    var knownCount by remember(belt, topic) { mutableStateOf(0) }
+    var notKnownCount by remember(belt, topic) { mutableStateOf(0) }
+    var unmarkedCount by remember(belt, topic) { mutableStateOf(0) }
     var total by remember(belt, topic) { mutableStateOf(0) }
 
     val marksVer by vm.marksVersion.collectAsState()
@@ -315,7 +321,9 @@ fun ProgressMeter(
             else listOf(topic)
 
         var t = 0
-        var d = 0
+        var yes = 0
+        var no = 0
+        var none = 0
 
         titles.forEach { tp ->
             val tpObj = beltContent?.topics?.firstOrNull { norm(it.title) == norm(tp) }
@@ -324,7 +332,6 @@ fun ProgressMeter(
 
             t += items.size
 
-            // ✅ Snapshot מהיר ומדויק לנושא (ה-VM עושה canonicalTopicKey בפנים)
             val topicSnap = vm.getTopicStatusSnapshot(belt, tp)
 
             items.forEachIndexed { index, raw ->
@@ -343,20 +350,58 @@ fun ProgressMeter(
                     item = raw
                 )
 
-                if ((topicSnap[statusId] ?: topicSnap[legacyStatusId]) == true) d++
+                when (topicSnap[statusId] ?: topicSnap[legacyStatusId]) {
+                    true -> yes++
+                    false -> no++
+                    null -> none++
+                }
             }
         }
 
         total = t
-        done = d
+        knownCount = yes
+        notKnownCount = no
+        unmarkedCount = none
     }
 
-    val effectiveDone = doneOverride ?: done
+    val effectiveKnown = knownOverride ?: doneOverride ?: knownCount
+    val effectiveNotKnown = notKnownOverride ?: notKnownCount
+    val effectiveUnmarked = unmarkedOverride ?: unmarkedCount
     val effectiveTotal = totalOverride ?: total
-    val pct: Int = if (effectiveTotal == 0) 0 else (effectiveDone * 100 / effectiveTotal)
-    val bg = MaterialTheme.colorScheme.surfaceVariant
-    val fg = belt.color
-    val txt = MaterialTheme.colorScheme.onSurface
+
+    val pct: Int =
+        if (effectiveTotal == 0) 0
+        else (effectiveKnown * 100 / effectiveTotal)
+
+    val animatedKnownSweep by animateFloatAsState(
+        targetValue = if (effectiveTotal == 0) 0f else 360f * (effectiveKnown.toFloat() / effectiveTotal.toFloat()),
+        animationSpec = tween(durationMillis = 950),
+        label = "premiumKnownSweep"
+    )
+
+    val animatedNotKnownSweep by animateFloatAsState(
+        targetValue = if (effectiveTotal == 0) 0f else 360f * (effectiveNotKnown.toFloat() / effectiveTotal.toFloat()),
+        animationSpec = tween(durationMillis = 950),
+        label = "premiumNotKnownSweep"
+    )
+
+    val animatedUnmarkedSweep by animateFloatAsState(
+        targetValue = if (effectiveTotal == 0) 0f else 360f * (effectiveUnmarked.toFloat() / effectiveTotal.toFloat()),
+        animationSpec = tween(durationMillis = 950),
+        label = "premiumUnmarkedSweep"
+    )
+
+    val context = LocalContext.current
+    val languageManager = remember { AppLanguageManager(context) }
+    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
+    val knownColor = Color(0xFF4CAF50)
+    val notKnownColor = Color(0xFFE53935)
+    val unmarkedColor = Color(0xFFD9D9E3)
+
+    val centerTextColor = Color(0xFF1E293B)
+    val subTextColor = Color(0xFF667085)
+    val remaining = (effectiveTotal - effectiveKnown).coerceAtLeast(0)
 
     Box(
         modifier = modifier.size(meterSize),
@@ -364,45 +409,113 @@ fun ProgressMeter(
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val strokePx = stroke.toPx()
-            val sweep = 360f * (pct / 100f)
+            var startAngle = -90f
+
+            drawCircle(
+                color = Color.White.copy(alpha = 0.96f)
+            )
 
             drawArc(
-                color = bg,
-                startAngle = -90f,
+                color = unmarkedColor,
+                startAngle = startAngle,
                 sweepAngle = 360f,
                 useCenter = false,
                 style = Stroke(width = strokePx, cap = StrokeCap.Round)
             )
-            drawArc(
-                color = fg,
-                startAngle = -90f,
-                sweepAngle = sweep,
-                useCenter = false,
-                style = Stroke(width = strokePx, cap = StrokeCap.Round)
+
+            if (animatedKnownSweep > 0.1f) {
+                drawArc(
+                    color = knownColor,
+                    startAngle = startAngle,
+                    sweepAngle = animatedKnownSweep,
+                    useCenter = false,
+                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                )
+                startAngle += animatedKnownSweep
+            }
+
+            if (animatedNotKnownSweep > 0.1f) {
+                drawArc(
+                    color = notKnownColor,
+                    startAngle = startAngle,
+                    sweepAngle = animatedNotKnownSweep,
+                    useCenter = false,
+                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                )
+                startAngle += animatedNotKnownSweep
+            }
+
+            val innerWhiteRadius = size.minDimension * 0.34f
+            val innerSoftRadius = size.minDimension * 0.28f
+
+            drawCircle(
+                color = Color.White.copy(alpha = 0.98f),
+                radius = innerWhiteRadius
+            )
+
+            drawCircle(
+                color = belt.color.copy(alpha = 0.07f),
+                radius = innerSoftRadius
             )
         }
 
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
             Text(
                 text = "$pct%",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = txt
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = centerTextColor
             )
-            val context = LocalContext.current
-            val languageManager = remember { AppLanguageManager(context) }
-            val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
+            Spacer(Modifier.height(4.dp))
 
             Text(
-                text = if (isEnglish) "$effectiveDone out of $effectiveTotal" else "$effectiveDone מתוך $effectiveTotal",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = if (isEnglish) "Completed" else "הושלמו",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = knownColor
             )
-            if (!topic.isNullOrBlank()) {
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = if (isEnglish) {
+                    "$effectiveKnown out of $effectiveTotal"
+                } else {
+                    "$effectiveKnown מתוך $effectiveTotal"
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = subTextColor
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = knownColor.copy(alpha = 0.10f),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = knownColor.copy(alpha = 0.18f)
+                )
+            ) {
                 Text(
-                    text = topic,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = if (!topic.isNullOrBlank()) {
+                        topic
+                    } else {
+                        if (isEnglish) {
+                            "$remaining remaining"
+                        } else {
+                            "נותרו $remaining"
+                        }
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF344054),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
                 )
             }
         }
@@ -436,6 +549,8 @@ private fun UserProgressComparisonCard(
     }
 
     val c = comparison
+    val textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val columnAlignment = if (isEnglish) Alignment.Start else Alignment.End
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -463,33 +578,37 @@ private fun UserProgressComparisonCard(
                 )
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+            horizontalAlignment = columnAlignment
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = if (isEnglish) {
-                    Arrangement.Start
-                } else {
-                    Arrangement.End
-                },
-                verticalAlignment = Alignment.CenterVertically
+
+            // ✅ כותרת מיושרת לימין בעברית, והאייקון בסוף הכותרת
+            Box(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Insights,
-                    contentDescription = null,
-                    tint = belt.color,
-                    modifier = Modifier.size(22.dp)
-                )
+                Row(
+                    modifier = Modifier.align(
+                        if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
+                    ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
+                ) {
+                    Text(
+                        text = titleText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF172033),
+                        textAlign = textAlign
+                    )
 
-                Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(8.dp))
 
-                Text(
-                    text = titleText,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF172033),
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
-                )
+                    Icon(
+                        imageVector = Icons.Filled.Insights,
+                        contentDescription = null,
+                        tint = belt.color,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
 
             if (c == null) {
@@ -498,7 +617,7 @@ private fun UserProgressComparisonCard(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF475467),
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                    textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
                 )
             } else {
@@ -542,7 +661,7 @@ private fun UserProgressComparisonCard(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (c.hasEnoughData) belt.color else Color(0xFF667085),
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                    textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -604,41 +723,106 @@ private fun SummaryToggleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val selectedBorder = iconColor.copy(alpha = 0.46f)
+    val idleBorder = Color.White.copy(alpha = 0.78f)
+
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = if (selected) iconColor.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.88f),
-        shadowElevation = if (selected) 6.dp else 4.dp,
+        shape = RoundedCornerShape(19.dp),
+        color = Color.Transparent,
+        shadowElevation = if (selected) 8.dp else 5.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
-            1.dp,
-            if (selected) iconColor.copy(alpha = 0.42f) else iconColor.copy(alpha = 0.16f)
+            width = 1.dp,
+            color = if (selected) selectedBorder else idleBorder
         ),
-        modifier = modifier.height(46.dp)
+        modifier = modifier.height(48.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+                .background(
+                    brush = if (selected) {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.98f),
+                                iconColor.copy(alpha = 0.24f),
+                                iconColor.copy(alpha = 0.15f)
+                            )
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.98f),
+                                Color.White.copy(alpha = 0.90f),
+                                iconColor.copy(alpha = 0.055f)
+                            )
+                        )
+                    },
+                    shape = RoundedCornerShape(19.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        colors = if (selected) {
+                            listOf(
+                                Color.White.copy(alpha = 0.95f),
+                                iconColor.copy(alpha = 0.36f),
+                                Color.White.copy(alpha = 0.82f)
+                            )
+                        } else {
+                            listOf(
+                                Color.White.copy(alpha = 0.95f),
+                                Color.White.copy(alpha = 0.55f),
+                                iconColor.copy(alpha = 0.12f)
+                            )
+                        }
+                    ),
+                    shape = RoundedCornerShape(19.dp)
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Filled.Insights,
-                contentDescription = null,
-                tint = iconColor,
-                modifier = Modifier.size(17.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if (selected) Color(0xFF172033) else Color(0xFF263238),
+                    maxLines = 1,
+                    textAlign = TextAlign.Center
+                )
 
-            Spacer(Modifier.width(5.dp))
+                Spacer(Modifier.width(6.dp))
 
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF263238),
-                maxLines = 1,
-                textAlign = TextAlign.Center
-            )
+                Surface(
+                    shape = CircleShape,
+                    color = if (selected) {
+                        iconColor.copy(alpha = 0.18f)
+                    } else {
+                        iconColor.copy(alpha = 0.09f)
+                    },
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = iconColor.copy(alpha = if (selected) 0.24f else 0.12f)
+                    ),
+                    modifier = Modifier.size(25.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.Insights,
+                            contentDescription = null,
+                            tint = iconColor,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1091,6 +1275,18 @@ fun SummaryScreen(
                 }
             }
 
+            val beltRes = remember(belt) {
+                when (belt) {
+                    Belt.WHITE  -> il.kmi.app.R.drawable.belt_white
+                    Belt.YELLOW -> il.kmi.app.R.drawable.belt_yellow
+                    Belt.ORANGE -> il.kmi.app.R.drawable.belt_orange
+                    Belt.GREEN  -> il.kmi.app.R.drawable.belt_green
+                    Belt.BLUE   -> il.kmi.app.R.drawable.belt_blue
+                    Belt.BROWN  -> il.kmi.app.R.drawable.belt_brown
+                    Belt.BLACK  -> il.kmi.app.R.drawable.belt_black
+                }
+            }
+
             val contextLang = LocalContext.current
             val langManager = remember { AppLanguageManager(contextLang) }
 
@@ -1361,12 +1557,11 @@ fun SummaryScreen(
                 horizontalAlignment = Alignment.End
             ) {
 
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 0.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val beltRes = when (belt) {
                         Belt.WHITE  -> il.kmi.app.R.drawable.belt_white
@@ -1392,55 +1587,39 @@ fun SummaryScreen(
                         belt.heb
                     }
 
-                    Surface(
-                        shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.88f),
-                        shadowElevation = 4.dp,
-                        border = BorderStroke(
-                            1.dp,
-                            belt.color.copy(alpha = 0.16f)
-                        ),
-                        modifier = Modifier.size(42.dp)
+                    Spacer(Modifier.height(0.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                painter = painterResource(id = beltRes),
-                                contentDescription = beltLabel,
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(30.dp)
-                            )
-                        }
+                        SummaryToggleButton(
+                            text = tr("התקדמות", "Progress"),
+                            iconColor = belt.color,
+                            selected = showProgress,
+                            onClick = {
+                                showProgress = !showProgress
+                                if (showProgress) {
+                                    showComparison = false
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        SummaryToggleButton(
+                            text = tr("השוואה", "Compare"),
+                            iconColor = belt.color,
+                            selected = showComparison,
+                            onClick = {
+                                showComparison = !showComparison
+                                if (showComparison) {
+                                    showProgress = false
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    SummaryToggleButton(
-                        text = tr("התקדמות", "Progress"),
-                        iconColor = belt.color,
-                        selected = showProgress,
-                        onClick = {
-                            showProgress = !showProgress
-                            if (showProgress) {
-                                showComparison = false
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Spacer(Modifier.width(8.dp))
-
-                    SummaryToggleButton(
-                        text = tr("השוואה לקבוצה", "Group comparison"),
-                        iconColor = belt.color,
-                        selected = showComparison,
-                        onClick = {
-                            showComparison = !showComparison
-                            if (showComparison) {
-                                showProgress = false
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
                 }
 
             if (showComparison) {
@@ -1483,49 +1662,127 @@ fun SummaryScreen(
                         }
                     }
 
-                    Text(
-                        text = tr("מד התקדמות – $beltLabel", "Progress meter - $beltLabel"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF535353),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        textAlign = TextAlign.Center
-                    )
+                    val notKnownCount = masteredMap.values.count { it == MarkState.NO }
+                    val unmarkedCount = (overallTotal - overallDone - notKnownCount).coerceAtLeast(0)
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 220.dp)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.Transparent
+                        ),
+                        shape = RoundedCornerShape(28.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                     ) {
-                        ProgressMeter(
-                            vm = vm,
-                            belt = belt,
-                            topic = null,
+                        Column(
                             modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(200.dp),
-                            meterSize = 200.dp,
-                            stroke = 16.dp,
-                            doneOverride = overallDone,
-                            totalOverride = overallTotal
-                        )
-
-                        IconButton(
-                            onClick = { showProgress = false },
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(4.dp)
-                                .size(32.dp)
+                                .fillMaxWidth()
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.White.copy(alpha = 0.98f),
+                                            belt.color.copy(alpha = 0.08f),
+                                            Color.White.copy(alpha = 0.96f)
+                                        )
+                                    ),
+                                    shape = RoundedCornerShape(28.dp)
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = belt.color.copy(alpha = 0.20f),
+                                    shape = RoundedCornerShape(28.dp)
+                                )
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = tr("סגור מד התקדמות", "Close progress meter"),
-                                tint = Color(0xFF444444)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                ) {
+                                    Text(
+                                        text = tr("מד התקדמות פרמיום", "Premium progress meter"),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF1F2937),
+                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Spacer(Modifier.height(2.dp))
+
+                                    Text(
+                                        text = if (isEnglish) {
+                                            "$beltLabel progress overview"
+                                        } else {
+                                            "סקירת התקדמות עבור $beltLabel"
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF667085),
+                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { showProgress = false },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = tr("סגור מד התקדמות", "Close progress meter"),
+                                        tint = Color(0xFF475467)
+                                    )
+                                }
+                            }
+
+                            ProgressMeter(
+                                vm = vm,
+                                belt = belt,
+                                topic = null,
+                                modifier = Modifier.size(220.dp),
+                                meterSize = 220.dp,
+                                stroke = 18.dp,
+                                doneOverride = overallDone,
+                                totalOverride = overallTotal,
+                                knownOverride = overallDone,
+                                notKnownOverride = notKnownCount,
+                                unmarkedOverride = unmarkedCount
                             )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SummaryMiniProgressChip(
+                                    title = tr("יודע", "Known"),
+                                    value = overallDone.toString(),
+                                    color = Color(0xFF4CAF50),
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                SummaryMiniProgressChip(
+                                    title = tr("לא יודע", "Not known"),
+                                    value = notKnownCount.toString(),
+                                    color = Color(0xFFE53935),
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                SummaryMiniProgressChip(
+                                    title = tr("לא סומן", "Unmarked"),
+                                    value = unmarkedCount.toString(),
+                                    color = Color(0xFF98A2B3),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
+
                     Spacer(Modifier.height(12.dp))
                 }
 
@@ -1717,12 +1974,29 @@ fun SummaryScreen(
                                                                 shadowElevation = 2.dp,
                                                                 tonalElevation = 0.dp
                                                             ) {
-                                                                Box(contentAlignment = Alignment.Center) {
-                                                                    Text(
-                                                                        text = mark,
-                                                                        color = fg,
-                                                                        fontWeight = FontWeight.Bold
-                                                                    )
+                                                                Box(
+                                                                    modifier = Modifier.fillMaxSize(),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    if (state == MarkState.NONE) {
+                                                                        Box(
+                                                                            modifier = Modifier
+                                                                                .size(8.dp)
+                                                                                .border(
+                                                                                    width = 1.7.dp,
+                                                                                    color = fg,
+                                                                                    shape = CircleShape
+                                                                                )
+                                                                        )
+                                                                    } else {
+                                                                        Text(
+                                                                            text = mark,
+                                                                            color = fg,
+                                                                            fontWeight = FontWeight.ExtraBold,
+                                                                            textAlign = TextAlign.Center,
+                                                                            style = MaterialTheme.typography.labelMedium
+                                                                        )
+                                                                    }
                                                                 }
                                                             }
 
