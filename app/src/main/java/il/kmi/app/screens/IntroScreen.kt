@@ -386,10 +386,31 @@ private suspend fun completeGoogleLoginAfterFirebaseAuth(
     onProfileComplete: () -> Unit,
     onProfileMissing: () -> Unit
 ) {
+    GoogleAuthManager.logUiStage(
+        context = ctx,
+        stage = "intro_after_firebase_start_profile_check"
+    )
+
     val profileStatus =
         UserProfileCompletion.checkAndPersistProfileStatus(ctx)
 
+    GoogleAuthManager.logUiStage(
+        context = ctx,
+        stage = "intro_profile_check_finished",
+        message = "isComplete=${profileStatus.isComplete}"
+    )
+
+    GoogleAuthManager.logUiStage(
+        context = ctx,
+        stage = "intro_fcm_refresh_start"
+    )
+
     FcmTokenManager.refreshTokenForCurrentUser(ctx)
+
+    GoogleAuthManager.logUiStage(
+        context = ctx,
+        stage = "intro_fcm_refresh_finished"
+    )
 
     userSp.edit()
         .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
@@ -398,6 +419,12 @@ private suspend fun completeGoogleLoginAfterFirebaseAuth(
     legacySp.edit()
         .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
         .apply()
+
+    GoogleAuthManager.logUiStage(
+        context = ctx,
+        stage = "intro_navigation_decision",
+        message = "profileComplete=${profileStatus.isComplete}"
+    )
 
     if (profileStatus.isComplete) {
         onProfileComplete()
@@ -434,10 +461,24 @@ fun IntroScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         scope.launch {
-            val classicResult = GoogleAuthManager.handleClassicGoogleSignInResult(result.data)
+            GoogleAuthManager.logUiStage(
+                context = ctx,
+                stage = "intro_classic_launcher_result_received",
+                message = "resultCode=${result.resultCode}, dataNull=${result.data == null}"
+            )
+
+            val classicResult = GoogleAuthManager.handleClassicGoogleSignInResult(
+                context = ctx,
+                data = result.data
+            )
 
             classicResult
                 .onSuccess {
+                    GoogleAuthManager.logUiStage(
+                        context = ctx,
+                        stage = "intro_classic_login_success_before_profile_check"
+                    )
+
                     isGoogleLoading = false
                     googleFlowLocked = false
 
@@ -450,6 +491,12 @@ fun IntroScreen(
                     )
                 }
                 .onFailure { error ->
+                    GoogleAuthManager.logUiStage(
+                        context = ctx,
+                        stage = "intro_classic_login_failure",
+                        error = error
+                    )
+
                     isGoogleLoading = false
                     googleFlowLocked = false
 
@@ -667,7 +714,17 @@ fun IntroScreen(
                 ) {
                     Button(
                         onClick = {
+                            GoogleAuthManager.logUiStage(
+                                context = ctx,
+                                stage = "intro_google_button_clicked",
+                                message = "isGoogleLoading=$isGoogleLoading, googleFlowLocked=$googleFlowLocked"
+                            )
+
                             if (isGoogleLoading || googleFlowLocked) {
+                                GoogleAuthManager.logUiStage(
+                                    context = ctx,
+                                    stage = "intro_google_button_ignored_locked"
+                                )
                                 return@Button
                             }
 
@@ -676,10 +733,20 @@ fun IntroScreen(
                             googleFlowLocked = true
 
                             scope.launch {
+                                GoogleAuthManager.logUiStage(
+                                    context = ctx,
+                                    stage = "intro_credential_manager_flow_start"
+                                )
+
                                 val loginResult = GoogleAuthManager.signInWithGoogle(ctx)
 
                                 loginResult
                                     .onSuccess {
+                                        GoogleAuthManager.logUiStage(
+                                            context = ctx,
+                                            stage = "intro_credential_manager_login_success_before_profile_check"
+                                        )
+
                                         isGoogleLoading = false
                                         googleFlowLocked = false
 
@@ -692,12 +759,29 @@ fun IntroScreen(
                                         )
                                     }
                                     .onFailure { error ->
+                                        GoogleAuthManager.logUiStage(
+                                            context = ctx,
+                                            stage = "intro_credential_manager_login_failure",
+                                            error = error
+                                        )
+
                                         if (GoogleAuthManager.shouldUseClassicGoogleFallback(error)) {
+                                            GoogleAuthManager.logUiStage(
+                                                context = ctx,
+                                                stage = "intro_classic_fallback_launch_start"
+                                            )
+
                                             runCatching {
                                                 classicGoogleLauncher.launch(
                                                     GoogleAuthManager.classicGoogleSignInIntent(ctx)
                                                 )
                                             }.onFailure { launchError ->
+                                                GoogleAuthManager.logUiStage(
+                                                    context = ctx,
+                                                    stage = "intro_classic_fallback_launch_failure",
+                                                    error = launchError
+                                                )
+
                                                 isGoogleLoading = false
                                                 googleFlowLocked = false
 
@@ -713,6 +797,12 @@ fun IntroScreen(
                                                 ).show()
                                             }
                                         } else {
+                                            GoogleAuthManager.logUiStage(
+                                                context = ctx,
+                                                stage = "intro_no_classic_fallback_show_error",
+                                                error = error
+                                            )
+
                                             isGoogleLoading = false
                                             googleFlowLocked = false
 
