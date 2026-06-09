@@ -391,25 +391,25 @@ private suspend fun completeGoogleLoginAfterFirebaseAuth(
         stage = "intro_after_firebase_start_profile_check"
     )
 
-    val profileStatus =
+    val profileStatus = runCatching {
         UserProfileCompletion.checkAndPersistProfileStatus(ctx)
+    }.onFailure { error ->
+        GoogleAuthManager.logUiStage(
+            context = ctx,
+            stage = "intro_profile_check_failed_force_profile_completion",
+            error = error
+        )
+    }.getOrElse {
+        UserProfileCompletion.ProfileStatus(
+            isComplete = false,
+            missingFields = listOf("profile_check_failed")
+        )
+    }
 
     GoogleAuthManager.logUiStage(
         context = ctx,
         stage = "intro_profile_check_finished",
-        message = "isComplete=${profileStatus.isComplete}"
-    )
-
-    GoogleAuthManager.logUiStage(
-        context = ctx,
-        stage = "intro_fcm_refresh_start"
-    )
-
-    FcmTokenManager.refreshTokenForCurrentUser(ctx)
-
-    GoogleAuthManager.logUiStage(
-        context = ctx,
-        stage = "intro_fcm_refresh_finished"
+        message = "isComplete=${profileStatus.isComplete}, missingFields=${profileStatus.missingFields.joinToString("|")}"
     )
 
     userSp.edit()
@@ -427,9 +427,39 @@ private suspend fun completeGoogleLoginAfterFirebaseAuth(
     )
 
     if (profileStatus.isComplete) {
+        GoogleAuthManager.logUiStage(
+            context = ctx,
+            stage = "intro_call_on_profile_complete"
+        )
+
         onProfileComplete()
     } else {
+        GoogleAuthManager.logUiStage(
+            context = ctx,
+            stage = "intro_call_on_profile_missing"
+        )
+
         onProfileMissing()
+    }
+
+    runCatching {
+        GoogleAuthManager.logUiStage(
+            context = ctx,
+            stage = "intro_fcm_refresh_start_after_navigation"
+        )
+
+        FcmTokenManager.refreshTokenForCurrentUser(ctx)
+
+        GoogleAuthManager.logUiStage(
+            context = ctx,
+            stage = "intro_fcm_refresh_finished_after_navigation"
+        )
+    }.onFailure { error ->
+        GoogleAuthManager.logUiStage(
+            context = ctx,
+            stage = "intro_fcm_refresh_failed_non_blocking",
+            error = error
+        )
     }
 }
 

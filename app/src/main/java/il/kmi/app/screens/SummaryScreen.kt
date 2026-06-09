@@ -50,6 +50,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.unit.sp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
@@ -369,9 +370,15 @@ fun ProgressMeter(
     val effectiveUnmarked = unmarkedOverride ?: unmarkedCount
     val effectiveTotal = totalOverride ?: total
 
+    // ✅ התקדמות = כל מה שסומן: יודע + לא יודע.
+    // ירוק = יודע, אדום = לא יודע, אפור = לא סומן.
+    val effectiveCompleted = (effectiveKnown + effectiveNotKnown)
+        .coerceAtMost(effectiveTotal)
+        .coerceAtLeast(0)
+
     val pct: Int =
         if (effectiveTotal == 0) 0
-        else (effectiveKnown * 100 / effectiveTotal)
+        else (effectiveCompleted * 100 / effectiveTotal)
 
     val animatedKnownSweep by animateFloatAsState(
         targetValue = if (effectiveTotal == 0) 0f else 360f * (effectiveKnown.toFloat() / effectiveTotal.toFloat()),
@@ -401,7 +408,7 @@ fun ProgressMeter(
 
     val centerTextColor = Color(0xFF1E293B)
     val subTextColor = Color(0xFF667085)
-    val remaining = (effectiveTotal - effectiveKnown).coerceAtLeast(0)
+    val remaining = (effectiveTotal - effectiveCompleted).coerceAtLeast(0)
 
     Box(
         modifier = modifier.size(meterSize),
@@ -465,7 +472,7 @@ fun ProgressMeter(
         ) {
             Text(
                 text = "$pct%",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.ExtraBold,
                 color = centerTextColor
             )
@@ -473,21 +480,21 @@ fun ProgressMeter(
             Spacer(Modifier.height(4.dp))
 
             Text(
-                text = if (isEnglish) "Completed" else "הושלמו",
-                style = MaterialTheme.typography.titleMedium,
+                text = if (isEnglish) "Marked" else "סומנו",
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.ExtraBold,
                 color = knownColor
             )
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(3.dp))
 
             Text(
                 text = if (isEnglish) {
-                    "$effectiveKnown out of $effectiveTotal"
+                    "$effectiveCompleted out of $effectiveTotal"
                 } else {
-                    "$effectiveKnown מתוך $effectiveTotal"
+                    "$effectiveCompleted מתוך $effectiveTotal"
                 },
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 color = subTextColor
             )
@@ -528,7 +535,8 @@ private fun UserProgressComparisonCard(
     isLoaded: Boolean,
     belt: Belt,
     isEnglish: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClose: () -> Unit = {}
 ) {
     val titleText = if (isEnglish) {
         "Your belt progress"
@@ -549,6 +557,14 @@ private fun UserProgressComparisonCard(
     }
 
     val c = comparison
+
+    // ✅ אם אין מתאמנים בכלל / אין נתונים מספיקים — לא מציגים 0% ו-0 מתאמנים.
+    // זה מונע מצב לא הגיוני כמו "ממוצע 0%" + "מתאמנים 0".
+    val hasValidComparisonData =
+        c != null &&
+                c.usersCount > 0 &&
+                c.hasEnoughData
+
     val textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
     val columnAlignment = if (isEnglish) Alignment.Start else Alignment.End
 
@@ -581,42 +597,103 @@ private fun UserProgressComparisonCard(
             horizontalAlignment = columnAlignment
         ) {
 
-            // ✅ כותרת מיושרת לימין בעברית, והאייקון בסוף הכותרת
+            // ✅ כותרת + X לסגירת כרטיס ההשוואה
+            // בעברית: הכותרת והאייקון בצד ימין, X בסוף השורה בצד שמאל.
+            // באנגלית: הכותרת והאייקון בצד שמאל, X בסוף השורה בצד ימין.
             Box(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(38.dp)
             ) {
-                Row(
-                    modifier = Modifier.align(
-                        if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
-                    ),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .align(
+                            if (isEnglish) {
+                                androidx.compose.ui.AbsoluteAlignment.CenterRight
+                            } else {
+                                androidx.compose.ui.AbsoluteAlignment.CenterLeft
+                            }
+                        )
                 ) {
-                    Text(
-                        text = titleText,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF172033),
-                        textAlign = textAlign
-                    )
-
-                    Spacer(Modifier.width(8.dp))
-
                     Icon(
-                        imageVector = Icons.Filled.Insights,
-                        contentDescription = null,
-                        tint = belt.color,
-                        modifier = Modifier.size(22.dp)
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = if (isEnglish) "Close comparison" else "סגור השוואה",
+                        tint = Color(0xFF475467)
                     )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.Center)
+                        .absolutePadding(
+                            left = if (isEnglish) 0.dp else 42.dp,
+                            right = if (isEnglish) 42.dp else 0.dp
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = if (isEnglish) {
+                        Arrangement.Absolute.Left
+                    } else {
+                        Arrangement.Absolute.Right
+                    }
+                ) {
+                    if (isEnglish) {
+                        Icon(
+                            imageVector = Icons.Filled.Insights,
+                            contentDescription = null,
+                            tint = belt.color,
+                            modifier = Modifier.size(22.dp)
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Text(
+                            text = titleText,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF172033),
+                            textAlign = TextAlign.Left,
+                            maxLines = 1
+                        )
+                    } else {
+                        Text(
+                            text = titleText,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF172033),
+                            textAlign = TextAlign.Right,
+                            maxLines = 1
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Icon(
+                            imageVector = Icons.Filled.Insights,
+                            contentDescription = null,
+                            tint = belt.color,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
 
-            if (c == null) {
+            if (!isLoaded) {
                 Text(
-                    text = if (isLoaded) notEnoughText else loadingText,
+                    text = loadingText,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF475467),
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else if (!hasValidComparisonData) {
+                Text(
+                    text = notEnoughText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF667085),
                     textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -649,18 +726,14 @@ private fun UserProgressComparisonCard(
                 }
 
                 Text(
-                    text = if (c.hasEnoughData) {
-                        if (isEnglish) {
-                            "You are above ${c.percentileAbove}% of trainees in your belt."
-                        } else {
-                            "אתה מעל ${c.percentileAbove}% מהמתאמנים בחגורה שלך."
-                        }
+                    text = if (isEnglish) {
+                        "You are above ${c.percentileAbove}% of trainees in your belt."
                     } else {
-                        notEnoughText
+                        "אתה מעל ${c.percentileAbove}% מהמתאמנים בחגורה שלך."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (c.hasEnoughData) belt.color else Color(0xFF667085),
+                    color = belt.color,
                     textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -677,7 +750,7 @@ private fun SummaryMiniProgressChip(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.height(70.dp),
+        modifier = modifier.height(76.dp),
         shape = RoundedCornerShape(18.dp),
         color = color.copy(alpha = 0.12f),
         border = BorderStroke(
@@ -694,7 +767,7 @@ private fun SummaryMiniProgressChip(
         ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.ExtraBold,
                 color = color,
                 textAlign = TextAlign.Center,
@@ -853,6 +926,8 @@ fun SummaryScreen(
     val favorites: Set<String> by FavoritesStore
         .favoritesFlow
         .collectAsState(initial = emptySet())
+
+    val marksVer by vm.marksVersion.collectAsState()
 
     var showProgress by rememberSaveable { mutableStateOf(false) }
     var showComparison by rememberSaveable { mutableStateOf(false) }
@@ -1056,6 +1131,36 @@ fun SummaryScreen(
         itemsByTopic = out
     }
 
+    // ✅ Warmup לכל הסימונים של כל הנושאים ותתי-הנושאים במסך הסיכום.
+    // בלי זה, getTopicStatusSnapshot קורא רק cache,
+    // ולכן סימונים נטענים רק אחרי שנכנסים ידנית לנושא/תת-נושא.
+    LaunchedEffect(belt, itemsByTopic) {
+        val warmupByStatusTopicKey: Map<String, List<String>> =
+            itemsByTopic
+                .values
+                .flatten()
+                .groupBy { row -> row.statusTopicKey }
+                .mapValues { (_, rows) ->
+                    rows.map { row ->
+                        summaryExerciseIdentityIdFor(
+                            belt = belt,
+                            topicKey = row.statusTopicKey,
+                            topicTitle = row.sourceTopicTitle,
+                            index = row.indexInStatusGroup,
+                            item = row.itemRaw
+                        )
+                    }.distinct()
+                }
+
+        warmupByStatusTopicKey.forEach { (statusTopicKey, statusIds) ->
+            vm.warmUpTopicStatuses(
+                belt = belt,
+                topic = statusTopicKey,
+                items = statusIds
+            )
+        }
+    }
+
     /**
      * ✅ masteredMap נשמר לפי (topicTitle, statusId)
      * statusId חייב להיות זהה ל-MaterialsScreen:
@@ -1066,7 +1171,7 @@ fun SummaryScreen(
         mutableStateOf<Map<Pair<String, String>, MarkState>>(emptyMap())
     }
 
-    LaunchedEffect(belt, itemsByTopic, subTopicFilter, topic) {
+    LaunchedEffect(belt, itemsByTopic, subTopicFilter, topic, marksVer) {
         loadError = null
         try {
             // ✅ מחשבים ברקע כדי למנוע תקיעה של ה-UI
@@ -1290,29 +1395,40 @@ fun SummaryScreen(
             val contextLang = LocalContext.current
             val langManager = remember { AppLanguageManager(contextLang) }
 
-            il.kmi.app.ui.KmiTopBar(
-                title = if (isEnglish) "Summary $beltLabel - ${overallPct}%" else "סיכום $beltLabel - ${overallPct}%",
-                onShare = { sharePdf(null) },
-                onPickSearchResult = { key -> handlePickFromTopBar(key) },
-                onShareWhatsApp = { sharePdf("com.whatsapp") },
-                onHome = { onBackHome() },
-                showBottomActions = true,
-                extraActions = { },
-                centerTitle = false,
-                showTopHome = false,
-                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
-                onToggleLanguage = {
-                    val newLang =
-                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
-                            AppLanguage.ENGLISH
-                        } else {
-                            AppLanguage.HEBREW
-                        }
+            // ✅ במסך הסיכום שומרים את מבנה הכותרת קבוע כמו בעברית:
+            // חגורה/תג בצד שמאל, תפריט בצד ימין.
+            // הטקסט עדיין משתנה לעברית/אנגלית לפי isEnglish.
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalLayoutDirection provides LayoutDirection.Rtl
+            ) {
+                il.kmi.app.ui.KmiTopBar(
+                    title = if (isEnglish) "Summary $beltLabel - ${overallPct}%" else "סיכום $beltLabel - ${overallPct}%",
+                    onShare = { sharePdf(null) },
+                    onPickSearchResult = { key -> handlePickFromTopBar(key) },
+                    onShareWhatsApp = { sharePdf("com.whatsapp") },
+                    onHome = { onBackHome() },
+                    showBottomActions = true,
+                    extraActions = { },
+                    centerTitle = false,
+                    showTopHome = false,
 
-                    langManager.setLanguage(newLang)
-                    (contextLang as? Activity)?.recreate()
-                }
-            )
+                    // ✅ בכוונה "he" רק לסידור הכותרת, כדי לא להזיז את התפריט לשמאל באנגלית.
+                    // הכותרת עצמה נשארת באנגלית לפי isEnglish.
+                    currentLang = "he",
+
+                    onToggleLanguage = {
+                        val newLang =
+                            if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                                AppLanguage.ENGLISH
+                            } else {
+                                AppLanguage.HEBREW
+                            }
+
+                        langManager.setLanguage(newLang)
+                        (contextLang as? Activity)?.recreate()
+                    }
+                )
+            }
         },
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0),
@@ -1622,17 +1738,20 @@ fun SummaryScreen(
                     }
                 }
 
-            if (showComparison) {
-                UserProgressComparisonCard(
-                    comparison = userProgressComparison,
-                    isLoaded = userProgressComparisonLoaded,
-                    belt = belt,
-                    isEnglish = isEnglish,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp, bottom = 10.dp)
-                )
-            }
+                if (showComparison) {
+                    UserProgressComparisonCard(
+                        comparison = userProgressComparison,
+                        isLoaded = userProgressComparisonLoaded,
+                        belt = belt,
+                        isEnglish = isEnglish,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp, bottom = 10.dp),
+                        onClose = {
+                            showComparison = false
+                        }
+                    )
+                }
 
                 loadError?.let { err ->
                     Text(
@@ -1665,13 +1784,14 @@ fun SummaryScreen(
                     val notKnownCount = masteredMap.values.count { it == MarkState.NO }
                     val unmarkedCount = (overallTotal - overallDone - notKnownCount).coerceAtLeast(0)
 
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color.Transparent
-                        ),
+                    Surface(
+                        modifier = Modifier
+                            .widthIn(max = 318.dp)
+                            .align(Alignment.CenterHorizontally),
                         shape = RoundedCornerShape(28.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                        color = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
                     ) {
                         Column(
                             modifier = Modifier
@@ -1680,31 +1800,30 @@ fun SummaryScreen(
                                     brush = Brush.verticalGradient(
                                         colors = listOf(
                                             Color.White.copy(alpha = 0.98f),
-                                            belt.color.copy(alpha = 0.08f),
+                                            belt.color.copy(alpha = 0.045f),
                                             Color.White.copy(alpha = 0.96f)
                                         )
                                     ),
-                                    shape = RoundedCornerShape(28.dp)
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = belt.color.copy(alpha = 0.20f),
                                     shape = RoundedCornerShape(28.dp)
                                 )
                                 .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
+                            Box(
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            start = if (isEnglish) 0.dp else 42.dp,
+                                            end = if (isEnglish) 42.dp else 0.dp
+                                        ),
                                     horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                 ) {
                                     Text(
-                                        text = tr("מד התקדמות פרמיום", "Premium progress meter"),
+                                        text = tr("מד התקדמות", "progress meter"),
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = Color(0xFF1F2937),
@@ -1730,7 +1849,16 @@ fun SummaryScreen(
 
                                 IconButton(
                                     onClick = { showProgress = false },
-                                    modifier = Modifier.size(34.dp)
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .offset(y = (-5).dp)
+                                        .align(
+                                            if (isEnglish) {
+                                                androidx.compose.ui.AbsoluteAlignment.TopRight
+                                            } else {
+                                                androidx.compose.ui.AbsoluteAlignment.TopLeft
+                                            }
+                                        )
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Close,
@@ -1744,9 +1872,9 @@ fun SummaryScreen(
                                 vm = vm,
                                 belt = belt,
                                 topic = null,
-                                modifier = Modifier.size(220.dp),
-                                meterSize = 220.dp,
-                                stroke = 18.dp,
+                                modifier = Modifier.size(194.dp),
+                                meterSize = 194.dp,
+                                stroke = 16.dp,
                                 doneOverride = overallDone,
                                 totalOverride = overallTotal,
                                 knownOverride = overallDone,
@@ -1759,26 +1887,85 @@ fun SummaryScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                SummaryMiniProgressChip(
-                                    title = tr("יודע", "Known"),
-                                    value = overallDone.toString(),
-                                    color = Color(0xFF4CAF50),
-                                    modifier = Modifier.weight(1f)
-                                )
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color(0xFF4CAF50).copy(alpha = 0.12f),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = Color(0xFF4CAF50).copy(alpha = 0.26f)
+                                    )
+                                ) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = tr("יודע: $overallDone", "Known: $overallDone"),
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color(0xFF2E7D32),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
 
-                                SummaryMiniProgressChip(
-                                    title = tr("לא יודע", "Not known"),
-                                    value = notKnownCount.toString(),
-                                    color = Color(0xFFE53935),
-                                    modifier = Modifier.weight(1f)
-                                )
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color(0xFFE53935).copy(alpha = 0.12f),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = Color(0xFFE53935).copy(alpha = 0.26f)
+                                    )
+                                ) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = tr("לא יודע: $notKnownCount", "No: $notKnownCount"),
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color(0xFFC62828),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
 
-                                SummaryMiniProgressChip(
-                                    title = tr("לא סומן", "Unmarked"),
-                                    value = unmarkedCount.toString(),
-                                    color = Color(0xFF98A2B3),
-                                    modifier = Modifier.weight(1f)
-                                )
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color(0xFF98A2B3).copy(alpha = 0.12f),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = Color(0xFF98A2B3).copy(alpha = 0.26f)
+                                    )
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 2.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = tr("לא סומן: $unmarkedCount", "Open: $unmarkedCount"),
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color(0xFF667085),
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
