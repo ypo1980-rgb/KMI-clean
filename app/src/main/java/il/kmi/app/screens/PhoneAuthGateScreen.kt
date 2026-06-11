@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import android.util.Log
 
 // ===== הגדרת המספרים המורשים =====
 // תחליף כאן ל־5 מספרי הטלפון שאתה רוצה לאפשר.
@@ -30,6 +31,14 @@ private val AllowedPhones: Set<String> = setOf(
     "0587938991"    //ליאם מלכה ק.מ.י אופק
 )
 
+private const val TAG_PHONE_GATE = "KMI_PHONE_GATE"
+
+private fun maskedPhoneForLog(raw: String): String {
+    val digits = raw.filter { it.isDigit() }
+    if (digits.isBlank()) return "empty"
+    return "len=${digits.length}, last4=${digits.takeLast(4)}"
+}
+
 // נרמול טלפון: משאיר ספרות בלבד, ולוקח עד 10 ספרות אחרונות
 private fun normalizePhone(raw: String): String {
     val digits = raw.filter { it.isDigit() }
@@ -44,6 +53,10 @@ fun PhoneAuthGateScreen(
 ) {
     var phone by remember { mutableStateOf("") }
     var errorText by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        Log.d(TAG_PHONE_GATE, "stage=phone_gate_opened")
+    }
 
     Scaffold(
         topBar = {
@@ -107,10 +120,26 @@ fun PhoneAuthGateScreen(
             Button(
                 onClick = {
                     val normalized = normalizePhone(phone)
+
+                    Log.d(
+                        TAG_PHONE_GATE,
+                        "stage=phone_submit_clicked, phone=${maskedPhoneForLog(phone)}, normalized=${maskedPhoneForLog(normalized)}, allowed=${normalized in AllowedPhones}"
+                    )
+
                     if (normalized in AllowedPhones) {
+                        Log.d(
+                            TAG_PHONE_GATE,
+                            "stage=phone_allowed_continue, normalized=${maskedPhoneForLog(normalized)}"
+                        )
+
                         // טלפון מורשה – מעבירים החוצה (MainNavHost כבר שומר ב-SharedPreferences)
                         onPhoneSubmitted(normalized)
                     } else {
+                        Log.d(
+                            TAG_PHONE_GATE,
+                            "stage=phone_denied, normalized=${maskedPhoneForLog(normalized)}"
+                        )
+
                         // טלפון לא מורשה
                         errorText = "מספר הטלפון אינו מורשה לשימוש באפליקציה. פנה למדריך לקבלת גישה."
                     }

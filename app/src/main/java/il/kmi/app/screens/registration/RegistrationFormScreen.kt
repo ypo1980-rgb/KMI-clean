@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Patterns
 import android.widget.Toast
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
@@ -49,6 +50,35 @@ import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.shared.prefs.KmiPrefs
 import il.kmi.app.FcmTokenManager
+
+private const val TAG_REG = "KMI_REGISTRATION"
+
+private fun regAuthStateForLog(): String {
+    val user = FirebaseAuth.getInstance().currentUser
+
+    return if (user == null) {
+        "uid=null, email=null, isAnonymous=null, providers=[]"
+    } else {
+        val providers = user.providerData
+            .map { it.providerId }
+            .joinToString("|")
+
+        "uid=${user.uid}, email=${user.email.orEmpty()}, isAnonymous=${user.isAnonymous}, providers=[$providers]"
+    }
+}
+
+private fun maskedEmailForLog(email: String): String {
+    val clean = email.trim().lowercase()
+    val at = clean.indexOf("@")
+    if (clean.isBlank() || at <= 1) return "blank_or_invalid"
+    return clean.take(2) + "***" + clean.substring(at)
+}
+
+private fun maskedPhoneForLog(phone: String): String {
+    val digits = phone.filter { it.isDigit() }
+    if (digits.isBlank()) return "empty"
+    return "len=${digits.length}, last4=${digits.takeLast(4)}"
+}
 
 // === רשימת מאמנים מורשים ===
 object CoachWhitelist {
@@ -706,6 +736,11 @@ fun RegistrationFormScreen(
     // פונקציית שליחה – יחידה אחת בלבד
     // --------------------------------
     fun submitRegistration() {
+        Log.d(
+            TAG_REG,
+            "stage=submit_registration_clicked, startAtProfile=$startAtProfile, isGoogleAuth=$isGoogleAuth, selectedTab=$selectedTab, email=${maskedEmailForLog(email)}, phone=${maskedPhoneForLog(phone)}, ${regAuthStateForLog()}"
+        )
+
         var valid = true
 
         // ✅ אכיפה קשיחה רק ברישום ראשוני.
@@ -796,7 +831,18 @@ fun RegistrationFormScreen(
             }
         }
 
-        if (!valid) return
+        if (!valid) {
+            Log.d(
+                TAG_REG,
+                "stage=submit_registration_validation_failed, fullNameError=$fullNameError, phoneError=$phoneError, emailError=$emailError, usernameError=$usernameError, passwordError=$passwordError, regionError=$regionError, branchError=$branchError, groupError=$groupError, genderError=$genderError, termsError=$termsError, beltBlank=${currentBeltId.isBlank()}, ${regAuthStateForLog()}"
+            )
+            return
+        }
+
+        Log.d(
+            TAG_REG,
+            "stage=submit_registration_validation_success, isGoogleAuth=$isGoogleAuth, startAtProfile=$startAtProfile, ${regAuthStateForLog()}"
+        )
 
         // role סופי:
         // בעריכת פרופיל אסור להפוך למאמן דרך הטופס.
@@ -1007,6 +1053,11 @@ fun RegistrationFormScreen(
         kmiPrefs.password = if (isGoogleAuth) "" else password
 
         fun persistRegistrationToFirestore(finalUid: String) {
+            Log.d(
+                TAG_REG,
+                "stage=firestore_persist_start, finalUidBlank=${finalUid.isBlank()}, roleFinal=$roleFinal, roleLockedBy=$roleLockedBy, email=${maskedEmailForLog(email)}, phone=${maskedPhoneForLog(phoneFinal)}, isGoogleAuth=$isGoogleAuth, ${regAuthStateForLog()}"
+            )
+
             if (finalUid.isBlank()) {
                 Toast.makeText(
                     ctx,
@@ -1071,6 +1122,11 @@ fun RegistrationFormScreen(
                 .document(finalUid)
                 .set(firestoreData, SetOptions.merge())
                 .addOnSuccessListener {
+                    Log.d(
+                        TAG_REG,
+                        "stage=firestore_persist_success, finalUid=$finalUid, ${regAuthStateForLog()}"
+                    )
+
                     sp.edit()
                         .putString("uid", finalUid)
                         .putString("profile_completed_uid", finalUid)
@@ -1094,7 +1150,13 @@ fun RegistrationFormScreen(
                     // authorizedCoaches/{uid}
                     finishRegistrationFlow()
                 }
-                .addOnFailureListener {
+                .addOnFailureListener { error ->
+                    Log.e(
+                        TAG_REG,
+                        "stage=firestore_persist_failure, finalUid=$finalUid, errorClass=${error.javaClass.name}, errorMessage=${error.message.orEmpty()}, ${regAuthStateForLog()}",
+                        error
+                    )
+
                     Toast.makeText(
                         ctx,
                         if (isEnglish) "Saving registration failed" else "שמירת הרישום נכשלה",
@@ -1108,21 +1170,60 @@ fun RegistrationFormScreen(
         val cleanPassword = password.trim()
 
         if (!startAtProfile && !isGoogleAuth) {
+            Log.d(
+                TAG_REG,
+                "stage=email_registration_auth_flow_start, email=${maskedEmailForLog(cleanEmail)}, passwordBlank=${cleanPassword.isBlank()}, ${regAuthStateForLog()}"
+            )
+
             auth.signOut()
+
+            Log.d(
+                TAG_REG,
+                "stage=email_registration_after_sign_out, ${regAuthStateForLog()}"
+            )
 
             auth.createUserWithEmailAndPassword(cleanEmail, cleanPassword)
                 .addOnSuccessListener { result ->
                     val newUid = result.user?.uid.orEmpty()
+
+                    Log.d(
+                        TAG_REG,
+                        "stage=email_create_user_success, newUid=$newUid, email=${maskedEmailForLog(cleanEmail)}, ${regAuthStateForLog()}"
+                    )
+
                     persistRegistrationToFirestore(newUid)
                 }
                 .addOnFailureListener { e ->
+                    Log.e(
+                        TAG_REG,
+                        "stage=email_create_user_failure, email=${maskedEmailForLog(cleanEmail)}, errorClass=${e.javaClass.name}, errorMessage=${e.message.orEmpty()}, ${regAuthStateForLog()}",
+                        e
+                    )
+
                     if (e is FirebaseAuthUserCollisionException) {
+                        Log.d(
+                            TAG_REG,
+                            "stage=email_collision_try_sign_in_existing_user, email=${maskedEmailForLog(cleanEmail)}"
+                        )
+
                         auth.signInWithEmailAndPassword(cleanEmail, cleanPassword)
                             .addOnSuccessListener { result ->
                                 val existingUid = result.user?.uid.orEmpty()
+
+                                Log.d(
+                                    TAG_REG,
+                                    "stage=email_collision_sign_in_success, existingUid=$existingUid, email=${maskedEmailForLog(cleanEmail)}, ${regAuthStateForLog()}"
+                                )
+
                                 persistRegistrationToFirestore(existingUid)
                             }
-                            .addOnFailureListener {
+                            .addOnFailureListener { signInError ->
+                                Log.e(
+                                    TAG_REG,
+                                    "stage=email_collision_sign_in_failure, email=${maskedEmailForLog(cleanEmail)}, errorClass=${signInError.javaClass.name}, errorMessage=${signInError.message.orEmpty()}, ${regAuthStateForLog()}",
+                                    signInError
+                                )
+
                                 Toast.makeText(
                                     ctx,
                                     if (isEnglish) {

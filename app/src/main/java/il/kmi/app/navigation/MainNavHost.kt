@@ -20,6 +20,7 @@ import il.kmi.app.screens.PhoneAuthGateScreen
 import il.kmi.app.screens.RateUsScreen
 import il.kmi.app.ui.DrawerBridge
 import android.widget.Toast
+import android.util.Log
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -59,6 +60,22 @@ import il.kmi.app.analytics.KmiUsageTracker
 private const val APP_ENTRY_ROUTE = "app_entry"
 private const val GOOGLE_PROFILE_COMPLETION_ROUTE = "google_profile_completion"
 private const val PROFILE_EDIT_ROUTE = "profile_edit"
+
+private const val TAG_NAV = "KMI_NAV"
+
+private fun authStateForLog(): String {
+    val user = FirebaseAuth.getInstance().currentUser
+
+    return if (user == null) {
+        "uid=null, email=null, isAnonymous=null, providers=[]"
+    } else {
+        val providers = user.providerData
+            .map { it.providerId }
+            .joinToString("|")
+
+        "uid=${user.uid}, email=${user.email.orEmpty()}, isAnonymous=${user.isAnonymous}, providers=[$providers]"
+    }
+}
 
 private fun NavHostController.openIntroCleanFrom(sourceRoute: String) {
     val currentRoute = currentBackStackEntry?.destination?.route
@@ -219,8 +236,16 @@ fun MainNavHost(
         try {
             val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
 
-            val uid = com.google.firebase.auth.FirebaseAuth.getInstance()
-                .currentUser?.uid ?: return@LaunchedEffect
+            val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                ?: return@LaunchedEffect
+
+            // ✅ לא מריצים preload עבור משתמש אנונימי.
+            // זה מונע קריאות Firestore וניווטים עקיפים לפני התחברות אמיתית.
+            if (authUser.isAnonymous) {
+                return@LaunchedEffect
+            }
+
+            val uid = authUser.uid
 
             // טוען מראש את המתאמנים של המאמן
             db.collection("users")
@@ -307,6 +332,11 @@ fun MainNavHost(
                     val selectedNow = isInitialLanguageAlreadySelected()
                     val currentRoute = nav.currentBackStackEntry?.destination?.route
 
+                    Log.d(
+                        TAG_NAV,
+                        "stage=app_entry_started, selectedLanguage=$selectedNow, currentRoute=$currentRoute, ${authStateForLog()}"
+                    )
+
                     if (entryNavigationLocked) {
                         return@LaunchedEffect
                     }
@@ -373,13 +403,32 @@ fun MainNavHost(
 
                         val firebaseUser = FirebaseAuth.getInstance().currentUser
 
-                        if (firebaseUser == null) {
+                        Log.d(
+                            TAG_NAV,
+                            "stage=splash_finished, route=${Route.Splash.route}, ${authStateForLog()}"
+                        )
+
+                        // ✅ חשוב:
+                        // משתמש אנונימי לא נחשב משתמש מחובר לאפליקציה.
+                        // אחרת Splash מתייחס ל־anonymous uid כאילו זה משתמש אמיתי,
+                        // ומנווט להשלמת פרטים / בדיקות פרופיל לפני שהמשתמש באמת התחבר.
+                        if (firebaseUser == null || firebaseUser.isAnonymous) {
+
+                            Log.d(
+                                TAG_NAV,
+                                "stage=splash_auth_decision, decision=intro, reason=${if (firebaseUser == null) "firebase_user_null" else "firebase_user_anonymous"}, ${authStateForLog()}"
+                            )
 
                             nav.openIntroCleanFrom(Route.Splash.route)
                             return@KmiStartupLoadingScreen
                         }
 
-                        // ✅ רישום שימוש באפליקציה – רק אחרי שיש משתמש מחובר בוודאות
+                        Log.d(
+                            TAG_NAV,
+                            "stage=splash_auth_decision, decision=continue, ${authStateForLog()}"
+                        )
+
+                        // ✅ רישום שימוש באפליקציה – רק אחרי שיש משתמש אמיתי ולא אנונימי
                         splashScope.launch {
                             runCatching {
                                 KmiUsageTracker.markAppOpen()
@@ -390,15 +439,28 @@ fun MainNavHost(
 
 // ✅ קודם בודקים דגל מקומי שהרישום כבר הושלם.
 // זה מונע חזרה לטופס בגלל missing=[belt] או שדה בודד.
-                        if (isProfileCompletedLocally(sp, userPrefsForEntry, uid)) {
+                        val localProfileCompleted = isProfileCompletedLocally(sp, userPrefsForEntry, uid)
+
+                        Log.d(
+                            TAG_NAV,
+                            "stage=splash_local_profile_check_result, localProfileCompleted=$localProfileCompleted, uid=$uid, ${authStateForLog()}"
+                        )
+
+                        if (localProfileCompleted) {
 
                             if (consumePendingDailyReminderAndNavigate("splash_local_profile_completed")) {
+                                Log.d(TAG_NAV, "stage=splash_navigate_daily_reminder_from_local_profile")
                                 return@KmiStartupLoadingScreen
                             }
 
                             if (consumePendingForumPushAndNavigate("splash_local_profile_completed")) {
                                 return@KmiStartupLoadingScreen
                             }
+
+                            Log.d(
+                                TAG_NAV,
+                                "stage=splash_navigation_decision, decision=home, source=local_profile_completed, ${authStateForLog()}"
+                            )
 
                             nav.navigate(Route.Home.route) {
                                 popUpTo(Route.Splash.route) { inclusive = true }
@@ -410,9 +472,29 @@ fun MainNavHost(
                         }
 
                         splashScope.launch {
-                            val remoteCompleted = runCatching {
+                            Log.d(
+                                TAG_NAV,
+                                "stage=splash_remote_profile_check_start, uid=$uid, ${authStateForLog()}"
+                            )
+
+                            val remoteCompletedResult = runCatching {
                                 isProfileCompletedRemotely(uid)
-                            }.getOrDefault(false)
+                            }
+
+                            remoteCompletedResult.onFailure { error ->
+                                Log.e(
+                                    TAG_NAV,
+                                    "stage=splash_remote_profile_check_failure, uid=$uid, errorClass=${error.javaClass.name}, errorMessage=${error.message.orEmpty()}, ${authStateForLog()}",
+                                    error
+                                )
+                            }
+
+                            val remoteCompleted = remoteCompletedResult.getOrDefault(false)
+
+                            Log.d(
+                                TAG_NAV,
+                                "stage=splash_remote_profile_check_result, remoteCompleted=$remoteCompleted, uid=$uid, ${authStateForLog()}"
+                            )
 
                             if (remoteCompleted) {
 
@@ -443,6 +525,11 @@ fun MainNavHost(
 
                                 return@launch
                             }
+
+                            Log.d(
+                                TAG_NAV,
+                                "stage=splash_navigation_decision, decision=profile_completion, source=remote_profile_not_completed, ${authStateForLog()}"
+                            )
 
                             nav.navigate(GOOGLE_PROFILE_COMPLETION_ROUTE) {
                                 popUpTo(Route.Splash.route) { inclusive = true }
@@ -1025,14 +1112,6 @@ private fun isProfileCompletedLocally(
 ): Boolean {
     if (uid.isBlank()) return false
 
-    val mainCompleted =
-        mainSp.getBoolean("profile_completed", false) ||
-                mainSp.getBoolean("registration_complete", false)
-
-    val userCompleted =
-        userSp.getBoolean("profile_completed", false) ||
-                userSp.getBoolean("registration_complete", false)
-
     val savedUid =
         mainSp.getString("profile_completed_uid", "")?.takeIf { it.isNotBlank() }
             ?: userSp.getString("profile_completed_uid", "")?.takeIf { it.isNotBlank() }
@@ -1046,43 +1125,23 @@ private fun isProfileCompletedLocally(
             ?: ""
     }
 
-    val role = getStringAny("user_role").lowercase()
-    val isCoach = role == "coach" || role.contains("coach") || role.contains("מאמן")
+    val email = getStringAny("email")
+        .ifBlank { getStringAny("user_email") }
+        .trim()
 
-    val fullName = getStringAny("fullName").trim()
-    val email = getStringAny("email").trim()
     val phone = (
-            getStringAny("phone").ifBlank { getStringAny("phone_number") }
+            getStringAny("phone")
+                .ifBlank { getStringAny("phone_number") }
             ).filter { it.isDigit() }
 
-    val region = getStringAny("region").trim()
-    val branch = getStringAny("branch").trim()
-    val group = getStringAny("age_group").ifBlank { getStringAny("group") }.trim()
-    val gender = getStringAny("gender").trim()
-    val belt = getStringAny("current_belt").ifBlank { getStringAny("belt_current") }.trim()
+    // ✅ תנאי כניסה בסיסי:
+    // אחרי Firebase Auth מספיקים אימייל + טלפון.
+    // שאר הפרטים לא אמורים לחסום כניסה לאפליקציה.
+    val canEnterApp =
+        email.isNotBlank() &&
+                phone.length >= 9
 
-    val hasCoreProfile =
-        fullName.isNotBlank() &&
-                email.isNotBlank() &&
-                phone.length >= 9 &&
-                region.isNotBlank() &&
-                branch.isNotBlank() &&
-                (group.isNotBlank() || isCoach) &&
-                gender.isNotBlank() &&
-                (isCoach || belt.isNotBlank())
-
-    val mainFormCompleted =
-        mainSp.getBoolean("registration_form_completed", false) &&
-                mainSp.getInt("registration_schema_version", 0) >= 2
-
-    val userFormCompleted =
-        userSp.getBoolean("registration_form_completed", false) &&
-                userSp.getInt("registration_schema_version", 0) >= 2
-
-    val completedFlag = (mainCompleted || userCompleted) && (mainFormCompleted || userFormCompleted)
-    val finalResult = uidMatches && completedFlag && hasCoreProfile
-
-    return finalResult
+    return uidMatches && canEnterApp
 }
 
 private suspend fun hydrateProfileLocallyFromFirestore(
@@ -1279,85 +1338,23 @@ private suspend fun isProfileCompletedRemotely(uid: String): Boolean {
         return false
     }
 
-    val profileCompleted = doc.getBoolean("profileCompleted") == true
-    val registrationComplete = doc.getBoolean("registrationComplete") == true
-
-    // משתמשים חדשים יקבלו את הדגלים החדשים.
-    // משתמשים קיימים יכולים לדלג גם אם יש להם profileCompleted / registrationComplete
-    // וכל שדות הליבה קיימים.
-    val registrationFormCompleted = doc.getBoolean("registrationFormCompleted") == true
-    val registrationSchemaVersion = (doc.getLong("registrationSchemaVersion") ?: 0L).toInt()
-    val hasNewRegistrationCompletion =
-        registrationFormCompleted && registrationSchemaVersion >= 2
-
-    val role = doc.getString("role").orEmpty().lowercase()
-    val fullName = doc.getString("fullName").orEmpty().trim()
     val email = doc.getString("email").orEmpty().trim()
+
     val phone = (
             doc.getString("phone")
                 ?: doc.getString("phoneNumber")
+                ?: doc.getString("phone_number")
                 ?: ""
             ).filter { it.isDigit() }
 
-    val region = doc.getString("region").orEmpty().trim()
+    // ✅ תנאי כניסה בסיסי מהשרת:
+    // Firebase Auth כבר אימת את המשתמש.
+    // כדי להיכנס לאפליקציה מספיקים אימייל + טלפון במסמך users/{uid}.
+    val canEnterApp =
+        email.isNotBlank() &&
+                phone.length >= 9
 
-    val branches = doc.get("branches") as? List<*>
-    val hasBranch =
-        !doc.getString("branch").orEmpty().trim().isBlank() ||
-                !doc.getString("branchesCsv").orEmpty().trim().isBlank() ||
-                branches?.any { !it?.toString().orEmpty().trim().isBlank() } == true
-
-    val groups = doc.get("groups") as? List<*>
-    val hasGroup =
-        !doc.getString("primaryGroup").orEmpty().trim().isBlank() ||
-                !doc.getString("activeGroup").orEmpty().trim().isBlank() ||
-                groups?.any { !it?.toString().orEmpty().trim().isBlank() } == true ||
-                role == "coach"
-
-    val gender = doc.getString("gender").orEmpty().trim()
-
-    val belt = (
-            doc.getString("belt")
-                ?: doc.getString("currentBelt")
-                ?: ""
-            ).trim()
-
-    val isCoach = role == "coach" || role.contains("coach") || role.contains("מאמן")
-    val hasBeltIfNeeded = isCoach || belt.isNotBlank()
-
-    val hasCoreProfile =
-        fullName.isNotBlank() &&
-                email.isNotBlank() &&
-                phone.length >= 9 &&
-                region.isNotBlank() &&
-                hasBranch &&
-                hasGroup &&
-                gender.isNotBlank() &&
-                hasBeltIfNeeded
-
-    val hasLegacyCompletion =
-        (profileCompleted || registrationComplete) && hasCoreProfile
-
-    val finalResult =
-        hasCoreProfile && (hasNewRegistrationCompletion || hasLegacyCompletion)
-
-    if (finalResult && !hasNewRegistrationCompletion) {
-        runCatching {
-            Firebase.firestore.collection("users")
-                .document(uid)
-                .update(
-                    mapOf(
-                        "registrationFormCompleted" to true,
-                        "registrationSchemaVersion" to 2,
-                        "profileCompleted" to true,
-                        "registrationComplete" to true
-                    )
-                )
-                .await()
-        }
-    }
-
-    return finalResult
+    return canEnterApp
 }
 
 /**

@@ -22,28 +22,6 @@ fun NavGraphBuilder.registrationNavGraph(
     sp: SharedPreferences,
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs
 ) {
-    // --- מסך נחיתה לרישום (NavHost פנימי כפי שהיה אצלך) ---
-    composable(Route.RegistrationLanding.route) {
-        val regNav = androidx.navigation.compose.rememberNavController()
-        RegistrationNavHost(
-            nav = regNav,
-            vm = vm,
-            sp = sp,
-            kmiPrefs = kmiPrefs,
-            onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
-            onOpenLegal = { nav.navigate(Route.Legal.route) },
-            onOpenTerms = { nav.navigate(Route.Legal.route) },
-            onRegistrationDone = {
-                // ✅ כניסה רגילה / סיום רישום או התחברות:
-                // קודם עוברים למסך הלוגו הדינמי, ורק ממנו לבית.
-                nav.navigate(Route.Splash.route) {
-                    popUpTo(0) { inclusive = true }
-                    launchSingleTop = true
-                    restoreState = false
-                }
-            }
-        )
-    }
 
     // --- New user (trainee) ---
     composable(

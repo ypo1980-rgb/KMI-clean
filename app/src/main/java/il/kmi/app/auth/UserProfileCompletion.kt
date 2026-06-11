@@ -9,7 +9,12 @@ import kotlinx.coroutines.tasks.await
 object UserProfileCompletion {
 
     data class ProfileStatus(
+        // פרופיל מלא: כל שדות הרישום קיימים.
         val isComplete: Boolean,
+
+        // כניסה בסיסית לאפליקציה: מספיק אימייל + טלפון.
+        val canEnterApp: Boolean,
+
         val missingFields: List<String>
     )
 
@@ -17,6 +22,7 @@ object UserProfileCompletion {
         val user = FirebaseAuth.getInstance().currentUser
             ?: return ProfileStatus(
                 isComplete = false,
+                canEnterApp = false,
                 missingFields = listOf("uid")
             )
 
@@ -47,18 +53,27 @@ object UserProfileCompletion {
                 phoneNumber = user.phoneNumber
             )
 
+            val authEmail = user.email.orEmpty().trim()
+            val authPhone = user.phoneNumber.orEmpty().filter { it.isDigit() }
+
+            val canEnterApp =
+                authEmail.isNotBlank() &&
+                        authPhone.length >= 9
+
             return ProfileStatus(
                 isComplete = false,
-                missingFields = listOf(
-                    "phone",
-                    "birthDate",
-                    "gender",
-                    "region",
-                    "branch",
-                    "groups",
-                    "belt",
-                    "role"
-                )
+                canEnterApp = canEnterApp,
+                missingFields = buildList {
+                    if (authEmail.isBlank()) add("email")
+                    if (authPhone.length < 9) add("phone")
+                    add("birthDate")
+                    add("gender")
+                    add("region")
+                    add("branch")
+                    add("groups")
+                    add("belt")
+                    add("role")
+                }
             )
         }
 
@@ -89,6 +104,12 @@ object UserProfileCompletion {
                     data.stringAny("phone", "phoneNumber", "phone_number")
                         ?: user.phoneNumber.orEmpty()
                     ).filter { it.isDigit() }
+
+        // ✅ תנאי כניסה בסיסי לאפליקציה:
+        // Google/Firebase כבר אימת את האימייל, ולכן מספיק אימייל + טלפון קיים במערכת.
+        val canEnterApp =
+            email.isNotBlank() &&
+                    phone.length >= 9
 
         val region = data.stringAny("region").orEmpty()
 
@@ -241,6 +262,7 @@ object UserProfileCompletion {
 
         return ProfileStatus(
             isComplete = isComplete,
+            canEnterApp = canEnterApp,
             missingFields = missing
         )
     }

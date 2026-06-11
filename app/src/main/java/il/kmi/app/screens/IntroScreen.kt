@@ -224,8 +224,14 @@ private fun googleLoginErrorMessage(
         error.toString()
     ).joinToString(" ")
 
+    val isReauthFailed =
+        clean.contains("Account reauth failed", ignoreCase = true) ||
+                clean.contains("reauth failed", ignoreCase = true) ||
+                clean.contains("[16]", ignoreCase = true)
+
     val isRealUserCancel =
-        error is androidx.credentials.exceptions.GetCredentialCancellationException
+        error is androidx.credentials.exceptions.GetCredentialCancellationException &&
+                !isReauthFailed
 
     val isNoCredential =
         clean.contains("NoCredential", ignoreCase = true) ||
@@ -249,6 +255,14 @@ private fun googleLoginErrorMessage(
         clean.contains("network", ignoreCase = true) ||
                 clean.contains("timeout", ignoreCase = true) ||
                 clean.contains("unavailable", ignoreCase = true)
+
+    if (isReauthFailed) {
+        return if (isEnglish) {
+            "Google sign-in could not be completed on this device. Please try again, choose another Google account, or update Google Play services."
+        } else {
+            "לא ניתן היה להשלים את ההתחברות עם Google במכשיר הזה. נסה שוב, בחר חשבון Google אחר, או עדכן את Google Play Services."
+        }
+    }
 
     if (isNoCredential) {
         return if (isEnglish) {
@@ -402,6 +416,7 @@ private suspend fun completeGoogleLoginAfterFirebaseAuth(
     }.getOrElse {
         UserProfileCompletion.ProfileStatus(
             isComplete = false,
+            canEnterApp = false,
             missingFields = listOf("profile_check_failed")
         )
     }
@@ -409,7 +424,7 @@ private suspend fun completeGoogleLoginAfterFirebaseAuth(
     GoogleAuthManager.logUiStage(
         context = ctx,
         stage = "intro_profile_check_finished",
-        message = "isComplete=${profileStatus.isComplete}, missingFields=${profileStatus.missingFields.joinToString("|")}"
+        message = "isComplete=${profileStatus.isComplete}, canEnterApp=${profileStatus.canEnterApp}, missingFields=${profileStatus.missingFields.joinToString("|")}"
     )
 
     userSp.edit()
@@ -423,20 +438,20 @@ private suspend fun completeGoogleLoginAfterFirebaseAuth(
     GoogleAuthManager.logUiStage(
         context = ctx,
         stage = "intro_navigation_decision",
-        message = "profileComplete=${profileStatus.isComplete}"
+        message = "profileComplete=${profileStatus.isComplete}, canEnterApp=${profileStatus.canEnterApp}"
     )
 
-    if (profileStatus.isComplete) {
+    if (profileStatus.canEnterApp) {
         GoogleAuthManager.logUiStage(
             context = ctx,
-            stage = "intro_call_on_profile_complete"
+            stage = "intro_call_on_app_enter_allowed"
         )
 
         onProfileComplete()
     } else {
         GoogleAuthManager.logUiStage(
             context = ctx,
-            stage = "intro_call_on_profile_missing"
+            stage = "intro_call_on_profile_missing_basic_details"
         )
 
         onProfileMissing()
@@ -578,8 +593,20 @@ fun IntroScreen(
     )
 
     LaunchedEffect(Unit) {
+        GoogleAuthManager.logUiStage(
+            context = ctx,
+            stage = "intro_screen_opened",
+            message = "currentUserUid=${FirebaseAuth.getInstance().currentUser?.uid.orEmpty()}, currentUserEmail=${FirebaseAuth.getInstance().currentUser?.email.orEmpty()}, isAnonymous=${FirebaseAuth.getInstance().currentUser?.isAnonymous}"
+        )
+
         startAnim = true
         KmiAccess.ensureTrialStarted(userSp)
+
+        GoogleAuthManager.logUiStage(
+            context = ctx,
+            stage = "intro_trial_started_or_verified",
+            message = "currentUserUid=${FirebaseAuth.getInstance().currentUser?.uid.orEmpty()}, isAnonymous=${FirebaseAuth.getInstance().currentUser?.isAnonymous}"
+        )
     }
 
     // ✅ FIX: משתמשים באותו userSp שממנו אתה מתחיל Trial ושבו נשמר המשתמש
@@ -951,6 +978,12 @@ fun IntroScreen(
 
                     TextButton(
                         onClick = {
+                            GoogleAuthManager.logUiStage(
+                                context = ctx,
+                                stage = "intro_regular_login_clicked",
+                                message = "isGoogleLoading=$isGoogleLoading, googleFlowLocked=$googleFlowLocked, currentUserUid=${FirebaseAuth.getInstance().currentUser?.uid.orEmpty()}, isAnonymous=${FirebaseAuth.getInstance().currentUser?.isAnonymous}"
+                            )
+
                             // מונע פתיחת סרגל צד בטעות בזמן המעבר למסך כניסה / רישום
                             userSp.edit()
                                 .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
@@ -959,6 +992,11 @@ fun IntroScreen(
                             legacySp.edit()
                                 .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
                                 .apply()
+
+                            GoogleAuthManager.logUiStage(
+                                context = ctx,
+                                stage = "intro_regular_login_call_on_continue"
+                            )
 
                             onContinue()
                         },

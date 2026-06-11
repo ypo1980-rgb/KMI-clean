@@ -432,17 +432,54 @@ object GoogleAuthManager {
     }
 
     fun shouldUseClassicGoogleFallback(error: Throwable): Boolean {
-        val shouldFallback = error is GoogleClassicFallbackRequiredException ||
-                error is GetCredentialCancellationException ||
-                error is NoCredentialException ||
-                error is GetCredentialException ||
-                isNoCredentialLike(error) ||
-                isCancellationLike(error)
+        val clean = listOfNotNull(
+            error.localizedMessage,
+            error.message,
+            error.toString(),
+            error.cause?.localizedMessage,
+            error.cause?.message,
+            error.cause?.toString()
+        ).joinToString(" ")
+
+        val isFallbackWrapper =
+            error is GoogleClassicFallbackRequiredException
+
+        val isCredentialManagerError =
+            error is GetCredentialCancellationException ||
+                    error is NoCredentialException ||
+                    error is GetCredentialException
+
+        val isNoCredential =
+            isNoCredentialLike(error)
+
+        val isCancellation =
+            isCancellationLike(error)
+
+        val isReauth16 =
+            clean.contains("Account reauth failed", ignoreCase = true) ||
+                    clean.contains("reauth failed", ignoreCase = true) ||
+                    clean.contains("reauth", ignoreCase = true) ||
+                    clean.contains("[16]", ignoreCase = true)
+
+        val shouldFallback =
+            isFallbackWrapper ||
+                    isCredentialManagerError ||
+                    isNoCredential ||
+                    isCancellation ||
+                    isReauth16
 
         Log.d(
             TAG,
             "stage=should_use_classic_fallback, shouldFallback=$shouldFallback, " +
-                    "errorClass=${error.javaClass.name}, errorMessage=${error.message.orEmpty()}"
+                    "isFallbackWrapper=$isFallbackWrapper, " +
+                    "isCredentialManagerError=$isCredentialManagerError, " +
+                    "isNoCredential=$isNoCredential, " +
+                    "isCancellation=$isCancellation, " +
+                    "isReauth16=$isReauth16, " +
+                    "errorClass=${error.javaClass.name}, " +
+                    "errorMessage=${error.message.orEmpty()}, " +
+                    "causeClass=${error.cause?.javaClass?.name.orEmpty()}, " +
+                    "causeMessage=${error.cause?.message.orEmpty()}"
         )
 
         return shouldFallback
@@ -557,7 +594,17 @@ object GoogleAuthManager {
         return clean.contains("cancel", ignoreCase = true) ||
                 clean.contains("canceled", ignoreCase = true) ||
                 clean.contains("cancelled", ignoreCase = true) ||
-                clean.contains("12501", ignoreCase = true)
+                clean.contains("12501", ignoreCase = true) ||
+
+                // ✅ Credential Manager sometimes fails on tester devices with:
+                // androidx.credentials.exceptions.GetCredentialCancellationException:
+                // [16] Account reauth failed.
+                // This should not be shown as a configuration error.
+                // It should trigger the classic Google Sign-In fallback.
+                clean.contains("Account reauth failed", ignoreCase = true) ||
+                clean.contains("reauth failed", ignoreCase = true) ||
+                clean.contains("reauth", ignoreCase = true) ||
+                clean.contains("[16]", ignoreCase = true)
     }
 
     private suspend fun signInToFirebaseWithGoogleCredential(
