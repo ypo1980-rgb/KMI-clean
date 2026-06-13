@@ -301,15 +301,14 @@ fun RegistrationLandingScreen(
     }
 
     val bgBrush = remember {
-        Brush.linearGradient(
-            listOf(
-                Color(0xFF041E2E),   // כחול כהה עליון
-                Color(0xFF0B3D2E),   // ירוק כהה
-                Color(0xFF1F7A6B),   // ירוק אמצעי
-                Color(0xFF0F3F52)    // כחול ירקרק תחתון
-            ),
-            start = Offset(0f, 0f),
-            end = Offset(1000f, 3000f)
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFFF8FBFF),
+                Color(0xFFEAF4FF),
+                Color(0xFFB7DDF7),
+                Color(0xFF1F78B4),
+                Color(0xFF062B4A)
+            )
         )
     }
 
@@ -339,23 +338,31 @@ fun RegistrationLandingScreen(
             )
 
             // חגורה דקורטיבית באלכסון – למעלה בצד
-            Image(
-                painter = androidx.compose.ui.res.painterResource(R.drawable.belt_black),
-                contentDescription = "חגורה שחורה",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 10.dp, end = 12.dp)
-                    .fillMaxWidth(0.42f)
-                    .height(64.dp)
-                    .rotate(-18f)
-                    .shadow(
-                        elevation = 10.dp,
-                        shape = RoundedCornerShape(8.dp),
-                        clip = false
+            val blackBeltBitmap = remember(ctx) {
+                runCatching {
+                    android.graphics.BitmapFactory.decodeResource(
+                        ctx.resources,
+                        R.drawable.intro_belt_black
                     )
-                    .alpha(0.9f),
-                contentScale = ContentScale.Fit
-            )
+                        ?.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
+                        ?.let { whiteToTransparent(it, tolerance = 238) }
+                }.getOrNull()
+            }
+
+            if (blackBeltBitmap != null) {
+                Image(
+                    bitmap = blackBeltBitmap.asImageBitmap(),
+                    contentDescription = "חגורה שחורה",
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 10.dp, end = 12.dp)
+                        .fillMaxWidth(0.42f)
+                        .height(64.dp)
+                        .rotate(-18f)
+                        .alpha(0.96f),
+                    contentScale = ContentScale.Fit
+                )
+            }
 
             // תוכן ראשי
             Column(

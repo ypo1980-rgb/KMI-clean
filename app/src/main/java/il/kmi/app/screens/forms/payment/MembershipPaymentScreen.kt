@@ -562,13 +562,15 @@ fun MembershipPaymentScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF0E1630),
-                            Color(0xFF1F2A52),
-                            Color(0xFF2575BC)
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
                         )
                     )
-                )
-        ) {
+                    )
+                ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -651,17 +653,19 @@ fun MembershipPaymentScreen(
                             singleLine = true,
                             shape = RoundedCornerShape(14.dp),
                             label = {
+
                                 Text(
                                     text = if (isEnglish) "Branch Name" else "שם הסניף",
-                                    color = Color.White.copy(alpha = 0.78f),
+                                    color = Color(0xFF5E6C80),
                                     fontSize = 10.sp,
                                     lineHeight = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                            },
+                                    },
                             leadingIcon = if (isEnglish) {
                                 {
                                     Icon(
@@ -707,31 +711,31 @@ fun MembershipPaymentScreen(
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                             ),
                             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Color(0xFF24365E),
-                                unfocusedContainerColor = Color(0xFF24365E),
-                                disabledContainerColor = Color(0xFF24365E),
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White,
+                                disabledContainerColor = Color(0xFFF4F7FB),
 
-                                focusedBorderColor = Color(0xFF5E7CE2),
-                                unfocusedBorderColor = Color(0xFF3A4A7A),
-                                disabledBorderColor = Color(0xFF2A355A),
+                                focusedBorderColor = Color(0xFFBFD0E8),
+                                unfocusedBorderColor = Color(0xFFD8E3F5),
+                                disabledBorderColor = Color(0xFFD8E3F5),
 
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                disabledTextColor = Color.White.copy(alpha = 0.55f),
+                                focusedTextColor = Color(0xFF1E2A3D),
+                                unfocusedTextColor = Color(0xFF1E2A3D),
+                                disabledTextColor = Color(0xFF1E2A3D).copy(alpha = 0.50f),
 
-                                focusedLabelColor = Color.White.copy(alpha = 0.82f),
-                                unfocusedLabelColor = Color.White.copy(alpha = 0.62f),
-                                disabledLabelColor = Color.White.copy(alpha = 0.42f),
+                                focusedLabelColor = Color(0xFF5E6C80),
+                                unfocusedLabelColor = Color(0xFF6B778B),
+                                disabledLabelColor = Color(0xFF6B778B).copy(alpha = 0.45f),
 
-                                focusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
-                                unfocusedLeadingIconColor = Color.White.copy(alpha = 0.62f),
-                                disabledLeadingIconColor = Color.White.copy(alpha = 0.38f),
+                                focusedLeadingIconColor = Color(0xFF5E6C80),
+                                unfocusedLeadingIconColor = Color(0xFF6B778B),
+                                disabledLeadingIconColor = Color(0xFF6B778B).copy(alpha = 0.40f),
 
-                                focusedTrailingIconColor = Color.White.copy(alpha = 0.82f),
-                                unfocusedTrailingIconColor = Color.White.copy(alpha = 0.62f),
-                                disabledTrailingIconColor = Color.White.copy(alpha = 0.38f),
+                                focusedTrailingIconColor = Color(0xFF5E6C80),
+                                unfocusedTrailingIconColor = Color(0xFF6B778B),
+                                disabledTrailingIconColor = Color(0xFF6B778B).copy(alpha = 0.40f),
 
-                                cursorColor = Color.White
+                                cursorColor = Color(0xFF1E2A3D)
                             )
                         )
 
@@ -894,7 +898,11 @@ fun MembershipPaymentScreen(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF91A0BF).copy(alpha = 0.26f)
+                        color = Color.White,
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = 1.dp,
+                            color = Color(0xFFD8E3F5)
+                        )
                     ) {
                         Text(
                             text = if (isEnglish) {
@@ -903,7 +911,8 @@ fun MembershipPaymentScreen(
                                 "תשלום דמי חבר הוא סופי לאחר אישור הפעולה, למעט מקרים של תשלום כפול בטעות או טעות אחרת בתום לב, בכפוף לבדיקת העמותה."
                             },
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.90f),
+                            color = Color(0xFF1E2A3D),
+                            fontWeight = FontWeight.SemiBold,
                             textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -925,7 +934,7 @@ fun MembershipPaymentScreen(
                                 onReadFullPolicy()
                             },
                             colors = ButtonDefaults.textButtonColors(
-                                contentColor = Color(0xFFBDA7FF)
+                                contentColor = Color(0xFF7C5CE6)
                             )
                         ) {
                             if (isEnglish) {
@@ -949,18 +958,18 @@ fun MembershipPaymentScreen(
                     Surface(
                         shape = RoundedCornerShape(18.dp),
                         color = if (policyAccepted) {
-                            Color(0xFF19C37D).copy(alpha = 0.16f)
+                            Color(0xFFE8FFF3)
                         } else {
-                            Color(0xFF24365E)
+                            Color.White
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(
                                 width = 1.5.dp,
                                 color = if (policyAccepted) {
-                                    Color(0xFF7CFFB2)
+                                    Color(0xFF19C37D)
                                 } else {
-                                    Color(0xFF7CFFB2).copy(alpha = 0.55f)
+                                    Color(0xFFBFD0E8)
                                 },
                                 shape = RoundedCornerShape(18.dp)
                             )
@@ -986,7 +995,8 @@ fun MembershipPaymentScreen(
                                 Text(
                                     text = "I have read and agree to the cancellation and refund policy.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.94f),
+                                    color = Color(0xFF1E2A3D),
+                                    fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Left,
                                     modifier = Modifier
                                         .weight(1f)
@@ -996,7 +1006,8 @@ fun MembershipPaymentScreen(
                                 Text(
                                     text = "קראתי ואני מאשר/ת את מדיניות הביטולים וההחזרים.",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.94f),
+                                    color = Color(0xFF1E2A3D),
+                                    fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier
                                         .weight(1f)
@@ -1043,10 +1054,10 @@ fun MembershipPaymentScreen(
                     enabled = isFormValid,
                     shape = MaterialTheme.shapes.extraLarge,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                        disabledContainerColor = Color(0xFF3A5D8F),
-                        disabledContentColor = Color.White.copy(alpha = 0.65f)
+                        containerColor = Color(0xFF7C5CE6),
+                        contentColor = Color.White,
+                        disabledContainerColor = Color(0xFFD8E3F5),
+                        disabledContentColor = Color(0xFF6B778B)
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1238,7 +1249,7 @@ private fun ProductHeroCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF314875)
+            containerColor = Color(0xFFEAF2FF)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
@@ -1255,7 +1266,7 @@ private fun ProductHeroCard(
                 Surface(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     shape = RoundedCornerShape(18.dp),
-                    color = Color.White.copy(alpha = 0.10f)
+                    color = Color(0xFFDCE7F7)
                 ) {
                     IconButton(
                         onClick = onClose,
@@ -1264,7 +1275,7 @@ private fun ProductHeroCard(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = if (isEnglish) "Close" else "סגור",
-                            tint = Color.White
+                            tint = Color(0xFF5D6F89)
                         )
                     }
                 }
@@ -1286,7 +1297,7 @@ private fun ProductHeroCard(
                 Surface(
                     modifier = Modifier.align(Alignment.CenterStart),
                     shape = RoundedCornerShape(18.dp),
-                    color = Color.White.copy(alpha = 0.10f)
+                    color = Color(0xFFDCE7F7)
                 ) {
                     Box(
                         modifier = Modifier
@@ -1297,7 +1308,7 @@ private fun ProductHeroCard(
                         Icon(
                             imageVector = Icons.Default.CreditCard,
                             contentDescription = null,
-                            tint = Color(0xFFBDA7FF)
+                            tint = Color(0xFF6E59B5)
                         )
                     }
                 }
@@ -1306,7 +1317,7 @@ private fun ProductHeroCard(
             Text(
                 text = if (isEnglish) "Association Membership" else "חברות בעמותה",
                 style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
+                color = Color(0xFF1E2A3D),
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = textAlign,
                 maxLines = 1,
@@ -1320,7 +1331,7 @@ private fun ProductHeroCard(
                     "רישום מאובטח לתשלום לפני מעבר לסליקה"
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.82f),
+                color = Color(0xFF5E6C80),
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = textAlign,
                 maxLines = 2,
@@ -1342,7 +1353,7 @@ private fun SectionCard(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF2A3D66)
+            containerColor = Color(0xFFEAF2FF)
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 8.dp,
@@ -1371,7 +1382,7 @@ private fun SectionCard(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = Color(0xFF0F5E9C)
                         )
                     }
                 }
@@ -1379,7 +1390,7 @@ private fun SectionCard(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = Color(0xFF1E2A3D),
                     fontWeight = FontWeight.ExtraBold,
                     textAlign = textAlign,
                     modifier = Modifier.weight(1f)
@@ -1387,7 +1398,7 @@ private fun SectionCard(
             }
 
             HorizontalDivider(
-                color = Color.White.copy(alpha = 0.12f)
+                color = Color(0xFFBFD0E8)
             )
 
             content()
@@ -1413,16 +1424,17 @@ private fun FormTextField(
         onValueChange = onValueChange,
         modifier = Modifier
             .fillMaxWidth()
-            .height(60.dp),
+            .height(66.dp),
         enabled = enabled,
         singleLine = true,
         shape = RoundedCornerShape(14.dp),
         label = {
             Text(
                 text = label,
-                color = Color.White.copy(alpha = 0.78f),
+                color = Color(0xFF5E6C80),
                 fontSize = 10.sp,
                 lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = textAlign,
@@ -1434,7 +1446,7 @@ private fun FormTextField(
                 Icon(
                     imageVector = leadingIcon,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.72f),
+                    tint = Color(0xFF6B778B),
                     modifier = Modifier.size(19.dp)
                 )
             }
@@ -1448,7 +1460,7 @@ private fun FormTextField(
                 Icon(
                     imageVector = leadingIcon,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.72f),
+                    tint = Color(0xFF6B778B),
                     modifier = Modifier.size(19.dp)
                 )
             }
@@ -1457,7 +1469,7 @@ private fun FormTextField(
             if (placeholder.isNotBlank()) {
                 Text(
                     text = placeholder,
-                    color = Color.White.copy(alpha = 0.42f),
+                    color = Color(0xFF7A879A),
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1467,35 +1479,37 @@ private fun FormTextField(
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         textStyle = MaterialTheme.typography.bodyMedium.copy(
             textAlign = textAlign,
-            fontSize = 13.sp,
-            lineHeight = 16.sp
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF1E2A3D)
         ),
         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = Color(0xFF24365E),
-            unfocusedContainerColor = Color(0xFF24365E),
-            disabledContainerColor = Color(0xFF24365E),
+            focusedContainerColor = Color.White,
+            unfocusedContainerColor = Color.White,
+            disabledContainerColor = Color.White,
 
-            focusedBorderColor = Color(0xFF5E7CE2),
-            unfocusedBorderColor = Color(0xFF3A4A7A),
-            disabledBorderColor = Color(0xFF2A355A),
+            focusedBorderColor = Color(0xFFBFD0E8),
+            unfocusedBorderColor = Color(0xFFD8E3F5),
+            disabledBorderColor = Color(0xFFD8E3F5),
 
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            disabledTextColor = Color.White.copy(alpha = 0.55f),
+            focusedTextColor = Color(0xFF1E2A3D),
+            unfocusedTextColor = Color(0xFF1E2A3D),
+            disabledTextColor = Color(0xFF1E2A3D),
 
-            focusedLabelColor = Color.White.copy(alpha = 0.82f),
-            unfocusedLabelColor = Color.White.copy(alpha = 0.62f),
-            disabledLabelColor = Color.White.copy(alpha = 0.42f),
+            focusedLabelColor = Color(0xFF5E6C80),
+            unfocusedLabelColor = Color(0xFF6B778B),
+            disabledLabelColor = Color(0xFF6B778B),
 
-            focusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
-            unfocusedLeadingIconColor = Color.White.copy(alpha = 0.62f),
-            disabledLeadingIconColor = Color.White.copy(alpha = 0.38f),
+            focusedLeadingIconColor = Color(0xFF5E6C80),
+            unfocusedLeadingIconColor = Color(0xFF6B778B),
+            disabledLeadingIconColor = Color(0xFF6B778B),
 
-            focusedTrailingIconColor = Color.White.copy(alpha = 0.82f),
-            unfocusedTrailingIconColor = Color.White.copy(alpha = 0.62f),
-            disabledTrailingIconColor = Color.White.copy(alpha = 0.38f),
+            focusedTrailingIconColor = Color(0xFF5E6C80),
+            unfocusedTrailingIconColor = Color(0xFF6B778B),
+            disabledTrailingIconColor = Color(0xFF6B778B),
 
-            cursorColor = Color.White
+            cursorColor = Color(0xFF1E2A3D)
         )
     )
 }
@@ -1517,7 +1531,7 @@ private fun ProductPriceRow(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = Color.White.copy(alpha = 0.76f),
+            color = Color(0xFF5E6C80),
             textAlign = labelAlign,
             modifier = Modifier.weight(1f)
         )
@@ -1530,9 +1544,9 @@ private fun ProductPriceRow(
                 MaterialTheme.typography.titleMedium
             },
             color = if (emphasize) {
-                Color(0xFF9B7BFF)
+                Color(0xFF7C5CE6)
             } else {
-                Color.White
+                Color(0xFF1E2A3D)
             },
             textAlign = valueAlign
         )

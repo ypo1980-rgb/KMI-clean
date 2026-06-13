@@ -830,9 +830,11 @@ fun MyProfileScreen(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFF0E1630),
-                                Color(0xFF1F2A52),
-                                Color(0xFF2575BC)
+                                Color(0xFFF8FBFF),
+                                Color(0xFFEAF4FF),
+                                Color(0xFFB7DDF7),
+                                Color(0xFF1F78B4),
+                                Color(0xFF062B4A)
                             )
                         )
                     )

@@ -1,5 +1,6 @@
 package il.kmi.app.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,17 +44,18 @@ fun AboutMethodScreen(
             il.kmi.app.ui.KmiTopBar(
                 title = amText("אודות השיטה", "About the Method", isEnglish),
                 centerTitle = true,
-                showMenu = false,
+                showMenu = true,
                 onHome = onHome,
                 showTopHome = false,
                 onBack = null,
                 showBottomActions = true,
                 lockSearch = true,
-                showRoleBadge = false,
+                showRoleBadge = true,
+                showModePill = true,
                 showCoachBroadcastFab = false
             )
-        },
-        containerColor = Color(0xFFF7F7FA),
+                 },
+        containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) { padding ->
 
@@ -60,15 +63,30 @@ fun AboutMethodScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
+                        )
+                    )
+                )
         ) {
             Surface(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 shape = RoundedCornerShape(24.dp),
-                color = Color.White,
+                color = Color(0xFFEAF2FF),
                 tonalElevation = 2.dp,
-                shadowElevation = 8.dp
+                shadowElevation = 8.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = Color(0xFFD8E3F5)
+                )
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
 
@@ -86,7 +104,10 @@ fun AboutMethodScreen(
                         textAlign = amAlign(isEnglish)
                     )
 
-                    HorizontalDivider()
+                    HorizontalDivider(
+                        color = Color(0xFFBFD0E8),
+                        thickness = 1.dp
+                    )
 
                     Column(
                         modifier = Modifier
@@ -439,31 +460,6 @@ Unlike traditional martial arts, K.A.M.I adapts itself to the changing reality o
                         Spacer(Modifier.height(24.dp))
                     }
                 }
-            }
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = (-24).dp, y = 20.dp)
-                    .size(22.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
-                        shape = CircleShape
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                        shape = CircleShape
-                    )
-                    .clickable(onClick = onBack),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = amText("סגור", "Close", isEnglish),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
             }
         }
     }

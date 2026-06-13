@@ -303,9 +303,11 @@ fun ContactUsScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF0E1630),
-                            Color(0xFF1F2A52),
-                            Color(0xFF2575BC)
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
                         )
                     )
                 )
@@ -334,7 +336,7 @@ fun ContactUsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFF314875)
+                                containerColor = Color(0xFFEAF2FF)
                             ),
                             elevation = CardDefaults.cardElevation(
                                 defaultElevation = 8.dp,
@@ -353,17 +355,17 @@ fun ContactUsScreen(
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = FontWeight.ExtraBold
                                     ),
-                                    color = Color.White.copy(alpha = 0.90f),
+                                    color = Color(0xFF1E2A3D),
                                     textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
                                 )
 
-                                HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                                HorizontalDivider(color = Color(0xFFBFD0E8))
 
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    color = Color.White
                                 ) {
                                     Box(
                                         modifier = Modifier
@@ -388,7 +390,7 @@ fun ContactUsScreen(
                                             style = MaterialTheme.typography.bodyMedium.copy(
                                                 fontWeight = FontWeight.Bold
                                             ),
-                                            color = Color.White,
+                                            color = Color(0xFF1E2A3D),
                                             textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -411,7 +413,7 @@ fun ContactUsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.extraLarge,
                         colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF2A3D66)
+                            containerColor = Color(0xFFEAF2FF)
                         ),
                         elevation = CardDefaults.cardElevation(
                             defaultElevation = 10.dp,
@@ -479,7 +481,7 @@ fun ContactUsScreen(
                                 label = {
                                     contactFieldLabel(
                                         text = if (effectiveEnglish) "Subject" else "נושא הפנייה",
-                                        color = if (subject.isBlank()) Color(0xFF111827) else Color.White
+                                        color = Color(0xFF5E6C80)
                                     )
                                 },
                                 leadingIcon = {
@@ -499,7 +501,7 @@ fun ContactUsScreen(
                                 label = {
                                     contactFieldLabel(
                                         text = if (effectiveEnglish) "Message" else "הודעה",
-                                        color = if (message.isBlank()) Color(0xFF111827) else Color.White
+                                        color = Color(0xFF5E6C80)
                                     )
                                 },
                                 textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -571,10 +573,10 @@ fun ContactUsScreen(
                                     pressedElevation = 2.dp
                                 ),
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    disabledContainerColor = Color(0xFF3A5D8F),
-                                    disabledContentColor = Color.White.copy(alpha = 0.65f)
+                                    containerColor = Color(0xFF7C5CE6),
+                                    contentColor = Color.White,
+                                    disabledContainerColor = Color(0xFFD8E3F5),
+                                    disabledContentColor = Color(0xFF6B778B)
                                 ),
                                 shape = MaterialTheme.shapes.extraLarge
                             ) {
@@ -609,12 +611,12 @@ fun ContactUsScreen(
 @Composable
 private fun contactFieldLabel(
     text: String,
-    color: Color = Color.White
+    color: Color = Color(0xFF5E6C80)
 ) {
     Text(
         text = text,
         color = color,
-        style = MaterialTheme.typography.labelLarge.copy(
+        style = MaterialTheme.typography.labelSmall.copy(
             fontWeight = FontWeight.ExtraBold
         )
     )
@@ -622,30 +624,25 @@ private fun contactFieldLabel(
 
 @Composable
 private fun contactFieldColors() = OutlinedTextFieldDefaults.colors(
-    // רקע בהיר לשדות כדי שהקלט יישאר קריא וברור
-    focusedContainerColor = Color(0xFFF4F7FF),
-    unfocusedContainerColor = Color(0xFFEAF0FF),
-    disabledContainerColor = Color(0xFFD8E0F5),
+    focusedContainerColor = Color.White,
+    unfocusedContainerColor = Color.White,
+    disabledContainerColor = Color.White,
 
-    // מסגרת ברורה במצב רגיל ובפוקוס
-    focusedBorderColor = Color(0xFF8EA7FF),
-    unfocusedBorderColor = Color.White.copy(alpha = 0.72f),
-    disabledBorderColor = Color.White.copy(alpha = 0.35f),
+    focusedBorderColor = Color(0xFFBFD0E8),
+    unfocusedBorderColor = Color(0xFFD8E3F5),
+    disabledBorderColor = Color(0xFFD8E3F5),
 
-    // טקסט הקלט כהה על רקע בהיר
-    focusedTextColor = Color(0xFF111827),
-    unfocusedTextColor = Color(0xFF111827),
-    disabledTextColor = Color(0xFF111827).copy(alpha = 0.55f),
+    focusedTextColor = Color(0xFF1E2A3D),
+    unfocusedTextColor = Color(0xFF1E2A3D),
+    disabledTextColor = Color(0xFF1E2A3D),
 
-    // הכותרות הצפות של השדות לבנות על הרקע הכהה
-    focusedLabelColor = Color.White,
-    unfocusedLabelColor = Color.White,
-    disabledLabelColor = Color.White.copy(alpha = 0.55f),
+    focusedLabelColor = Color(0xFF5E6C80),
+    unfocusedLabelColor = Color(0xFF6B778B),
+    disabledLabelColor = Color(0xFF6B778B),
 
-    // אייקונים כהים כדי שיבלטו בתוך השדות הבהירים
-    focusedLeadingIconColor = Color(0xFF1E3A8A),
-    unfocusedLeadingIconColor = Color(0xFF52627A),
-    disabledLeadingIconColor = Color(0xFF52627A).copy(alpha = 0.55f),
+    focusedLeadingIconColor = Color(0xFF5E6C80),
+    unfocusedLeadingIconColor = Color(0xFF6B778B),
+    disabledLeadingIconColor = Color(0xFF6B778B),
 
-    cursorColor = Color(0xFF1E3A8A)
+    cursorColor = Color(0xFF1E2A3D)
 )
