@@ -330,167 +330,53 @@ fun SettingsScreenModern(
         }
     }
 
-    // ---- גרדיאנט כותרת לפי תפקיד (נשאר כפי שהיה) ----
-    val headerBrush = if (isCoach)
-        Brush.linearGradient(listOf(Color(0xFF7B1FA2), Color(0xFF512DA8)))
-    else
-        Brush.linearGradient(listOf(Color(0xFF1565C0), Color(0xFF26A69A)))
+    // ---- גרדיאנט כותרת אחיד לכל התפקידים ----
+    val headerBrush = Brush.horizontalGradient(
+        colors = listOf(
+            Color(0xFF062B4A).copy(alpha = 0.96f),
+            Color(0xFF0F5E9C).copy(alpha = 0.92f),
+            Color(0xFF062B4A).copy(alpha = 0.96f)
+        )
+    )
 
-    // צבע "פרימיום" לאייקונים בכותרות הכרטיסים לפי תפקיד
-    val sectionIconTint = remember(isCoach) {
-        if (isCoach) Color(0xFF6A1B9A) else Color(0xFF1565C0)
+// צבע "פרימיום" אחיד לאייקונים בכותרות הכרטיסים
+    val sectionIconTint = remember {
+        Color(0xFF0F5E9C)
     }
 
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .background(headerBrush)    // ← קודם הצבע/גרדיאנט
-                    .statusBarsPadding()        // ← ואז הפדינג של הסטטוס בר
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-
-                    // ⬇⬇ כותרת עם כפתור סגירה במיקום פיזי קבוע:
-                    // עברית: X בשמאל, כותרת בימין
-                    // אנגלית: כותרת בשמאל, X בימין
-                    CompositionLocalProvider(
-                        androidx.compose.ui.platform.LocalLayoutDirection provides
-                                androidx.compose.ui.unit.LayoutDirection.Ltr
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (isEnglish) {
-                                Text(
-                                    text = "Settings",
-                                    style = MaterialTheme.typography.headlineMedium.copy(
-                                        color = Color.White,
-                                        fontWeight = FontWeight.ExtraBold
-                                    ),
-                                    textAlign = TextAlign.Left,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
-                                )
-
-                                Spacer(modifier = Modifier.weight(1f))
-
-                                IconButton(
-                                    onClick = { onBack() },
-                                    modifier = Modifier.size(48.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Close,
-                                        contentDescription = "Close settings",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                }
-                            } else {
-                                IconButton(
-                                    onClick = { onBack() },
-                                    modifier = Modifier.size(48.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Close,
-                                        contentDescription = "סגור הגדרות",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.weight(1f))
-
-                                Text(
-                                    text = "הגדרות",
-                                    style = MaterialTheme.typography.headlineMedium.copy(
-                                        color = Color.White,
-                                        fontWeight = FontWeight.ExtraBold
-                                    ),
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    // ⬇⬇ כרטיס פרופיל — אייקון בשמאל, טקסטים מיושרים לימין
-                    Surface(
-                        color = Color.White.copy(alpha = 0.92f),
-                        shape = RoundedCornerShape(16.dp),
-                        tonalElevation = 0.dp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (isCoach) Icons.Filled.Verified else Icons.Filled.Person,
-                                contentDescription = null,
-                                tint = if (isCoach) Color(0xFF6A1B9A) else Color(0xFF1565C0),
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                horizontalAlignment = horizontalEnd
-                            ) {
-                                Text(
-                                    text = fullName.ifBlank { tr("משתמש", "User") },
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    textAlign = textAlignPrimary,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                if (phone.isNotBlank()) {
-                                    Text(
-                                        text = phone,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        textAlign = textAlignPrimary,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-
-                                if (rankDisplayName.isNotBlank()) {
-                                    Text(
-                                        text = tr(
-                                            "דרגה: $rankDisplayName",
-                                            "Rank: $rankDisplayName"
-                                        ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color(0xFF475569),
-                                        fontWeight = FontWeight.SemiBold,
-                                        textAlign = textAlignPrimary,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
-
-                        }
-                    }
-                }
-            }
+            il.kmi.app.ui.KmiTopBar(
+                title = tr("הגדרות", "Settings"),
+                onHome = { onBack() },
+                showTopHome = false,
+                showTopSearch = false,
+                showBottomActions = true,
+                lockSearch = true,
+                centerTitle = true
+            )
         }
     ) { padding ->
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
+                        )
+                    )
+                )
                 .verticalScroll(rememberScrollState())
                 .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
 
             // --- שפה מועדפת ---

@@ -1714,8 +1714,19 @@ fun SummaryScreen(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            color = belt.lightColor,
+                .padding(innerPadding)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
+                        )
+                    )
+                ),
+            color = Color.Transparent,
             contentColor = Color(0xFF1B1B1B)
         ) {
             Column(

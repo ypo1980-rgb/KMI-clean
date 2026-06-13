@@ -334,27 +334,17 @@ fun SubjectExercisesScreen(
         KmiTtsManager.setSpeechProfile(rate = 0.95f, pitch = 1.0f)
     }
 
-    val backgroundBrush = remember(isCoach) {
-        if (isCoach) {
-            Brush.linearGradient(
-                colors = listOf(
-                    Color(0xFF141E30),
-                    Color(0xFF243B55),
-                    Color(0xFF0EA5E9)
-                )
+    val backgroundBrush = remember {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFFF8FBFF),
+                Color(0xFFEAF4FF),
+                Color(0xFFB7DDF7),
+                Color(0xFF1F78B4),
+                Color(0xFF062B4A)
             )
-        } else {
-            Brush.linearGradient(
-                colors = listOf(
-                    Color(0xFF7F00FF),
-                    Color(0xFF3F51B5),
-                    Color(0xFF03A9F4)
-                )
-            )
-        }
+        )
     }
-
-
 
             // נתוני שורה: belt + topic + rawItem (לניווט) + displayName + canonicalId
             data class RowData(

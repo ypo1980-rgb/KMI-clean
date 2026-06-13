@@ -768,9 +768,9 @@ private fun visibleGreenDefenseSubTopics(
             ).distinctBy { normalizeUiNestedTitle(it) }
 }
 
-private val catalogScreenGradientTop = Color(0xFFF3F1FB)
-private val catalogScreenGradientMid = Color(0xFFF8F9FD)
-private val catalogScreenGradientBottom = Color(0xFFFDFDFE)
+private val catalogScreenGradientTop = Color(0xFFF8FBFF)
+private val catalogScreenGradientMid = Color(0xFFB7DDF7)
+private val catalogScreenGradientBottom = Color(0xFF062B4A)
 
 /**
  * מסך שמציג את כל תתי־הנושאים של נושא מסוים בחגורה מסוימת.

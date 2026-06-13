@@ -620,16 +620,16 @@ internal fun BeltPangoLayout(
         return fallback ?: currentBelt
     }
 
-    val backgroundBrush = remember(key1 = coachMode) {
-        if (coachMode) {
-            Brush.linearGradient(
-                colors = listOf(Color(0xFF141E30), Color(0xFF243B55), Color(0xFF0EA5E9))
+    val backgroundBrush = remember {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFFF8FBFF),
+                Color(0xFFEAF4FF),
+                Color(0xFFB7DDF7),
+                Color(0xFF1F78B4),
+                Color(0xFF062B4A)
             )
-        } else {
-            Brush.linearGradient(
-                colors = listOf(Color(0xFF7F00FF), Color(0xFF3F51B5), Color(0xFF03A9F4))
-            )
-        }
+        )
     }
 
     var centerProgress by remember { mutableStateOf(currentIndex.toFloat()) }
@@ -1066,8 +1066,14 @@ internal fun TopicsViewModeToggle(
         modifier = Modifier
             .fillMaxWidth(0.88f)
             .padding(bottom = 6.dp),
-        color = Color.White.copy(alpha = 0.10f),
-        shape = MaterialTheme.shapes.medium
+        color = Color(0xFF062B4A).copy(alpha = 0.78f),
+        shadowElevation = 8.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color.White.copy(alpha = 0.34f)
+        ),
+        shape = RoundedCornerShape(18.dp)
     ) {
         Box(
             modifier = Modifier
@@ -1080,7 +1086,7 @@ internal fun TopicsViewModeToggle(
                     .offset(y = (-4).dp)
                     .width(1.dp)
                     .height(24.dp)
-                    .background(Color.White.copy(alpha = 0.95f))
+                    .background(Color.White.copy(alpha = 0.65f))
             )
 
             // ✅ חשוב:
@@ -1120,8 +1126,7 @@ internal fun TopicsViewModeToggle(
                                 )
                             },
                             selectedContentColor = Color.White,
-                            unselectedContentColor = Color.White.copy(alpha = 0.7f)
-                        )
+                            unselectedContentColor = Color.White.copy(alpha = 0.82f)                        )
                     }
                 }
             }

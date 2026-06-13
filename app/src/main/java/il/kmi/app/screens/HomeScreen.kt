@@ -298,22 +298,16 @@ fun HomeScreen(
         }
     }
 
-    val backgroundBrush = remember(isCoach) {
-        if (isCoach) {
-            Brush.linearGradient(
-                colors = listOf(
-                    Color(0xFF141E30),
-                    Color(0xFF243B55),
-                    Color(0xFF0EA5E9)
-                )
+    val backgroundBrush = remember {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color(0xFFF8FBFF),
+                Color(0xFFEAF4FF),
+                Color(0xFFB7DDF7),
+                Color(0xFF1F78B4),
+                Color(0xFF062B4A)
             )
-        } else {
-            Brush.linearGradient(
-                colors = listOf(Color(0xFF7F00FF), Color(0xFF3F51B5), Color(0xFF03A9F4)),
-                start = Offset(0f, 0f),
-                end = Offset(1000f, 3000f)
-            )
-        }
+        )
     }
 
     Scaffold(
@@ -1274,37 +1268,26 @@ fun HomeScreen(
                 // הכותרת "מסך הבית" כבר מוצגת ב־KmiTopBar.
                 // לכן מסירים את הכותרת הפנימית כדי להרוויח עוד שטח תצוגה.
 
-                if (isCoach) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                    ) {
-                        TrainingsWeekHeader(
-                            isEnglish = isEnglish,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(Color(0xFF7F00FF), Color(0xFF3F51B5))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color(0xFF062B4A).copy(alpha = 0.92f),
+                                    Color(0xFF0F5E9C).copy(alpha = 0.86f),
+                                    Color(0xFF062B4A).copy(alpha = 0.92f)
                                 )
                             )
-                            .padding(vertical = 4.dp)
-                    ) {
-                        TrainingsWeekHeader(
-                            isEnglish = isEnglish,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
                         )
-                    }
+                        .padding(vertical = 4.dp)
+                ) {
+                    TrainingsWeekHeader(
+                        isEnglish = isEnglish,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    )
                 }
 
                 Spacer(Modifier.height(4.dp))

@@ -55,6 +55,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
@@ -62,6 +63,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import il.kmi.app.domain.color
 import il.kmi.app.subscription.KmiAccess
@@ -502,7 +504,19 @@ fun BeltQuestionsByTopicScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
+                        )
+                    )
+                )
         ) {
+
             // 1. תוכן המסך (נגלל)
             Column(
                 modifier = Modifier
