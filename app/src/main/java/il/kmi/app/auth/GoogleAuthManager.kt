@@ -313,7 +313,19 @@ object GoogleAuthManager {
                 stage = "credential_manager_cancelled",
                 error = e
             )
-            Result.failure(GoogleClassicFallbackRequiredException("GOOGLE_CREDENTIAL_CANCELLED", e))
+
+            // ✅ אם המשתמש לחץ ביטול — עוצרים ולא נכנסים לאפליקציה.
+            // ✅ אם זו תקלת [16] Account reauth failed — כן מפעילים Classic fallback.
+            if (isReauth16Like(e)) {
+                Result.failure(
+                    GoogleClassicFallbackRequiredException(
+                        "GOOGLE_REAUTH_16_FALLBACK_REQUIRED",
+                        e
+                    )
+                )
+            } else {
+                Result.failure(e)
+            }
         } catch (e: NoCredentialException) {
             logStage(
                 context = context,
@@ -431,6 +443,31 @@ object GoogleAuthManager {
         }
     }
 
+    private fun isRealUserCancelLike(error: Throwable): Boolean {
+        val clean = listOfNotNull(
+            error.localizedMessage,
+            error.message,
+            error.toString(),
+            error.cause?.localizedMessage,
+            error.cause?.message,
+            error.cause?.toString()
+        ).joinToString(" ")
+
+        val isReauth16 =
+            clean.contains("Account reauth failed", ignoreCase = true) ||
+                    clean.contains("reauth failed", ignoreCase = true) ||
+                    clean.contains("reauth", ignoreCase = true) ||
+                    clean.contains("[16]", ignoreCase = true)
+
+        val isCancel =
+            clean.contains("cancel", ignoreCase = true) ||
+                    clean.contains("canceled", ignoreCase = true) ||
+                    clean.contains("cancelled", ignoreCase = true) ||
+                    clean.contains("12501", ignoreCase = true)
+
+        return isCancel && !isReauth16
+    }
+
     fun shouldUseClassicGoogleFallback(error: Throwable): Boolean {
         val clean = listOfNotNull(
             error.localizedMessage,
@@ -445,28 +482,30 @@ object GoogleAuthManager {
             error is GoogleClassicFallbackRequiredException
 
         val isCredentialManagerError =
-            error is GetCredentialCancellationException ||
-                    error is NoCredentialException ||
-                    error is GetCredentialException
+            error is NoCredentialException ||
+                    (
+                            error is GetCredentialException &&
+                                    error !is GetCredentialCancellationException &&
+                                    !isRealUserCancelLike(error)
+                            )
 
         val isNoCredential =
             isNoCredentialLike(error)
 
         val isCancellation =
-            isCancellationLike(error)
+            isCancellationLike(error) && isReauth16Like(error)
 
-        val isReauth16 =
-            clean.contains("Account reauth failed", ignoreCase = true) ||
-                    clean.contains("reauth failed", ignoreCase = true) ||
-                    clean.contains("reauth", ignoreCase = true) ||
-                    clean.contains("[16]", ignoreCase = true)
+        val isReauth16 = isReauth16Like(error)
 
         val shouldFallback =
-            isFallbackWrapper ||
-                    isCredentialManagerError ||
-                    isNoCredential ||
-                    isCancellation ||
-                    isReauth16
+            !isRealUserCancelLike(error) &&
+                    (
+                            isFallbackWrapper ||
+                                    isCredentialManagerError ||
+                                    isNoCredential ||
+                                    isCancellation ||
+                                    isReauth16
+                            )
 
         Log.d(
             TAG,
@@ -582,6 +621,22 @@ object GoogleAuthManager {
                 clean.contains("No credentials", ignoreCase = true) ||
                 clean.contains("credentials available", ignoreCase = true) ||
                 clean.contains("no available credentials", ignoreCase = true)
+    }
+
+    private fun isReauth16Like(error: Throwable): Boolean {
+        val clean = listOfNotNull(
+            error.localizedMessage,
+            error.message,
+            error.toString(),
+            error.cause?.localizedMessage,
+            error.cause?.message,
+            error.cause?.toString()
+        ).joinToString(" ")
+
+        return clean.contains("Account reauth failed", ignoreCase = true) ||
+                clean.contains("reauth failed", ignoreCase = true) ||
+                clean.contains("reauth", ignoreCase = true) ||
+                clean.contains("[16]", ignoreCase = true)
     }
 
     private fun isCancellationLike(error: Throwable): Boolean {

@@ -57,6 +57,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -81,7 +82,7 @@ private data class QuickMenuItemUi(
 private fun quickMenuLockTint(accentColor: Color): Color {
     // ✅ מנעול קבוע בסגנון פרימיום "אמיתי" בכל החגורות
     // לא לפי צבע חגורה, כדי שלא ייראה כמו צעצוע
-    return Color(0xFFD49A1F)
+    return Color(0xFFF59E0B)
 }
 
 @Composable
@@ -498,7 +499,7 @@ fun FloatingQuickMenu(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(Color.Black.copy(alpha = 0.10f))
+                    .background(Color.Transparent)
             )
         }
 
@@ -634,10 +635,12 @@ private fun PremiumQuickMenuPanel(
     onClose: () -> Unit
 ) {
     val panelWidth = 190.dp
+    val panelHeight = 214.dp
     val panelShape = RoundedCornerShape(20.dp)
 
     // ✅ המלל מקבל את צבע החגורה, אבל בצורה כהה/יוקרתית מספיק לקריאה.
     val textColor = when {
+        accentColor == Belt.GREEN.color -> Color(0xFF16A34A)
         accentColor.luminance() > 0.78f -> Color(0xFF9A6A00) // צהוב/לבן
         accentColor.luminance() > 0.58f -> accentColor.copy(alpha = 0.96f)
         else -> accentColor.copy(alpha = 0.94f)
@@ -656,25 +659,31 @@ private fun PremiumQuickMenuPanel(
         accentColor.copy(alpha = 0.34f)
     }
 
-    val titleAccent = if (accentColor.luminance() > 0.65f) {
-        Color(0xFF64748B)
-    } else {
-        accentColor.copy(alpha = 0.86f)
+    val titleAccent = when {
+        accentColor == Belt.GREEN.color -> Color(0xFF16A34A)
+        accentColor.luminance() > 0.65f -> Color(0xFF64748B)
+        else -> accentColor.copy(alpha = 0.86f)
     }
 
     Surface(
         shape = panelShape,
-        color = Color.White,
+        color = Color.White.copy(alpha = 0.98f),
         tonalElevation = 0.dp,
-        shadowElevation = 18.dp,
+        shadowElevation = 14.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = borderAccent.copy(alpha = 0.58f)
+        ),
         modifier = Modifier
             .requiredWidth(panelWidth)
+            .height(panelHeight)
             .wrapContentWidth(
                 if (isEnglish) Alignment.Start else Alignment.End
             )
     ) {
         Box(
             modifier = Modifier
+                .fillMaxSize()
                 .clip(panelShape)
                 .background(
                     brush = Brush.verticalGradient(
@@ -728,8 +737,8 @@ private fun PremiumQuickMenuPanel(
                                 text = title,
                                 color = titleAccent,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 14.sp,
-                                lineHeight = 16.sp,
+                                fontSize = 13.sp,
+                                lineHeight = 15.sp,
                                 textAlign = TextAlign.Start,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -754,8 +763,8 @@ private fun PremiumQuickMenuPanel(
                                 text = title,
                                 color = titleAccent,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 14.sp,
-                                lineHeight = 16.sp,
+                                fontSize = 13.sp,
+                                lineHeight = 15.sp,
                                 textAlign = TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -868,8 +877,11 @@ private fun PremiumQuickMenuRow(
                     text = text,
                     color = textColor,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                    lineHeight = 14.sp,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp,
+                        letterSpacing = (-0.14).sp
+                    ),
                     textAlign = TextAlign.Start,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -906,8 +918,11 @@ private fun PremiumQuickMenuRow(
                     text = text,
                     color = textColor,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                    lineHeight = 14.sp,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 13.sp,
+                        letterSpacing = (-0.14).sp
+                    ),
                     textAlign = TextAlign.Right,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -931,15 +946,17 @@ private fun PremiumAnimatedLockIcon(
     scale: Float,
     glowAlpha: Float
 ) {
-    Text(
-        text = "🔒",
-        fontSize = 12.sp,
-        lineHeight = 12.sp,
-        modifier = Modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-            alpha = 1f
-        }
+    Icon(
+        imageVector = Icons.Filled.Lock,
+        contentDescription = null,
+        tint = accentColor,
+        modifier = Modifier
+            .size(13.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                alpha = 1f
+            }
     )
 }
 
@@ -952,10 +969,10 @@ private fun PremiumQuickMenuIcon(
         modifier = Modifier
             .size(20.dp)
             .clip(CircleShape)
-            .background(accentColor.copy(alpha = 0.12f))
+            .background(accentColor.copy(alpha = 0.10f))
             .border(
                 width = 1.dp,
-                color = accentColor.copy(alpha = 0.32f),
+                color = accentColor.copy(alpha = 0.24f),
                 shape = CircleShape
             ),
         contentAlignment = Alignment.Center
@@ -964,7 +981,7 @@ private fun PremiumQuickMenuIcon(
             imageVector = icon,
             contentDescription = null,
             tint = accentColor,
-            modifier = Modifier.size(12.dp)
+            modifier = Modifier.size(10.5.dp)
         )
     }
 }

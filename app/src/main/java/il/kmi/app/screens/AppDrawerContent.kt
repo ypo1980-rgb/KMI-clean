@@ -809,27 +809,19 @@ fun AppDrawerContent(
                             )
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(scroll)
-                            .padding(
-                                start = 8.dp,
-                                end = 8.dp,
-                                top = 12.dp,
-                                bottom = 92.dp
-                            ),
-                        horizontalAlignment = Alignment.Start
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        // ←—— כותרת + כפתור X באותה שורה, ממוקמים מעט נמוך מה-status bar ——→
+                        // ←—— כותרת + כפתור X קבועים מעל אזור הגלילה ——→
                         val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 8.dp, end = 8.dp, top = topInset + 12.dp)
-                                .height(48.dp),
+                                .padding(start = 8.dp, end = 8.dp, top = 8.dp)
+                                .height(42.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+
                             Text(
                                 tr("תפריט", "Menu"),
                                 style = MaterialTheme.typography.titleLarge,
@@ -848,7 +840,18 @@ fun AppDrawerContent(
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scroll)
+                                .padding(
+                                    start = 8.dp,
+                                    end = 8.dp,
+                                    top = 0.dp,
+                                    bottom = 24.dp
+                                ),
+                            horizontalAlignment = Alignment.Start
+                        ) {
 
                         //------------------------------------------------------------------------
                         // ===== כפתורי מאמן — ורק למאמן =====
@@ -1547,9 +1550,10 @@ fun AppDrawerContent(
                             textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(Modifier.height(8.dp))
-                } // end Column
-            } // end AnimatedVisibility
+                            Spacer(Modifier.height(8.dp))
+                        } // end scroll Column
+                    } // end fixed header Column
+                } // end AnimatedVisibility
 
                 // ─────────────────────────────────────────────
                 // 📄💳 דיאלוג: טפסים ותשלומים

@@ -34,7 +34,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.BiasAbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -75,6 +74,11 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
 import androidx.compose.ui.draw.clip
@@ -2146,7 +2150,7 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.24f))
+                        .background(Color.Transparent)
                         .clickable { fabExpanded = false }
                 )
             }
@@ -2156,7 +2160,7 @@ fun HomeScreen(
                 modifier = Modifier
                     // ✅ כמו מסך החגורות: התפריט נפתח מהצד, ליד הטאב
                     .align(Alignment.CenterStart)
-                    .padding(start = 42.dp),
+                    .offset(x = 46.dp, y = 88.dp),
                 enter =
                     fadeIn(animationSpec = tween(180)) +
                             scaleIn(
@@ -2182,7 +2186,8 @@ fun HomeScreen(
                 visible = showFab && !fabExpanded,
                 modifier = Modifier
                     // ✅ בדיוק כמו במסך החגורות: צד שמאל פיזי של המסך
-                    .align(Alignment.CenterStart),
+                    .align(Alignment.CenterStart)
+                    .offset(y = 88.dp),
                 enter = fadeIn() + scaleIn(),
                 exit = fadeOut() + scaleOut()
             ) {
@@ -2480,7 +2485,7 @@ fun HomeScreen(
                                                                         imageVector = Icons.Filled.DateRange,
                                                                         contentDescription = null,
                                                                         tint = Color(0xFF64748B),
-                                                                        modifier = Modifier.size(13.dp)
+                                                                        modifier = Modifier.size(12.dp)
                                                                     )
 
                                                                     Text(
@@ -2705,34 +2710,43 @@ private fun HomePremiumQuickMenuPanel(
     items: List<Triple<String, androidx.compose.ui.graphics.vector.ImageVector, () -> Unit>>,
     onClose: () -> Unit
 ) {
-    val panelShape = RoundedCornerShape(22.dp)
+    val panelHeight = 214.dp
+    val panelShape = RoundedCornerShape(20.dp)
 
     Surface(
         shape = panelShape,
-        color = Color.White,
+        color = Color.White.copy(alpha = 0.98f),
         tonalElevation = 0.dp,
-        shadowElevation = 10.dp,
-        modifier = Modifier.width(214.dp)
+        shadowElevation = 14.dp,
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = Color(0xFF16A34A).copy(alpha = 0.58f)
+        ),
+        modifier = Modifier
+            .width(190.dp)
+            .height(panelHeight)
     ) {
         Box(
             modifier = Modifier
+                .fillMaxSize()
+                .clip(panelShape)
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF16A34A).copy(alpha = 0.24f),
-                            Color(0xFFFDFDFE),
-                            Color(0xFFF7FAF8),
-                            Color(0xFF16A34A).copy(alpha = 0.14f)
+                            Color.White.copy(alpha = 0.98f),
+                            Color(0xFFF9FFFB),
+                            Color(0xFF16A34A).copy(alpha = 0.12f),
+                            Color(0xFFFBFFFC),
+                            Color.White.copy(alpha = 0.98f)
                         )
-                    ),
-                    shape = panelShape
+                    )
                 )
                 .border(
                     width = 1.dp,
                     color = Color(0xFF16A34A).copy(alpha = 0.34f),
                     shape = panelShape
                 )
-                .padding(horizontal = 7.dp, vertical = 6.dp)
+                .padding(horizontal = 8.dp, vertical = 8.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -2751,7 +2765,7 @@ private fun HomePremiumQuickMenuPanel(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.titleSmall.copy(
-                                fontSize = 13.2.sp,
+                                fontSize = 13.sp,
                                 lineHeight = 15.sp
                             ),
                             modifier = Modifier.weight(1f)
@@ -2762,7 +2776,7 @@ private fun HomePremiumQuickMenuPanel(
                             contentDescription = "Close",
                             tint = Color(0xFF16A34A),
                             modifier = Modifier
-                                .size(15.dp)
+                                .size(18.dp)
                                 .clickable { onClose() }
                         )
                     } else {
@@ -2774,7 +2788,7 @@ private fun HomePremiumQuickMenuPanel(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.titleSmall.copy(
-                                fontSize = 13.2.sp,
+                                fontSize = 13.sp,
                                 lineHeight = 15.sp
                             ),
                             modifier = Modifier.weight(1f)
@@ -2787,7 +2801,7 @@ private fun HomePremiumQuickMenuPanel(
                             contentDescription = "סגור",
                             tint = Color(0xFF16A34A),
                             modifier = Modifier
-                                .size(15.dp)
+                                .size(18.dp)
                                 .clickable { onClose() }
                         )
                     }
@@ -2825,11 +2839,24 @@ private fun HomePremiumQuickMenuRow(
     val isLocked = text.endsWith(" 🔒")
     val cleanText = if (isLocked) text.removeSuffix(" 🔒") else text
 
+    val lockPulse = rememberInfiniteTransition(label = "homeQuickMenuLockPulse")
+
+    val lockScale by lockPulse.animateFloat(
+        initialValue = 0.90f,
+        targetValue = 1.00f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "homeQuickMenuLockScale"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .padding(horizontal = 4.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isEnglish) {
@@ -2838,13 +2865,13 @@ private fun HomePremiumQuickMenuRow(
 
             Text(
                 text = cleanText,
-                color = Color(0xFF0F172A),
-                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF16A34A).copy(alpha = 0.94f),
+                fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Start,
                 style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 11.4.sp,
+                    fontSize = 11.sp,
                     lineHeight = 13.sp,
-                    letterSpacing = (-0.15).sp
+                    letterSpacing = (-0.14).sp
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -2857,7 +2884,13 @@ private fun HomePremiumQuickMenuRow(
                     imageVector = Icons.Filled.Lock,
                     contentDescription = null,
                     tint = Color(0xFFF59E0B),
-                    modifier = Modifier.size(13.dp)
+                    modifier = Modifier
+                        .size(13.dp)
+                        .graphicsLayer {
+                            scaleX = lockScale
+                            scaleY = lockScale
+                            alpha = 1f
+                        }
                 )
             }
         } else {
@@ -2866,20 +2899,26 @@ private fun HomePremiumQuickMenuRow(
                     imageVector = Icons.Filled.Lock,
                     contentDescription = null,
                     tint = Color(0xFFF59E0B),
-                    modifier = Modifier.size(13.dp)
+                    modifier = Modifier
+                        .size(13.dp)
+                        .graphicsLayer {
+                            scaleX = lockScale
+                            scaleY = lockScale
+                            alpha = 1f
+                        }
                 )
                 Spacer(Modifier.width(5.dp))
             }
 
             Text(
                 text = cleanText,
-                color = Color(0xFF0F172A),
-                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF16A34A).copy(alpha = 0.94f),
+                fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Right,
                 style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.5.sp,
-                    lineHeight = 14.sp,
-                    letterSpacing = (-0.10).sp
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    letterSpacing = (-0.14).sp
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -2898,7 +2937,7 @@ private fun HomePremiumQuickMenuIcon(
 ) {
     Box(
         modifier = Modifier
-            .size(19.dp)
+            .size(20.dp)
             .background(Color(0xFF16A34A).copy(alpha = 0.10f), CircleShape)
             .border(
                 width = 1.dp,

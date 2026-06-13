@@ -90,7 +90,6 @@ import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.LockedContentPolicy
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.domain.ExerciseExplanationResolver
-import il.kmi.app.domain.ExerciseCountProvider
 
 
 /* ------------------------------ Helpers מקומיים למסך ------------------------------ */
@@ -1137,28 +1136,29 @@ private fun PremiumPulsingLockBadge(
     modifier: Modifier = Modifier,
     isDarkTheme: Boolean = false
 ) {
-    val pulse = rememberInfiniteTransition(label = "emojiLockPulse")
+    val pulse = rememberInfiniteTransition(label = "topicLockPulse")
 
     val scale by pulse.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.12f,
+        initialValue = 0.90f,
+        targetValue = 1.00f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 780, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 900, easing = LinearEasing),
             repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
         ),
-        label = "emojiLockScale"
+        label = "topicLockScale"
     )
 
-    Text(
-        text = "🔒",
+    Icon(
+        imageVector = Icons.Filled.Lock,
+        contentDescription = null,
+        tint = Color(0xFFF59E0B),
         modifier = modifier
-            .size(28.dp)
+            .size(20.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            },
-        textAlign = TextAlign.Center,
-        style = MaterialTheme.typography.titleLarge
+                alpha = 1f
+            }
     )
 }
 

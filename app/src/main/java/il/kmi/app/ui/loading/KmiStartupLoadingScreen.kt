@@ -52,6 +52,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import il.kmi.app.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -60,6 +65,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -189,36 +195,22 @@ fun KmiStartupLoadingScreen(
         label = "progressAnimated"
     )
 
-    val accent = Color(0xFF16C47F)
-    val accent2 = Color(0xFF31D6A0)
-    val bgTop = Color(0xFF071019)
-    val bgBottom = Color(0xFF0E1A26)
-    val cardBg = Color(0xAA132231)
-    val textPrimary = Color(0xFFF3F7FA)
-    val textSecondary = Color(0xFFB8C7D3)
+    val accent = Color(0xFF168BFF)
+    val accent2 = Color(0xFF5B35F5)
+    val cardBg = Color.White.copy(alpha = 0.94f)
+    val textPrimary = Color(0xFF172033)
+    val textSecondary = Color(0xFF667085)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(bgTop, bgBottom, Color(0xFF101F2E))
-                )
-            )
+            .background(Color.White)
     ) {
-
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            accent.copy(alpha = 0.16f),
-                            Color.Transparent
-                        ),
-                        radius = 1200f
-                    )
-                )
+        Image(
+            painter = painterResource(id = R.drawable.kmi_startup_loading_bg),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
         )
 
         Column(
@@ -269,7 +261,9 @@ fun KmiStartupLoadingScreen(
                         val scanX = maxWidth * scanOffset
 
                         KmiLoopingStartupVideo(
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .scale(1.34f)
                         )
 
                         Box(
@@ -300,23 +294,11 @@ fun KmiStartupLoadingScreen(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = textPrimary,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier.offset(y = (-18).dp)
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text(
-                text = if (isEnglish) {
-                    "Initializing premium training environment"
-                } else {
-                    "מאתחל סביבת אימון מתקדמת"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = textSecondary,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(134.dp))
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -328,7 +310,7 @@ fun KmiStartupLoadingScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -354,87 +336,105 @@ fun KmiStartupLoadingScreen(
 
                             Text(
                                 text = if (isEnglish) currentStage.titleEn else currentStage.titleHe,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = textPrimary
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = textPrimary,
+                                maxLines = 1
                             )
                         }
 
                         Text(
                             text = "${(progressAnimated * 100).toInt()}%",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = accent2
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF123C7C),
+                            modifier = Modifier.offset(y = (-14).dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Box(
                         modifier = Modifier
+                            .offset(y = (-6).dp)
                             .fillMaxWidth()
                             .height(8.dp)
-                            .background(Color.White.copy(alpha = 0.10f))
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color(0xFFE5E7EB))
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(progressAnimated.coerceIn(0f, 1f))
                                 .fillMaxHeight()
+                                .clip(RoundedCornerShape(999.dp))
                                 .background(Color(0xFF0FA36B))
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                    LoadingChecklist(
-                        stages = stages,
-                        activeIndex = currentStageIndex,
-                        completedStagesInCycle = completedStagesInCycle,
-                        isEnglish = isEnglish,
-                        textPrimary = textPrimary,
-                        textSecondary = textSecondary,
-                        accent = accent
-                    )
+                    Box(
+                        modifier = Modifier.offset(y = (0).dp)
+                    ) {
+                        LoadingChecklist(
+                            stages = stages,
+                            activeIndex = currentStageIndex,
+                            completedStagesInCycle = completedStagesInCycle,
+                            isEnglish = isEnglish,
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary,
+                            accent = accent
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(34.dp)
+                    ) {
+                        TextButton(
+                            onClick = onFinished,
+                            modifier = Modifier
+                                .align(
+                                    if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
+                                )
+                                .offset(x = (12).dp),
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color(0xFF123C7C)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                text = if (isEnglish) "Skip" else "דלג",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Text(
+                            text = if (isEnglish) {
+                                "Please wait..."
+                            } else {
+                                "אנא המתן..."
+                            },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp
+                            ),
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF123C7C),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .fillMaxWidth()
+                                .padding(horizontal = 72.dp)
+                        )
+                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = if (isEnglish) {
-                    "Please wait a few seconds..."
-                } else {
-                    "אנא המתן מספר שניות..."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = textSecondary,
-                textAlign = TextAlign.Center
-            )
-        }
-
-        TextButton(
-            onClick = onFinished,
-            modifier = Modifier
-                .align(
-                    if (isEnglish)
-                        androidx.compose.ui.BiasAbsoluteAlignment(1f, 1f)   // ימין מוחלט
-                    else
-                        androidx.compose.ui.BiasAbsoluteAlignment(-1f, 1f)  // שמאל מוחלט
-                )
-                .padding(
-                    start = 20.dp,
-                    end = 20.dp,
-                    bottom = 56.dp
-                ),
-            colors = ButtonDefaults.textButtonColors(
-                contentColor = accent
-            )
-        ) {
-            Text(
-                text = if (isEnglish) "Skip" else "דלג",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
         }
     }
 }
@@ -543,9 +543,10 @@ private fun LoadingChecklist(
 
                 Text(
                     text = if (isEnglish) stage.titleEn else stage.titleHe,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (active || done) textPrimary else textSecondary
+                    color = if (active || done) textPrimary else textSecondary,
+                    maxLines = 1
                 )
             }
         }

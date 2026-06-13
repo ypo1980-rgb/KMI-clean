@@ -208,25 +208,25 @@ fun KmiTopBar(
     val resolvedTopBeltIconRes = remember(title, topBeltIconRes) {
         topBeltIconRes ?: when {
             title.contains("לבנה") || title.contains("White", ignoreCase = true) ->
-                R.drawable.belt_white
+                R.drawable.intro_belt_white
 
             title.contains("צהובה") || title.contains("Yellow", ignoreCase = true) ->
-                R.drawable.belt_yellow
+                R.drawable.intro_belt_yellow
 
             title.contains("כתומה") || title.contains("Orange", ignoreCase = true) ->
-                R.drawable.belt_orange
+                R.drawable.intro_belt_orange
 
             title.contains("ירוקה") || title.contains("Green", ignoreCase = true) ->
-                R.drawable.belt_green
+                R.drawable.intro_belt_green
 
             title.contains("כחולה") || title.contains("Blue", ignoreCase = true) ->
-                R.drawable.belt_blue
+                R.drawable.intro_belt_blue
 
             title.contains("חומה") || title.contains("Brown", ignoreCase = true) ->
-                R.drawable.belt_brown
+                R.drawable.intro_belt_brown
 
             title.contains("שחורה") || title.contains("Black", ignoreCase = true) ->
-                R.drawable.belt_black
+                R.drawable.intro_belt_black
 
             else -> null
         }
@@ -665,9 +665,10 @@ fun KmiTopBar(
                     painter = painterResource(id = resolvedTopBeltIconRes),
                     contentDescription = topBeltIconDescription ?: title,
                     modifier = Modifier
-                        .size(50.dp)
+                        .width(82.dp)
+                        .height(38.dp)
                         .graphicsLayer {
-                            rotationZ = -18f
+                            rotationZ = -6f
                         }
                 )
             }
@@ -1948,11 +1949,22 @@ private fun IconsRailAttachedHandle(
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
+            }
+            .clip(
+                RoundedCornerShape(
+                    topStart = 0.dp,
+                    topEnd = 0.dp,
+                    bottomStart = 18.dp,
+                    bottomEnd = 18.dp
+                )
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                pressed = true
+                onToggle()
             },
-        onClick = {
-            pressed = true
-            onToggle()
-        },
         shape = RoundedCornerShape(
             topStart = 0.dp,
             topEnd = 0.dp,

@@ -975,10 +975,15 @@ private fun UserProfileCard(
                             text = info.belt,
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                lineHeight = 16.sp,
                                 color = Color(0xFF31528A)
                             ),
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Left
+                            textAlign = TextAlign.Right,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip
                         )
                     }
                 }
@@ -1023,7 +1028,7 @@ private fun UserProfileCard(
 
                     Box(
                         modifier = Modifier
-                            .width(118.dp)
+                            .width(104.dp)
                             .height(82.dp),
                         contentAlignment = Alignment.TopCenter
                     ) {

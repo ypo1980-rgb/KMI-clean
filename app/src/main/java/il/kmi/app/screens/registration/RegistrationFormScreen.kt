@@ -435,10 +435,22 @@ fun RegistrationFormScreen(
         }
     }
 
-    val profileAllowsCoach = remember(startAtProfile, profileCoachAuthorized, profileSavedRole) {
+    val profileAllowsCoach = remember(
+        startAtProfile,
+        profileCoachAuthorized,
+        profileSavedRole,
+        isWhitelistedCoach,
+        isSuperTester
+    ) {
         startAtProfile &&
-                profileCoachAuthorized &&
-                profileSavedRole.equals("coach", ignoreCase = true)
+                (
+                        (
+                                profileCoachAuthorized &&
+                                        profileSavedRole.equals("coach", ignoreCase = true)
+                                ) ||
+                                isWhitelistedCoach ||
+                                isSuperTester
+                        )
     }
 
     // ✅ חדש: ADMIN (Firestore: admins/{uid}.enabled)
@@ -848,7 +860,7 @@ fun RegistrationFormScreen(
         // בעריכת פרופיל אסור להפוך למאמן דרך הטופס.
         // מאמן נשאר מאמן רק אם כבר יש coach_authorized=true מהתחברות מול authorizedCoaches.
         val roleFinal = if (startAtProfile) {
-            if (profileAllowsCoach) "coach" else "trainee"
+            if (isCoach && profileAllowsCoach) "coach" else "trainee"
         } else if (isAdmin || isSuperTester) {
             if (isCoach) "coach" else "trainee"
         } else {
@@ -856,12 +868,29 @@ fun RegistrationFormScreen(
         }
 
         val roleLockedBy = when {
-            startAtProfile && roleFinal == "coach" -> "profile_edit_server_authorized_coach"
-            startAtProfile -> "profile_edit_forced_trainee"
-            isAdmin -> "admin"
-            isSuperTester -> "super_tester"
-            isWhitelistedCoach -> "coach_whitelist"
-            else -> "trainee_default"
+            startAtProfile && roleFinal == "coach" && profileCoachAuthorized ->
+                "profile_edit_server_authorized_coach"
+
+            startAtProfile && roleFinal == "coach" && isSuperTester ->
+                "profile_edit_super_tester"
+
+            startAtProfile && roleFinal == "coach" && isWhitelistedCoach ->
+                "profile_edit_coach_whitelist"
+
+            startAtProfile ->
+                "profile_edit_forced_trainee"
+
+            isAdmin ->
+                "admin"
+
+            isSuperTester ->
+                "super_tester"
+
+            isWhitelistedCoach ->
+                "coach_whitelist"
+
+            else ->
+                "trainee_default"
         }
 
         // ✅ מקור אמת לטלפון: ספרות בלבד.

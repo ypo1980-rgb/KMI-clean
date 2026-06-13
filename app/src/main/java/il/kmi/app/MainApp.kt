@@ -537,7 +537,23 @@ fun MainApp(
                                                     .signOut()
                                             }
 
-                                            spUser.edit().clear().apply()
+                                            // ✅ לא עושים clear מלא.
+                                            // clear() מוחק גם שפה, שם, חגורה ופרטי פרופיל,
+                                            // ואז האפליקציה מתנהגת כאילו זו כניסה ראשונה.
+                                            spUser.edit()
+                                                .remove("uid")
+                                                .remove("user_uid")
+                                                .remove("firebase_uid")
+                                                .remove("auth_uid")
+                                                .remove("isLoggedIn")
+                                                .remove("logged_in")
+                                                .remove("login_token")
+                                                .remove("session_token")
+                                                .remove("google_id_token")
+                                                .remove("id_token")
+                                                .remove("access_token")
+                                                .remove("refresh_token")
+                                                .apply()
 
                                             ctxInner.getSharedPreferences(
                                                 "kmi_settings",

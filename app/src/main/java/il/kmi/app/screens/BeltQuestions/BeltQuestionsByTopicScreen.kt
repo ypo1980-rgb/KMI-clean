@@ -3,6 +3,7 @@ package il.kmi.app.screens.BeltQuestions
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -60,6 +61,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.ui.graphics.vector.ImageVector
 import il.kmi.app.domain.color
 import il.kmi.app.subscription.KmiAccess
@@ -227,6 +229,36 @@ private fun withLockSuffix(text: String, locked: Boolean): String {
 
 private fun stripLockSuffix(text: String): String {
     return text.removeSuffix(" 🔒").trim()
+}
+
+@Composable
+private fun PremiumTopicLockIcon(
+    modifier: Modifier = Modifier
+) {
+    val pulse = rememberInfiniteTransition(label = "subjectTopicLockPulse")
+
+    val scale by pulse.animateFloat(
+        initialValue = 0.90f,
+        targetValue = 1.00f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "subjectTopicLockScale"
+    )
+
+    Icon(
+        imageVector = Icons.Filled.Lock,
+        contentDescription = null,
+        tint = Color(0xFFF59E0B),
+        modifier = modifier
+            .size(20.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                alpha = 1f
+            }
+    )
 }
 
 private fun normalizeFavoriteId(raw: String): String =
@@ -707,6 +739,8 @@ private fun SubjectRootCardPremium(
         Color(0xFF64748B)
     }
     val countColor = accent.copy(alpha = 1f)
+    val isTitleLocked = title.endsWith(" 🔒")
+    val displayTitle = stripLockSuffix(title)
 
     @Composable
     fun SubjectVisual() {
@@ -795,15 +829,27 @@ private fun SubjectRootCardPremium(
                         modifier = Modifier.weight(1f),
                         horizontalAlignment = Alignment.Start
                     ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            textAlign = TextAlign.Start,
-                            color = titleColor,
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 2
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start
+                        ) {
+                            Text(
+                                text = displayTitle,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                textAlign = TextAlign.Start,
+                                color = titleColor,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            if (isTitleLocked) {
+                                Spacer(modifier = Modifier.width(5.dp))
+                                PremiumTopicLockIcon()
+                            }
+                        }
 
                         if (subtitle.isNotBlank()) {
                             Spacer(modifier = Modifier.height(2.dp))
@@ -835,18 +881,32 @@ private fun SubjectRootCardPremium(
                         )
                     }
                 } else {
+                    Box(
+                        modifier = Modifier.width(28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isTitleLocked) {
+                            PremiumTopicLockIcon(
+                                modifier = Modifier.offset(x = 20.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
                     Column(
                         modifier = Modifier.weight(1f),
                         horizontalAlignment = Alignment.End
                     ) {
                         Text(
-                            text = title,
+                            text = displayTitle,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.ExtraBold,
                             textAlign = TextAlign.Right,
                             color = titleColor,
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 2
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
 
                         if (subtitle.isNotBlank()) {
