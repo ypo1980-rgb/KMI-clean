@@ -357,6 +357,29 @@ class AttendanceRepository private constructor(
     }
 
     /**
+     * ביטול סימון נוכחות למתאמן.
+     * מוחק את הרשומה של אותו מתאמן מהשיעור הנוכחי.
+     */
+    suspend fun clearMark(
+        sessionId: Long,
+        memberId: Long
+    ) {
+        val path = sessionPathById[sessionId]
+            ?: error("Missing Firestore session path for sessionId=$sessionId. ensureSession() must run before clearMark().")
+
+        val (groupDocId, sessionDocId) = path
+
+        firestore.collection("attendanceGroups")
+            .document(groupDocId)
+            .collection("sessions")
+            .document(sessionDocId)
+            .collection("records")
+            .document(memberId.toString())
+            .delete()
+            .await()
+    }
+
+    /**
      * סטטיסטיקות נוכחות לפי טווח תאריכים.
      * מחשוב מתוך Firestore.
      */

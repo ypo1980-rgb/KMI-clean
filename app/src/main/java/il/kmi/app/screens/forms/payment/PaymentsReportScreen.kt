@@ -591,9 +591,11 @@ fun PaymentsReportScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF0E1630),
-                            Color(0xFF1F2A52),
-                            Color(0xFF2575BC)
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
                         )
                     )
                 )
@@ -609,8 +611,8 @@ fun PaymentsReportScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(30.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2B4273)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF2FF)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -636,7 +638,7 @@ fun PaymentsReportScreen(
                                         fontSize = 17.sp,
                                         lineHeight = 21.sp
                                     ),
-                                    color = Color.White,
+                                    color = Color(0xFF1E2A3D),
                                     fontWeight = FontWeight.ExtraBold,
                                     textAlign = screenTextAlign,
                                     modifier = Modifier.fillMaxWidth(),
@@ -653,7 +655,7 @@ fun PaymentsReportScreen(
                                         fontSize = 13.sp,
                                         lineHeight = 17.sp
                                     ),
-                                    color = Color.White.copy(alpha = 0.76f),
+                                    color = Color(0xFF5E6C80),
                                     textAlign = screenTextAlign,
                                     modifier = Modifier.fillMaxWidth(),
                                     maxLines = 1
@@ -669,7 +671,7 @@ fun PaymentsReportScreen(
                                         fontSize = 13.sp,
                                         lineHeight = 17.sp
                                     ),
-                                    color = Color.White,
+                                    color = Color(0xFF0F5E9C),
                                     fontWeight = FontWeight.Bold,
                                     textAlign = screenTextAlign,
                                     modifier = Modifier.fillMaxWidth(),
@@ -755,7 +757,7 @@ fun PaymentsReportScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF243A67))
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF2FF))
                 ) {
                     Column(
                         modifier = Modifier
@@ -765,7 +767,7 @@ fun PaymentsReportScreen(
                     ) {
                         Text(
                             text = if (isEnglish) "Search & filters" else "חיפוש וסינון",
-                            color = Color.White,
+                            color = Color(0xFF1E2A3D),
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontSize = 15.sp,
                                 lineHeight = 18.sp
@@ -810,7 +812,8 @@ fun PaymentsReportScreen(
                             textStyle = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 13.sp,
                                 lineHeight = 16.sp,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                color = Color(0xFF1E2A3D)
                             ),
                             colors = reportFieldColors()
                         )
@@ -826,7 +829,7 @@ fun PaymentsReportScreen(
                                 "Results: ${filteredItems.size}"
                             else
                                 "תוצאות: ${filteredItems.size}",
-                            color = Color.White.copy(alpha = 0.80f),
+                            color = Color(0xFF5E6C80),
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 12.sp,
                                 lineHeight = 15.sp
@@ -1125,7 +1128,8 @@ private fun BranchDropdown(
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                 },
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
-                    textAlign = dropdownTextAlign
+                    textAlign = dropdownTextAlign,
+                    color = Color(0xFF1E2A3D)
                 ),
                 colors = reportFieldColors()
             )
@@ -1165,8 +1169,12 @@ private fun FilterChipSimple(
         onClick = onClick,
         modifier = modifier.height(50.dp),
         shape = RoundedCornerShape(20.dp),
-        color = if (selected) Color(0xFF7B57D1) else Color.White.copy(alpha = 0.10f),
-        tonalElevation = if (selected) 5.dp else 0.dp
+        color = if (selected) Color(0xFF7B57D1) else Color.White,
+        tonalElevation = if (selected) 5.dp else 2.dp,
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = if (selected) Color(0xFF7B57D1) else Color(0xFFD8E3F5)
+        )
     ) {
         Box(
             modifier = Modifier
@@ -1176,7 +1184,7 @@ private fun FilterChipSimple(
         ) {
             Text(
                 text = text,
-                color = Color.White,
+                color = if (selected) Color.White else Color(0xFF1E2A3D),
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontSize = 11.sp,
                     lineHeight = 13.sp
@@ -1516,17 +1524,31 @@ private fun ManualPaymentDialog(
 
 @Composable
 private fun reportFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = Color(0xFF24365E),
-    unfocusedContainerColor = Color(0xFF24365E),
-    disabledContainerColor = Color(0xFF24365E),
-    focusedBorderColor = Color(0xFF5E7CE2),
-    unfocusedBorderColor = Color(0xFF3A4A7A),
-    disabledBorderColor = Color(0xFF2A355A),
-    focusedTextColor = Color.White,
-    unfocusedTextColor = Color.White,
-    focusedLabelColor = Color.White.copy(alpha = 0.82f),
-    unfocusedLabelColor = Color.White.copy(alpha = 0.62f),
-    cursorColor = Color.White
+    focusedContainerColor = Color.White,
+    unfocusedContainerColor = Color.White,
+    disabledContainerColor = Color.White,
+
+    focusedBorderColor = Color(0xFFBFD0E8),
+    unfocusedBorderColor = Color(0xFFD8E3F5),
+    disabledBorderColor = Color(0xFFD8E3F5),
+
+    focusedTextColor = Color(0xFF1E2A3D),
+    unfocusedTextColor = Color(0xFF1E2A3D),
+    disabledTextColor = Color(0xFF1E2A3D),
+
+    focusedLabelColor = Color(0xFF5E6C80),
+    unfocusedLabelColor = Color(0xFF5E6C80),
+    disabledLabelColor = Color(0xFF5E6C80),
+
+    focusedLeadingIconColor = Color(0xFF6B778B),
+    unfocusedLeadingIconColor = Color(0xFF6B778B),
+    disabledLeadingIconColor = Color(0xFF6B778B),
+
+    focusedTrailingIconColor = Color(0xFF6B778B),
+    unfocusedTrailingIconColor = Color(0xFF6B778B),
+    disabledTrailingIconColor = Color(0xFF6B778B),
+
+    cursorColor = Color(0xFF1E2A3D)
 )
 
 private fun statusLabel(

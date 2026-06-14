@@ -317,6 +317,19 @@ fun KmiTopBar(
     var globalSearchQuery by rememberSaveable { mutableStateOf("") }
     var globalSearchInputEnabled by rememberSaveable { mutableStateOf(true) }
 
+// ✅ דיאלוג הסבר גלובלי חדש לתוצאות חיפוש
+    var showPremiumExerciseDialog by rememberSaveable { mutableStateOf(false) }
+    var premiumExerciseTitle by rememberSaveable { mutableStateOf("") }
+    var premiumExerciseBeltName by rememberSaveable { mutableStateOf("") }
+    var premiumExerciseExplanation by rememberSaveable { mutableStateOf("") }
+    var premiumExerciseStableKey by rememberSaveable { mutableStateOf("") }
+
+    // ✅ פעולות בדיאלוג החדש: מועדפים + הערות משתמש
+    var premiumExerciseIsFavorite by rememberSaveable { mutableStateOf(false) }
+    var showPremiumEditDialog by rememberSaveable { mutableStateOf(false) }
+    var premiumExerciseEditText by rememberSaveable { mutableStateOf("") }
+    var premiumExerciseUserNote by rememberSaveable { mutableStateOf("") }
+    var premiumExerciseUserNoteTitle by rememberSaveable { mutableStateOf("") }
     val broadcastTooLong by remember(broadcastText) {
         derivedStateOf { broadcastText.length > MAX_BROADCAST_CHARS }
     }
@@ -1053,6 +1066,18 @@ fun KmiTopBar(
                     .trim()
             }
 
+            fun beltLabelForDialog(belt: il.kmi.shared.domain.Belt): String {
+                return when (belt) {
+                    il.kmi.shared.domain.Belt.YELLOW -> if (isEnglish) "Yellow belt" else "חגורה צהובה"
+                    il.kmi.shared.domain.Belt.ORANGE -> if (isEnglish) "Orange belt" else "חגורה כתומה"
+                    il.kmi.shared.domain.Belt.GREEN -> if (isEnglish) "Green belt" else "חגורה ירוקה"
+                    il.kmi.shared.domain.Belt.BLUE -> if (isEnglish) "Blue belt" else "חגורה כחולה"
+                    il.kmi.shared.domain.Belt.BROWN -> if (isEnglish) "Brown belt" else "חגורה חומה"
+                    il.kmi.shared.domain.Belt.BLACK -> if (isEnglish) "Black belt" else "חגורה שחורה"
+                    else -> ""
+                }
+            }
+
             fun beltLabelForSearch(beltName: String): String {
                 return when (beltName.uppercase()) {
                     "YELLOW" -> if (isEnglish) "Yellow belt" else "חגורה צהובה"
@@ -1481,6 +1506,7 @@ fun KmiTopBar(
                                         key = { hit -> hit.id ?: hit.title }
                                     ) { hit ->
                                         val rawKey = (hit.id ?: hit.title).trim()
+                                        val cleanTitle = hit.title.trim()
 
                                         Surface(
                                             modifier = Modifier
@@ -1489,17 +1515,34 @@ fun KmiTopBar(
                                                     val resolved =
                                                         il.kmi.app.domain.ContentRepo.resolveItemKey(rawKey)
 
+                                                    val auditRow = explanationSearchRows.firstOrNull { row ->
+                                                        row.exerciseId == rawKey || row.title == cleanTitle
+                                                    }
+
+                                                    val dialogBelt =
+                                                        resolved?.belt
+                                                            ?: auditRow?.belt
+                                                            ?: il.kmi.shared.domain.Belt.GREEN
+
+                                                    val dialogTitle =
+                                                        resolved?.itemTitle
+                                                            ?: auditRow?.title
+                                                            ?: cleanTitle.ifBlank { rawKey }
+
+                                                    val explanation = il.kmi.app.domain.Explanations.get(
+                                                        belt = dialogBelt,
+                                                        item = dialogTitle,
+                                                        exerciseId = auditRow?.exerciseId
+                                                    )
+
                                                     val stableKey = if (resolved != null) {
-                                                        // שולחים מפתח פשוט ויציב להסבר:
-                                                        // belt::topic::item
-                                                        // לא מכניסים כאן subTopic, כי חלק מהמסכים מפרשים רק 3 חלקים.
                                                         listOf(
                                                             resolved.belt.id,
                                                             resolved.topicTitle,
                                                             resolved.itemTitle
                                                         ).joinToString("::")
                                                     } else {
-                                                        rawKey
+                                                        rawKey.ifBlank { dialogTitle }
                                                     }
 
                                                     keyboardController?.hide()
@@ -1507,9 +1550,42 @@ fun KmiTopBar(
 
                                                     showGlobalSearch = false
                                                     globalSearchQuery = ""
-                                                    onPickSearchResult?.invoke(stableKey)
-                                                        ?: onOpenExercise?.invoke(stableKey)
-                                                },
+
+                                                    val keyForPrefs = stableKey.ifBlank { dialogTitle }
+
+                                                    val editedExplanation = ctx
+                                                        .getSharedPreferences("kmi_explanation_overrides", Context.MODE_PRIVATE)
+                                                        .getString(keyForPrefs, null)
+                                                        ?.trim()
+                                                        .orEmpty()
+
+                                                    val favoritesSet = ctx
+                                                        .getSharedPreferences("kmi_global_favorites", Context.MODE_PRIVATE)
+                                                        .getStringSet("favorite_exercises", emptySet())
+                                                        ?: emptySet()
+
+                                                    val noteRoleKey = if (userIsCoach) "coach" else "trainee"
+                                                    val notePrefsKey = "$keyForPrefs::$noteRoleKey"
+
+                                                    val savedUserNote = ctx
+                                                        .getSharedPreferences("kmi_exercise_user_notes", Context.MODE_PRIVATE)
+                                                        .getString(notePrefsKey, "")
+                                                        ?.trim()
+                                                        .orEmpty()
+
+                                                    premiumExerciseTitle = dialogTitle
+                                                    premiumExerciseBeltName = beltLabelForDialog(dialogBelt)
+                                                    premiumExerciseExplanation = editedExplanation.ifBlank { explanation }
+                                                    premiumExerciseStableKey = keyForPrefs
+                                                    premiumExerciseIsFavorite = favoritesSet.contains(keyForPrefs)
+                                                    premiumExerciseUserNote = savedUserNote
+                                                    premiumExerciseUserNoteTitle = if (userIsCoach) {
+                                                        if (isEnglish) "Coach notes" else "הערות המאמן"
+                                                    } else {
+                                                        if (isEnglish) "Trainee notes" else "הערות המתאמן"
+                                                    }
+                                                    showPremiumExerciseDialog = true
+                                                           },
                                             shape = RoundedCornerShape(22.dp),
                                             color = Color.White,
                                             tonalElevation = 0.dp,
@@ -1559,6 +1635,149 @@ fun KmiTopBar(
                 }
             }
         }
+    }
+
+    if (showPremiumExerciseDialog) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = {
+                showPremiumExerciseDialog = false
+            }
+        ) {
+            ExercisePremiumSearchDialog(
+                title = premiumExerciseTitle,
+                beltName = premiumExerciseBeltName,
+                explanation = premiumExerciseExplanation,
+                isEnglish = isEnglish,
+                onDismiss = {
+                    showPremiumExerciseDialog = false
+                },
+                showFavoriteIcon = true,
+                showEditIcon = true,
+                isFavorite = premiumExerciseIsFavorite,
+                userNoteTitle = premiumExerciseUserNoteTitle,
+                userNote = premiumExerciseUserNote,
+                onFavoriteClick = {
+                    val keyToSave = premiumExerciseStableKey.ifBlank {
+                        premiumExerciseTitle
+                    }
+
+                    val favoritesPrefs = ctx.getSharedPreferences(
+                        "kmi_global_favorites",
+                        Context.MODE_PRIVATE
+                    )
+
+                    val currentFavorites = favoritesPrefs
+                        .getStringSet("favorite_exercises", emptySet())
+                        ?.toMutableSet()
+                        ?: mutableSetOf()
+
+                    val nowFavorite = if (currentFavorites.contains(keyToSave)) {
+                        currentFavorites.remove(keyToSave)
+                        false
+                    } else {
+                        currentFavorites.add(keyToSave)
+                        true
+                    }
+
+                    favoritesPrefs.edit()
+                        .putStringSet("favorite_exercises", currentFavorites)
+                        .apply()
+
+                    premiumExerciseIsFavorite = nowFavorite
+
+                    android.widget.Toast.makeText(
+                        ctx,
+                        if (nowFavorite) {
+                            if (isEnglish) "Added to favorites" else "התרגיל נוסף למועדפים"
+                        } else {
+                            if (isEnglish) "Removed from favorites" else "התרגיל הוסר מהמועדפים"
+                        },
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                },
+                onEditClick = {
+                    premiumExerciseEditText = ""
+                    showPremiumEditDialog = true
+                },
+                onUserNoteEditClick = {
+                    premiumExerciseEditText = premiumExerciseUserNote
+                    showPremiumEditDialog = true
+                },
+                onUserNoteDeleteClick = {
+                    val keyToSave = premiumExerciseStableKey.ifBlank {
+                        premiumExerciseTitle
+                    }
+
+                    val noteRoleKey = if (userIsCoach) "coach" else "trainee"
+                    val notePrefsKey = "$keyToSave::$noteRoleKey"
+
+                    ctx.getSharedPreferences(
+                        "kmi_exercise_user_notes",
+                        Context.MODE_PRIVATE
+                    ).edit()
+                        .remove(notePrefsKey)
+                        .apply()
+
+                    premiumExerciseUserNote = ""
+
+                    android.widget.Toast.makeText(
+                        ctx,
+                        if (isEnglish) "Note deleted" else "ההערה נמחקה",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            )
+        }
+    }
+
+    if (showPremiumEditDialog) {
+        ExercisePremiumNoteEditorDialog(
+            noteTitle = premiumExerciseUserNoteTitle.ifBlank {
+                if (userIsCoach) {
+                    if (isEnglish) "Coach notes" else "הערות המאמן"
+                } else {
+                    if (isEnglish) "Trainee notes" else "הערות המתאמן"
+                }
+            },
+            noteText = premiumExerciseEditText,
+            beltName = premiumExerciseBeltName,
+            isEnglish = isEnglish,
+            onNoteChange = { premiumExerciseEditText = it },
+            onDismiss = {
+                showPremiumEditDialog = false
+            },
+            onSave = {
+                val keyToSave = premiumExerciseStableKey.ifBlank {
+                    premiumExerciseTitle
+                }
+
+                val noteRoleKey = if (userIsCoach) "coach" else "trainee"
+                val notePrefsKey = "$keyToSave::$noteRoleKey"
+                val cleanText = premiumExerciseEditText.trim()
+
+                ctx.getSharedPreferences(
+                    "kmi_exercise_user_notes",
+                    Context.MODE_PRIVATE
+                ).edit()
+                    .putString(notePrefsKey, cleanText)
+                    .apply()
+
+                premiumExerciseUserNote = cleanText
+                premiumExerciseUserNoteTitle = if (userIsCoach) {
+                    if (isEnglish) "Coach notes" else "הערות המאמן"
+                } else {
+                    if (isEnglish) "Trainee notes" else "הערות המתאמן"
+                }
+
+                showPremiumEditDialog = false
+
+                android.widget.Toast.makeText(
+                    ctx,
+                    if (isEnglish) "Note saved" else "ההערה נשמרה",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        )
     }
 
     // === יריעת שידור מאמן ===

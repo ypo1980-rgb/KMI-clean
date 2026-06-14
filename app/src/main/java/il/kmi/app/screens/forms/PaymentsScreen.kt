@@ -29,6 +29,8 @@ import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -54,6 +56,16 @@ fun PaymentsScreen(
     val membershipTitle = if (isEnglish) "Association Membership Fee" else "דמי חבר לעמותה"
     val screenTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
 
+    val backgroundBrush = Brush.verticalGradient(
+        colors = listOf(
+            Color(0xFFF8FBFF),
+            Color(0xFFEAF4FF),
+            Color(0xFFB7DDF7),
+            Color(0xFF1F78B4),
+            Color(0xFF062B4A)
+        )
+    )
+
     val items = listOf(
         PaymentMenuItemUi(
             title = membershipTitle,
@@ -68,7 +80,7 @@ fun PaymentsScreen(
     )
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             KmiTopBar(
                 title = title,
@@ -80,40 +92,45 @@ fun PaymentsScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(innerPadding)
+                .background(backgroundBrush)
         ) {
-            item {
-                PaymentHeaderCard(
-                    isEnglish = isEnglish,
-                    textAlign = screenTextAlign
-                )
-            }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                item {
+                    PaymentHeaderCard(
+                        isEnglish = isEnglish,
+                        textAlign = screenTextAlign
+                    )
+                }
 
-            item {
-                MembershipStatusCard(
-                    title = if (isEnglish) "Membership Status" else "סטטוס חברות",
-                    status = membershipStatus ?: if (isEnglish) "Not paid yet" else "טרם שולם",
-                    isEnglish = isEnglish
-                )
-            }
+                item {
+                    MembershipStatusCard(
+                        title = if (isEnglish) "Membership Status" else "סטטוס חברות",
+                        status = membershipStatus ?: if (isEnglish) "Not paid yet" else "טרם שולם",
+                        isEnglish = isEnglish
+                    )
+                }
 
-            item {
-                HorizontalDivider()
-            }
+                item {
+                    HorizontalDivider()
+                }
 
-            items(items) { item ->
-                PaymentRow(
-                    title = item.title,
-                    subtitle = item.subtitle,
-                    enabled = item.enabled,
-                    isEnglish = isEnglish,
-                    onClick = item.onClick
-                )
+                items(items) { item ->
+                    PaymentRow(
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        enabled = item.enabled,
+                        isEnglish = isEnglish,
+                        onClick = item.onClick
+                    )
+                }
             }
         }
     }

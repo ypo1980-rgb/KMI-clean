@@ -207,11 +207,9 @@ fun ExercisesTabsScreen(
         emptyList()
     }
 
-    // === KMI_SEARCH_INJECT: STATE — MUST BE ABOVE Scaffold ===
-    var showSearch by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
+    // הסברי תרגילים מתוך הרשימה נשארים מקומיים.
+    // החיפוש הגלובלי עצמו מטופל עכשיו פנימית דרך KmiTopBar + ExercisePremiumSearchDialog.
     var explainFromSearch by remember { mutableStateOf<String?>(null) }
-    var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }   // ← תרגיל שנבחר מחיפוש כללי
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
     var noteDraft by rememberSaveable { mutableStateOf("") }
     var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
@@ -223,13 +221,7 @@ fun ExercisesTabsScreen(
         .replace(Regex("[\u0591-\u05C7]"), "")
         .trim().lowercase()
 
-    val searchResults by remember(searchQuery, itemList) {
-        val q = searchQuery.norm()
-        mutableStateOf(
-            if (q.isBlank()) emptyList()
-            else itemList.filter { it.norm().contains(q) }
-        )
-    }
+    // אין יותר searchResults מקומי — החיפוש הגלובלי נמצא ב-KmiTopBar
 
     // מזהה תרגיל "אחיד" – בלי prefix של נושא וכו'
     fun normalizeItemId(raw: String): String =
@@ -503,9 +495,9 @@ fun ExercisesTabsScreen(
                 onHome = onHome,                      // חזרה לבית שעובד ✅
                 centerTitle = true,
                 showTopHome = false,
-                lockSearch = false,                  // חיפוש פעיל ✅
-                onPickSearchResult = { key -> pickedKey = key }, // חיבור חיפוש מדויק
-                extraActions = { },                  // אם אין אקשנים נוספים
+                lockSearch = false,
+                // החיפוש הגלובלי נפתח ומטופל פנימית בתוך KmiTopBar
+                extraActions = { },
                 currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
                 onToggleLanguage = {
                     val newLang =
@@ -599,71 +591,6 @@ fun ExercisesTabsScreen(
             }
         }
     ) { padding ->
-
-        // פונקציות עזר להסבר דרך החיפוש הכללי
-        fun parseSearchKey(key: String): Triple<Belt, String, String> {
-            fun dec(s: String): String =
-                runCatching { java.net.URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
-
-            val parts0 = when {
-                '|' in key  -> key.split('|', limit = 3)
-                "::" in key -> key.split("::", limit = 3)
-                '/' in key  -> key.split('/', limit = 3)
-                else        -> listOf("", "", "")
-            }
-            val parts = (parts0 + listOf("", "", "")).take(3)
-            val beltFromKey  = Belt.fromId(parts[0]) ?: belt
-            val topicFromKey = dec(parts[1])
-            val itemFromKey  = dec(parts[2])
-            return Triple(beltFromKey, topicFromKey, itemFromKey)
-        }
-
-        fun findExplanationForHit(
-            beltHit: Belt,
-            rawItem: String,
-            topicHit: String
-        ): String {
-            val display = ExerciseTitleFormatter
-                .displayName(rawItem)
-                .ifBlank { rawItem }
-                .trim()
-
-            val resolved = ExerciseExplanationResolver.get(
-                belt = beltHit,
-                topic = topicHit,
-                item = display,
-                isEnglish = isEnglish
-            ).trim()
-
-            val cleaned = if ("::" in resolved) {
-                resolved
-                    .split("::")
-                    .map { it.trim() }
-                    .lastOrNull { it.isNotBlank() }
-                    ?: resolved
-            } else {
-                resolved
-            }.trim()
-
-            val isFallback = if (isEnglish) {
-                cleaned.isBlank() ||
-                        cleaned.startsWith("Detailed explanation for:") ||
-                        cleaned.startsWith("There is currently no explanation")
-            } else {
-                cleaned.isBlank() ||
-                        cleaned.startsWith("הסבר מפורט על") ||
-                        cleaned.startsWith("אין כרגע")
-            }
-
-            if (!isFallback) {
-                return cleaned
-            }
-
-            return tr(
-                "אין כרגע הסבר לתרגיל הזה.",
-                "There is currently no explanation for this exercise."
-            )
-        }
 
         // ===== טאבים "מקצה-לקצה" =====
         @Composable
@@ -858,51 +785,8 @@ fun ExercisesTabsScreen(
             }
         }
 
-        // ===== דיאלוג הסבר מתוצאת חיפוש כללית (אייקון זכוכית מגדלת) =====
-        pickedKey?.let { key ->
-            val (hitBelt, hitTopic, hitItem) = parseSearchKey(key)
-            val displayName = ExerciseTitleFormatter.displayName(hitItem)
-                .ifBlank { hitItem.trim() }
-
-            val explanation = remember(hitBelt, hitItem, hitTopic, isEnglish) {
-                val raw = findExplanationForHit(hitBelt, hitItem, hitTopic)
-                if (raw == "NO_EXPLANATION") {
-                    tr("אין כרגע הסבר לתרגיל הזה.", "There is currently no explanation for this exercise.")
-                } else {
-                    raw
-                }
-            }
-
-            val isFav = favorites.contains(normalizeItemId(hitItem))
-            val noteText = remember(hitItem, notesRefreshKey) {
-                loadNote(hitItem)
-            }
-
-            ExerciseExplanationDialog(
-                title = displayName,
-                beltLabel = if (isEnglish) {
-                    "$hitTopic • ${hitBelt.en}"
-                } else {
-                    "$hitTopic • ${hitBelt.heb}"
-                },
-                explanation = explanation,
-                noteText = noteText,
-                isFavorite = isFav,
-                accentColor = hitBelt.color,
-                isEnglish = isEnglish,
-                onDismiss = { pickedKey = null },
-                onEditNote = {
-                    noteEditorFor = hitItem
-                    noteDraft = loadNote(hitItem)
-                },
-                onDeleteNote = {
-                    deleteNote(hitItem)
-                },
-                onToggleFavorite = {
-                    toggleFavorite(hitItem)
-                }
-            )
-        }
+        // אין כאן יותר דיאלוג מתוצאת חיפוש גלובלי.
+        // החיפוש, ההסבר, המועדפים והערות המשתמש מטופלים דרך KmiTopBar.
 
         // ===== דיאלוג הסבר (לחיצה על שורה או אייקון info ברשימה) =====
         explainFromSearch?.let { item ->

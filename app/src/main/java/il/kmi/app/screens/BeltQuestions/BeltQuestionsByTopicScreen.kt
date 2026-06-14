@@ -36,15 +36,10 @@ import il.kmi.app.R
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.domain.ExerciseCountsRegistry
 import il.kmi.app.domain.ExerciseCountProvider
-import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.SubjectTopic
-import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.localization.rememberIsEnglish
-import il.kmi.app.screens.parseSearchKey
 import il.kmi.app.ui.FloatingQuickMenu
 import il.kmi.app.ui.QuickMenuTriggerMode
-import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
-import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.screens.PracticeByTopicsSelection
 import il.kmi.app.screens.PracticeMenuDialog
 import il.kmi.shared.domain.Belt
@@ -271,70 +266,6 @@ private fun normalizeFavoriteId(raw: String): String =
 private fun beltTitleForUi(belt: Belt, isEnglish: Boolean): String =
     if (isEnglish) belt.en else belt.heb
 
-private fun findExplanationForHitLocal(
-    belt: Belt,
-    rawItem: String,
-    topic: String,
-    isEnglish: Boolean
-): String {
-    val display = ExerciseTitleFormatter
-        .displayName(rawItem)
-        .ifBlank { rawItem }
-        .trim()
-
-    val resolved = ExerciseExplanationResolver.get(
-        belt = belt,
-        topic = topic,
-        item = display,
-        isEnglish = isEnglish
-    ).trim()
-
-    val cleaned = if ("::" in resolved) {
-        resolved
-            .split("::")
-            .map { it.trim() }
-            .lastOrNull { it.isNotBlank() }
-            ?: resolved
-    } else {
-        resolved
-    }.trim()
-
-    val isFallback = if (isEnglish) {
-        cleaned.isBlank() ||
-                cleaned.startsWith("Detailed explanation for:") ||
-                cleaned.startsWith("There is currently no explanation")
-    } else {
-        cleaned.isBlank() ||
-                cleaned.startsWith("הסבר מפורט על") ||
-                cleaned.startsWith("אין כרגע")
-    }
-
-    if (!isFallback) {
-        return cleaned
-    }
-
-    return if (isEnglish) {
-        "There is currently no explanation for this exercise."
-    } else {
-        "אין כרגע הסבר לתרגיל הזה."
-    }
-}
-
-private fun saveBeltQuestionNote(
-    prefs: SharedPreferences,
-    noteKey: String,
-    text: String
-) {
-    val clean = text.trim()
-
-    prefs.edit().apply {
-        if (clean.isBlank()) {
-            remove(noteKey)
-        } else {
-            putString(noteKey, clean)
-        }
-    }.apply()
-}
 
 @Composable
 private fun rememberEnsureContentRepoInitialized() {
@@ -371,7 +302,7 @@ fun BeltQuestionsByTopicScreen(
     rememberEnsureContentRepoInitialized()
     val isEnglish = rememberIsEnglish()
     val ctx = LocalContext.current
-    val notePrefs = remember(ctx) { ctx.getSharedPreferences("kmi_exercise_notes", Context.MODE_PRIVATE) }
+    // הערות תרגילים מנוהלות עכשיו בדיאלוג הגלובלי החדש דרך KmiTopBar
 
     val userSp = remember(ctx) {
         ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
@@ -457,8 +388,7 @@ fun BeltQuestionsByTopicScreen(
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var showPracticeMenu by rememberSaveable { mutableStateOf(false) }
     var effectiveBelt by rememberSaveable { mutableStateOf(Belt.GREEN) }
-    var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
-    var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
+    // החיפוש והסברי התרגילים עוברים דרך KmiTopBar + ExercisePremiumSearchDialog
 
     if (showPracticeMenu) {
         PracticeMenuDialog(
@@ -492,7 +422,7 @@ fun BeltQuestionsByTopicScreen(
                 onHome = { },
                 lockHome = false,
                 showTopHome = false,
-                onPickSearchResult = { key -> pickedKey = key },
+                // החיפוש הגלובלי נפתח ומטופל פנימית בתוך KmiTopBar
                 lockSearch = false,
                 showBottomActions = true,
                 centerTitle = true
@@ -571,99 +501,8 @@ fun BeltQuestionsByTopicScreen(
             )
         }
 
-        // --- ניהול דיאלוגים ---
-        pickedKey?.let { key ->
-            val (belt, topic, item) = parseSearchKey(key)
-
-            val baseDisplayName = ExerciseTitleFormatter.displayName(item).ifBlank { item }
-            val displayName = if (isEnglish) {
-                ExerciseTitlesEn.getOrSame(baseDisplayName)
-            } else {
-                baseDisplayName
-            }
-
-            val favoriteId = remember(item) { normalizeFavoriteId(item) }
-            val favorites by FavoritesStore.favoritesFlow.collectAsState(initial = emptySet())
-            val isFavorite = favorites.contains(favoriteId)
-
-            val noteKey = "note_${belt.id}_${topic.trim()}_${favoriteId}"
-            var noteText by remember(noteKey, notesRefreshKey) {
-                mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
-            }
-
-            var showNoteEditor by rememberSaveable(noteKey) {
-                mutableStateOf(false)
-            }
-
-            val explanation = remember(belt, item, topic, isEnglish) {
-                findExplanationForHitLocal(
-                    belt = belt,
-                    rawItem = item,
-                    topic = topic,
-                    isEnglish = isEnglish
-                )
-            }
-
-            ExerciseExplanationDialog(
-                title = displayName,
-                beltLabel = if (isEnglish) {
-                    "(${ExerciseTitlesEn.getOrSame(topic)} • ${belt.en})"
-                } else {
-                    "($topic • ${belt.heb})"
-                },
-                explanation = explanation,
-                noteText = noteText,
-                isFavorite = isFavorite,
-                accentColor = belt.color,
-                isEnglish = isEnglish,
-                onDismiss = {
-                    pickedKey = null
-                    showNoteEditor = false
-                },
-                onEditNote = {
-                    showNoteEditor = true
-                },
-                onDeleteNote = {
-                    noteText = ""
-
-                    saveBeltQuestionNote(
-                        prefs = notePrefs,
-                        noteKey = noteKey,
-                        text = ""
-                    )
-
-                    notesRefreshKey++
-                },
-                onToggleFavorite = {
-                    FavoritesStore.toggle(favoriteId)
-                }
-            )
-
-            if (showNoteEditor) {
-                ExerciseNoteEditorDialog(
-                    noteText = noteText,
-                    isEnglish = isEnglish,
-                    accentColor = belt.color,
-                    onNoteChange = { noteText = it },
-                    onDismiss = {
-                        showNoteEditor = false
-                    },
-                    onSave = {
-                        val cleanNote = noteText.trim()
-                        noteText = cleanNote
-
-                        saveBeltQuestionNote(
-                            prefs = notePrefs,
-                            noteKey = noteKey,
-                            text = cleanNote
-                        )
-
-                        notesRefreshKey++
-                        showNoteEditor = false
-                    }
-                )
-            }
-        }
+        // אין כאן יותר דיאלוג חיפוש/הסבר מקומי.
+        // כל החיפוש, ההסבר, המועדפים והערות המשתמש מטופלים דרך KmiTopBar.
     }
 }
 

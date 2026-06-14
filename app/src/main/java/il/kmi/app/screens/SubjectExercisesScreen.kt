@@ -38,7 +38,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import il.kmi.app.KmiViewModel
-import il.kmi.app.domain.Explanations
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.SubjectTopic as AppSubjectTopic
 import il.kmi.app.domain.TopicsBySubjectRegistry
@@ -706,11 +705,11 @@ fun SubjectExercisesScreen(
                     .background(backgroundBrush) // שומר על אותו רקע מאחורי הכל
             ) {
                 il.kmi.app.ui.KmiTopBar(
-                    title = screenTitleResolved, // ✅ היה: appSubject.titleHeb
+                    title = screenTitleResolved,
                     onHome = onOpenHome,
                     showTopHome = false,
                     centerTitle = true,
-                    lockSearch = true,
+                    lockSearch = false,
                     showBottomActions = true
                 )
 

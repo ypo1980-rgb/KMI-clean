@@ -270,6 +270,9 @@ fun AttendanceScreen(
 
             KmiTopBar(
                 title = if (isEnglish) "Attendance" else "נוכחות",
+                showMenu = true,
+                showRoleBadge = true,
+                showModePill = true,
                 showTopHome = false,
                 showTopSearch = false,
                 showBottomActions = true,
@@ -321,11 +324,12 @@ fun AttendanceScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF020617),
-                            Color(0xFF111827),
-                            Color(0xFF1D4ED8),
-                            Color(0xFF22D3EE)
+                        colors = listOf(
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
                         )
                     )
                 )
@@ -378,8 +382,8 @@ fun AttendanceScreen(
                     Text(
                         text = tr("סימון נוכחות למתאמנים", "Mark trainee attendance"),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFECFEFF),
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF1E2A3D),
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = screenTextAlign
                     )
@@ -408,7 +412,8 @@ fun AttendanceScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Start,
                                 style = MaterialTheme.typography.titleMedium,
-                                color = Color.White
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF1E2A3D)
                             )
 
                             Spacer(Modifier.height(6.dp))
@@ -435,23 +440,33 @@ fun AttendanceScreen(
                                     shadowElevation = 0.dp,
                                     border = brd,
                                     modifier = modifier
-                                        .height(44.dp)
+                                        .height(36.dp)
                                         .clickable { onClick() }
                                 ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(horizontal = 16.dp),
+                                            .padding(horizontal = 10.dp),
                                         horizontalArrangement = Arrangement.Center,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Box(Modifier.size(18.dp)) {
+                                        Box(Modifier.size(14.dp)) {
                                             if (selected) {
-                                                Icon(Icons.Filled.Check, contentDescription = null)
+                                                Icon(
+                                                    imageVector = Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
                                             }
                                         }
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(text)
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = text,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
                             }
@@ -696,15 +711,15 @@ fun AttendanceScreen(
                             .clip(RoundedCornerShape(30.dp))
                             .background(
                                 Brush.verticalGradient(
-                                    listOf(
-                                        Color(0xFF111827),
-                                        Color(0xFF1E3A8A),
-                                        Color(0xFF2563EB),
-                                        Color(0xFF22D3EE)
+                                    colors = listOf(
+                                        Color(0xFFF8FBFF),
+                                        Color(0xFFEAF4FF),
+                                        Color(0xFFB7DDF7),
+                                        Color(0xFF1F78B4),
+                                        Color(0xFF062B4A)
                                     )
                                 )
-                            )
-                            .padding(1.dp)
+                            )                            .padding(1.dp)
                     ) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -1156,8 +1171,8 @@ private fun AttendanceSelectionCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+        color = Color(0xFFEAF2FF),
+        border = BorderStroke(1.dp, Color(0xFFD8E3F5)),
         tonalElevation = 0.dp
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
@@ -1167,8 +1182,8 @@ private fun AttendanceSelectionCard(
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                Color.White.copy(alpha = 0.08f),
-                                Color(0xFF1D4ED8).copy(alpha = 0.16f)
+                                Color(0xFFF4F8FF),
+                                Color(0xFFDCEBFF)
                             )
                         )
                     )
@@ -1178,7 +1193,7 @@ private fun AttendanceSelectionCard(
             ) {
                 Text(
                     text = tr("בחירת אימון לנוכחות", "Select attendance class"),
-                    color = Color.White,
+                    color = Color(0xFF1E2A3D),
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleSmall.merge(
                         TextStyle(textDirection = textDirection)
@@ -1219,7 +1234,7 @@ private fun AttendanceSelectionCard(
                         "הרשימה למטה תיטען לפי תאריך + סניף + קבוצה.",
                         "The list below loads by date + branch + group."
                     ),
-                    color = Color(0xFFBFDBFE),
+                    color = Color(0xFF5E6C80),
                     style = MaterialTheme.typography.labelSmall.merge(
                         TextStyle(textDirection = textDirection)
                     ),
@@ -1252,7 +1267,7 @@ private fun AttendanceReadonlyPickerField(
         color = Color.Transparent,
         border = BorderStroke(
             width = 1.dp,
-            color = Color.White.copy(alpha = 0.30f)
+            color = Color(0xFFD8E3F5)
         )
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
@@ -1269,7 +1284,8 @@ private fun AttendanceReadonlyPickerField(
                 ) {
                     Text(
                         text = label,
-                        color = Color(0xFFBFDBFE),
+                        color = Color(0xFF5E6C80),
+                        fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.labelSmall.merge(
                             TextStyle(
                                 textDirection = textDirection,
@@ -1285,7 +1301,7 @@ private fun AttendanceReadonlyPickerField(
 
                     Text(
                         text = value.ifBlank { "—" },
-                        color = Color.White,
+                        color = Color(0xFF1E2A3D),
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.bodySmall.merge(
                             TextStyle(
@@ -1305,7 +1321,7 @@ private fun AttendanceReadonlyPickerField(
 
                 Text(
                     text = "▼",
-                    color = Color(0xFFBFDBFE),
+                    color = Color(0xFF6B778B),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -1366,19 +1382,22 @@ private fun AttendanceDropdownField(
             trailingIcon = {
                 Text(
                     text = "▼",
-                    color = Color(0xFFBFDBFE),
+                    color = Color(0xFF6B778B),
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
             },
             colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White,
-                focusedLabelColor = Color(0xFFBFDBFE),
-                unfocusedLabelColor = Color(0xFFBFDBFE),
-                focusedBorderColor = Color(0xFF38BDF8),
-                unfocusedBorderColor = Color.White.copy(alpha = 0.30f),
-                cursorColor = Color.White
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White,
+                disabledContainerColor = Color.White,
+                focusedTextColor = Color(0xFF1E2A3D),
+                unfocusedTextColor = Color(0xFF1E2A3D),
+                focusedLabelColor = Color(0xFF5E6C80),
+                unfocusedLabelColor = Color(0xFF5E6C80),
+                focusedBorderColor = Color(0xFFBFD0E8),
+                unfocusedBorderColor = Color(0xFFD8E3F5),
+                cursorColor = Color(0xFF1E2A3D)
             ),
             modifier = Modifier
                 .menuAnchor()
@@ -1526,8 +1545,12 @@ private fun AttendanceHeroCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        color = Color.White.copy(alpha = 0.08f),
-        tonalElevation = 0.dp
+        color = Color(0xFFEAF2FF),
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFFD8E3F5)
+        )
     ) {
         CompositionLocalProvider(
             LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
@@ -1550,7 +1573,7 @@ private fun AttendanceHeroCard(
                         Text(
                             text = hebDate,
                             style = MaterialTheme.typography.labelSmall.merge(styleDirection),
-                            color = Color(0xFFE5E7EB),
+                            color = Color(0xFF5E6C80),
                             textAlign = align,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -1563,7 +1586,8 @@ private fun AttendanceHeroCard(
                                 "Trainees in class: $totalMembers"
                             ),
                             style = MaterialTheme.typography.labelSmall.merge(styleDirection),
-                            color = Color(0xFFBFDBFE),
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF5E6C80),
                             textAlign = align,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -1604,8 +1628,8 @@ private fun AttendanceHeroCard(
                             "Attendance: ${"%.0f".format(attendancePct)}%"
                         ),
                         style = MaterialTheme.typography.labelLarge.merge(styleDirection),
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF22D3EE),
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF0F5E9C),
                         textAlign = align
                     )
                 }
@@ -1619,7 +1643,8 @@ private fun AttendanceHeroCard(
                     ) {
                         Text(
                             text = label,
-                            color = Color(0xFFBFDBFE),
+                            color = Color(0xFF5E6C80),
+                            fontWeight = FontWeight.SemiBold,
                             style = MaterialTheme.typography.labelSmall.merge(styleDirection),
                             textAlign = align,
                             modifier = Modifier.fillMaxWidth(),
@@ -1629,7 +1654,7 @@ private fun AttendanceHeroCard(
                         lines.filter { it.isNotBlank() }.forEach { line ->
                             Text(
                                 text = line,
-                                color = Color.White,
+                                color = Color(0xFF1E2A3D),
                                 style = MaterialTheme.typography.bodySmall.merge(styleDirection),
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = align,
@@ -1679,9 +1704,9 @@ private fun AttendanceSummaryCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.08f),
+        color = Color(0xFFEAF2FF),
         tonalElevation = 0.dp,
-        border = BorderStroke(1.dp, Color(0xFF1E3A8A))
+        border = BorderStroke(1.dp, Color(0xFFD8E3F5))
     ) {
         Column(
             modifier = Modifier
@@ -1696,7 +1721,8 @@ private fun AttendanceSummaryCard(
                     "Group attendance average for this class"
                 ),
                 style = MaterialTheme.typography.titleSmall,
-                color = Color(0xFFECFEFF),
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF1E2A3D),
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1788,13 +1814,14 @@ private fun AttendanceStatBox(
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
+            fontWeight = FontWeight.ExtraBold,
+            color = Color(0xFF1E2A3D)
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFFCBD5F5)
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF5E6C80)
         )
     }
 }

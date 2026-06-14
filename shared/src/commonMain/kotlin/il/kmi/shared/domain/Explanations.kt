@@ -436,7 +436,12 @@ object Explanations {
         return if (isRealExplanation(fallback)) {
             fallback
         } else {
-            "$FALLBACK_PREFIX $id"
+            val readableName = fallbackItem
+                .trim()
+                .takeIf { it.isNotBlank() && !it.startsWith("ex_", ignoreCase = true) }
+                ?: id
+
+            "$FALLBACK_PREFIX $readableName"
         }
     }
 
@@ -446,23 +451,64 @@ object Explanations {
             raw = item
         )
 
-        for (k in tries) {
-            val r = when (belt) {
-                Belt.YELLOW -> getYellow(k)
-                Belt.ORANGE -> getOrange(k)
-                Belt.GREEN  -> getGreen(k)
-                Belt.BLUE   -> getBlue(k)
-                Belt.BROWN  -> getBrown(k)
-                Belt.BLACK  -> getBlack(k)
-                else        -> "$FALLBACK_PREFIX $k"
+        fun getFromBelt(
+            searchBelt: Belt,
+            key: String
+        ): String {
+            return when (searchBelt) {
+                Belt.YELLOW -> getYellow(key)
+                Belt.ORANGE -> getOrange(key)
+                Belt.GREEN  -> getGreen(key)
+                Belt.BLUE   -> getBlue(key)
+                Belt.BROWN  -> getBrown(key)
+                Belt.BLACK  -> getBlack(key)
+                else        -> "$FALLBACK_PREFIX $key"
             }
-
-            // אם לא נפלנו ל-default — מצאנו התאמה אמיתית
-            if (!r.startsWith(FALLBACK_PREFIX)) return r
         }
 
-        // fallback סופי (עם הטקסט המקורי)
-        return "$FALLBACK_PREFIX $item"
+        // 1. קודם מחפשים בחגורה שהמסך שלח
+        for (k in tries) {
+            val r = getFromBelt(belt, k)
+
+            if (!r.startsWith(FALLBACK_PREFIX)) {
+                return r
+            }
+        }
+
+        // 2. אם לא נמצא — מחפשים בכל החגורות לפי שם התרגיל
+        val allBelts = listOf(
+            Belt.YELLOW,
+            Belt.ORANGE,
+            Belt.GREEN,
+            Belt.BLUE,
+            Belt.BROWN,
+            Belt.BLACK
+        )
+
+        for (searchBelt in allBelts) {
+            if (searchBelt == belt) continue
+
+            val beltTries = keysToTry(
+                belt = searchBelt,
+                raw = item
+            )
+
+            for (k in beltTries) {
+                val r = getFromBelt(searchBelt, k)
+
+                if (!r.startsWith(FALLBACK_PREFIX)) {
+                    return r
+                }
+            }
+        }
+
+        // fallback סופי עם שם התרגיל שהמשתמש פתח
+        val readableName = item
+            .trim()
+            .takeIf { it.isNotBlank() }
+            ?: "תרגיל לא מזוהה"
+
+        return "$FALLBACK_PREFIX $readableName"
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -798,7 +844,7 @@ object Explanations {
             "הגנה פנימית נגד ימין - אגרוף שמאל בהחלקה" -> "[[RED_BOLD]]עמידת מוצא להגנות פנימיות.[[/RED_BOLD]]\nאגרוף שמאל בהחלקה מעל אגרוף ימין תוקף. דגשים: 1. ההתקפה היא ההגנה. 2. מתוזמן"
             "הגנה חיצונית נגד ימין באגרוף מהופך" -> "[[RED_BOLD]]עמידת מוצא להגנות חיצוניות.[[/RED_BOLD]]\nיד שמאל תוקפת באגרוף מהופך. יד ימין שומרת פנים. \nדגש: ההתקפה היא ההגנה"
             "הגנה חיצונית נגד שמאל" -> "[[RED_BOLD]]עמידת מוצא להגנות חיצוניות.[[/RED_BOLD]]\nהגנה חיצונית מס' 2 ביד שמאל והתקפה באגרוף ימין לצלעות"
-            "הגנה חיצונית נגד שמאל בהתקדמות" -> "[[RED_BOLD]]עמידת מוצא להגנות חיצוניות.[[/RED_BOLD]]\nהגנה חיצונית מס' 2 ביד שמאל. צעד ברגל ימין לצד המת תוך הפניית גוף ומכת אגרוף ימין לצלעות התוקף. תפיסה ובעיטת ברך שמאל.[[/RED_BOLD]]\nהגנה חיצונית ביד שמאל. צעד ברגל ימין לאלכסון ימין"
+            "הגנה חיצונית נגד שמאל בהתקדמות" -> "[[RED_BOLD]]עמידת מוצא להגנות חיצוניות.[[/RED_BOLD]]\nהגנה חיצונית מס' 2 ביד שמאל. צעד ברגל ימין לצד המת תוך הפניית גוף ומכת אגרוף ימין לצלעות התוקף. תפיסה ובעיטת ברך שמאל.\nהגנה חיצונית ביד שמאל. צעד ברגל ימין לאלכסון ימין"
             "הגנה פנימית נגד ימין באמת שמאל" -> "[[RED_BOLD]]עמידת מוצא כללית מס' 1 (רגל שמאל קדימה).[[/RED_BOLD]]\nהגנה פנימית באמת שמאל. צעד לפנים ברגל שמאל תוך המשך התקפה ברצף"
             "הגנה פנימית נגד שמאל באמת שמאל" -> "[[RED_BOLD]]עמידת מוצא כללית מס' 2 (רגל ימין קדימה).[[/RED_BOLD]]\nהגנה פנימית באמת שמאל. צעד לפנים ברגל שמאל תוך המשך התקפה ברצף"
 

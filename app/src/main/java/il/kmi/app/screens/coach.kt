@@ -1109,10 +1109,12 @@ fun CoachTraineesScreen(
 
     val backgroundBrush = remember {
         Brush.verticalGradient(
-            listOf(
-                Color(0xFF141E30),
-                Color(0xFF243B55),
-                Color(0xFF0EA5E9)
+            colors = listOf(
+                Color(0xFFF8FBFF),
+                Color(0xFFEAF4FF),
+                Color(0xFFB7DDF7),
+                Color(0xFF1F78B4),
+                Color(0xFF062B4A)
             )
         )
     }
@@ -3466,12 +3468,18 @@ fun CoachTraineesScreen(
             }
 
             if (showStatsSheet) {
-                CoachGroupStatsPremiumScreen(
-                    stats = groupStats,
-                    profiles = uiProfiles,
-                    isEnglish = isEnglish,
-                    onClose = { showStatsSheet = false }
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(backgroundBrush)
+                ) {
+                    CoachGroupStatsPremiumScreen(
+                        stats = groupStats,
+                        profiles = uiProfiles,
+                        isEnglish = isEnglish,
+                        onClose = { showStatsSheet = false }
+                    )
+                }
             }
         }
     }
@@ -4111,9 +4119,11 @@ private fun CoachGroupStatsPremiumScreen(
 
     val statsBgBrush = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFFEAF1FF),
-            Color(0xFFF7FAFF),
-            Color(0xFFEFF4FB)
+            Color(0xFFF8FBFF),
+            Color(0xFFEAF4FF),
+            Color(0xFFB7DDF7),
+            Color(0xFF1F78B4),
+            Color(0xFF062B4A)
         )
     )
 
@@ -4211,63 +4221,38 @@ private fun CoachGroupStatsPremiumScreen(
                                 .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            Row(
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                horizontalAlignment = statsHorizontalAlignment,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = statsHorizontalAlignment
-                                ) {
-                                    Text(
-                                        text = coachTr(isEnglish, "מידע על הקבוצה", "Group information"),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = statsTextAlign,
-                                        style = MaterialTheme.typography.titleLarge.copy(
-                                            fontSize = 22.sp,
-                                            lineHeight = 25.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = Color(0xFF0F172A)
-                                        )
+                                Text(
+                                    text = coachTr(isEnglish, "מידע על הקבוצה", "Group information"),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = statsTextAlign,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontSize = 22.sp,
+                                        lineHeight = 25.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFF0F172A)
                                     )
+                                )
 
-                                    Text(
-                                        text = coachTr(
-                                            isEnglish,
-                                            "סיכום נוכחות, גיל, ותק וחגורות",
-                                            "Attendance, age, seniority and belt summary"
-                                        ),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = statsTextAlign,
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontSize = 12.sp,
-                                            lineHeight = 15.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = Color(0xFF64748B)
-                                        )
+                                Text(
+                                    text = coachTr(
+                                        isEnglish,
+                                        "סיכום נוכחות, גיל, ותק וחגורות",
+                                        "Attendance, age, seniority and belt summary"
+                                    ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = statsTextAlign,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.sp,
+                                        lineHeight = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF64748B)
                                     )
-                                }
-
-                                Spacer(Modifier.width(10.dp))
-
-                                Surface(
-                                    onClick = onClose,
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = Color(0xFFF8FAFC),
-                                    border = BorderStroke(1.dp, Color(0xFFE7ECF7)),
-                                    shadowElevation = 3.dp,
-                                    modifier = Modifier.size(42.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = coachTr(isEnglish, "סגור", "Close"),
-                                            tint = Color(0xFF475569),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
+                                )
                             }
 
                             Row(
@@ -4275,6 +4260,8 @@ private fun CoachGroupStatsPremiumScreen(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+
+                            }
                                 Surface(
                                     color = Color(0xFFFCFDFF),
                                     shape = RoundedCornerShape(24.dp),
@@ -4625,7 +4612,7 @@ private fun CoachGroupStatsPremiumScreen(
             }
         }
     }
-}
+
 
 @Composable
 private fun PremiumStatChip(

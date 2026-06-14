@@ -252,50 +252,25 @@ private fun examBeltDrawableRes(belt: Belt): Int =
 
 private fun internalExamEntryScreenBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
     androidx.compose.ui.graphics.Brush.verticalGradient(
-        listOf(
-            Color(0xFF0F1B35),
-            Color(0xFF172A4A),
-            examBeltSoftColor(belt).copy(alpha = 0.92f),
-            Color(0xFFF8FAFC),
-            examBeltSoftColor(belt).copy(alpha = 0.84f)
+        colors = listOf(
+            Color(0xFFF8FBFF),
+            Color(0xFFEAF4FF),
+            Color(0xFFB7DDF7),
+            Color(0xFF1F78B4),
+            Color(0xFF062B4A)
         )
     )
 
 private fun examBeltScreenBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
-    when (belt) {
-        Belt.BROWN -> {
-            androidx.compose.ui.graphics.Brush.verticalGradient(
-                listOf(
-                    Color(0xFFFFFBF5),
-                    Color(0xFFF3E0C5),
-                    Color(0xFFD6A76D).copy(alpha = 0.78f),
-                    Color(0xFF7C3F1D).copy(alpha = 0.42f)
-                )
-            )
-        }
-
-        Belt.BLACK -> {
-            androidx.compose.ui.graphics.Brush.verticalGradient(
-                listOf(
-                    Color(0xFFF8FAFC),
-                    Color(0xFFD1D5DB),
-                    Color(0xFF64748B).copy(alpha = 0.72f),
-                    Color(0xFF111827).copy(alpha = 0.82f)
-                )
-            )
-        }
-
-        else -> {
-            androidx.compose.ui.graphics.Brush.verticalGradient(
-                listOf(
-                    Color(0xFFF8FAFC),
-                    examBeltSoftColor(belt).copy(alpha = 0.96f),
-                    Color.White.copy(alpha = 0.98f),
-                    examBeltSoftColor(belt).copy(alpha = 0.88f)
-                )
-            )
-        }
-    }
+    androidx.compose.ui.graphics.Brush.verticalGradient(
+        colors = listOf(
+            Color(0xFFF8FBFF),
+            Color(0xFFEAF4FF),
+            Color(0xFFB7DDF7),
+            Color(0xFF1F78B4),
+            Color(0xFF062B4A)
+        )
+    )
 
 private fun examBeltButtonBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
     androidx.compose.ui.graphics.Brush.horizontalGradient(
@@ -1252,10 +1227,22 @@ fun InternalExamScreen(
                     exercises.groupBy { it.topic }
                 }
 
+                val orderedExercisesByTopic = remember(exercisesByTopic) {
+                    exercisesByTopic
+                        .toList()
+                        .sortedWith(
+                            compareByDescending<Pair<String, List<ExamExerciseItem>>> { (_, topicExercises) ->
+                                topicExercises.any { !it.subTopic.isNullOrBlank() }
+                            }.thenBy { (topic, _) ->
+                                topic
+                            }
+                        )
+                }
+
                 var expandedTopic by remember { mutableStateOf<String?>(null) }
                 var expandedSubTopicKey by remember { mutableStateOf<String?>(null) }
 
-                // --- תרגילים ---
+// --- תרגילים ---
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f, fill = true)
@@ -1263,7 +1250,7 @@ fun InternalExamScreen(
                         .padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    exercisesByTopic.forEach { (topic, topicExercises) ->
+                    orderedExercisesByTopic.forEach { (topic, topicExercises) ->
 
                         val subTopicGroups = topicExercises
                             .filter { !it.subTopic.isNullOrBlank() }
@@ -1298,96 +1285,123 @@ fun InternalExamScreen(
 
                         if (topicIsExpanded) {
                             if (hasSubTopics) {
-                                subTopicGroups.forEach { (subTopic, subTopicExercises) ->
-                                    val subTopicKey = "$topic||$subTopic"
-                                    val subTopicExpanded = expandedSubTopicKey == subTopicKey
-
-                                    item {
-                                        SubTopicHeader(
-                                            title = examTitleForUi(subTopic, isEnglish),
-                                            expanded = subTopicExpanded,
-                                            exerciseCount = subTopicExercises.size,
-                                            isEnglish = isEnglish,
-                                            belt = belt,
-                                            onClick = {
-                                                expandedSubTopicKey =
-                                                    if (subTopicExpanded) null else subTopicKey
-                                            }
+                                item {
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                start = if (isEnglish) 14.dp else 0.dp,
+                                                end = if (isEnglish) 0.dp else 14.dp,
+                                                top = 2.dp,
+                                                bottom = 4.dp
+                                            ),
+                                        shape = RoundedCornerShape(24.dp),
+                                        color = Color.White.copy(alpha = 0.72f),
+                                        shadowElevation = 7.dp,
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = Color(0xFFD8E3F5)
                                         )
-                                    }
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            subTopicGroups.forEach { (subTopic, subTopicExercises) ->
+                                                val subTopicKey = "$topic||$subTopic"
+                                                val subTopicExpanded = expandedSubTopicKey == subTopicKey
 
-                                    if (subTopicExpanded) {
-                                        items(subTopicExercises) { ex ->
-                                            val scoreForThis = marksMap[ex.id]
-
-                                            ExerciseRow(
-                                                name = examTitleForUi(ex.name, isEnglish),
-                                                score = scoreForThis,
-                                                isEnglish = isEnglish,
-                                                onScoreChange = { newScore ->
-                                                    hasUnsavedChanges = true
-
-                                                    if (newScore == null) {
-                                                        marksMap.remove(ex.id)
-                                                    } else {
-                                                        marksMap[ex.id] = clampScore10(newScore)
+                                                SubTopicHeader(
+                                                    title = examTitleForUi(subTopic, isEnglish),
+                                                    expanded = subTopicExpanded,
+                                                    exerciseCount = subTopicExercises.size,
+                                                    isEnglish = isEnglish,
+                                                    belt = belt,
+                                                    onClick = {
+                                                        expandedSubTopicKey =
+                                                            if (subTopicExpanded) null else subTopicKey
                                                     }
+                                                )
 
-                                                    val activeName = traineeName.trim()
-                                                    if (activeName.isNotBlank()) {
-                                                        scope.launch {
-                                                            saveExamDraft(ctx, activeName, belt, marksMap)
+                                                if (subTopicExpanded) {
+                                                    subTopicExercises.forEach { ex ->
+                                                        key(ex.id) {
+                                                            val scoreForThis = marksMap[ex.id]
+
+                                                            ExerciseRow(
+                                                                name = examTitleForUi(ex.name, isEnglish),
+                                                                score = scoreForThis,
+                                                                isEnglish = isEnglish,
+                                                                onScoreChange = { newScore ->
+                                                                    hasUnsavedChanges = true
+
+                                                                    if (newScore == null) {
+                                                                        marksMap.remove(ex.id)
+                                                                    } else {
+                                                                        marksMap[ex.id] = clampScore10(newScore)
+                                                                    }
+
+                                                                    val activeName = traineeName.trim()
+                                                                    if (activeName.isNotBlank()) {
+                                                                        scope.launch {
+                                                                            saveExamDraft(ctx, activeName, belt, marksMap)
+                                                                        }
+                                                                    }
+                                                                }
+                                                            )
                                                         }
                                                     }
                                                 }
-                                            )
-                                        }
-                                    }
-                                }
-
-                                if (directExercises.isNotEmpty()) {
-                                    val generalKey = "$topic||__direct__"
-                                    val generalExpanded = expandedSubTopicKey == generalKey
-
-                                    item {
-                                        SubTopicHeader(
-                                            title = examTr(isEnglish, "כללי", "General"),
-                                            expanded = generalExpanded,
-                                            exerciseCount = directExercises.size,
-                                            isEnglish = isEnglish,
-                                            belt = belt,
-                                            onClick = {
-                                                expandedSubTopicKey =
-                                                    if (generalExpanded) null else generalKey
                                             }
-                                        )
-                                    }
 
-                                    if (generalExpanded) {
-                                        items(directExercises) { ex ->
-                                            val scoreForThis = marksMap[ex.id]
+                                            if (directExercises.isNotEmpty()) {
+                                                val generalKey = "$topic||__direct__"
+                                                val generalExpanded = expandedSubTopicKey == generalKey
 
-                                            ExerciseRow(
-                                                name = examTitleForUi(ex.name, isEnglish),
-                                                score = scoreForThis,
-                                                isEnglish = isEnglish,
-                                                onScoreChange = { newScore ->
-                                                    hasUnsavedChanges = true
-
-                                                    if (newScore == null) {
-                                                        marksMap.remove(ex.id)
-                                                    } else {
-                                                        marksMap[ex.id] = clampScore10(newScore)
+                                                SubTopicHeader(
+                                                    title = examTr(isEnglish, "כללי", "General"),
+                                                    expanded = generalExpanded,
+                                                    exerciseCount = directExercises.size,
+                                                    isEnglish = isEnglish,
+                                                    belt = belt,
+                                                    onClick = {
+                                                        expandedSubTopicKey =
+                                                            if (generalExpanded) null else generalKey
                                                     }
+                                                )
 
-                                                    val activeName = traineeName.trim()
-                                                    if (activeName.isNotBlank()) {
-                                                        scope.launch {
-                                                            saveExamDraft(ctx, activeName, belt, marksMap)
+                                                if (generalExpanded) {
+                                                    directExercises.forEach { ex ->
+                                                        key(ex.id) {
+                                                            val scoreForThis = marksMap[ex.id]
+
+                                                            ExerciseRow(
+                                                                name = examTitleForUi(ex.name, isEnglish),
+                                                                score = scoreForThis,
+                                                                isEnglish = isEnglish,
+                                                                onScoreChange = { newScore ->
+                                                                    hasUnsavedChanges = true
+
+                                                                    if (newScore == null) {
+                                                                        marksMap.remove(ex.id)
+                                                                    } else {
+                                                                        marksMap[ex.id] = clampScore10(newScore)
+                                                                    }
+
+                                                                    val activeName = traineeName.trim()
+                                                                    if (activeName.isNotBlank()) {
+                                                                        scope.launch {
+                                                                            saveExamDraft(ctx, activeName, belt, marksMap)
+                                                                        }
+                                                                    }
+                                                                }
+                                                            )
                                                         }
                                                     }
                                                 }
-                                            )
+                                            }
                                         }
                                     }
                                 }
@@ -1772,11 +1786,15 @@ private fun TopicHeader(
 
     Surface(
         shape = cardShape,
-        color = examBeltMainColor(belt).copy(alpha = 0.045f),
-        shadowElevation = 0.dp,
+        color = Color(0xFFEAF2FF),
+        shadowElevation = 2.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = examBeltMainColor(belt).copy(alpha = if (expanded) 0.34f else 0.18f)
+            color = if (expanded) {
+                Color(0xFFBFD0E8)
+            } else {
+                Color(0xFFD8E3F5)
+            }
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -1798,9 +1816,9 @@ private fun TopicHeader(
             Surface(
                 shape = CircleShape,
                 color = if (expanded) {
-                    examBeltMainColor(belt).copy(alpha = 0.92f)
+                    Color(0xFF0F5E9C)
                 } else {
-                    examBeltDarkColor(belt).copy(alpha = 0.62f)
+                    Color(0xFF6B778B)
                 },
                 shadowElevation = 2.dp,
                 modifier = Modifier.size(23.dp)
@@ -1855,7 +1873,7 @@ private fun TopicHeader(
                             "$exerciseCount exercises"
                         )
                     },
-                    color = examBeltDarkColor(belt).copy(alpha = 0.58f),
+                    color = Color(0xFF5E6C80),
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 7.2.sp,
                     lineHeight = 7.8.sp,
@@ -1880,29 +1898,29 @@ private fun SubTopicHeader(
 ) {
     val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-    val cardShape = RoundedCornerShape(15.dp)
+    val cardShape = RoundedCornerShape(20.dp)
 
     Surface(
         shape = cardShape,
-        color = examBeltMainColor(belt).copy(alpha = 0.035f),
-        shadowElevation = 0.dp,
+        color = Color.White.copy(alpha = 0.96f),
+        shadowElevation = 6.dp,
         border = BorderStroke(
             width = 1.dp,
             color = if (expanded) {
-                examBeltMainColor(belt).copy(alpha = 0.30f)
+                Color(0xFF9CC7E8)
             } else {
-                examBeltMainColor(belt).copy(alpha = 0.16f)
+                Color(0xFFD8E3F5)
             }
         ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = if (isEnglish) 18.dp else 4.dp,
-                end = if (isEnglish) 4.dp else 18.dp,
-                top = 2.dp,
-                bottom = 2.dp
+                start = if (isEnglish) 34.dp else 10.dp,
+                end = if (isEnglish) 10.dp else 34.dp,
+                top = 4.dp,
+                bottom = 4.dp
             )
-            .height(42.dp)
+            .height(46.dp)
             .clip(cardShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -1914,18 +1932,41 @@ private fun SubTopicHeader(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 9.dp, vertical = 4.dp),
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.White,
+                            Color(0xFFF4F8FF),
+                            Color.White
+                        )
+                    )
+                )
+                .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = if (expanded) {
+                    Color(0xFF0F5E9C)
+                } else {
+                    Color(0xFFBFD0E8)
+                },
+                modifier = Modifier
+                    .width(5.dp)
+                    .height(28.dp)
+            ) {}
+
+            Spacer(Modifier.width(9.dp))
+
+            Surface(
                 shape = CircleShape,
                 color = if (expanded) {
-                    examBeltMainColor(belt).copy(alpha = 0.90f)
+                    Color(0xFF0F5E9C)
                 } else {
-                    examBeltDarkColor(belt).copy(alpha = 0.56f)
+                    Color(0xFF6B778B)
                 },
-                shadowElevation = 2.dp,
-                modifier = Modifier.size(23.dp)
+                shadowElevation = 3.dp,
+                modifier = Modifier.size(24.dp)
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -1935,13 +1976,13 @@ private fun SubTopicHeader(
                         text = if (expanded) "−" else "+",
                         color = Color.White,
                         fontWeight = FontWeight.Black,
-                        fontSize = 12.sp,
-                        lineHeight = 12.sp
+                        fontSize = 13.sp,
+                        lineHeight = 13.sp
                     )
                 }
             }
 
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(10.dp))
 
             Column(
                 modifier = Modifier.weight(1f),
@@ -1950,10 +1991,10 @@ private fun SubTopicHeader(
             ) {
                 Text(
                     text = title,
-                    color = Color(0xFF111827),
-                    fontWeight = FontWeight.Black,
-                    fontSize = 11.sp,
-                    lineHeight = 11.8.sp,
+                    color = Color(0xFF1E2A3D),
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 10.6.sp,
+                    lineHeight = 12.sp,
                     textAlign = textAlign,
                     maxLines = 1,
                     softWrap = false,
@@ -1961,18 +2002,18 @@ private fun SubTopicHeader(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(Modifier.height(1.dp))
+                Spacer(Modifier.height(2.dp))
 
                 Text(
                     text = examTr(
                         isEnglish,
-                        "$exerciseCount תרגילים",
-                        "$exerciseCount exercises"
+                        "תת נושא • $exerciseCount תרגילים",
+                        "Sub-topic • $exerciseCount exercises"
                     ),
-                    color = examBeltDarkColor(belt).copy(alpha = 0.56f),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 7.sp,
-                    lineHeight = 7.6.sp,
+                    color = Color(0xFF5E6C80),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 7.4.sp,
+                    lineHeight = 8.sp,
                     textAlign = textAlign,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -2293,7 +2334,7 @@ fun InternalExamEntryScreen(
                     showBottomActions = true,
                     showRoleStatus = true,
                     showModePill = true,
-                    showTopHome = true,
+                    showTopHome = false,
                     showTopSearch = true,
                     showSettings = true,
                     showTopShare = false,
@@ -2321,11 +2362,11 @@ fun InternalExamEntryScreen(
                         Surface(
                             onClick = onBack,
                             shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.14f),
-                            shadowElevation = 8.dp,
+                            color = Color.White.copy(alpha = 0.92f),
+                            shadowElevation = 6.dp,
                             border = BorderStroke(
                                 width = 1.dp,
-                                color = Color.White.copy(alpha = 0.24f)
+                                color = Color(0xFFD8E3F5)
                             ),
                             modifier = Modifier
                                 .size(34.dp)
@@ -2337,10 +2378,10 @@ fun InternalExamEntryScreen(
                             ) {
                                 Text(
                                     text = "×",
-                                    color = Color.White.copy(alpha = 0.92f),
+                                    color = Color(0xFF5E6C80),
                                     fontSize = 22.sp,
                                     lineHeight = 22.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -2362,11 +2403,11 @@ fun InternalExamEntryScreen(
                                 .align(Alignment.Center),
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodyMedium.copy(
-                                fontSize = 15.sp,
-                                lineHeight = 18.sp
+                                fontSize = 16.sp,
+                                lineHeight = 20.sp
                             ),
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White.copy(alpha = 0.94f),
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF1E2A3D),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -3980,7 +4021,7 @@ private fun SummaryCard(
                         contentDescription = examBeltNameForUi(currentBelt, isEnglish),
                         modifier = Modifier
                             .width(104.dp)
-                            .height(34.dp),
+                            .height(28.dp),
                         contentScale = ContentScale.Fit
                     )
                 } else {
@@ -3989,7 +4030,7 @@ private fun SummaryCard(
                         contentDescription = examBeltNameForUi(currentBelt, isEnglish),
                         modifier = Modifier
                             .width(104.dp)
-                            .height(34.dp),
+                            .height(28.dp),
                         contentScale = ContentScale.Fit
                     )
 

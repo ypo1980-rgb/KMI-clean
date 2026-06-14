@@ -31,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -56,8 +55,6 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import il.kmi.app.ui.FloatingQuickMenu
-import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
-import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -76,10 +73,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.Dp
 import il.kmi.shared.domain.TopicsEngine
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
-import il.kmi.app.screens.parseSearchKey
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import androidx.compose.ui.platform.LocalContext
-import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
 import androidx.compose.ui.graphics.graphicsLayer
 import il.kmi.shared.localization.AppLanguage
@@ -465,9 +460,7 @@ internal fun BeltPangoLayout(
 
     val haptic = rememberHapticsGlobal()
     val clickSound = rememberClickSound()
-    val notePrefs = remember(ctx) {
-        ctx.getSharedPreferences("kmi_exercise_notes", android.content.Context.MODE_PRIVATE)
-    }
+    // הערות תרגילים מנוהלות עכשיו בדיאלוג הגלובלי החדש דרך KmiTopBar
     val userSp = remember(ctx) {
         ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
     }
@@ -530,8 +523,7 @@ internal fun BeltPangoLayout(
             .trim()
 
     val coachMode = remember { isCoach }
-    var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
-    var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
+    // החיפוש והסברי התרגילים עוברים דרך KmiTopBar + ExercisePremiumSearchDialog
 
     var showPracticeMenu by rememberSaveable { mutableStateOf(false) }
 
@@ -666,7 +658,7 @@ internal fun BeltPangoLayout(
             il.kmi.app.ui.KmiTopBar(
                 title = beltTitleForUi(currentBelt, langManager.getCurrentLanguage()),
                 onHome = onBackHome,
-                onPickSearchResult = { key -> pickedKey = key },
+                // החיפוש הגלובלי נפתח ומטופל פנימית בתוך KmiTopBar
                 lockSearch = false,
                 showBottomActions = true,
                 centerTitle = true,
@@ -902,123 +894,8 @@ internal fun BeltPangoLayout(
                     }
                 )
             }
-
-                pickedKey?.let { key ->
-                val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-                val (belt, topic, item) = parseSearchKey(key)
-
-                    val displayName = if (isEnglish) {
-                        ExerciseTitlesEn.getOrSame(
-                            ExerciseTitleFormatter.displayName(item).ifBlank { item }.trim()
-                        )
-                    } else {
-                        ExerciseTitleFormatter.displayName(item).ifBlank { item }
-                    }
-
-                val favoriteId = remember(item) { normalizeFavoriteId(item) }
-                val favorites: Set<String> by FavoritesStore
-                    .favoritesFlow
-                    .collectAsState(initial = emptySet())
-                val isFavorite = favorites.contains(favoriteId)
-
-                val noteKey = remember(belt, topic, favoriteId) {
-                    "note_${belt.id}_${topic.trim()}_${favoriteId}"
-                }
-
-                    var noteText by remember(noteKey, notesRefreshKey) {
-                        mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
-                    }
-                    var showNoteEditor by rememberSaveable(noteKey) { mutableStateOf(false) }
-
-                    val explanation = remember(belt, item, isEnglish) {
-                        findExplanationForHit(
-                            belt = belt,
-                            rawItem = item,
-                            topic = topic,
-                            lang = if (isEnglish) AppLanguage.ENGLISH else AppLanguage.HEBREW
-                        )
-                    }
-
-                    ExerciseExplanationDialog(
-                        title = displayName,
-                        beltLabel = if (isEnglish) {
-                            "(${belt.en})"
-                        } else {
-                            "(${belt.heb})"
-                        },
-                        explanation = explanation,
-                        noteText = noteText,
-                        isFavorite = isFavorite,
-                        accentColor = belt.color,
-                        isEnglish = isEnglish,
-                        backgroundBrush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White,
-                                lerp(Color.White, belt.color, 0.12f),
-                                lerp(Color.White, belt.color, 0.06f),
-                                Color.White
-                            )
-                        ),
-                        onDismiss = {
-                            clickSound()
-                            haptic(true)
-                            pickedKey = null
-                            showNoteEditor = false
-                        },
-                        onEditNote = {
-                            clickSound()
-                            haptic(true)
-                            showNoteEditor = true
-                        },
-                        onDeleteNote = {
-                            clickSound()
-                            haptic(true)
-
-                            noteText = ""
-
-                            saveBeltQuestionByBeltNote(
-                                prefs = notePrefs,
-                                noteKey = noteKey,
-                                text = ""
-                            )
-
-                            notesRefreshKey++
-                        },
-                        onToggleFavorite = {
-                            clickSound()
-                            haptic(true)
-                            FavoritesStore.toggle(favoriteId)
-                        }
-                    )
-
-                    if (showNoteEditor) {
-                        ExerciseNoteEditorDialog(
-                            noteText = noteText,
-                            isEnglish = isEnglish,
-                            accentColor = belt.color,
-                            onNoteChange = { noteText = it },
-                            onDismiss = {
-                                showNoteEditor = false
-                            },
-                            onSave = {
-                                clickSound()
-                                haptic(true)
-
-                                val cleanNote = noteText.trim()
-                                noteText = cleanNote
-
-                                saveBeltQuestionByBeltNote(
-                                    prefs = notePrefs,
-                                    noteKey = noteKey,
-                                    text = cleanNote
-                                )
-
-                                notesRefreshKey++
-                                showNoteEditor = false
-                            }
-                        )
-                    }
-                }
+            // אין כאן יותר דיאלוג חיפוש/הסבר מקומי.
+            // כל החיפוש, ההסבר, המועדפים והערות המשתמש מטופלים דרך KmiTopBar.
             }
         }
     }

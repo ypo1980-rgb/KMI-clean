@@ -932,28 +932,34 @@ fun CoachBroadcastScreen(
         )
     }
 
-    // 🔵 גרעין – רקע גרדיאנט בסגנון המסכים החדשים
+    // 🔵 רקע אחיד חדש לכל המסכים
     val gradientBackground = remember {
         Brush.verticalGradient(
-            listOf(
-                Color(0xFF020617),
-                Color(0xFF0F172A),
-                Color(0xFF0EA5E9)
+            colors = listOf(
+                Color(0xFFF8FBFF),
+                Color(0xFFEAF4FF),
+                Color(0xFFB7DDF7),
+                Color(0xFF1F78B4),
+                Color(0xFF062B4A)
             )
         )
     }
 
-    // 🎨 צבעים אחידים לכל ה־TextField: טקסט לבן, רקע כהה, מסגרת כחולה
+    // 🎨 צבעים אחידים לשדות בהירים
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedContainerColor = Color(0xFF0F172A),
-        unfocusedContainerColor = Color(0xFF0B1220),
-        focusedTextColor = Color.White,
-        unfocusedTextColor = Color(0xFFF8FAFC),
-        focusedLabelColor = Color(0xFFE0F2FE),
-        unfocusedLabelColor = Color(0xFFCBD5E1),
-        focusedBorderColor = Color(0xFF67E8F9),
-        unfocusedBorderColor = Color(0xFF38BDF8),
-        cursorColor = Color(0xFF67E8F9)
+        focusedContainerColor = Color.White,
+        unfocusedContainerColor = Color.White,
+        disabledContainerColor = Color.White,
+        focusedTextColor = Color(0xFF1E2A3D),
+        unfocusedTextColor = Color(0xFF1E2A3D),
+        disabledTextColor = Color(0xFF1E2A3D),
+        focusedLabelColor = Color(0xFF5E6C80),
+        unfocusedLabelColor = Color(0xFF5E6C80),
+        disabledLabelColor = Color(0xFF5E6C80),
+        focusedBorderColor = Color(0xFFBFD0E8),
+        unfocusedBorderColor = Color(0xFFD8E3F5),
+        disabledBorderColor = Color(0xFFD8E3F5),
+        cursorColor = Color(0xFF1E2A3D)
     )
 
     androidx.compose.runtime.CompositionLocalProvider(
@@ -1016,11 +1022,11 @@ fun CoachBroadcastScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
-                    color = Color.Black.copy(alpha = 0.18f),
+                    color = Color(0xFFEAF2FF),
                     tonalElevation = 0.dp,
                     border = BorderStroke(
-                        1.dp,
-                        Color.White.copy(alpha = 0.10f)
+                        width = 1.dp,
+                        color = Color(0xFFD8E3F5)
                     )
                 ) {
                     Column(
@@ -1100,6 +1106,10 @@ fun CoachBroadcastScreen(
                                     modifier = Modifier
                                         .menuAnchor()
                                         .fillMaxWidth(),
+                                    textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge.copy(
+                                        textAlign = screenTextAlign,
+                                        color = Color(0xFF1E2A3D)
+                                    ),
                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                                     colors = fieldColors
                                 )
@@ -1155,12 +1165,12 @@ fun CoachBroadcastScreen(
                 if (branch.isNotBlank() && availableBranchGroups.isNotEmpty()) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-                        color = Color.Black.copy(alpha = 0.16f),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
+                        color = Color(0xFFEAF2FF),
                         tonalElevation = 0.dp,
                         border = BorderStroke(
-                            1.dp,
-                            Color.White.copy(alpha = 0.10f)
+                            width = 1.dp,
+                            color = Color(0xFFD8E3F5)
                         )
                     ) {
                         Column(
@@ -1175,9 +1185,9 @@ fun CoachBroadcastScreen(
                                     "בחירת קבוצות לשליחה",
                                     "Select groups to include"
                                 ),
-                                color = Color.White,
+                                color = Color(0xFF1E2A3D),
                                 style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
                                 textAlign = screenTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -1350,14 +1360,14 @@ fun CoachBroadcastScreen(
                                             },
                                         shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
                                         color = if (isSelected) {
-                                            Color(0xFF0EA5E9).copy(alpha = 0.28f)
+                                            Color(0xFFD9F1FF)
                                         } else {
                                             Color(0xFF0B1220).copy(alpha = 0.78f)
                                         },
                                         border = BorderStroke(
                                             1.dp,
                                             if (isSelected) {
-                                                Color(0xFF67E8F9)
+                                                Color(0xFF38BDF8)
                                             } else {
                                                 Color.White.copy(alpha = 0.12f)
                                             }
@@ -1381,9 +1391,13 @@ fun CoachBroadcastScreen(
                                             ) {
                                                 Text(
                                                     text = groupName,
-                                                    color = Color.White,
+                                                    color = if (isSelected) {
+                                                        Color(0xFF1E2A3D)
+                                                    } else {
+                                                        Color.White
+                                                    },
                                                     style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
                                                     textAlign = screenTextAlign,
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
@@ -1394,9 +1408,13 @@ fun CoachBroadcastScreen(
                                                         "${availableBranchGroupCounts[groupName] ?: 0} מתאמנים",
                                                         "${availableBranchGroupCounts[groupName] ?: 0} trainees"
                                                     ),
-                                                    color = Color(0xFFBAE6FD),
+                                                    color = if (isSelected) {
+                                                        Color(0xFF0F5E9C)
+                                                    } else {
+                                                        Color(0xFFBAE6FD)
+                                                    },
                                                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                                                     textAlign = screenTextAlign,
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
@@ -1429,8 +1447,9 @@ fun CoachBroadcastScreen(
                                     "ההודעה תישלח רק למתאמנים בקבוצות שסומנו.",
                                     "The message will be sent only to trainees in the selected groups."
                                 ),
-                                color = Color(0xFFE0F2FE),
+                                color = Color(0xFF5E6C80),
                                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                                 textAlign = screenTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )

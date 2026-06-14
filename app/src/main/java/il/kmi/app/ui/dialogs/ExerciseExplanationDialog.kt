@@ -448,22 +448,22 @@ fun ExerciseNoteEditorDialog(
         ),
         containerColor = Color.Transparent,
         tonalElevation = 0.dp,
-        shape = RoundedCornerShape(30.dp),
+        shape = RoundedCornerShape(34.dp),
         title = null,
         text = {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .shadow(
-                        elevation = 18.dp,
-                        shape = RoundedCornerShape(30.dp),
+                        elevation = 22.dp,
+                        shape = RoundedCornerShape(34.dp),
                         clip = false
                     ),
-                shape = RoundedCornerShape(30.dp),
-                color = Color.White.copy(alpha = 0.98f),
+                shape = RoundedCornerShape(34.dp),
+                color = Color.White.copy(alpha = 0.99f),
                 border = BorderStroke(
                     width = 1.dp,
-                    color = accentColor.copy(alpha = 0.18f)
+                    color = accentColor.copy(alpha = 0.22f)
                 )
             ) {
                 Column(
@@ -472,46 +472,52 @@ fun ExerciseNoteEditorDialog(
                         .background(
                             brush = Brush.verticalGradient(
                                 colors = listOf(
-                                    Color.White.copy(alpha = 0.99f),
-                                    accentColor.copy(alpha = 0.08f),
-                                    Color.White.copy(alpha = 0.96f)
+                                    Color.White,
+                                    lerp(Color.White, accentColor, 0.08f),
+                                    lerp(Color.White, accentColor, 0.16f)
                                 )
                             )
                         )
-                        .padding(horizontal = 20.dp, vertical = 20.dp),
-                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End,
+                        .padding(horizontal = 22.dp, vertical = 22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
                         text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        style = MaterialTheme.typography.titleLarge,
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 25.sp,
+                            lineHeight = 30.sp
+                        ),
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF1F2937)
+                        color = Color(0xFF1E2A3D)
                     )
 
                     Text(
                         text = if (isEnglish) {
-                            "Write a personal note that will stay attached to this exercise."
+                            "Write a personal note that will stay attached to this exercise"
                         } else {
                             "כתוב הערה אישית שתישמר לתרגיל הזה"
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 15.sp,
+                            lineHeight = 20.sp
+                        ),
+                        fontWeight = FontWeight.ExtraBold,
                         color = Color(0xFF64748B)
                     )
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
-                        color = Color.White.copy(alpha = 0.96f),
-                        shadowElevation = 7.dp,
+                        color = Color.White.copy(alpha = 0.94f),
+                        shadowElevation = 8.dp,
                         border = BorderStroke(
                             width = 1.dp,
-                            color = accentColor.copy(alpha = 0.22f)
+                            color = accentColor.copy(alpha = 0.20f)
                         )
                     ) {
                         OutlinedTextField(
@@ -519,21 +525,32 @@ fun ExerciseNoteEditorDialog(
                             onValueChange = onNoteChange,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
-                            minLines = 4,
-                            maxLines = 7,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                .heightIn(min = 170.dp)
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            minLines = 5,
+                            maxLines = 8,
+                            textStyle = MaterialTheme.typography.titleMedium.copy(
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF111827)
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 19.sp,
+                                lineHeight = 25.sp,
+                                color = Color(0xFF1E2A3D)
                             ),
                             placeholder = {
                                 Text(
-                                    text = if (isEnglish) "Write a free note" else "הקלד הערה חופשית",
+                                    text = if (isEnglish) {
+                                        "Write a free note"
+                                    } else {
+                                        "הקלד הערה\nחופשית"
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
-                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontSize = 23.sp,
+                                        lineHeight = 31.sp
+                                    ),
                                     color = Color(0xFF94A3B8),
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.Black
                                 )
                             },
                             shape = RoundedCornerShape(20.dp),
@@ -542,37 +559,49 @@ fun ExerciseNoteEditorDialog(
                                 unfocusedBorderColor = Color.Transparent,
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
-                                cursorColor = accentColor
+                                cursorColor = accentColor,
+                                focusedTextColor = Color(0xFF1E2A3D),
+                                unfocusedTextColor = Color(0xFF1E2A3D)
                             )
                         )
                     }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(18.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(
+                        Surface(
                             onClick = onDismiss,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(50.dp)
+                                .height(56.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            color = Color.Transparent
                         ) {
-                            Text(
-                                text = if (isEnglish) "Cancel" else "בטל",
-                                fontWeight = FontWeight.Black,
-                                color = Color(0xFF6D5BA6),
-                                style = MaterialTheme.typography.titleSmall
-                            )
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isEnglish) "Cancel" else "בטל",
+                                    fontWeight = FontWeight.Black,
+                                    color = Color(0xFF6D5BA6),
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 19.sp,
+                                        lineHeight = 22.sp
+                                    )
+                                )
+                            }
                         }
 
                         Surface(
                             onClick = onSave,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(50.dp),
+                                .height(56.dp),
                             shape = RoundedCornerShape(18.dp),
-                            color = accentColor,
+                            color = accentColor.copy(alpha = 0.78f),
                             shadowElevation = 8.dp
                         ) {
                             Box(
@@ -583,7 +612,10 @@ fun ExerciseNoteEditorDialog(
                                     text = if (isEnglish) "Save" else "שמור",
                                     fontWeight = FontWeight.Black,
                                     color = Color.White,
-                                    style = MaterialTheme.typography.titleSmall
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 19.sp,
+                                        lineHeight = 22.sp
+                                    )
                                 )
                             }
                         }

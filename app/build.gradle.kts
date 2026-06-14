@@ -15,7 +15,7 @@ android {
         applicationId = "il.kmi.training"
         minSdk = 23
         targetSdk = 35
-        versionCode = 155
+        versionCode = 156
         versionName = "1.0.15"
         vectorDrawables.useSupportLibrary = true
     }
