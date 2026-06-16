@@ -255,6 +255,7 @@ internal fun formatCount(n: Int, lang: AppLanguage): String = when {
             else -> "$n exercises"
         }
     }
+
     else -> {
         when {
             n <= 0 -> "0 תרגילים"
@@ -290,21 +291,12 @@ private fun subTopicStatsLineForUi(
     subTopic: SharedContentRepo.SubTopic,
     lang: AppLanguage
 ): String {
-    val nestedCount = subTopic.subTopics.size
     val exercisesCount = subTopic.totalExercisesCountDeep()
 
     return if (lang == AppLanguage.ENGLISH) {
-        if (nestedCount > 0) {
-            "$nestedCount subtopics  •  $exercisesCount exercises"
-        } else {
-            "$exercisesCount exercises"
-        }
+        if (exercisesCount == 1) "1 exercise" else "$exercisesCount exercises"
     } else {
-        if (nestedCount > 0) {
-            "$nestedCount תתי נושאים  •  $exercisesCount תרגילים"
-        } else {
-            "$exercisesCount תרגילים"
-        }
+        if (exercisesCount == 1) "תרגיל 1" else "$exercisesCount תרגילים"
     }
 }
 
@@ -568,7 +560,8 @@ internal fun BeltPangoLayout(
 
     var currentIndex by rememberSaveable {
         mutableIntStateOf(
-            belts.indexOf(initialBelt).let { if (it >= 0) it else belts.indexOf(Belt.ORANGE).coerceAtLeast(0) }
+            belts.indexOf(initialBelt)
+                .let { if (it >= 0) it else belts.indexOf(Belt.ORANGE).coerceAtLeast(0) }
         )
     }
 
@@ -758,7 +751,37 @@ internal fun BeltPangoLayout(
                                     },
 
                                     onOpenDefenseList = { belt, kind, pick ->
-                                        onOpenDefenseMenu(belt, "$kind:$pick")
+                                        vm.setSelectedBelt(belt)
+
+                                        val cleanKind = kind.trim()
+                                        val cleanPick = pick.trim()
+
+                                        when {
+                                            cleanKind.contains("knife", ignoreCase = true) ||
+                                                    cleanPick.contains("סכין") ||
+                                                    cleanPick.contains("knife", ignoreCase = true) -> {
+                                                onOpenHardSubjectRoute(belt, "knife_defense")
+                                            }
+
+                                            cleanPick.contains("אקדח") ||
+                                                    cleanPick.contains("gun", ignoreCase = true) -> {
+                                                onOpenHardSubjectRoute(belt, "gun_threat_defense")
+                                            }
+
+                                            cleanPick.contains("מקל") ||
+                                                    cleanPick.contains("stick", ignoreCase = true) -> {
+                                                onOpenHardSubjectRoute(belt, "stick_defense")
+                                            }
+
+                                            cleanPick.contains("בעיטה") ||
+                                                    cleanPick.contains("kick", ignoreCase = true) -> {
+                                                onOpenHardSubjectRoute(belt, "kicks")
+                                            }
+
+                                            else -> {
+                                                onOpenDefenseMenu(belt, "$cleanKind:$cleanPick")
+                                            }
+                                        }
                                     },
 
                                     onOpenHardSubjectRoute = { belt, subjectId ->
@@ -896,9 +919,9 @@ internal fun BeltPangoLayout(
             }
             // אין כאן יותר דיאלוג חיפוש/הסבר מקומי.
             // כל החיפוש, ההסבר, המועדפים והערות המשתמש מטופלים דרך KmiTopBar.
-            }
         }
     }
+}
 
 /* ----------------------------- מתג "לפי חגורה / לפי נושא" ----------------------------- */
 
@@ -1003,7 +1026,8 @@ internal fun TopicsViewModeToggle(
                                 )
                             },
                             selectedContentColor = Color.White,
-                            unselectedContentColor = Color.White.copy(alpha = 0.82f)                        )
+                            unselectedContentColor = Color.White.copy(alpha = 0.82f)
+                        )
                     }
                 }
             }
@@ -1098,8 +1122,10 @@ private fun TopicsCardForBelt(
         )
     }
 
-    val subBoxBg = if (isDarkTheme) Color(0xFF0F172A).copy(alpha = 0.86f) else Color.White.copy(alpha = 0.76f)
-    val subRowBg = if (isDarkTheme) Color(0xFF1E293B).copy(alpha = 0.96f) else Color.White.copy(alpha = 0.94f)
+    val subBoxBg =
+        if (isDarkTheme) Color(0xFF0F172A).copy(alpha = 0.86f) else Color.White.copy(alpha = 0.76f)
+    val subRowBg =
+        if (isDarkTheme) Color(0xFF1E293B).copy(alpha = 0.96f) else Color.White.copy(alpha = 0.94f)
 
     val rawTopicTitles: List<String> = remember(belt) {
         TopicsEngine.topicTitlesFor(belt)
@@ -1461,7 +1487,9 @@ private fun TopicsCardForBelt(
                                             .background(subBoxBg)
                                             .border(
                                                 width = 1.dp,
-                                                color = if (isDarkTheme) Color.White.copy(alpha = 0.10f) else belt.color.copy(alpha = 0.18f),
+                                                color = if (isDarkTheme) Color.White.copy(alpha = 0.10f) else belt.color.copy(
+                                                    alpha = 0.18f
+                                                ),
                                                 shape = RoundedCornerShape(18.dp)
                                             )
                                             .padding(8.dp),
@@ -1470,15 +1498,16 @@ private fun TopicsCardForBelt(
                                         subTitles.forEach { sub ->
                                             val displaySub = topicTitleForUi(sub, lang)
 
-                                            val subTopicStatsLine = remember(belt, title, sub, lang) {
-                                                SharedContentRepo.getSubTopicsFor(
-                                                    belt = belt,
-                                                    topicTitle = title
-                                                )
-                                                    .firstOrNull { it.title.trim() == sub.trim() }
-                                                    ?.let { subTopicStatsLineForUi(it, lang) }
-                                                    .orEmpty()
-                                            }
+                                            val subTopicStatsLine =
+                                                remember(belt, title, sub, lang) {
+                                                    SharedContentRepo.getSubTopicsFor(
+                                                        belt = belt,
+                                                        topicTitle = title
+                                                    )
+                                                        .firstOrNull { it.title.trim() == sub.trim() }
+                                                        ?.let { subTopicStatsLineForUi(it, lang) }
+                                                        .orEmpty()
+                                                }
 
                                             Surface(
                                                 modifier = Modifier
@@ -1491,7 +1520,10 @@ private fun TopicsCardForBelt(
 
                                                         val canOpenSubTopic =
                                                             accessMode == AccessMode.OPEN ||
-                                                                    LockedContentPolicy.canOpenTopic(accessMode, title)
+                                                                    LockedContentPolicy.canOpenTopic(
+                                                                        accessMode,
+                                                                        title
+                                                                    )
 
                                                         if (!canOpenSubTopic) {
                                                             onOpenSubscription()
@@ -1504,13 +1536,18 @@ private fun TopicsCardForBelt(
                                                 shadowElevation = if (isDarkTheme) 0.dp else 4.dp,
                                                 border = BorderStroke(
                                                     1.dp,
-                                                    if (isDarkTheme) Color.White.copy(alpha = 0.10f) else belt.color.copy(alpha = 0.14f)
+                                                    if (isDarkTheme) Color.White.copy(alpha = 0.10f) else belt.color.copy(
+                                                        alpha = 0.14f
+                                                    )
                                                 )
                                             ) {
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                        .padding(
+                                                            horizontal = 12.dp,
+                                                            vertical = 10.dp
+                                                        ),
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     if (!isEnglish && parentLocked) {
@@ -1882,7 +1919,10 @@ private fun RotatingOrbitRing(
             sweepAngle = 360f,
             useCenter = false,
             topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
-            size = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2),
+            size = androidx.compose.ui.geometry.Size(
+                size.width - inset * 2,
+                size.height - inset * 2
+            ),
             style = Stroke(width = gapStroke.toPx())
         )
 
@@ -1894,7 +1934,10 @@ private fun RotatingOrbitRing(
                 sweepAngle = 360f,
                 useCenter = false,
                 topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
-                size = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2),
+                size = androidx.compose.ui.geometry.Size(
+                    size.width - inset * 2,
+                    size.height - inset * 2
+                ),
                 style = Stroke(width = strokePx, cap = androidx.compose.ui.graphics.StrokeCap.Round)
             )
         }

@@ -823,15 +823,16 @@ fun SubTopicsScreen(
         }
     }
 
-    val hardCurrentSection = remember(hardNavTopic, hardRootSections, isGreenDefenseNestedNavigation) {
-        if (isGreenDefenseNestedNavigation) {
-            null
-        } else if (hardRootSections == null) {
-            HardSectionsCatalog.findAnySectionById(hardNavTopic)
-        } else {
-            null
+    val hardCurrentSection =
+        remember(hardNavTopic, hardRootSections, isGreenDefenseNestedNavigation) {
+            if (isGreenDefenseNestedNavigation) {
+                null
+            } else if (hardRootSections == null) {
+                HardSectionsCatalog.findAnySectionById(hardNavTopic)
+            } else {
+                null
+            }
         }
-    }
 
     val isHardFlow = remember(
         hardNavTopic,
@@ -853,6 +854,7 @@ fun SubTopicsScreen(
             hardRootSections != null ->
                 HardSectionsCatalog.subjectDisplayTitle(hardNavTopic)
                     ?: hardDisplayTitleFallback(hardNavTopic)
+
             else -> hardDisplayTitleFallback(hardNavTopic)
         }
     }
@@ -1139,7 +1141,8 @@ fun SubTopicsScreen(
                 if (isHardFlow && hardSubSections.isNotEmpty()) {
                     hardSubSections.forEach { section ->
                         val beltCount = section.itemsFor(belt).size
-                        val displayCount = if (beltCount > 0) beltCount else section.totalItemsCount()
+                        val displayCount =
+                            if (beltCount > 0) beltCount else section.totalItemsCount()
 
                         HardSubTopicCategoryCard(
                             belt = belt,
@@ -1267,14 +1270,59 @@ fun SubTopicsScreen(
 
                 } else if (activeNestedGroup != null) {
 
+                    var explain by rememberSaveable { mutableStateOf<String?>(null) }
+
                     activeNestedGroup.leaves.forEach { leaf ->
-                        HardSubTopicCategoryCard(
-                            belt = belt,
-                            title = if (isEnglish) ExerciseTitlesEn.getOrSame(leaf.title) else leaf.title,
-                            count = leaf.items.size,
-                            onClick = {
-                                openedLocalNestedLeafTitle = leaf.title
-                            }
+                        Text(
+                            text = if (isEnglish) ExerciseTitlesEn.getOrSame(leaf.title) else leaf.title,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 6.dp),
+                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 13.sp,
+                                lineHeight = 16.sp
+                            ),
+                            fontWeight = FontWeight.ExtraBold,
+                            color = belt.color
+                        )
+
+                        leaf.items.forEach { itemName ->
+                            ExerciseRowWithInfo(
+                                belt = belt,
+                                itemName = itemName,
+                                accent = MaterialTheme.colorScheme.primary,
+                                onExplain = { _, item -> explain = item },
+                                onOpenExercise = { item ->
+                                    openedExerciseRequest = OpenedExerciseRequest(
+                                        belt = belt,
+                                        item = item
+                                    )
+                                }
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                    }
+
+                    explain?.let { item ->
+                        val explanation = remember(belt, topicDecoded, item) {
+                            findExplanationForHitLocal(
+                                belt = belt,
+                                rawItem = item,
+                                topic = topicDecoded,
+                                isEnglish = isEnglish
+                            )
+                        }
+
+                        ModernExerciseInfoDialog(
+                            title = exerciseTitleForUi(
+                                raw = item,
+                                isEnglish = isEnglish
+                            ),
+                            subtitle = if (isEnglish) belt.en else belt.heb,
+                            explanation = explanation,
+                            accentColor = belt.color,
+                            onDismiss = { explain = null }
                         )
                     }
 
@@ -1362,7 +1410,10 @@ fun SubTopicsScreen(
                                             subSectionId = "knife_defense_rifle_against_knife_stabs",
                                             belt = belt
                                         )
-                                            .map { ExerciseTitleFormatter.displayName(it).ifBlank { it }.trim() }
+                                            .map {
+                                                ExerciseTitleFormatter.displayName(it)
+                                                    .ifBlank { it }.trim()
+                                            }
                                             .filter { it.isNotBlank() }
                                             .distinct()
                                             .size
@@ -1375,7 +1426,10 @@ fun SubTopicsScreen(
                                             subjectId = "multiple_attackers_defense",
                                             belt = belt
                                         )
-                                            .map { ExerciseTitleFormatter.displayName(it).ifBlank { it }.trim() }
+                                            .map {
+                                                ExerciseTitleFormatter.displayName(it)
+                                                    .ifBlank { it }.trim()
+                                            }
                                             .filter { it.isNotBlank() }
                                             .distinct()
                                             .size
@@ -1492,15 +1546,15 @@ fun SubTopicsScreen(
 /* ========= עזר: לפרק מפתח חיפוש "belt|topic|item" ========= */
 private fun parseSearchKeyLocal(key: String): Triple<il.kmi.shared.domain.Belt, String, String> {
     val parts = when {
-        "|" in key  -> key.split("|", limit = 3)
+        "|" in key -> key.split("|", limit = 3)
         "::" in key -> key.split("::", limit = 3)
-        "/" in key  -> key.split("/", limit = 3)
-        else        -> listOf("", "", "")
+        "/" in key -> key.split("/", limit = 3)
+        else -> listOf("", "", "")
     }.let { (it + listOf("", "", "")).take(3) }
 
-    val belt  = il.kmi.shared.domain.Belt.fromId(parts[0]) ?: il.kmi.shared.domain.Belt.WHITE
+    val belt = il.kmi.shared.domain.Belt.fromId(parts[0]) ?: il.kmi.shared.domain.Belt.WHITE
     val topic = parts[1]
-    val item  = parts[2]
+    val item = parts[2]
     return Triple(belt, topic, item)
 }
 

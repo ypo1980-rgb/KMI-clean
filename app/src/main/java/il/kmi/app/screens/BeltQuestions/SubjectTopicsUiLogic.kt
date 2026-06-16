@@ -1438,25 +1438,44 @@ internal object SubjectTopicsUiLogic {
             sectionId = sectionId
         ) ?: return 0
 
-        fun countDeep(
+        fun countDeepForCurrentBelt(
             s: il.kmi.shared.domain.content.HardSectionsCatalog.Section
         ): Int {
             return if (s.subSections.isNotEmpty()) {
-                s.subSections.sumOf { child -> countDeep(child) }
+                s.subSections.sumOf { child -> countDeepForCurrentBelt(child) }
             } else {
                 s.beltGroups
                     .filter { group -> group.belt == currentBelt }
-                    .sumOf { group ->
-                        group.items
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                            .size
-                    }
+                    .flatMap { group -> group.items }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .size
             }
         }
 
-        return countDeep(section)
+        fun countDeepAllBelts(
+            s: il.kmi.shared.domain.content.HardSectionsCatalog.Section
+        ): Int {
+            return if (s.subSections.isNotEmpty()) {
+                s.subSections.sumOf { child -> countDeepAllBelts(child) }
+            } else {
+                s.beltGroups
+                    .flatMap { group -> group.items }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .size
+            }
+        }
+
+        val currentBeltCount = countDeepForCurrentBelt(section)
+
+        return if (currentBeltCount > 0) {
+            currentBeltCount
+        } else {
+            countDeepAllBelts(section)
+        }
     }
 
     private fun releasesCountForPick(
@@ -1932,16 +1951,16 @@ internal object SubjectTopicsUiLogic {
 
         return when {
 
-            p.contains("פנימ") || p == "internal" -> {
-                DefenseDialogDecision.AskKind(il.kmi.app.domain.DefenseKind.INTERNAL)
+            p.contains("פנימ") || p == "internal" || p == "def_internal" -> {
+                DefenseDialogDecision.OpenHardSubject("def_internal")
             }
 
-            p.contains("חיצונ") || p == "external" -> {
-                DefenseDialogDecision.AskKind(il.kmi.app.domain.DefenseKind.EXTERNAL)
+            p.contains("חיצונ") || p == "external" || p == "def_external" -> {
+                DefenseDialogDecision.OpenHardSubject("def_external")
             }
 
-            p.contains("בעיט") || p == "kicks" -> {
-                DefenseDialogDecision.OpenHardSubject("kicks_hard")
+            p.contains("בעיט") || p == "kicks" || p == "kicks_hard" -> {
+                DefenseDialogDecision.OpenHardSubject("kicks")
             }
 
             p == "knife_rifle" || p.contains("רובה") -> {

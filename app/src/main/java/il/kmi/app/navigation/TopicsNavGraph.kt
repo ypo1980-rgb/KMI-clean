@@ -2,6 +2,7 @@ package il.kmi.app.navigation
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraphBuilder
@@ -49,6 +50,74 @@ fun NavGraphBuilder.topicsNavGraph(
     sp: SharedPreferences,
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs
 ) {
+    composable("hard_subject/{subjectId}") { backStackEntry ->
+        val subjectId = backStackEntry.arguments
+            ?.getString("subjectId")
+            ?.let { Uri.decode(it) }
+            .orEmpty()
+
+        il.kmi.app.screens.UnifiedSubjectExercisesScreen(
+            subjectId = subjectId,
+            sectionId = null,
+            onOpenSection = { nextSubjectId, sectionId ->
+                val encodedSubject = Uri.encode(nextSubjectId)
+
+                if (sectionId == null) {
+                    nav.navigate("hard_subject/$encodedSubject") {
+                        launchSingleTop = true
+                        restoreState = false
+                    }
+                } else {
+                    val encodedSection = Uri.encode(sectionId)
+                    nav.navigate("hard_subject/$encodedSubject/$encodedSection") {
+                        launchSingleTop = true
+                        restoreState = false
+                    }
+                }
+            },
+            onBack = {
+                nav.popBackStack()
+            },
+            vm = vm
+        )
+    }
+
+    composable("hard_subject/{subjectId}/{sectionId}") { backStackEntry ->
+        val subjectId = backStackEntry.arguments
+            ?.getString("subjectId")
+            ?.let { Uri.decode(it) }
+            .orEmpty()
+
+        val sectionId = backStackEntry.arguments
+            ?.getString("sectionId")
+            ?.let { Uri.decode(it) }
+
+        il.kmi.app.screens.UnifiedSubjectExercisesScreen(
+            subjectId = subjectId,
+            sectionId = sectionId,
+            onOpenSection = { nextSubjectId, nextSectionId ->
+                val encodedSubject = Uri.encode(nextSubjectId)
+
+                if (nextSectionId == null) {
+                    nav.navigate("hard_subject/$encodedSubject") {
+                        launchSingleTop = true
+                        restoreState = false
+                    }
+                } else {
+                    val encodedSection = Uri.encode(nextSectionId)
+                    nav.navigate("hard_subject/$encodedSubject/$encodedSection") {
+                        launchSingleTop = true
+                        restoreState = false
+                    }
+                }
+            },
+            onBack = {
+                nav.popBackStack()
+            },
+            vm = vm
+        )
+    }
+
     composable(Route.Topics.route) {
 
         val appCtx = LocalContext.current
@@ -132,16 +201,42 @@ fun NavGraphBuilder.topicsNavGraph(
             onOpenHardSubjectRoute = { belt, subjectId ->
                 vm.setSelectedBelt(belt)
 
-                if (shouldBlockPremiumTopic(subjectId)) {
-                    nav.navigate(Route.Subscription.route) {
-                        launchSingleTop = true
-                        restoreState = true
+                val cleanSubjectId = subjectId.trim()
+
+                when (cleanSubjectId) {
+                    "def_internal",
+                    "def_external",
+                    "kicks",
+                    "kicks_hard",
+                    "knife_defense",
+                    "knife_rifle_defense",
+                    "gun_threat_defense",
+                    "stick_defense",
+                    "multiple_attackers_defense",
+                    "releases",
+                    "releases_hugs",
+                    "hands_all",
+                    "hands_strikes",
+                    "hands_elbows",
+                    "hands_stick_rifle",
+                    "topic_kavaler",
+                    "topic_general",
+                    "topic_kicks",
+                    "topic_breakfalls_rolls",
+                    "topic_ready_stance",
+                    "topic_ground_prep" -> {
+                        nav.navigate("hard_subject/${Uri.encode(cleanSubjectId)}") {
+                            launchSingleTop = true
+                            restoreState = false
+                        }
                     }
-                } else {
-                    openSubTopics(
-                        belt = belt,
-                        topic = subjectId
-                    )
+
+                    else -> {
+                        openSubTopics(
+                            belt = belt,
+                            topic = cleanSubjectId
+                        )
+                    }
                 }
             },
 
@@ -174,23 +269,13 @@ fun NavGraphBuilder.topicsNavGraph(
             },
 
             onOpenTopicWithSub = { belt: Belt, topicTitle: String, subTopicTitle: String ->
-                if (
-                    shouldBlockPremiumTopic(topicTitle) ||
-                    shouldBlockPremiumTopic(subTopicTitle)
-                ) {
-                    nav.navigate(Route.Subscription.route) {
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                } else {
-                    openChosenSubTopic(
-                        belt = belt,
-                        topic = topicTitle,
-                        subTopic = subTopicTitle
-                    )
-                }
+                // במסך "לפי נושא" לא חוסמים שוב תת־נושא שכבר נבחר מתוך דיאלוג פתוח.
+                openChosenSubTopic(
+                    belt = belt,
+                    topic = topicTitle,
+                    subTopic = subTopicTitle
+                )
             },
-
             onOpenDefenseList = { belt, kind, pick ->
                 // ✅ המסלול הזה מגיע רק אחרי שהמשתמש עבר את שער הגישה במסך הנושאים.
                 // לא חוסמים כאן שוב, כדי לא להפיל מנוי פעיל בגלל SharedPreferences לא מסונכרנים.

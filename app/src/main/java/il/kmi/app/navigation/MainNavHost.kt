@@ -50,6 +50,7 @@ import il.kmi.app.screens.AboutNetworkCoachesScreen
 import il.kmi.app.screens.SubTopics.subTopicsByBeltNavGraph
 import il.kmi.app.screens.SubTopics.subTopicsByTopicNavGraph
 import il.kmi.app.screens.admin.PaymentsReportScreen
+import il.kmi.app.screens.admin.AdminDiagnosticsScreen
 import il.kmi.app.screens.payments.PaymentScreen
 import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.screens.InitialLanguageScreen
@@ -949,6 +950,25 @@ fun MainNavHost(
             // אזור מנהל - ניהול משתמשים 🔐
             composable(route = Route.AdminUsers.route) {
                 il.kmi.app.screens.admin.AdminUsersScreen(
+                    onBack = {
+                        nav.popBackStack()
+                    },
+                    onHome = {
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = true
+                            popUpTo(nav.graph.startDestinationId) {
+                                inclusive = false
+                            }
+                        }
+                    }
+                )
+            }
+
+            // אזור מנהל - מרכז בקרה ולוגים 🔐
+            composable(route = "admin_diagnostics") {
+                AdminDiagnosticsScreen(
+                    isEnglish = isEnglish,
                     onBack = {
                         nav.popBackStack()
                     },

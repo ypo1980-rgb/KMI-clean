@@ -114,7 +114,15 @@ object HardSectionsCatalog {
             t == "מכות מרפק" -> "hands_elbows"
             t == "מכות במקל / רובה" -> "hands_stick_rifle"
             t == "מכות ידיים" -> "topic_hands"
-            t == "הגנות נגד בעיטות" -> "kicks_hard"
+            t == "הגנות נגד בעיטות" ||
+                    t == "kicks" ||
+                    t == "kicks_hard" -> "kicks_hard"
+            t == "הגנות פנימיות" ||
+                    t == "def_internal" -> "def_internal"
+
+            t == "הגנות חיצוניות" ||
+                    t == "def_external" -> "def_external"
+
             t == "הגנות פנימיות - אגרופים" -> "def_internal_punch"
             t == "הגנות פנימיות - בעיטות" -> "def_internal_kick"
             t == "הגנות חיצוניות - אגרופים" -> "def_external_punch"
@@ -125,7 +133,7 @@ object HardSectionsCatalog {
             t == "בלימות וגלגולים" -> "topic_breakfalls_rolls"
             t == "עמידת מוצא" -> "topic_ready_stance"
             t == "עבודת קרקע" -> "topic_ground_prep"
-            t == "קוואלר" -> "topic_Kavaler"
+            t == "קוואלר" -> "topic_kavaler"
 
             else -> t
         }
@@ -145,10 +153,10 @@ object HardSectionsCatalog {
         "hands_stick_rifle",
         "topic_hands",
         "kicks_hard",
+        "def_internal",
+        "def_external",
         "def_internal_punch",
-        "def_internal_kick",
         "def_external_punch",
-        "def_external_kick",
         "topic_general",
         "topic_kicks",
         "topic_breakfalls_rolls",
@@ -167,6 +175,67 @@ object HardSectionsCatalog {
         }
     }
 
+    private fun mergedDefenseBeltGroups(
+        vararg sectionLists: List<Section>
+    ): List<BeltGroup> {
+        val allSections = sectionLists.flatMap { it }
+
+        val orderedBelts = allSections
+            .flatMap { section -> section.beltGroups.map { it.belt } }
+            .distinct()
+
+        return orderedBelts.mapNotNull { belt ->
+            val items = allSections
+                .flatMap { section ->
+                    section.beltGroups
+                        .filter { it.belt == belt }
+                        .flatMap { it.items }
+                }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+            if (items.isEmpty()) {
+                null
+            } else {
+                BeltGroup(
+                    belt = belt,
+                    items = items
+                )
+            }
+        }
+    }
+
+    private fun mergedBeltGroupsDeep(
+        vararg sections: Section
+    ): List<BeltGroup> {
+        val allBelts = sections
+            .flatMap { section ->
+                section.beltGroups.map { it.belt } +
+                        section.subSections.flatMap { child ->
+                            child.beltGroups.map { it.belt }
+                        }
+            }
+            .distinct()
+
+        return allBelts.mapNotNull { belt ->
+            val items = sections
+                .flatMap { section -> section.itemsFor(belt) }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+            if (items.isEmpty()) {
+                null
+            } else {
+                BeltGroup(
+                    belt = belt,
+                    items = items
+                )
+            }
+        }
+    }
+
     // ✅ NEW
     fun sectionsForSubject(subjectId: String): List<Section>? {
         val id = canonicalSubjectId(subjectId)
@@ -174,13 +243,21 @@ object HardSectionsCatalog {
         return when {
             id == "releases" -> releases
 
+            id == "releases_hugs" -> {
+                val section = findSectionById("releases", id) ?: return null
+
+                listOf(
+                    Section(
+                        id = "releases_hugs",
+                        title = "שחרור מחביקות",
+                        beltGroups = mergedBeltGroupsDeep(section)
+                    )
+                )
+            }
+
             id.startsWith("releases_") -> {
                 val section = findSectionById("releases", id) ?: return null
-                if (section.subSections.isNotEmpty()) {
-                    section.subSections
-                } else {
-                    listOf(section)
-                }
+                listOf(section)
             }
 
             id == "defenses_root" -> defensesRoot
@@ -190,15 +267,32 @@ object HardSectionsCatalog {
             id == "stick_defense" -> defensesStick
             id == "multiple_attackers_defense" -> defensesMultipleAttackers
             id == "kicks_hard" -> defensesKicks
+
+            id == "def_internal" -> listOf(
+                Section(
+                    id = "def_internal",
+                    title = "הגנות פנימיות",
+                    beltGroups = mergedDefenseBeltGroups(
+                        defensesInternalPunch
+                    )
+                )
+            )
+
+            id == "def_external" -> listOf(
+                Section(
+                    id = "def_external",
+                    title = "הגנות חיצוניות",
+                    beltGroups = mergedDefenseBeltGroups(
+                        defensesExternalPunch
+                    )
+                )
+            )
+
             id == "hands_all" -> handsAll
             id == "hands_strikes" -> handsAll.filter { it.id == "hands_strikes" }
             id == "hands_elbows" -> handsAll.filter { it.id == "hands_elbows" }
             id == "hands_stick_rifle" -> handsAll.filter { it.id == "hands_stick_rifle" }
             id == "topic_hands" -> handsAll
-            id == "def_internal_punch" -> defensesInternalPunch
-            id == "def_internal_kick" -> defensesInternalKick
-            id == "def_external_punch" -> defensesExternalPunch
-            id == "def_external_kick" -> defensesExternalKick
             id == "topic_general" -> topicGeneral
             id == "topic_kicks" -> topicKicks
             id == "topic_breakfalls_rolls" -> topicBreakfallsRolls
@@ -220,15 +314,15 @@ object HardSectionsCatalog {
             "stick_defense" -> "הגנות נגד מקל"
             "multiple_attackers_defense" -> "הגנות נגד מספר תוקפים"
             "kicks_hard" -> "הגנות נגד בעיטות"
+            "def_internal" -> "הגנות פנימיות"
+            "def_external" -> "הגנות חיצוניות"
             "hands_all" -> "עבודת ידיים"
             "hands_strikes" -> "מכות יד"
             "hands_elbows" -> "מכות מרפק"
             "hands_stick_rifle" -> "מכות במקל / רובה"
             "topic_hands" -> "מכות ידיים"
-            "def_internal_punch" -> "הגנות פנימיות - אגרופים"
-            "def_internal_kick" -> "הגנות פנימיות - בעיטות"
-            "def_external_punch" -> "הגנות חיצוניות - אגרופים"
-            "def_external_kick" -> "הגנות חיצוניות - בעיטות"
+            "def_internal_punch" -> "הגנות פנימיות"
+            "def_external_punch" -> "הגנות חיצוניות"
             "topic_general" -> "כללי"
             "topic_kicks" -> "בעיטות"
             "topic_breakfalls_rolls" -> "בלימות וגלגולים"
@@ -566,7 +660,7 @@ object HardSectionsCatalog {
 
     val topicKavaler: List<Section> = listOf(
         Section(
-            id = "topic_Kavaler_main",
+            id = "topic_kavaler_main",
             title = "קוואלר",
             beltGroups = listOf(
                 BeltGroup(belt = Belt.YELLOW, items = emptyList()),
@@ -643,7 +737,10 @@ object HardSectionsCatalog {
                         "הגנה נגד בעיטת מגל לאחור - בעיטה בימין",
                         "הגנה נגד בעיטת מגל לאחור - בעיטה שמאל",
                         "הגנה נגד בעיטת מגל לאחור - אגרוף שמאל",
-                        "הגנה נגד בעיטת מגל לאחור בסיבוב – בעיטה"
+                        "הגנה נגד בעיטת מגל לאחור בסיבוב – בעיטה",
+                        "הגנה חיצונית באמת ימין נגד בעיטה לצד",
+                        "הגנה חיצונית באמת שמאל נגד בעיטה לצד",
+                        "הגנה נגד בעיטת לצד בעיטת סטירה חיצונית"
                     )
                 ),
                 BeltGroup(
@@ -652,7 +749,8 @@ object HardSectionsCatalog {
                         "הגנה נגד בעיטת מגל לפנים עם השוק",
                         "הגנה נגד בעיטת מגל לצלעות",
                         "הגנה נגד בעיטת מגל לפנים - בעיטה לצד",
-                        "הגנה נגד בעיטת מגל לפנים - בעיטה לאחור"
+                        "הגנה נגד בעיטת מגל לפנים - בעיטה לאחור",
+                        "הגנה פנימית באמת ימין נגד בעיטה לצד",
                     )
                 ),
                 BeltGroup(
@@ -675,35 +773,8 @@ object HardSectionsCatalog {
             )
         ),
 
+
         Section(
-            id = "kicks_side_kick",
-            title = "הגנות נגד בעיטה לצד",
-            beltGroups = listOf(
-                BeltGroup(
-                    belt = Belt.ORANGE,
-                    items = listOf(
-                        "בעיטת עצירה נגד בעיטה לצד"
-                    )
-                ),
-                BeltGroup(
-                    belt = Belt.GREEN,
-                    items = listOf(
-                        "הגנה חיצונית באמת ימין נגד בעיטה לצד",
-                        "הגנה חיצונית באמת שמאל נגד בעיטה לצד",
-                        "הגנה נגד בעיטת לצד בעיטת סטירה חיצונית"
-                    )
-                ),
-                BeltGroup(
-                    belt = Belt.BLUE,
-                    items = listOf(
-                        "הגנה פנימית באמת ימין נגד בעיטה לצד",
-                    )
-                )
-            )
-        ),
-
-
-                        Section(
             id = "kicks_knee",
             title = "הגנות נגד ברך",
             beltGroups = listOf(
@@ -810,8 +881,8 @@ object HardSectionsCatalog {
                 )
             )
         ),
-                    Section(
-                    id = "knife_defense_rifle_against_knife_stabs",
+        Section(
+            id = "knife_defense_rifle_against_knife_stabs",
             title = "הגנות עם רובה נגד דקירות סכין",
             beltGroups = listOf(
                 BeltGroup(belt = Belt.YELLOW, items = emptyList()),
@@ -915,25 +986,25 @@ object HardSectionsCatalog {
                 BeltGroup(
                     belt = Belt.BROWN,
                     items = listOf(
-                "הגנה נגד מקל בסיבוב – צד חי",
-                "הגנה נגד מקל עם קוואלר – צד מת",
-                "הגנה נגד מקל נקודת תורפה – לצד המת"
+                        "הגנה נגד מקל בסיבוב – צד חי",
+                        "הגנה נגד מקל עם קוואלר – צד מת",
+                        "הגנה נגד מקל נקודת תורפה – לצד המת"
                     )
                 ),
                 BeltGroup(
                     belt = Belt.BLACK,
                     items = listOf(
-                "הגנה נגד מקל ארוך – התקפה לצד ימין מגן",
-                "הגנה נגד מקל ארוך – התקפה לצד שמאל מגן",
-                "הגנה נגד מקל ארוך מצד ימין",
-                "הגנה נגד מקל ארוך מצד שמאל",
-                "הגנה נגד דקירה במקל ארוך – הצד החי",
-                "הגנה נגד דקירה במקל ארוך – הצד המת"
+                        "הגנה נגד מקל ארוך – התקפה לצד ימין מגן",
+                        "הגנה נגד מקל ארוך – התקפה לצד שמאל מגן",
+                        "הגנה נגד מקל ארוך מצד ימין",
+                        "הגנה נגד מקל ארוך מצד שמאל",
+                        "הגנה נגד דקירה במקל ארוך – הצד החי",
+                        "הגנה נגד דקירה במקל ארוך – הצד המת"
+                    )
                 )
             )
-         )
+        )
     )
-)
 
     // ----------------------------
     // עבודת ידיים – לפי חגורה
@@ -1101,7 +1172,7 @@ object HardSectionsCatalog {
     val defensesInternalPunch: List<Section> = listOf(
         Section(
             id = "def_internal_punch",
-            title = "הגנות פנימיות - אגרופים",
+            title = "הגנות פנימיות",
             beltGroups = listOf(
                 BeltGroup(
                     belt = Belt.YELLOW,
@@ -1109,7 +1180,8 @@ object HardSectionsCatalog {
                         "הגנה פנימית רפלקסיבית",
                         "הגנה פנימית נגד ימין בכף יד שמאל",
                         "הגנה פנימית נגד שמאל בכף יד ימין",
-                    )
+                        "הגנה פנימית נגד בעיטה רגילה למפסעה",
+                        )
                 ),
                 BeltGroup(
                     belt = Belt.ORANGE,
@@ -1127,6 +1199,22 @@ object HardSectionsCatalog {
                     )
                 ),
                 BeltGroup(
+                    belt = Belt.BLUE,
+                    items = listOf(
+                        "הגנה פנימית נגד בעיטת מגל לפנים - בעיטה לצד",
+                        "הגנה פנימית נגד בעיטת מגל לפנים - בעיטה לאחור",
+                        "הגנה פנימית באמת ימין נגד בעיטה לצד"
+                    )
+                ),
+                BeltGroup(
+                    belt = Belt.BROWN,
+                    items = listOf(
+                        "הגנה פנימית נגד בעיטה לסנטר",
+                        "הגנה פנימית נגד בעיטה רגילה – טאטוא",
+                    )
+                ),
+
+                BeltGroup(
                     belt = Belt.BLACK,
                     items = listOf(
                         "הגנה פנימית נגד אגרוף שמאל – בעיטת הגנה",
@@ -1142,40 +1230,10 @@ object HardSectionsCatalog {
         )
     )
 
-    val defensesInternalKick: List<Section> = listOf(
-        Section(
-            id = "def_internal_kick",
-            title = "הגנות פנימיות - בעיטות",
-            beltGroups = listOf(
-                BeltGroup(
-                    belt = Belt.YELLOW,
-                    items = listOf(
-                        "הגנה פנימית נגד בעיטה רגילה למפסעה",
-                    )
-                ),
-                BeltGroup(
-                    belt = Belt.BLUE,
-                    items = listOf(
-                        "הגנה פנימית נגד בעיטת מגל לפנים - בעיטה לצד",
-                        "הגנה פנימית נגד בעיטת מגל לפנים - בעיטה לאחור",
-                        "הגנה פנימית באמת ימין נגד בעיטה לצד"
-                    )
-                ),
-                BeltGroup(
-                    belt = Belt.BROWN,
-                    items = listOf(
-                        "הגנה פנימית נגד בעיטה לסנטר",
-                        "הגנה פנימית נגד בעיטה רגילה – טאטוא",
-                    )
-                )
-            )
-        )
-    )
-
     val defensesExternalPunch: List<Section> = listOf(
         Section(
             id = "def_external_punch",
-            title = "הגנות חיצוניות - אגרופים",
+            title = "הגנות חיצוניות",
             beltGroups = listOf(
                 BeltGroup(
                     belt = Belt.YELLOW,
@@ -1199,7 +1257,12 @@ object HardSectionsCatalog {
                         "הגנה נגד מכה גבוהה מהצד - התוקף בצד ימין",
                         "הגנה נגד מכה מהצד לגרון - התוקף בצד ימין",
                         "הגנה נגד מכה מהצד לבטן - התוקף בצד ימין",
-                    )
+                        "הגנה חיצונית נגד בעיטה רגילה",
+                        "הגנה חיצונית נגד בעיטת מגל לפנים - בעיטה בימין",
+                        "הגנה חיצונית נגד בעיטת מגל לפנים - בעיטה בשמאל",
+                        "הגנה חיצונית נגד בעיטת מגל לפנים - אגרוף בימין",
+
+                        )
                 ),
                 BeltGroup(
                     belt = Belt.GREEN,
@@ -1207,33 +1270,11 @@ object HardSectionsCatalog {
                         "הגנה חיצונית נגד ימין באגרוף מהופך",
                         "הגנה חיצונית נגד שמאל",
                         "הגנה חיצונית נגד שמאל בהתקדמות",
-                    )
-                )
-            )
-        )
-    )
-
-    val defensesExternalKick: List<Section> = listOf(
-        Section(
-            id = "def_external_kick",
-            title = "הגנות חיצוניות - בעיטות",
-            beltGroups = listOf(
-                BeltGroup(
-                    belt = Belt.ORANGE,
-                    items = listOf(
-                        "הגנה חיצונית נגד בעיטה רגילה",
-                        "הגנה חיצונית נגד בעיטת מגל לפנים - בעיטה בימין",
-                        "הגנה חיצונית נגד בעיטת מגל לפנים - בעיטה בשמאל",
-                        "הגנה חיצונית נגד בעיטת מגל לפנים - אגרוף בימין",
-                    )
-                ),
-                BeltGroup(
-                    belt = Belt.GREEN,
-                    items = listOf(
                         "הגנה חיצונית באמת שמאל נגד בעיטה רגילה",
                         "הגנה חיצונית באמת ימין נגד בעיטה לצד",
                         "הגנה חיצונית באמת שמאל נגד בעיטה לצד",
-                    )
+
+                        )
                 ),
                 BeltGroup(
                     belt = Belt.BROWN,
@@ -1243,11 +1284,13 @@ object HardSectionsCatalog {
                         "הגנה חיצונית נגד בעיטה רגילה – טאטוא",
                         "הגנה חיצונית נגד מגל לפנים – גזיזה",
                         "הגנה חיצונית נגד מגל לפנים – טאטוא",
-                    )
+
+                        )
                 )
             )
         )
     )
+
 
     val defensesRoot: List<Section> = listOf(
         Section(
@@ -1290,22 +1333,13 @@ object HardSectionsCatalog {
             id = "def_internal_punch",
             title = "הגנות פנימיות - אגרופים",
             beltGroups = defensesInternalPunch.firstOrNull()?.beltGroups.orEmpty()
-        ),
-        Section(
-            id = "def_internal_kick",
-            title = "הגנות פנימיות - בעיטות",
-            beltGroups = defensesInternalKick.firstOrNull()?.beltGroups.orEmpty()
+
         ),
         Section(
             id = "def_external_punch",
             title = "הגנות חיצוניות - אגרופים",
             beltGroups = defensesExternalPunch.firstOrNull()?.beltGroups.orEmpty()
         ),
-        Section(
-            id = "def_external_kick",
-            title = "הגנות חיצוניות - בעיטות",
-            beltGroups = defensesExternalKick.firstOrNull()?.beltGroups.orEmpty()
-        )
     )
 
     // ----------------------------
@@ -1531,7 +1565,7 @@ object HardSectionsCatalog {
         )
     )
 
-        // ----------------------------
+    // ----------------------------
     // Defense helpers (source of truth)
     // ----------------------------
 
@@ -1562,7 +1596,7 @@ object HardSectionsCatalog {
             t.startsWith("def_internal") -> "internal"
             t.startsWith("def_external") -> "external"
             t.startsWith("def_all") -> "all"
-            t == "kicks_hard" -> "kicks_hard"
+            t == "kicks" || t == "kicks_hard" -> "kicks_hard"
             t == "releases_hard" -> "releases_hard"
             t == "knife_hard" -> "knife_hard"
             t == "knife_rifle_hard" -> "knife_rifle_hard"
@@ -1639,17 +1673,10 @@ object HardSectionsCatalog {
             return fromSection(defensesInternalPunch.firstOrNull())
         }
 
-        if (kind == "internal" && pick == "kick") {
-            return fromSection(defensesInternalKick.firstOrNull())
-        }
-
         if (kind == "external" && pick == "punch") {
             return fromSection(defensesExternalPunch.firstOrNull())
         }
 
-        if (kind == "external" && pick == "kick") {
-            return fromSection(defensesExternalKick.firstOrNull())
-        }
 
         if (kind == "knife_hard") {
             return fromSection(

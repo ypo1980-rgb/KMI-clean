@@ -71,13 +71,13 @@ private fun BeltPill(
     val stroke = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
 
     fun beltDrawableRes(b: Belt): Int = when (b) {
-        Belt.WHITE  -> R.drawable.belt_white
+        Belt.WHITE -> R.drawable.belt_white
         Belt.YELLOW -> R.drawable.belt_yellow
         Belt.ORANGE -> R.drawable.belt_orange
-        Belt.GREEN  -> R.drawable.belt_green
-        Belt.BLUE   -> R.drawable.belt_blue
-        Belt.BROWN  -> R.drawable.belt_brown
-        Belt.BLACK  -> R.drawable.belt_black
+        Belt.GREEN -> R.drawable.belt_green
+        Belt.BLUE -> R.drawable.belt_blue
+        Belt.BROWN -> R.drawable.belt_brown
+        Belt.BLACK -> R.drawable.belt_black
     }
 
     Surface(
@@ -214,7 +214,12 @@ fun MaterialsScreen(
     val currentLang = langManager.getCurrentLanguage()
     val isEnglish = currentLang == AppLanguage.ENGLISH
 
-    val sp = remember { context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
+    val sp = remember {
+        context.getSharedPreferences(
+            "kmi_settings",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
 
     // ✅ גורם למסך להתרענן אחרי סימון יודע/לא יודע ממסכים אחרים, כולל RandomPracticeScreen
     val marksVersion by vm.marksVersion.collectAsState()
@@ -229,7 +234,8 @@ fun MaterialsScreen(
 
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
-    val itemStates = remember(belt.id, topic, subTopicFilter) { mutableStateMapOf<String, Boolean?>() }
+    val itemStates =
+        remember(belt.id, topic, subTopicFilter) { mutableStateMapOf<String, Boolean?>() }
 
     var explainTriple by remember { mutableStateOf<Triple<Belt, String, String>?>(null) }
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -321,15 +327,7 @@ fun MaterialsScreen(
         mutableStateOf<String?>(null)
     }
 
-    val isShowingNestedSubTopicPicker = remember(
-        materialParentSubTopic,
-        openedNestedSubTopic,
-        nestedSubTopicTitles
-    ) {
-        materialParentSubTopic != null &&
-                openedNestedSubTopic == null &&
-                nestedSubTopicTitles.isNotEmpty()
-    }
+    val isShowingNestedSubTopicPicker = false
 
     val effectiveSubTopicFilter = remember(
         materialParentSubTopic,
@@ -400,17 +398,21 @@ fun MaterialsScreen(
     // ===== סוף canonical =====
 
     val handlePickFromTopBar: (String) -> Unit = { key ->
-        fun dec(s: String) = try { java.net.URLDecoder.decode(s, "UTF-8") } catch (_: Exception) { s }
+        fun dec(s: String) = try {
+            java.net.URLDecoder.decode(s, "UTF-8")
+        } catch (_: Exception) {
+            s
+        }
 
         val r = runCatching { il.kmi.app.domain.ContentRepo.resolveItemKey(key) }.getOrNull()
         if (r != null) {
             explainTriple = Triple(r.belt, r.topicTitle, r.itemTitle)
         } else {
             val parts = when {
-                '|'  in key -> key.split('|',  limit = 3)
+                '|' in key -> key.split('|', limit = 3)
                 "::" in key -> key.split("::", limit = 3)
-                '/'  in key -> key.split('/',  limit = 3)
-                else        -> listOf("", "", "")
+                '/' in key -> key.split('/', limit = 3)
+                else -> listOf("", "", "")
             }.map(::dec)
 
             val beltFromKey = Belt.fromId(parts.getOrNull(0).orEmpty()) ?: belt
@@ -469,9 +471,19 @@ fun MaterialsScreen(
                         topicTitle = topicTrim,
                         subTopicTitle = subTrim
                     )
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
 
                     if (nestedTitles.isNotEmpty()) {
-                        emptyList()
+                        nestedTitles.flatMap { nestedTitle ->
+                            SharedContentRepo.getNestedItemsFor(
+                                belt = belt,
+                                topicTitle = topicTrim,
+                                subTopicTitle = subTrim,
+                                nestedSubTopicTitle = nestedTitle
+                            )
+                        }
                     } else {
                         SharedContentRepo.getAllItemsFor(
                             belt = belt,
@@ -494,6 +506,29 @@ fun MaterialsScreen(
         }
 
         itemsCache[key] = value
+    }
+
+    val nestedSectionTitleByItem = remember(
+        belt,
+        materialRootTopic,
+        materialParentSubTopic,
+        nestedSubTopicTitles
+    ) {
+        if (materialParentSubTopic.isNullOrBlank() || nestedSubTopicTitles.isEmpty()) {
+            emptyMap()
+        } else {
+            nestedSubTopicTitles.flatMap { nestedTitle ->
+                SharedContentRepo.getNestedItemsFor(
+                    belt = belt,
+                    topicTitle = materialRootTopic.trim(),
+                    subTopicTitle = materialParentSubTopic.trim(),
+                    nestedSubTopicTitle = nestedTitle.trim()
+                )
+                    .map { item -> item.trim() to nestedTitle.trim() }
+            }
+                .filter { (item, title) -> item.isNotBlank() && title.isNotBlank() }
+                .toMap()
+        }
     }
 
     fun normalizeStatusPart(s: String): String =
@@ -639,12 +674,14 @@ fun MaterialsScreen(
 
     // ✅ סימונים (✓/✗/—) — מקור אמת יחיד: ViewModel/DataStore
 
-    val unknownKey = remember(belt.id, excludedKeySuffix) { "unknown_${belt.id}_$excludedKeySuffix" }
+    val unknownKey =
+        remember(belt.id, excludedKeySuffix) { "unknown_${belt.id}_$excludedKeySuffix" }
     var unknowns by remember(unknownKey) {
         mutableStateOf<MutableSet<String>>(
             sp.getStringSet(unknownKey, emptySet())?.toMutableSet() ?: mutableSetOf()
         )
     }
+
     fun setUnknown(id: String, set: Boolean) {
         val s = unknowns.toMutableSet()
         if (set) s.add(id) else s.remove(id)
@@ -652,12 +689,14 @@ fun MaterialsScreen(
         sp.edit().putStringSet(unknownKey, s).apply()
     }
 // ✅ NEW: נשמור גם mastered (וי ירוק) ב-SP כדי שהסיכום יראה אותו
-    val masteredKey = remember(belt.id, excludedKeySuffix) { "mastered_${belt.id}_$excludedKeySuffix" }
+    val masteredKey =
+        remember(belt.id, excludedKeySuffix) { "mastered_${belt.id}_$excludedKeySuffix" }
     var masteredSet by remember(masteredKey) {
         mutableStateOf<MutableSet<String>>(
             sp.getStringSet(masteredKey, emptySet())?.toMutableSet() ?: mutableSetOf()
         )
     }
+
     fun setMasteredLocal(id: String, set: Boolean) {
         val s = masteredSet.toMutableSet()
         if (set) s.add(id) else s.remove(id)
@@ -864,11 +903,21 @@ fun MaterialsScreen(
                     }
 
                     openedNestedSubTopic.isNullOrBlank() -> {
-                        "${topicTitleForUi(topic, currentLang)} - ${topicTitleForUi(decodedSubTopicFilter, currentLang)}"
+                        "${topicTitleForUi(topic, currentLang)} - ${
+                            topicTitleForUi(
+                                decodedSubTopicFilter,
+                                currentLang
+                            )
+                        }"
                     }
 
                     else -> {
-                        "${topicTitleForUi(decodedSubTopicFilter, currentLang)} - ${topicTitleForUi(openedNestedSubTopic ?: "", currentLang)}"
+                        "${topicTitleForUi(decodedSubTopicFilter, currentLang)} - ${
+                            topicTitleForUi(
+                                openedNestedSubTopic ?: "",
+                                currentLang
+                            )
+                        }"
                     }
                 }
 
@@ -1023,7 +1072,7 @@ fun MaterialsScreen(
             }
         }
     ) { innerPadding ->
-    Surface(
+        Surface(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
@@ -1031,239 +1080,241 @@ fun MaterialsScreen(
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
 
-        // ===== דיאלוג הסבר בעקבות חיפוש / מידע =====
-        explainTriple?.let { (b, t, iRaw) ->
+            // ===== דיאלוג הסבר בעקבות חיפוש / מידע =====
+            explainTriple?.let { (b, t, iRaw) ->
 
-            val cleanItemForResolver = remember(t, iRaw) {
-                cleanItem(t, iRaw).trim()
+                val cleanItemForResolver = remember(t, iRaw) {
+                    cleanItem(t, iRaw).trim()
+                }
+
+                val resolvedIdentity = remember(b, t, cleanItemForResolver) {
+                    ExerciseIdentityRegistry.resolve(
+                        belt = b,
+                        hebrewTitle = cleanItemForResolver,
+                        topicKey = t.trim().ifBlank { null }
+                    )
+                }
+
+                val dialogActionId =
+                    remember(b, t, iRaw, cleanItemForResolver, resolvedIdentity.id) {
+                        if (resolvedIdentity.isKnown) {
+                            resolvedIdentity.id
+                        } else {
+                            CanonicalIds.resolveCanonicalForExplanation(
+                                belt = b,
+                                topicTitle = t,
+                                rawItemFromRepo = iRaw
+                            )
+                        }
+                    }
+
+                val explanation = remember(b, t, cleanItemForResolver, isEnglish) {
+                    ExerciseExplanationResolver.get(
+                        belt = b,
+                        topic = t,
+                        item = cleanItemForResolver,
+                        isEnglish = isEnglish
+                    ).trim()
+                }.ifBlank {
+                    if (isEnglish) {
+                        "No explanation found for \"$cleanItemForResolver\"."
+                    } else {
+                        "לא נמצא הסבר עבור \"$cleanItemForResolver\"."
+                    }
+                }
+
+                val dialogTitle = itemTitleForUi(
+                    topic = t,
+                    rawItem = cleanItemForResolver,
+                    lang = currentLang
+                )
+
+                val dialogBeltLabel = if (isEnglish) {
+                    "(${b.en} belt)"
+                } else {
+                    "(${b.heb})"
+                }
+
+                val dialogNoteText = remember(dialogActionId, notesRefreshKey) {
+                    loadNote(dialogActionId)
+                }
+
+                ExerciseExplanationDialog(
+                    title = dialogTitle,
+                    beltLabel = dialogBeltLabel,
+                    explanation = explanation,
+                    noteText = dialogNoteText,
+                    isFavorite = favorites.contains(dialogActionId) ||
+                            isFavoriteByAliases(
+                                topicTitle = t,
+                                rawItem = iRaw
+                            ),
+                    accentColor = b.color,
+                    isEnglish = isEnglish,
+                    onDismiss = { explainTriple = null },
+                    onEditNote = {
+                        noteEditorFor = dialogActionId
+                        noteDraft = loadNote(dialogActionId)
+                    },
+                    onDeleteNote = {
+                        noteDraft = ""
+                        saveNote(dialogActionId, "")
+                    },
+                    onToggleFavorite = {
+                        toggleFavoriteAliases(
+                            topicTitle = t,
+                            rawItem = iRaw
+                        )
+                    }
+                )
             }
+            // ===== סוף הדיאלוג =====
 
-            val resolvedIdentity = remember(b, t, cleanItemForResolver) {
-                ExerciseIdentityRegistry.resolve(
-                    belt = b,
-                    hebrewTitle = cleanItemForResolver,
-                    topicKey = t.trim().ifBlank { null }
+            noteEditorFor?.let { itemId ->
+                ExerciseNoteEditorDialog(
+                    noteText = noteDraft,
+                    isEnglish = isEnglish,
+                    accentColor = belt.color,
+                    onNoteChange = { noteDraft = it },
+                    onDismiss = {
+                        noteEditorFor = null
+                    },
+                    onSave = {
+                        val cleanNote = noteDraft.trim()
+                        noteDraft = cleanNote
+                        saveNote(itemId, cleanNote)
+                        noteEditorFor = null
+                    }
                 )
             }
 
-            val dialogActionId = remember(b, t, iRaw, cleanItemForResolver, resolvedIdentity.id) {
-                if (resolvedIdentity.isKnown) {
-                    resolvedIdentity.id
-                } else {
-                    CanonicalIds.resolveCanonicalForExplanation(
-                        belt = b,
-                        topicTitle = t,
-                        rawItemFromRepo = iRaw
-                    )
-                }
-            }
-
-            val explanation = remember(b, t, cleanItemForResolver, isEnglish) {
-                ExerciseExplanationResolver.get(
-                    belt = b,
-                    topic = t,
-                    item = cleanItemForResolver,
-                    isEnglish = isEnglish
-                ).trim()
-            }.ifBlank {
-                if (isEnglish) {
-                    "No explanation found for \"$cleanItemForResolver\"."
-                } else {
-                    "לא נמצא הסבר עבור \"$cleanItemForResolver\"."
-                }
-            }
-
-            val dialogTitle = itemTitleForUi(
-                topic = t,
-                rawItem = cleanItemForResolver,
-                lang = currentLang
-            )
-
-            val dialogBeltLabel = if (isEnglish) {
-                "(${b.en} belt)"
-            } else {
-                "(${b.heb})"
-            }
-
-            val dialogNoteText = remember(dialogActionId, notesRefreshKey) {
-                loadNote(dialogActionId)
-            }
-
-            ExerciseExplanationDialog(
-                title = dialogTitle,
-                beltLabel = dialogBeltLabel,
-                explanation = explanation,
-                noteText = dialogNoteText,
-                isFavorite = favorites.contains(dialogActionId) ||
-                        isFavoriteByAliases(
-                            topicTitle = t,
-                            rawItem = iRaw
-                        ),
-                accentColor = b.color,
-                isEnglish = isEnglish,
-                onDismiss = { explainTriple = null },
-                onEditNote = {
-                    noteEditorFor = dialogActionId
-                    noteDraft = loadNote(dialogActionId)
-                },
-                onDeleteNote = {
-                    noteDraft = ""
-                    saveNote(dialogActionId, "")
-                },
-                onToggleFavorite = {
-                    toggleFavoriteAliases(
-                        topicTitle = t,
-                        rawItem = iRaw
-                    )
-                }
-            )
-        }
-        // ===== סוף הדיאלוג =====
-
-        noteEditorFor?.let { itemId ->
-            ExerciseNoteEditorDialog(
-                noteText = noteDraft,
-                isEnglish = isEnglish,
-                accentColor = belt.color,
-                onNoteChange = { noteDraft = it },
-                onDismiss = {
-                    noteEditorFor = null
-                },
-                onSave = {
-                    val cleanNote = noteDraft.trim()
-                    noteDraft = cleanNote
-                    saveNote(itemId, cleanNote)
-                    noteEditorFor = null
-                }
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.End
-        ) {
-            Box(
+            Column(
                 modifier = Modifier
+                    .fillMaxSize(),
+                horizontalAlignment = Alignment.End
+            ) {
+                Box(
+                    modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                         .background(belt.lightColor)
                         .padding(top = 4.dp, start = 12.dp, end = 12.dp)
                 ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(scroll),
-                    verticalArrangement = Arrangement.spacedBy(0.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scroll),
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
+                        horizontalAlignment = Alignment.End
+                    ) {
 
-                    if (!isShowingNestedSubTopicPicker && itemList.isNotEmpty()) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = if (isEnglish) {
-                                    "← Swipe sideways to see more stats →"
-                                } else {
-                                    "→→ הזז לצד כדי לראות עוד נתונים →→"
-                                },
-                                color = Color(0xFF5B6472),
-                                fontSize = 10.sp,
-                                lineHeight = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 4.dp, bottom = 2.dp)
-                            )
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        if (!isShowingNestedSubTopicPicker && itemList.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                MaterialsTopStatChip(
-                                    value = summaryTotalCount.toString(),
-                                    label = if (isEnglish) "Exercises" else "תרגילים",
-                                    containerColor = Color(0xFF98A2B3),
-                                    contentColor = Color.White
+                                Text(
+                                    text = if (isEnglish) {
+                                        "← Swipe sideways to see more stats →"
+                                    } else {
+                                        "→→ הזז לצד כדי לראות עוד נתונים →→"
+                                    },
+                                    color = Color(0xFF5B6472),
+                                    fontSize = 10.sp,
+                                    lineHeight = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 4.dp, bottom = 2.dp)
                                 )
 
-                                MaterialsTopStatChip(
-                                    value = summaryMasteredCount.toString(),
-                                    label = if (isEnglish) "Known" else "יודע",
-                                    containerColor = Color(0xFF7ACB88),
-                                    contentColor = Color.White,
-                                    minWidth = 64.dp,
-                                    horizontalPadding = 12.dp
-                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    MaterialsTopStatChip(
+                                        value = summaryTotalCount.toString(),
+                                        label = if (isEnglish) "Exercises" else "תרגילים",
+                                        containerColor = Color(0xFF98A2B3),
+                                        contentColor = Color.White
+                                    )
 
-                                MaterialsTopStatChip(
-                                    value = summaryUnknownCount.toString(),
-                                    label = if (isEnglish) "Unknown" else "לא יודע",
-                                    containerColor = Color(0xFFF1A97A),
-                                    contentColor = Color.White
-                                )
+                                    MaterialsTopStatChip(
+                                        value = summaryMasteredCount.toString(),
+                                        label = if (isEnglish) "Known" else "יודע",
+                                        containerColor = Color(0xFF7ACB88),
+                                        contentColor = Color.White,
+                                        minWidth = 64.dp,
+                                        horizontalPadding = 12.dp
+                                    )
 
-                                MaterialsTopStatChip(
-                                    value = summaryFavoritesCount.toString(),
-                                    label = if (isEnglish) "Favorites" else "מועדפים",
-                                    containerColor = Color(0xFFE7A3B5),
-                                    contentColor = Color.White
-                                )
+                                    MaterialsTopStatChip(
+                                        value = summaryUnknownCount.toString(),
+                                        label = if (isEnglish) "Unknown" else "לא יודע",
+                                        containerColor = Color(0xFFF1A97A),
+                                        contentColor = Color.White
+                                    )
 
-                                MaterialsTopStatChip(
-                                    value = summaryExcludedCount.toString(),
-                                    label = if (isEnglish) "Excluded" else "מוחרגים",
-                                    containerColor = Color(0xFF95D69A),
-                                    contentColor = Color.White
-                                )
+                                    MaterialsTopStatChip(
+                                        value = summaryFavoritesCount.toString(),
+                                        label = if (isEnglish) "Favorites" else "מועדפים",
+                                        containerColor = Color(0xFFE7A3B5),
+                                        contentColor = Color.White
+                                    )
 
-                                MaterialsTopStatChip(
-                                    value = summaryNotesCount.toString(),
-                                    label = if (isEnglish) "Notes" else "הערות",
-                                    containerColor = Color(0xFF8596C9),
-                                    contentColor = Color.White
+                                    MaterialsTopStatChip(
+                                        value = summaryExcludedCount.toString(),
+                                        label = if (isEnglish) "Excluded" else "מוחרגים",
+                                        containerColor = Color(0xFF95D69A),
+                                        contentColor = Color.White
+                                    )
+
+                                    MaterialsTopStatChip(
+                                        value = summaryNotesCount.toString(),
+                                        label = if (isEnglish) "Notes" else "הערות",
+                                        containerColor = Color(0xFF8596C9),
+                                        contentColor = Color.White
+                                    )
+                                }
+
+                                Text(
+                                    text = if (isEnglish) {
+                                        "More cards are available off-screen"
+                                    } else {
+                                        "יש עוד כרטיסים בהמשך הגלילה"
+                                    },
+                                    color = Color(0xFF7A8392),
+                                    fontSize = 9.sp,
+                                    lineHeight = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 0.dp, bottom = 4.dp)
                                 )
                             }
 
-                            Text(
-                                text = if (isEnglish) {
-                                    "More cards are available off-screen"
-                                } else {
-                                    "יש עוד כרטיסים בהמשך הגלילה"
-                                },
-                                color = Color(0xFF7A8392),
-                                fontSize = 9.sp,
-                                lineHeight = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 0.dp, bottom = 4.dp)
-                            )
+                            Spacer(Modifier.height(4.dp))
                         }
 
-                        Spacer(Modifier.height(4.dp))
-                    }
-
-                    if (isShowingNestedSubTopicPicker) {
+                        if (isShowingNestedSubTopicPicker) {
                             nestedSubTopicTitles.forEach { nestedTitle ->
-                                val count = remember(belt, topicUi, decodedSubTopicFilter, nestedTitle) {
-                                    decodedSubTopicFilter
-                                        ?.let { sub ->
-                                            SharedContentRepo.getNestedItemsFor(
-                                                belt = belt,
-                                                topicTitle = materialRootTopic.trim(),
-                                                subTopicTitle = sub.trim(),
-                                                nestedSubTopicTitle = nestedTitle.trim()
-                                            ).size
-                                        }
-                                        ?: 0
-                                }
+                                val count =
+                                    remember(belt, topicUi, decodedSubTopicFilter, nestedTitle) {
+                                        decodedSubTopicFilter
+                                            ?.let { sub ->
+                                                SharedContentRepo.getNestedItemsFor(
+                                                    belt = belt,
+                                                    topicTitle = materialRootTopic.trim(),
+                                                    subTopicTitle = sub.trim(),
+                                                    nestedSubTopicTitle = nestedTitle.trim()
+                                                ).size
+                                            }
+                                            ?: 0
+                                    }
 
                                 Surface(
                                     modifier = Modifier
@@ -1329,7 +1380,37 @@ fun MaterialsScreen(
                         } else {
                             val filtered = itemList
                             filtered.forEachIndexed { index, item ->
-                            var showNoteDialog by remember { mutableStateOf(false) }
+                                val currentSectionTitle = nestedSectionTitleByItem[item.trim()]
+                                val previousSectionTitle = filtered
+                                    .getOrNull(index - 1)
+                                    ?.trim()
+                                    ?.let { previousItem -> nestedSectionTitleByItem[previousItem] }
+
+                                if (
+                                    !currentSectionTitle.isNullOrBlank() &&
+                                    currentSectionTitle != previousSectionTitle
+                                ) {
+                                    Text(
+                                        text = topicTitleForUi(currentSectionTitle, currentLang),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                start = 8.dp,
+                                                end = 8.dp,
+                                                top = 8.dp,
+                                                bottom = 4.dp
+                                            ),
+                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                        style = MaterialTheme.typography.labelLarge.copy(
+                                            fontSize = 12.sp,
+                                            lineHeight = 15.sp
+                                        ),
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = belt.color
+                                    )
+                                }
+
+                                var showNoteDialog by remember { mutableStateOf(false) }
 
                                 // ✅ מזהה אחיד להסבר / הערות / החרגות
                                 val canonicalId = remember(item, belt.id, topicUi) {
@@ -1351,43 +1432,49 @@ fun MaterialsScreen(
                                     )
                                 }
 
-                            // ✅ מזהה לסימון יודע/לא יודע בלבד.
-                            // אם canonicalId כפול בין כמה שורות, statusId מפריד ביניהן לפי מיקום השורה.
-                            val statusId = remember(index, item, belt.id, topicKey, topicUi) {
-                                statusIdFor(index, item)
-                            }
-
-                            // ✅ טקסט לתצוגה בלבד
-                            val displayName = remember(item, topicUi, currentLang) {
-                                itemTitleForUi(topicUi, item, currentLang)
-                            }
-
-                            var noteText by remember(item, belt.id, excludedKeySuffix, notesRefreshKey) {
-                                mutableStateOf(loadNote(canonicalId))
-                            }
-
-                            val mastered = itemStates[statusId] ?: when {
-                                masteredSet.contains(statusId) -> true
-                                unknowns.contains(statusId) -> false
-                                else -> null
-                            }
-
-                            val isExcluded = excludedItems.contains(canonicalId)
-                            val isHighlighted = highlight != null && canonicalId == highlight
-
-                            val bringer = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
-                            LaunchedEffect(isHighlighted) {
-                                if (isHighlighted) {
-                                    kotlinx.coroutines.delay(120)
-                                    bringer.bringIntoView()
+                                // ✅ מזהה לסימון יודע/לא יודע בלבד.
+                                // אם canonicalId כפול בין כמה שורות, statusId מפריד ביניהן לפי מיקום השורה.
+                                val statusId = remember(index, item, belt.id, topicKey, topicUi) {
+                                    statusIdFor(index, item)
                                 }
-                            }
 
-                            var pressed by remember { mutableStateOf(false) }
-                            val scale by animateFloatAsState(
-                                targetValue = if (pressed) 1.2f else 1f,
-                                label = "scaleAnim"
-                            )
+                                // ✅ טקסט לתצוגה בלבד
+                                val displayName = remember(item, topicUi, currentLang) {
+                                    itemTitleForUi(topicUi, item, currentLang)
+                                }
+
+                                var noteText by remember(
+                                    item,
+                                    belt.id,
+                                    excludedKeySuffix,
+                                    notesRefreshKey
+                                ) {
+                                    mutableStateOf(loadNote(canonicalId))
+                                }
+
+                                val mastered = itemStates[statusId] ?: when {
+                                    masteredSet.contains(statusId) -> true
+                                    unknowns.contains(statusId) -> false
+                                    else -> null
+                                }
+
+                                val isExcluded = excludedItems.contains(canonicalId)
+                                val isHighlighted = highlight != null && canonicalId == highlight
+
+                                val bringer =
+                                    remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+                                LaunchedEffect(isHighlighted) {
+                                    if (isHighlighted) {
+                                        kotlinx.coroutines.delay(120)
+                                        bringer.bringIntoView()
+                                    }
+                                }
+
+                                var pressed by remember { mutableStateOf(false) }
+                                val scale by animateFloatAsState(
+                                    targetValue = if (pressed) 1.2f else 1f,
+                                    label = "scaleAnim"
+                                )
 
                                 Column(
                                     modifier = Modifier
@@ -1532,126 +1619,154 @@ fun MaterialsScreen(
                                                 MasterToggle(
                                                     mastered = mastered,
                                                     onSelect = { newVal ->
-                                                itemStates[statusId] = newVal
+                                                        itemStates[statusId] = newVal
 
-                                                // ✅ במסך תת־נושא שומרים רק למפתח המדויק.
-                                                // אחרת סימון בתת־נושא עלול להשפיע על תרגילים אחרים דרך topicUi / כללי.
-                                                val topicKeysToWriteToVm = if (subTopicFilter.isNullOrBlank()) {
-                                                    listOf(
-                                                        topicKey,
-                                                        topicUi,
-                                                        "כללי"
-                                                    )
-                                                } else {
-                                                    listOf(topicKey)
-                                                }
-                                                    .map { it.trim() }
-                                                    .filter { it.isNotBlank() }
-                                                    .distinct()
+                                                        // ✅ במסך תת־נושא שומרים רק למפתח המדויק.
+                                                        // אחרת סימון בתת־נושא עלול להשפיע על תרגילים אחרים דרך topicUi / כללי.
+                                                        val topicKeysToWriteToVm =
+                                                            if (subTopicFilter.isNullOrBlank()) {
+                                                                listOf(
+                                                                    topicKey,
+                                                                    topicUi,
+                                                                    "כללי"
+                                                                )
+                                                            } else {
+                                                                listOf(topicKey)
+                                                            }
+                                                                .map { it.trim() }
+                                                                .filter { it.isNotBlank() }
+                                                                .distinct()
 
-                                                topicKeysToWriteToVm.forEach { key ->
-                                                    vm.setItemStatusNullable(
-                                                        belt = belt,
-                                                        topic = key,
-                                                        item = statusId,
-                                                        value = newVal
-                                                    )
-                                                }
-
-                                                // ✅ שמירה מקומית תואמת לסיכום/מסכים ישנים
-                                                setMasteredLocal(statusId, newVal == true)
-                                                setUnknown(statusId, newVal == false)
-
-                                                // ✅ בתת־נושא שומרים מקומית רק למפתח המדויק.
-                                                // במסך נושא רגיל נשארת שמירה רחבה לסנכרון עם תרגול.
-                                                val localKeysToWrite = if (subTopicFilter.isNullOrBlank()) {
-                                                    listOf(
-                                                        topicKey,
-                                                        topicUi,
-                                                        "כללי"
-                                                    )
-                                                } else {
-                                                    listOf(topicKey)
-                                                }
-                                                    .map { it.trim() }
-                                                    .filter { it.isNotBlank() }
-                                                    .distinct()
-
-                                                localKeysToWrite.forEach { key ->
-                                                    val masteredKeyForPractice = "mastered_${belt.id}_${key}"
-                                                    val unknownKeyForPractice = "unknown_${belt.id}_${key}"
-
-                                                    val masteredSetForPractice =
-                                                        (sp.getStringSet(masteredKeyForPractice, emptySet()) ?: emptySet())
-                                                            .toMutableSet()
-
-                                                    val unknownSetForPractice =
-                                                        (sp.getStringSet(unknownKeyForPractice, emptySet()) ?: emptySet())
-                                                            .toMutableSet()
-
-                                                    when (newVal) {
-                                                        true -> {
-                                                            masteredSetForPractice.add(statusId)
-                                                            unknownSetForPractice.remove(statusId)
+                                                        topicKeysToWriteToVm.forEach { key ->
+                                                            vm.setItemStatusNullable(
+                                                                belt = belt,
+                                                                topic = key,
+                                                                item = statusId,
+                                                                value = newVal
+                                                            )
                                                         }
 
-                                                        false -> {
-                                                            unknownSetForPractice.add(statusId)
-                                                            masteredSetForPractice.remove(statusId)
-                                                        }
+                                                        // ✅ שמירה מקומית תואמת לסיכום/מסכים ישנים
+                                                        setMasteredLocal(statusId, newVal == true)
+                                                        setUnknown(statusId, newVal == false)
 
-                                                        null -> {
-                                                            masteredSetForPractice.remove(statusId)
-                                                            unknownSetForPractice.remove(statusId)
+                                                        // ✅ בתת־נושא שומרים מקומית רק למפתח המדויק.
+                                                        // במסך נושא רגיל נשארת שמירה רחבה לסנכרון עם תרגול.
+                                                        val localKeysToWrite =
+                                                            if (subTopicFilter.isNullOrBlank()) {
+                                                                listOf(
+                                                                    topicKey,
+                                                                    topicUi,
+                                                                    "כללי"
+                                                                )
+                                                            } else {
+                                                                listOf(topicKey)
+                                                            }
+                                                                .map { it.trim() }
+                                                                .filter { it.isNotBlank() }
+                                                                .distinct()
+
+                                                        localKeysToWrite.forEach { key ->
+                                                            val masteredKeyForPractice =
+                                                                "mastered_${belt.id}_${key}"
+                                                            val unknownKeyForPractice =
+                                                                "unknown_${belt.id}_${key}"
+
+                                                            val masteredSetForPractice =
+                                                                (sp.getStringSet(
+                                                                    masteredKeyForPractice,
+                                                                    emptySet()
+                                                                ) ?: emptySet())
+                                                                    .toMutableSet()
+
+                                                            val unknownSetForPractice =
+                                                                (sp.getStringSet(
+                                                                    unknownKeyForPractice,
+                                                                    emptySet()
+                                                                ) ?: emptySet())
+                                                                    .toMutableSet()
+
+                                                            when (newVal) {
+                                                                true -> {
+                                                                    masteredSetForPractice.add(
+                                                                        statusId
+                                                                    )
+                                                                    unknownSetForPractice.remove(
+                                                                        statusId
+                                                                    )
+                                                                }
+
+                                                                false -> {
+                                                                    unknownSetForPractice.add(
+                                                                        statusId
+                                                                    )
+                                                                    masteredSetForPractice.remove(
+                                                                        statusId
+                                                                    )
+                                                                }
+
+                                                                null -> {
+                                                                    masteredSetForPractice.remove(
+                                                                        statusId
+                                                                    )
+                                                                    unknownSetForPractice.remove(
+                                                                        statusId
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            sp.edit()
+                                                                .putStringSet(
+                                                                    masteredKeyForPractice,
+                                                                    masteredSetForPractice
+                                                                )
+                                                                .putStringSet(
+                                                                    unknownKeyForPractice,
+                                                                    unknownSetForPractice
+                                                                )
+                                                                .apply()
                                                         }
                                                     }
-
-                                                    sp.edit()
-                                                        .putStringSet(masteredKeyForPractice, masteredSetForPractice)
-                                                        .putStringSet(unknownKeyForPractice, unknownSetForPractice)
-                                                        .apply()
-                                                }
+                                                )
                                             }
-                                        )
+                                        }
                                     }
+
+                                    Divider(
+                                        color = belt.color.copy(alpha = 0.30f),
+                                        thickness = 1.dp,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 8.dp, end = 8.dp)
+                                    )
                                 }
-                            }
 
-                                Divider(
-                                    color = belt.color.copy(alpha = 0.30f),
-                                    thickness = 1.dp,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 8.dp, end = 8.dp)
-                                )
-                            }
-
-                            // דיאלוג הערה
-                            if (showNoteDialog) {
-                                ExerciseNoteEditorDialog(
-                                    noteText = noteText,
-                                    isEnglish = isEnglish,
-                                    accentColor = belt.color,
-                                    onNoteChange = { noteText = it },
-                                    onDismiss = {
-                                        showNoteDialog = false
-                                    },
-                                    onSave = {
-                                        val cleanNote = noteText.trim()
-                                        noteText = cleanNote
-                                        saveNote(canonicalId, cleanNote)
-                                        showNoteDialog = false
-                                    }
-                                )
-                            }
+                                // דיאלוג הערה
+                                if (showNoteDialog) {
+                                    ExerciseNoteEditorDialog(
+                                        noteText = noteText,
+                                        isEnglish = isEnglish,
+                                        accentColor = belt.color,
+                                        onNoteChange = { noteText = it },
+                                        onDismiss = {
+                                            showNoteDialog = false
+                                        },
+                                        onSave = {
+                                            val cleanNote = noteText.trim()
+                                            noteText = cleanNote
+                                            saveNote(canonicalId, cleanNote)
+                                            showNoteDialog = false
+                                        }
+                                    )
+                                }
 
                                 Spacer(Modifier.height(0.dp))
                             }
                         }
                     }
                 }
+            }
         }
-    }
     }
 }
 
@@ -1838,7 +1953,12 @@ private fun ItemFloatingActions(
     onEditNote: () -> Unit
 ) {
     val context = LocalContext.current
-    val sp = remember { context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
+    val sp = remember {
+        context.getSharedPreferences(
+            "kmi_settings",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
     var expanded by remember { mutableStateOf(false) }
     var helpSeen by remember { mutableStateOf(sp.getBoolean("exclude_help_seen", false)) }
 

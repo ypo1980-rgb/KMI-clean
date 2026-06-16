@@ -92,8 +92,32 @@ fun UnifiedSubjectExercisesScreen(
     vm: KmiViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val isEnglish = LocalizationRuntime.currentLanguage == AppLanguage.ENGLISH
-    val result = remember(subjectId, sectionId) {
-        HardSectionsResolver.resolve(subjectId, sectionId)
+    val resolverSubjectId = remember(subjectId) {
+        when (subjectId.trim()) {
+            "kicks" -> "kicks_hard"
+            else -> subjectId
+        }
+    }
+
+    val result = remember(resolverSubjectId, sectionId) {
+        HardSectionsResolver.resolve(resolverSubjectId, sectionId)
+    }
+
+    val combinedDefenseGroups = remember(resolverSubjectId) {
+        combinedDefenseGroupsFor(resolverSubjectId)
+    }
+
+    val shouldShowSectionCards = sectionId == null && isRootSubjectId(subjectId)
+
+    val flattenedSectionGroups = remember(subjectId, sectionId, result, shouldShowSectionCards) {
+        if (!shouldShowSectionCards && result is HardSectionsResolver.NodeResult.Sections) {
+            flattenNestedSectionsToBeltGroups(
+                subjectId = resolverSubjectId,
+                entries = result.entries
+            )
+        } else {
+            null
+        }
     }
 
     Scaffold(
@@ -128,16 +152,37 @@ fun UnifiedSubjectExercisesScreen(
                     )
                 )
         ) {
+            if (combinedDefenseGroups != null) {
+                BeltGroupsContent(
+                    title = subjectRootTitle(subjectId),
+                    groups = combinedDefenseGroups,
+                    isEnglish = isEnglish,
+                    vm = vm,
+                    modifier = Modifier.fillMaxSize()
+                )
+                return@Box
+            }
+
             when (result) {
                 is HardSectionsResolver.NodeResult.Sections -> {
-                    SectionsContent(
-                        subjectId = subjectId,
-                        title = result.title,
-                        entries = result.entries,
-                        isEnglish = isEnglish,
-                        onOpen = onOpenSection,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    if (shouldShowSectionCards) {
+                        SectionsContent(
+                            subjectId = subjectId,
+                            title = result.title,
+                            entries = result.entries,
+                            isEnglish = isEnglish,
+                            onOpen = onOpenSection,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        BeltGroupsContent(
+                            title = result.title ?: subjectRootTitle(subjectId),
+                            groups = flattenedSectionGroups.orEmpty(),
+                            isEnglish = isEnglish,
+                            vm = vm,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
 
                 is HardSectionsResolver.NodeResult.BeltGroups -> {
@@ -182,12 +227,120 @@ private fun resultTitle(
 private fun subjectRootTitle(subjectId: String): String =
     when (subjectId) {
         "releases" -> "שחרורים"
+        "releases_hugs" -> "שחרור מחביקות"
+        "def_internal" -> "הגנות פנימיות"
+        "def_external" -> "הגנות חיצוניות"
         "knife_defense" -> "הגנות מסכין"
         "gun_threat_defense" -> "הגנות מאיום אקדח"
         "stick_defense" -> "הגנות נגד מקל"
         "kicks" -> "הגנות נגד בעיטות"
+        "kicks_hard" -> "הגנות נגד בעיטות"
         else -> "נושאים"
     }
+
+private fun isRootSubjectId(subjectId: String): Boolean {
+    return subjectId in setOf(
+        "releases",
+        "knife_defense",
+        "gun_threat_defense",
+        "stick_defense",
+        "kicks"
+    )
+}
+
+private fun combinedDefenseGroupsFor(
+    subjectId: String
+): List<HardSectionsResolver.BeltItems>? {
+    val sectionIds = when (subjectId.trim().lowercase()) {
+        "def_internal" -> listOf(
+            "def_internal_punch",
+            "def_internal_kick"
+        )
+
+        "def_external" -> listOf(
+            "def_external_punch",
+            "def_external_kick"
+        )
+
+        else -> return null
+    }
+
+    val mergedByBelt = linkedMapOf<Belt, MutableList<String>>()
+
+    fun addGroups(groups: List<HardSectionsResolver.BeltItems>) {
+        groups.forEach { group ->
+            val items = mergedByBelt.getOrPut(group.belt) { mutableListOf() }
+            items.addAll(group.items)
+        }
+    }
+
+    sectionIds.forEach { sectionId ->
+        when (val resolved = HardSectionsResolver.resolve(sectionId, null)) {
+            is HardSectionsResolver.NodeResult.BeltGroups -> {
+                addGroups(resolved.groups)
+            }
+
+            is HardSectionsResolver.NodeResult.Sections -> {
+                addGroups(
+                    flattenNestedSectionsToBeltGroups(
+                        subjectId = sectionId,
+                        entries = resolved.entries
+                    )
+                )
+            }
+
+            null -> Unit
+        }
+    }
+
+    return mergedByBelt.map { (belt, items) ->
+        HardSectionsResolver.BeltItems(
+            belt = belt,
+            items = items.distinct()
+        )
+    }
+}
+
+private fun flattenNestedSectionsToBeltGroups(
+    subjectId: String,
+    entries: List<HardSectionsResolver.SectionEntry>
+): List<HardSectionsResolver.BeltItems> {
+    val mergedByBelt = linkedMapOf<Belt, MutableList<String>>()
+
+    fun addGroups(groups: List<HardSectionsResolver.BeltItems>) {
+        groups.forEach { group ->
+            val items = mergedByBelt.getOrPut(group.belt) { mutableListOf() }
+            items.addAll(group.items)
+        }
+    }
+
+    fun collect(entry: HardSectionsResolver.SectionEntry) {
+        when (val resolved = HardSectionsResolver.resolve(subjectId, entry.id)) {
+            is HardSectionsResolver.NodeResult.BeltGroups -> {
+                addGroups(resolved.groups)
+            }
+
+            is HardSectionsResolver.NodeResult.Sections -> {
+                resolved.entries.forEach { nestedEntry ->
+                    collect(nestedEntry)
+                }
+            }
+
+            null -> Unit
+        }
+    }
+
+    entries.forEach { entry ->
+        collect(entry)
+    }
+
+    return mergedByBelt.map { (belt, items) ->
+        HardSectionsResolver.BeltItems(
+            belt = belt,
+            items = items.distinct()
+        )
+    }
+}
 
 @Composable
 private fun SectionsContent(

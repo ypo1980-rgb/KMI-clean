@@ -113,19 +113,11 @@ private fun topicCountsText(
     subTopicCount: Int,
     itemCount: Int
 ): String {
-    return if (hasRealSubs) {
-        topicsTr(
-            isEnglish,
-            "$subTopicCount תתי נושאים  •  $itemCount תרגילים",
-            "$subTopicCount sub-topics  •  $itemCount exercises"
-        )
-    } else {
-        topicsTr(
-            isEnglish,
-            "$itemCount תרגילים",
-            "$itemCount exercises"
-        )
-    }
+    return topicsTr(
+        isEnglish,
+        "$itemCount תרגילים",
+        "$itemCount exercises"
+    )
 }
 
 
@@ -310,11 +302,11 @@ private fun findExplanationForHit(
 private fun findSubTopicTitleForItem(belt: Belt, topic: String, item: String): String? {
 
     fun norm(s: String): String = s
-        .replace("\u200F","").replace("\u200E","").replace("\u00A0"," ")
+        .replace("\u200F", "").replace("\u200E", "").replace("\u00A0", " ")
         .replace(Regex("[\u0591-\u05C7]"), "")
-        .replace('\u05BE','-').replace('\u2010','-').replace('\u2011','-')
-        .replace('\u2012','-').replace('\u2013','-').replace('\u2014','-')
-        .replace('\u2015','-').replace('\u2212','-')
+        .replace('\u05BE', '-').replace('\u2010', '-').replace('\u2011', '-')
+        .replace('\u2012', '-').replace('\u2013', '-').replace('\u2014', '-')
+        .replace('\u2015', '-').replace('\u2212', '-')
         .replace(Regex("\\s*-\\s*"), "-")
         .trim().replace(Regex("\\s+"), " ").lowercase()
 
@@ -479,7 +471,7 @@ fun TopicsScreen(
     val effectiveBelt: Belt = belt.takeUnless { it == Belt.WHITE } ?: Belt.GREEN
 
     val topicTitles: List<String> = remember(effectiveBelt) {
-    val viaBridge = runCatching {
+        val viaBridge = runCatching {
             il.kmi.app.search.KmiSearchBridge.topicTitlesFor(effectiveBelt)
         }.getOrDefault(emptyList())
         if (viaBridge.isNotEmpty()) viaBridge
@@ -499,7 +491,8 @@ fun TopicsScreen(
 
     val onBeltColor = if (effectiveBelt.color.luminance() < 0.5f) Color.White else Color.Black
     val bottomButtonShape = RoundedCornerShape(24.dp)
-    val userSp = remember { ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE) }
+    val userSp =
+        remember { ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE) }
 
     // 👇 מצב גישה לפי ניסיון/מנוי + עקיפת מנהל (מתעדכן בזמן אמת)
     var isManagerOverride by remember {
@@ -523,9 +516,9 @@ fun TopicsScreen(
     }
 
     val canUseTraining = KmiAccess.canUseTraining(userSp) || isManagerOverride
-    val canUseExtras   = KmiAccess.canUseExtras(userSp)   || isManagerOverride
-    val isTrial        = KmiAccess.isTrialActive(userSp) && !KmiAccess.hasFullAccess(userSp)
-    val trialDaysLeft  = KmiAccess.trialDaysLeft(userSp)
+    val canUseExtras = KmiAccess.canUseExtras(userSp) || isManagerOverride
+    val isTrial = KmiAccess.isTrialActive(userSp) && !KmiAccess.hasFullAccess(userSp)
+    val trialDaysLeft = KmiAccess.trialDaysLeft(userSp)
 
     // ✅ סנכרון חגורה אפקטיבית חזרה ל-VM (מונע מצב שהמסך הבא רואה WHITE/ישן)
     LaunchedEffect(effectiveBelt) {
@@ -538,9 +531,10 @@ fun TopicsScreen(
     // ===== ROLE (ללא vm.selectedRole) =====
     var userRole by remember { mutableStateOf(userSp.getString("user_role", null)) }
     DisposableEffect(userSp) {
-        val l = SharedPreferences.OnSharedPreferenceChangeListener { _: SharedPreferences, key: String? ->
-            if (key == "user_role") userRole = userSp.getString("user_role", null)
-        }
+        val l =
+            SharedPreferences.OnSharedPreferenceChangeListener { _: SharedPreferences, key: String? ->
+                if (key == "user_role") userRole = userSp.getString("user_role", null)
+            }
         userSp.registerOnSharedPreferenceChangeListener(l)
         onDispose { userSp.unregisterOnSharedPreferenceChangeListener(l) }
     }
@@ -584,7 +578,8 @@ fun TopicsScreen(
         }
     }
 
-    val settingsSp = remember { ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
+    val settingsSp =
+        remember { ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
 
     KmiLightTheme(useGreenAccent = false) {
         // ⭐ helpers – רטט וצליל גלובליים למסך
@@ -677,7 +672,7 @@ fun TopicsScreen(
             contentWindowInsets = WindowInsets(0)
         ) { padding ->
 
-        // ----- דיאלוג הסבר מהחיפוש -----
+            // ----- דיאלוג הסבר מהחיפוש -----
             pickedKey?.let { key ->
                 val (hitBelt, hitTopic, hitItem) = parseSearchKey(key)
 
@@ -713,8 +708,10 @@ fun TopicsScreen(
                     onDismissRequest = { pickedKey = null },
                     title = {
                         Box(modifier = Modifier.fillMaxWidth()) {
-                            val starAlignment = if (isEnglish) Alignment.CenterEnd else Alignment.CenterStart
-                            val textAlignment = if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
+                            val starAlignment =
+                                if (isEnglish) Alignment.CenterEnd else Alignment.CenterStart
+                            val textAlignment =
+                                if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
 
                             IconButton(
                                 onClick = {
@@ -772,7 +769,7 @@ fun TopicsScreen(
                                 )
                             }
                         }
-                            },
+                    },
                     text = {
                         val stanceColor = MaterialTheme.colorScheme.primary
                         val annotated = remember(explanation, stanceColor) {
@@ -917,9 +914,17 @@ fun TopicsScreen(
                                         val realSubsCount by remember(effectiveBelt, title) {
                                             mutableStateOf(
                                                 runCatching {
-                                                    ContentRepo.listSubTopicTitles(effectiveBelt, title)
+                                                    ContentRepo.listSubTopicTitles(
+                                                        effectiveBelt,
+                                                        title
+                                                    )
                                                         .map { it.trim() }
-                                                        .filter { it.isNotEmpty() && !it.equals(title.trim(), ignoreCase = true) }
+                                                        .filter {
+                                                            it.isNotEmpty() && !it.equals(
+                                                                title.trim(),
+                                                                ignoreCase = true
+                                                            )
+                                                        }
                                                         .distinct()
                                                         .size
                                                 }.getOrDefault(0)
@@ -937,7 +942,10 @@ fun TopicsScreen(
                                                 // ✅ חשוב: תמיד לסנכרן חגורה ל-VM לפני ניווט
                                                 vm.setSelectedBelt(effectiveBelt)
 
-                                                if (hasRealSubs) onOpenDefenseMenu(effectiveBelt, title)
+                                                if (hasRealSubs) onOpenDefenseMenu(
+                                                    effectiveBelt,
+                                                    title
+                                                )
                                                 else onOpenTopic(effectiveBelt, title)
                                             },
                                             enabled = canUseTraining,
@@ -966,9 +974,12 @@ fun TopicsScreen(
                                                 contentColor = onBeltColor
                                             ),
                                             shape = bottomButtonShape,
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
+                                            contentPadding = PaddingValues(
+                                                horizontal = 12.dp,
+                                                vertical = 12.dp
+                                            )
                                         ) {
-                                        Column(
+                                            Column(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalAlignment = Alignment.CenterHorizontally
                                             ) {
@@ -982,13 +993,13 @@ fun TopicsScreen(
                                                     textAlign = screenTextAlign
                                                 )
                                                 Spacer(Modifier.height(6.dp))
-                                            val counts = ExerciseCountProvider.countText(
-                                                stats = countStats,
-                                                isEnglish = isEnglish,
-                                                showZeroSubTopics = false
-                                            )
+                                                val counts = topicsTr(
+                                                    isEnglish,
+                                                    "${countStats.exerciseCount} תרגילים",
+                                                    "${countStats.exerciseCount} exercises"
+                                                )
 
-                                            Text(
+                                                Text(
                                                     text = counts,
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = onBeltColor.copy(alpha = 0.90f),
@@ -1031,72 +1042,72 @@ fun TopicsScreen(
     }             // ✅ סוף KmiLightTheme
 } // ✅ סוף TopicsScreen
 
-    // ✅ SpeedDialRow חייב להיות ברמת קובץ (לא בתוך TopicsScreen)
-    @Composable
-    private fun SpeedDialRow(
-        text: String,
-        icon: ImageVector,
-        enabled: Boolean = true,
-        isEnglish: Boolean = false,
-        onClick: () -> Unit,
-        height: Dp = 52.dp,
-        labelWidth: Dp = 170.dp,
-        iconButtonSize: Dp = 52.dp,
-        iconSize: Dp = 22.dp,
-        gap: Dp = 10.dp
+// ✅ SpeedDialRow חייב להיות ברמת קובץ (לא בתוך TopicsScreen)
+@Composable
+private fun SpeedDialRow(
+    text: String,
+    icon: ImageVector,
+    enabled: Boolean = true,
+    isEnglish: Boolean = false,
+    onClick: () -> Unit,
+    height: Dp = 52.dp,
+    labelWidth: Dp = 170.dp,
+    iconButtonSize: Dp = 52.dp,
+    iconSize: Dp = 22.dp,
+    gap: Dp = 10.dp
+) {
+    val alphaDisabled = 0.45f
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height),
+        horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        val alphaDisabled = 0.45f
+        if (isEnglish) {
+            SpeedDialIconButton(
+                icon = icon,
+                text = text,
+                enabled = enabled,
+                iconButtonSize = iconButtonSize,
+                iconSize = iconSize,
+                onClick = onClick
+            )
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(height),
-            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isEnglish) {
-                SpeedDialIconButton(
-                    icon = icon,
-                    text = text,
-                    enabled = enabled,
-                    iconButtonSize = iconButtonSize,
-                    iconSize = iconSize,
-                    onClick = onClick
-                )
+            Spacer(Modifier.width(gap))
 
-                Spacer(Modifier.width(gap))
+            SpeedDialLabel(
+                text = text,
+                enabled = enabled,
+                alphaDisabled = alphaDisabled,
+                labelWidth = labelWidth,
+                height = height,
+                onClick = onClick
+            )
+        } else {
+            SpeedDialLabel(
+                text = text,
+                enabled = enabled,
+                alphaDisabled = alphaDisabled,
+                labelWidth = labelWidth,
+                height = height,
+                onClick = onClick
+            )
 
-                SpeedDialLabel(
-                    text = text,
-                    enabled = enabled,
-                    alphaDisabled = alphaDisabled,
-                    labelWidth = labelWidth,
-                    height = height,
-                    onClick = onClick
-                )
-            } else {
-                SpeedDialLabel(
-                    text = text,
-                    enabled = enabled,
-                    alphaDisabled = alphaDisabled,
-                    labelWidth = labelWidth,
-                    height = height,
-                    onClick = onClick
-                )
+            Spacer(Modifier.width(gap))
 
-                Spacer(Modifier.width(gap))
-
-                SpeedDialIconButton(
-                    icon = icon,
-                    text = text,
-                    enabled = enabled,
-                    iconButtonSize = iconButtonSize,
-                    iconSize = iconSize,
-                    onClick = onClick
-                )
-            }
+            SpeedDialIconButton(
+                icon = icon,
+                text = text,
+                enabled = enabled,
+                iconButtonSize = iconButtonSize,
+                iconSize = iconSize,
+                onClick = onClick
+            )
         }
     }
+}
 
 @Composable
 private fun SpeedDialLabel(

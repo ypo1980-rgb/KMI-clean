@@ -91,7 +91,10 @@ fun DrawerMenuCard(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
     textColor: Color = MaterialTheme.colorScheme.onSurface,
-    border: BorderStroke? = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+    border: BorderStroke? = BorderStroke(
+        1.dp,
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    ),
     onClick: () -> Unit
 ) {
     Surface(
@@ -198,6 +201,7 @@ fun AppDrawerContent(
     onOpenCoachPaymentsReport: () -> Unit = {},
     isAdmin: Boolean = false,
     onOpenAdminUsers: () -> Unit = {},
+    onOpenAdminDiagnostics: () -> Unit = {},
     onOpenAccessibility: () -> Unit = {},
     onOpenMembershipPayment: () -> Unit = {},
     onOpenContactUs: () -> Unit = {}
@@ -812,7 +816,8 @@ fun AppDrawerContent(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         // ←—— כותרת + כפתור X קבועים מעל אזור הגלילה ——→
-                        val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                        val topInset =
+                            WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -837,8 +842,8 @@ fun AppDrawerContent(
                                     contentDescription = tr("סגור תפריט", "Close menu"),
                                     tint = Color.White
                                 )
-                    }
-                }
+                            }
+                        }
 
                         Column(
                             modifier = Modifier
@@ -853,10 +858,290 @@ fun AppDrawerContent(
                             horizontalAlignment = Alignment.Start
                         ) {
 
-                        //------------------------------------------------------------------------
-                        // ===== כפתורי מאמן — ורק למאמן =====
-                        if (isCoach) {
-                            Spacer(Modifier.height(8.dp))
+                            //------------------------------------------------------------------------
+                            // ===== כפתורי מאמן — ורק למאמן =====
+                            if (isCoach) {
+                                Spacer(Modifier.height(8.dp))
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp)
+                                        .clip(RoundedCornerShape(24.dp))
+                                        .background(
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color(0xFF1E1B4B).copy(alpha = 0.92f),
+                                                    Color(0xFF312E81).copy(alpha = 0.78f),
+                                                    Color(0xFF1D4ED8).copy(alpha = 0.36f)
+                                                )
+                                            )
+                                        )
+                                        .border(
+                                            width = 1.dp,
+                                            color = Color(0xFFFF8AD8).copy(alpha = 0.22f),
+                                            shape = RoundedCornerShape(24.dp)
+                                        )
+                                        .padding(vertical = 6.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+
+                                        Spacer(Modifier.width(10.dp))
+
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                        ) {
+                                            Text(
+                                                text = tr("אזור מאמן", "Coach area"),
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 12.5.sp,
+                                                lineHeight = 14.sp,
+                                                letterSpacing = (-0.12).sp,
+                                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(
+                                            horizontal = 16.dp,
+                                            vertical = 4.dp
+                                        ),
+                                        thickness = 1.dp,
+                                        color = Color.White.copy(alpha = 0.16f)
+                                    )
+
+                                    if (isEnglish) {
+                                        CoachLineItemEn(
+                                            title = "Mark Attendance",
+                                            icon = Icons.Filled.Assessment,
+                                            onClick = {
+                                                onClose()
+
+                                                runCatching {
+                                                    onOpenCoachAttendance()
+                                                }.onFailure {
+                                                    Toast.makeText(
+                                                        contextLang,
+                                                        tr(
+                                                            "לא ניתן לפתוח דו״ח נוכחות כרגע",
+                                                            "Unable to open attendance report right now"
+                                                        ),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        )
+                                        CoachLineItemEn(
+                                            title = "Send Message",
+                                            icon = Icons.Filled.Campaign,
+                                            onClick = {
+                                                onClose()
+                                                onOpenCoachBroadcast()
+                                            }
+                                        )
+                                        CoachLineItemEn(
+                                            title = "Trainees List",
+                                            icon = Icons.Filled.Groups,
+                                            onClick = {
+                                                onClose()
+                                                onOpenCoachTrainees()
+                                            }
+                                        )
+                                        CoachLineItemEn(
+                                            title = "Payments Report",
+                                            icon = Icons.Filled.Assessment,
+                                            onClick = {
+                                                onClose()
+                                                onOpenCoachPaymentsReport()
+                                            }
+                                        )
+                                        CoachLineItemEn(
+                                            title = "Internal Belt Exam",
+                                            icon = Icons.Filled.WorkspacePremium,
+                                            showDivider = false,
+                                            onClick = {
+                                                onClose()
+                                                onOpenCoachInternalExam()
+                                            }
+                                        )
+                                    } else {
+                                        CoachLineItemHe(
+                                            title = "עדכון נוכחות",
+                                            icon = Icons.Filled.Assessment,
+                                            onClick = {
+                                                onClose()
+
+                                                runCatching {
+                                                    onOpenCoachAttendance()
+                                                }.onFailure {
+                                                    Toast.makeText(
+                                                        contextLang,
+                                                        tr(
+                                                            "לא ניתן לפתוח דו״ח נוכחות כרגע",
+                                                            "Unable to open attendance report right now"
+                                                        ),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        )
+                                        CoachLineItemHe(
+                                            title = "שליחת הודעה",
+                                            icon = Icons.Filled.Campaign,
+                                            onClick = {
+                                                onClose()
+                                                onOpenCoachBroadcast()
+                                            }
+                                        )
+                                        CoachLineItemHe(
+                                            title = "רשימת מתאמנים",
+                                            icon = Icons.Filled.Groups,
+                                            onClick = {
+                                                onClose()
+                                                onOpenCoachTrainees()
+                                            }
+                                        )
+                                        CoachLineItemHe(
+                                            title = "דו״ח תשלומים",
+                                            icon = Icons.Filled.Assessment,
+                                            onClick = {
+                                                onClose()
+                                                onOpenCoachPaymentsReport()
+                                            }
+                                        )
+                                        CoachLineItemHe(
+                                            title = "מבחן פנימי לחגורה",
+                                            icon = Icons.Filled.WorkspacePremium,
+                                            showDivider = false,
+                                            onClick = {
+                                                onClose()
+                                                onOpenCoachInternalExam()
+                                            }
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(10.dp))
+                            }
+
+                            // ===== אזור מנהל – רק למנהל =====
+                            if (effectiveIsAdmin) {
+                                Spacer(Modifier.height(6.dp))
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp)
+                                        .clip(RoundedCornerShape(24.dp))
+                                        .background(
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color(0xFF163524).copy(alpha = 0.96f),
+                                                    Color(0xFF1F5A3D).copy(alpha = 0.82f),
+                                                    Color(0xFF1F7A57).copy(alpha = 0.42f)
+                                                )
+                                            )
+                                        )
+                                        .border(
+                                            width = 1.dp,
+                                            color = Color(0xFF7DFFB3).copy(alpha = 0.24f),
+                                            shape = RoundedCornerShape(24.dp)
+                                        )
+                                        .padding(vertical = 6.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                        ) {
+                                            Text(
+                                                text = tr("אזור מנהל", "Admin area"),
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 12.5.sp,
+                                                lineHeight = 14.sp,
+                                                letterSpacing = (-0.12).sp,
+                                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(
+                                            horizontal = 16.dp,
+                                            vertical = 4.dp
+                                        ),
+                                        thickness = 1.dp,
+                                        color = Color.White.copy(alpha = 0.16f)
+                                    )
+
+                                    if (isEnglish) {
+                                        CoachLineItemEn(
+                                            title = "Manage Users",
+                                            subtitle = "View all app users",
+                                            icon = Icons.Filled.Groups,
+                                            showDivider = true,
+                                            onClick = {
+                                                onClose()
+                                                onOpenAdminUsers()
+                                            }
+                                        )
+
+                                        CoachLineItemEn(
+                                            title = "Control Center & Logs",
+                                            subtitle = "Activity, errors and app diagnostics",
+                                            icon = Icons.Filled.Assessment,
+                                            showDivider = false,
+                                            onClick = {
+                                                onClose()
+                                                onOpenAdminDiagnostics()
+                                            }
+                                        )
+                                    } else {
+                                        CoachLineItemHe(
+                                            title = "ניהול משתמשים",
+                                            subtitle = "צפייה בכל המשתמשים\nבאפליקציה",
+                                            icon = Icons.Filled.Groups,
+                                            showDivider = true,
+                                            onClick = {
+                                                onClose()
+                                                onOpenAdminUsers()
+                                            }
+                                        )
+
+                                        CoachLineItemHe(
+                                            title = "מרכז בקרה ולוגים",
+                                            subtitle = "ניתוח פעילות, תקלות\nושימוש באפליקציה",
+                                            icon = Icons.Filled.Assessment,
+                                            showDivider = false,
+                                            onClick = {
+                                                onClose()
+                                                onOpenAdminDiagnostics()
+                                            }
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(8.dp))
+                            }
+
+                            // ===== אזור מתאמן =====
+                            Spacer(Modifier.height(6.dp))
 
                             Column(
                                 modifier = Modifier
@@ -866,15 +1151,15 @@ fun AppDrawerContent(
                                     .background(
                                         brush = Brush.verticalGradient(
                                             colors = listOf(
-                                                Color(0xFF1E1B4B).copy(alpha = 0.92f),
-                                                Color(0xFF312E81).copy(alpha = 0.78f),
-                                                Color(0xFF1D4ED8).copy(alpha = 0.36f)
+                                                Color(0xFF153A63).copy(alpha = 0.94f),
+                                                Color(0xFF1D5C96).copy(alpha = 0.82f),
+                                                Color(0xFF2F83C8).copy(alpha = 0.42f)
                                             )
                                         )
                                     )
                                     .border(
                                         width = 1.dp,
-                                        color = Color(0xFFFF8AD8).copy(alpha = 0.22f),
+                                        color = Color(0xFF8FD3FF).copy(alpha = 0.24f),
                                         shape = RoundedCornerShape(24.dp)
                                     )
                                     .padding(vertical = 6.dp)
@@ -893,7 +1178,7 @@ fun AppDrawerContent(
                                         horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                     ) {
                                         Text(
-                                            text = tr("אזור מאמן", "Coach area"),
+                                            text = tr("אזור מתאמן", "Trainee area"),
                                             color = Color.White,
                                             fontWeight = FontWeight.Black,
                                             fontSize = 12.5.sp,
@@ -906,650 +1191,401 @@ fun AppDrawerContent(
                                 }
 
                                 HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                    modifier = Modifier.padding(
+                                        horizontal = 16.dp,
+                                        vertical = 4.dp
+                                    ),
                                     thickness = 1.dp,
                                     color = Color.White.copy(alpha = 0.16f)
                                 )
 
+                                // ✅ הפרופיל שלי — מסך אמת שמציג נתונים מהמשתמש / Firestore / Preferences
                                 if (isEnglish) {
-                                    CoachLineItemEn(
-                                        title = "Mark Attendance",
-                                        icon = Icons.Filled.Assessment,
-                                        onClick = {
-                                            onClose()
-
-                                            runCatching {
-                                                onOpenCoachAttendance()
-                                            }.onFailure {
-                                                Toast.makeText(
-                                                    contextLang,
-                                                    tr(
-                                                        "לא ניתן לפתוח דו״ח נוכחות כרגע",
-                                                        "Unable to open attendance report right now"
-                                                    ),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        }
-                                    )
-                                    CoachLineItemEn(
-                                        title = "Send Message",
-                                        icon = Icons.Filled.Campaign,
-                                        onClick = {
-                                            onClose()
-                                            onOpenCoachBroadcast()
-                                        }
-                                    )
-                                    CoachLineItemEn(
-                                        title = "Trainees List",
-                                        icon = Icons.Filled.Groups,
-                                        onClick = {
-                                            onClose()
-                                            onOpenCoachTrainees()
-                                        }
-                                    )
-                                    CoachLineItemEn(
-                                        title = "Payments Report",
-                                        icon = Icons.Filled.Assessment,
-                                        onClick = {
-                                            onClose()
-                                            onOpenCoachPaymentsReport()
-                                        }
-                                    )
-                                    CoachLineItemEn(
-                                        title = "Internal Belt Exam",
-                                        icon = Icons.Filled.WorkspacePremium,
-                                        showDivider = false,
-                                        onClick = {
-                                            onClose()
-                                            onOpenCoachInternalExam()
-                                        }
-                                    )
-                                } else {
-                                    CoachLineItemHe(
-                                        title = "עדכון נוכחות",
-                                        icon = Icons.Filled.Assessment,
-                                        onClick = {
-                                            onClose()
-
-                                            runCatching {
-                                                onOpenCoachAttendance()
-                                            }.onFailure {
-                                                Toast.makeText(
-                                                    contextLang,
-                                                    tr(
-                                                        "לא ניתן לפתוח דו״ח נוכחות כרגע",
-                                                        "Unable to open attendance report right now"
-                                                    ),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        }
-                                    )
-                                    CoachLineItemHe(
-                                        title = "שליחת הודעה",
-                                        icon = Icons.Filled.Campaign,
-                                        onClick = {
-                                            onClose()
-                                            onOpenCoachBroadcast()
-                                        }
-                                    )
-                                    CoachLineItemHe(
-                                        title = "רשימת מתאמנים",
-                                        icon = Icons.Filled.Groups,
-                                        onClick = {
-                                            onClose()
-                                            onOpenCoachTrainees()
-                                        }
-                                    )
-                                    CoachLineItemHe(
-                                        title = "דו״ח תשלומים",
-                                        icon = Icons.Filled.Assessment,
-                                        onClick = {
-                                            onClose()
-                                            onOpenCoachPaymentsReport()
-                                        }
-                                    )
-                                    CoachLineItemHe(
-                                        title = "מבחן פנימי לחגורה",
-                                        icon = Icons.Filled.WorkspacePremium,
-                                        showDivider = false,
-                                        onClick = {
-                                            onClose()
-                                            onOpenCoachInternalExam()
-                                        }
-                                    )
-                                }
-                            }
-
-                            Spacer(Modifier.height(10.dp))
-                        }
-
-                        // ===== אזור מנהל – רק למנהל =====
-                        if (effectiveIsAdmin) {
-                            Spacer(Modifier.height(6.dp))
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 10.dp)
-                                    .clip(RoundedCornerShape(24.dp))
-                                    .background(
-                                        brush = Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color(0xFF163524).copy(alpha = 0.96f),
-                                                Color(0xFF1F5A3D).copy(alpha = 0.82f),
-                                                Color(0xFF1F7A57).copy(alpha = 0.42f)
+                                    DrawerLineItemEn(
+                                        leading = {
+                                            Icon(
+                                                imageVector = Icons.Filled.Person,
+                                                contentDescription = null,
+                                                tint = Color.White
                                             )
-                                        )
-                                    )
-                                    .border(
-                                        width = 1.dp,
-                                        color = Color(0xFF7DFFB3).copy(alpha = 0.24f),
-                                        shape = RoundedCornerShape(24.dp)
-                                    )
-                                    .padding(vertical = 6.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                    ) {
-                                        Text(
-                                            text = tr("אזור מנהל", "Admin area"),
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Black,
-                                            fontSize = 12.5.sp,
-                                            lineHeight = 14.sp,
-                                            letterSpacing = (-0.12).sp,
-                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-                                }
-
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                    thickness = 1.dp,
-                                    color = Color.White.copy(alpha = 0.16f)
-                                )
-
-                                if (isEnglish) {
-                                    CoachLineItemEn(
-                                        title = "Manage Users",
-                                        subtitle = "View all app users",
-                                        icon = Icons.Filled.Groups,
-                                        showDivider = false,
+                                        },
+                                        title = "My Profile",
+                                        subtitle = "View your personal K.M.I details",
                                         onClick = {
                                             onClose()
-                                            onOpenAdminUsers()
+                                            onOpenMyProfile()
                                         }
                                     )
                                 } else {
-                                    CoachLineItemHe(
-                                        title = "ניהול משתמשים",
-                                        subtitle = "צפייה בכל המשתמשים\nבאפליקציה",
-                                        icon = Icons.Filled.Groups,
-                                        showDivider = false,
+                                    DrawerLineItemHe(
+                                        leading = {
+                                            Icon(
+                                                imageVector = Icons.Filled.Person,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
+                                        title = "הפרופיל שלי",
+                                        subtitle = "צפייה בפרטים האישיים שלך",
                                         onClick = {
                                             onClose()
-                                            onOpenAdminUsers()
+                                            onOpenMyProfile()
+                                        }
+                                    )
+                                }
+
+                                // ===== כפתור ראשון: אודות אבי אביסידון =====
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "About Avi Avisidon",
+                                        subtitle = "Head of the method",
+                                        titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+                                            color = Color.White,
+                                            fontSize = 12.5.sp,
+                                            lineHeight = 14.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = (-0.12).sp
+                                        ),
+                                        onClick = {
+                                            onClose()
+                                            onOpenAboutAvi()
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "אודות אבי אביסידון",
+                                        subtitle = "ראש השיטה",
+                                        titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+                                            color = Color.White,
+                                            fontSize = 12.5.sp,
+                                            lineHeight = 14.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = (-0.12).sp
+                                        ),
+                                        onClick = {
+                                            onClose()
+                                            onOpenAboutAvi()
+                                        }
+                                    )
+                                }
+
+                                // ===== אודות המאמנים ברשת =====
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "About Network Coaches",
+                                        subtitle = "Ranks, experience and certifications",
+                                        titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+                                            color = Color.White,
+                                            fontSize = 12.5.sp,
+                                            lineHeight = 14.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = (-0.12).sp
+                                        ),
+                                        onClick = {
+                                            onClose()
+                                            onOpenAboutNetworkCoaches()
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "אודות המאמנים ברשת",
+                                        subtitle = "דרגות, ותק, הכשרות והסמכות",
+                                        titleTextStyle = MaterialTheme.typography.titleMedium.copy(
+                                            color = Color.White,
+                                            fontSize = 12.5.sp,
+                                            lineHeight = 14.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = (-0.12).sp
+                                        ),
+                                        onClick = {
+                                            onClose()
+                                            onOpenAboutNetworkCoaches()
+                                        }
+                                    )
+                                }
+
+                                val showHiddenAboutItems = false
+
+                                if (showHiddenAboutItems) {
+
+                                    if (isEnglish) {
+                                        DrawerLineItemEn(
+                                            title = "About Itzik Biton",
+                                            subtitle = "Senior coach",
+                                            onClick = {
+                                                onClose()
+                                                onOpenAboutItzik()
+                                            }
+                                        )
+                                    } else {
+                                        DrawerLineItemHe(
+                                            title = "אודות איציק ביטון",
+                                            subtitle = "מאמן בכיר",
+                                            onClick = {
+                                                onClose()
+                                                onOpenAboutItzik()
+                                            }
+                                        )
+                                    }
+
+                                    if (isEnglish) {
+                                        DrawerLineItemEn(
+                                            title = "About the Network",
+                                            subtitle = "Knockout",
+                                            onClick = {
+                                                onClose()
+                                                onOpenAboutNetwork()
+                                            }
+                                        )
+                                    } else {
+                                        DrawerLineItemHe(
+                                            title = "אודות הרשת",
+                                            subtitle = "Knockout",
+                                            onClick = {
+                                                onClose()
+                                                onOpenAboutNetwork()
+                                            }
+                                        )
+                                    }
+
+                                }
+
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "About the Method",
+                                        subtitle = "KAMI",
+                                        onClick = {
+                                            onClose()
+                                            onOpenAboutMethod()
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "אודות השיטה",
+                                        subtitle = "KAMI",
+                                        onClick = {
+                                            onClose()
+                                            onOpenAboutMethod()
+                                        }
+                                    )
+                                }
+
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "Exercises – Demo",
+                                        subtitle = "Short demo videos for exercises",
+                                        onClick = { showDemoVideos = true }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "תרגילים – הדגמה",
+                                        subtitle = "סרטוני הסבר קצרים לתרגילים",
+                                        onClick = { showDemoVideos = true }
+                                    )
+                                }
+
+                                val context = LocalContext.current
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "Forms & Payments",
+                                        twoLineTitle = true,
+                                        onClick = {
+                                            showFormsPaymentsDialog = true
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "טפסים ותשלומים",
+                                        twoLineTitle = true,
+                                        onClick = {
+                                            showFormsPaymentsDialog = true
+                                        }
+                                    )
+                                }
+
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "Contact Us",
+                                        subtitle = "Leave details and we will get back to you",
+                                        onClick = {
+                                            onClose()
+                                            onOpenContactUs()
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "צור קשר",
+                                        subtitle = "השאירו פרטים ונחזור אליכם",
+                                        onClick = {
+                                            onClose()
+                                            onOpenContactUs()
+                                        }
+                                    )
+                                }
+
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "Branch Forum",
+                                        trailing = {
+                                            DrawerUnreadBadge(forumUnreadCount)
+                                        },
+                                        onClick = {
+                                            onClose()
+                                            onOpenForum()
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "פורום הסניף",
+                                        trailing = {
+                                            DrawerUnreadBadge(forumUnreadCount)
+                                        },
+                                        onClick = {
+                                            onClose()
+                                            onOpenForum()
+                                        }
+                                    )
+                                }
+
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        leading = {
+                                            Icon(
+                                                imageVector = Icons.Filled.Language,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
+                                        title = "Language / שפה",
+                                        onClick = {
+                                            val newLang = AppLanguage.HEBREW
+
+                                            // ✅ רק MainApp שומר ומעדכן את ה-State.
+                                            // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
+                                            onLanguageChanged(newLang)
+
+                                            onClose()
+
+                                            scope.launch {
+                                                delay(180)
+
+                                                Toast.makeText(
+                                                    contextLang,
+                                                    "שפה: עברית",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        leading = {
+                                            Icon(
+                                                imageVector = Icons.Filled.Language,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
+                                        title = "שפה / Language",
+                                        onClick = {
+                                            val newLang = AppLanguage.ENGLISH
+
+                                            // ✅ רק MainApp שומר ומעדכן את ה-State.
+                                            // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
+                                            onLanguageChanged(newLang)
+
+                                            onClose()
+
+                                            scope.launch {
+                                                delay(180)
+
+                                                Toast.makeText(
+                                                    contextLang,
+                                                    "Language: English",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
+                                    )
+                                }
+
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "Manage Subscription",
+                                        onClick = {
+                                            onClose()
+                                            onOpenSubscriptions()
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "ניהול מנוי",
+                                        onClick = {
+                                            onClose()
+                                            onOpenSubscriptions()
+                                        }
+                                    )
+                                }
+
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "⭐ Rate Us ⭐",
+                                        onClick = {
+                                            onClose()
+                                            onOpenRateUs()
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "⭐ דרגו אותנו ⭐",
+                                        onClick = {
+                                            onClose()
+                                            onOpenRateUs()
+                                        }
+                                    )
+                                }
+
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        leading = {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Logout,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
+                                        title = "Logout",
+                                        onClick = {
+                                            onClose()
+                                            onLogout()
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        leading = {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Logout,
+                                                contentDescription = null,
+                                                tint = Color.White
+                                            )
+                                        },
+                                        title = "התנתקות",
+                                        onClick = {
+                                            onClose()
+                                            onLogout()
                                         }
                                     )
                                 }
                             }
 
                             Spacer(Modifier.height(8.dp))
-                        }
-
-                        // ===== אזור מתאמן =====
-                        Spacer(Modifier.height(6.dp))
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 10.dp)
-                                .clip(RoundedCornerShape(24.dp))
-                                .background(
-                                    brush = Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color(0xFF153A63).copy(alpha = 0.94f),
-                                            Color(0xFF1D5C96).copy(alpha = 0.82f),
-                                            Color(0xFF2F83C8).copy(alpha = 0.42f)
-                                        )
-                                    )
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = Color(0xFF8FD3FF).copy(alpha = 0.24f),
-                                    shape = RoundedCornerShape(24.dp)
-                                )
-                                .padding(vertical = 6.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-
-                                Spacer(Modifier.width(10.dp))
-
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                ) {
-                                    Text(
-                                        text = tr("אזור מתאמן", "Trainee area"),
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 12.5.sp,
-                                        lineHeight = 14.sp,
-                                        letterSpacing = (-0.12).sp,
-                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
-
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                                thickness = 1.dp,
-                                color = Color.White.copy(alpha = 0.16f)
+                            Text(
+                                text = "© KAMI",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFB8C4DA),
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                modifier = Modifier.fillMaxWidth()
                             )
-
-                            // ✅ הפרופיל שלי — מסך אמת שמציג נתונים מהמשתמש / Firestore / Preferences
-                            if (isEnglish) {
-                                DrawerLineItemEn(
-                                    leading = {
-                                        Icon(
-                                            imageVector = Icons.Filled.Person,
-                                            contentDescription = null,
-                                            tint = Color.White
-                                        )
-                                    },
-                                    title = "My Profile",
-                                    subtitle = "View your personal K.M.I details",
-                                    onClick = {
-                                        onClose()
-                                        onOpenMyProfile()
-                                    }
-                                )
-                            } else {
-                                DrawerLineItemHe(
-                                    leading = {
-                                        Icon(
-                                            imageVector = Icons.Filled.Person,
-                                            contentDescription = null,
-                                            tint = Color.White
-                                        )
-                                    },
-                                    title = "הפרופיל שלי",
-                                    subtitle = "צפייה בפרטים האישיים שלך",
-                                    onClick = {
-                                        onClose()
-                                        onOpenMyProfile()
-                                    }
-                                )
-                            }
-
-                        // ===== כפתור ראשון: אודות אבי אביסידון =====
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "About Avi Avisidon",
-                                subtitle = "Head of the method",
-                                titleTextStyle = MaterialTheme.typography.titleMedium.copy(
-                                    color = Color.White,
-                                    fontSize = 12.5.sp,
-                                    lineHeight = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.12).sp
-                                ),
-                                onClick = {
-                                    onClose()
-                                    onOpenAboutAvi()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "אודות אבי אביסידון",
-                                subtitle = "ראש השיטה",
-                                titleTextStyle = MaterialTheme.typography.titleMedium.copy(
-                                    color = Color.White,
-                                    fontSize = 12.5.sp,
-                                    lineHeight = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.12).sp
-                                ),
-                                onClick = {
-                                    onClose()
-                                    onOpenAboutAvi()
-                                }
-                            )
-                        }
-
-                        // ===== אודות המאמנים ברשת =====
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "About Network Coaches",
-                                subtitle = "Ranks, experience and certifications",
-                                titleTextStyle = MaterialTheme.typography.titleMedium.copy(
-                                    color = Color.White,
-                                    fontSize = 12.5.sp,
-                                    lineHeight = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.12).sp
-                                ),
-                                onClick = {
-                                    onClose()
-                                    onOpenAboutNetworkCoaches()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "אודות המאמנים ברשת",
-                                subtitle = "דרגות, ותק, הכשרות והסמכות",
-                                titleTextStyle = MaterialTheme.typography.titleMedium.copy(
-                                    color = Color.White,
-                                    fontSize = 12.5.sp,
-                                    lineHeight = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.12).sp
-                                ),
-                                onClick = {
-                                    onClose()
-                                    onOpenAboutNetworkCoaches()
-                                }
-                            )
-                        }
-
-                        val showHiddenAboutItems = false
-
-                        if (showHiddenAboutItems) {
-
-                            if (isEnglish) {
-                                DrawerLineItemEn(
-                                    title = "About Itzik Biton",
-                                    subtitle = "Senior coach",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAboutItzik()
-                                    }
-                                )
-                            } else {
-                                DrawerLineItemHe(
-                                    title = "אודות איציק ביטון",
-                                    subtitle = "מאמן בכיר",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAboutItzik()
-                                    }
-                                )
-                            }
-
-                            if (isEnglish) {
-                                DrawerLineItemEn(
-                                    title = "About the Network",
-                                    subtitle = "Knockout",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAboutNetwork()
-                                    }
-                                )
-                            } else {
-                                DrawerLineItemHe(
-                                    title = "אודות הרשת",
-                                    subtitle = "Knockout",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAboutNetwork()
-                                    }
-                                )
-                            }
-
-                        }
-
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "About the Method",
-                                subtitle = "KAMI",
-                                onClick = {
-                                    onClose()
-                                    onOpenAboutMethod()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "אודות השיטה",
-                                subtitle = "KAMI",
-                                onClick = {
-                                    onClose()
-                                    onOpenAboutMethod()
-                                }
-                            )
-                        }
-
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "Exercises – Demo",
-                                subtitle = "Short demo videos for exercises",
-                                onClick = { showDemoVideos = true }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "תרגילים – הדגמה",
-                                subtitle = "סרטוני הסבר קצרים לתרגילים",
-                                onClick = { showDemoVideos = true }
-                            )
-                        }
-
-                        val context = LocalContext.current
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "Forms & Payments",
-                                twoLineTitle = true,
-                                onClick = {
-                                    showFormsPaymentsDialog = true
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "טפסים ותשלומים",
-                                twoLineTitle = true,
-                                onClick = {
-                                    showFormsPaymentsDialog = true
-                                }
-                            )
-                        }
-
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "Contact Us",
-                                subtitle = "Leave details and we will get back to you",
-                                onClick = {
-                                    onClose()
-                                    onOpenContactUs()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "צור קשר",
-                                subtitle = "השאירו פרטים ונחזור אליכם",
-                                onClick = {
-                                    onClose()
-                                    onOpenContactUs()
-                                }
-                            )
-                        }
-
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "Branch Forum",
-                                trailing = {
-                                    DrawerUnreadBadge(forumUnreadCount)
-                                },
-                                onClick = {
-                                    onClose()
-                                    onOpenForum()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "פורום הסניף",
-                                trailing = {
-                                    DrawerUnreadBadge(forumUnreadCount)
-                                },
-                                onClick = {
-                                    onClose()
-                                    onOpenForum()
-                                }
-                            )
-                        }
-
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                leading = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Language,
-                                        contentDescription = null,
-                                        tint = Color.White
-                                    )
-                                },
-                                title = "Language / שפה",
-                                onClick = {
-                                    val newLang = AppLanguage.HEBREW
-
-                                    // ✅ רק MainApp שומר ומעדכן את ה-State.
-                                    // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
-                                    onLanguageChanged(newLang)
-
-                                    onClose()
-
-                                    scope.launch {
-                                        delay(180)
-
-                                        Toast.makeText(
-                                            contextLang,
-                                            "שפה: עברית",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                leading = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Language,
-                                        contentDescription = null,
-                                        tint = Color.White
-                                    )
-                                },
-                                title = "שפה / Language",
-                                onClick = {
-                                    val newLang = AppLanguage.ENGLISH
-
-                                    // ✅ רק MainApp שומר ומעדכן את ה-State.
-                                    // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
-                                    onLanguageChanged(newLang)
-
-                                    onClose()
-
-                                    scope.launch {
-                                        delay(180)
-
-                                        Toast.makeText(
-                                            contextLang,
-                                            "Language: English",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            )
-                        }
-
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "Manage Subscription",
-                                onClick = {
-                                    onClose()
-                                    onOpenSubscriptions()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "ניהול מנוי",
-                                onClick = {
-                                    onClose()
-                                    onOpenSubscriptions()
-                                }
-                            )
-                        }
-
-                        if (isEnglish) {
-                            DrawerLineItemEn(
-                                title = "⭐ Rate Us ⭐",
-                                onClick = {
-                                    onClose()
-                                    onOpenRateUs()
-                                }
-                            )
-                        } else {
-                            DrawerLineItemHe(
-                                title = "⭐ דרגו אותנו ⭐",
-                                onClick = {
-                                    onClose()
-                                    onOpenRateUs()
-                                }
-                            )
-                        }
-
-                            if (isEnglish) {
-                                DrawerLineItemEn(
-                                    leading = {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Logout,
-                                            contentDescription = null,
-                                            tint = Color.White
-                                        )
-                                    },
-                                    title = "Logout",
-                                    onClick = {
-                                        onClose()
-                                        onLogout()
-                                    }
-                                )
-                            } else {
-                                DrawerLineItemHe(
-                                    leading = {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Logout,
-                                            contentDescription = null,
-                                            tint = Color.White
-                                        )
-                                    },
-                                    title = "התנתקות",
-                                    onClick = {
-                                        onClose()
-                                        onLogout()
-                                    }
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "© KAMI",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFB8C4DA),
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                            modifier = Modifier.fillMaxWidth()
-                        )
                             Spacer(Modifier.height(8.dp))
                         } // end scroll Column
                     } // end fixed header Column
@@ -1735,14 +1771,18 @@ fun AppDrawerContent(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 FormCard(
-                                    title = tr("טופס רישום לעמותה", "Association Registration Form"),
+                                    title = tr(
+                                        "טופס רישום לעמותה",
+                                        "Association Registration Form"
+                                    ),
                                     subtitle = tr(
                                         "פתיחת טופס הרישום הקיים לעמותה",
                                         "Open the existing association registration form"
                                     ),
                                     enabled = true,
                                     onClick = {
-                                        val uri = Uri.parse("https://10nokout.com/files/Kami-Register.pdf")
+                                        val uri =
+                                            Uri.parse("https://10nokout.com/files/Kami-Register.pdf")
                                         try {
                                             CustomTabsIntent.Builder()
                                                 .setShowTitle(true)
@@ -1757,7 +1797,10 @@ fun AppDrawerContent(
                                             } catch (_: Exception) {
                                                 Toast.makeText(
                                                     ctx,
-                                                    tr("לא ניתן לפתוח את הקובץ", "Unable to open the file"),
+                                                    tr(
+                                                        "לא ניתן לפתוח את הקובץ",
+                                                        "Unable to open the file"
+                                                    ),
                                                     Toast.LENGTH_SHORT
                                                 ).show()
                                             }
@@ -1780,152 +1823,158 @@ fun AppDrawerContent(
                     )
                 }
 
-            // ─────────────────────────────────────────────
-            // 🎬 דיאלוג: תרגילים – הדגמה
-            // ─────────────────────────────────────────────
-            if (showDemoVideos) {
-                val ctx = LocalContext.current
-                var query by rememberSaveable { mutableStateOf("") }
+                // ─────────────────────────────────────────────
+                // 🎬 דיאלוג: תרגילים – הדגמה
+                // ─────────────────────────────────────────────
+                if (showDemoVideos) {
+                    val ctx = LocalContext.current
+                    var query by rememberSaveable { mutableStateOf("") }
 
-                val filtered = remember(query, isEnglish) {
-                    val q = query.trim()
-                    if (q.isBlank()) {
-                        DEMO_VIDEOS
-                    } else {
-                        DEMO_VIDEOS.filter {
-                            it.titleHe.contains(q, ignoreCase = true) ||
-                                    it.titleEn.contains(q, ignoreCase = true) ||
-                                    it.source.contains(q, ignoreCase = true)
+                    val filtered = remember(query, isEnglish) {
+                        val q = query.trim()
+                        if (q.isBlank()) {
+                            DEMO_VIDEOS
+                        } else {
+                            DEMO_VIDEOS.filter {
+                                it.titleHe.contains(q, ignoreCase = true) ||
+                                        it.titleEn.contains(q, ignoreCase = true) ||
+                                        it.source.contains(q, ignoreCase = true)
+                            }
                         }
                     }
-                }
 
-                AlertDialog(
-                    onDismissRequest = { showDemoVideos = false },
-                    title = {
-                        Text(
-                            text = tr("תרגילים – הדגמה", "Exercises – Demo"),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    text = {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = query,
-                                onValueChange = { query = it },
-                                singleLine = true,
-                                placeholder = { Text(tr("חיפוש…", "Search…")) },
+                    AlertDialog(
+                        onDismissRequest = { showDemoVideos = false },
+                        title = {
+                            Text(
+                                text = tr("תרגילים – הדגמה", "Exercises – Demo"),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                 modifier = Modifier.fillMaxWidth()
                             )
-
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 360.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                        },
+                        text = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                items(filtered, key = { it.id }) { v ->
-                                    Surface(
-                                        onClick = {
-                                            val uri = Uri.parse(v.url)
-                                            try {
-                                                CustomTabsIntent.Builder()
-                                                    .setShowTitle(true)
-                                                    .setUrlBarHidingEnabled(true)
-                                                    .build()
-                                                    .launchUrl(ctx, uri)
-                                            } catch (_: Exception) {
+                                OutlinedTextField(
+                                    value = query,
+                                    onValueChange = { query = it },
+                                    singleLine = true,
+                                    placeholder = { Text(tr("חיפוש…", "Search…")) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 360.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    items(filtered, key = { it.id }) { v ->
+                                        Surface(
+                                            onClick = {
+                                                val uri = Uri.parse(v.url)
                                                 try {
-                                                    ctx.startActivity(
-                                                        Intent(Intent.ACTION_VIEW, uri)
-                                                            .addCategory(Intent.CATEGORY_BROWSABLE)
-                                                    )
+                                                    CustomTabsIntent.Builder()
+                                                        .setShowTitle(true)
+                                                        .setUrlBarHidingEnabled(true)
+                                                        .build()
+                                                        .launchUrl(ctx, uri)
                                                 } catch (_: Exception) {
-                                                    Toast.makeText(
-                                                        ctx,
-                                                        tr("לא ניתן לפתוח את הסרטון", "Unable to open the video"),
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
+                                                    try {
+                                                        ctx.startActivity(
+                                                            Intent(Intent.ACTION_VIEW, uri)
+                                                                .addCategory(Intent.CATEGORY_BROWSABLE)
+                                                        )
+                                                    } catch (_: Exception) {
+                                                        Toast.makeText(
+                                                            ctx,
+                                                            tr(
+                                                                "לא ניתן לפתוח את הסרטון",
+                                                                "Unable to open the video"
+                                                            ),
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
                                                 }
-                                            }
 
-                                            showDemoVideos = false
-                                            onClose() // סוגר גם את התפריט אחרי פתיחה
-                                        },
-                                        shape = RoundedCornerShape(18.dp),
-                                        color = Color.White.copy(alpha = 0.10f),
-                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-                                        tonalElevation = 0.dp,
-                                        shadowElevation = 0.dp,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                                showDemoVideos = false
+                                                onClose() // סוגר גם את התפריט אחרי פתיחה
+                                            },
+                                            shape = RoundedCornerShape(18.dp),
+                                            color = Color.White.copy(alpha = 0.10f),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                Color.White.copy(alpha = 0.18f)
+                                            ),
+                                            tonalElevation = 0.dp,
+                                            shadowElevation = 0.dp,
+                                            modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.PlayArrow,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(22.dp)
-                                            )
-                                            Spacer(Modifier.width(10.dp))
-
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = v.titleFor(isEnglish),
-                                                    color = Color.White,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                                                    modifier = Modifier.fillMaxWidth()
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.PlayArrow,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(22.dp)
                                                 )
-                                                Text(
-                                                    text = v.source,
-                                                    color = Color.White.copy(alpha = 0.75f),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                                                    modifier = Modifier.fillMaxWidth()
+                                                Spacer(Modifier.width(10.dp))
+
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = v.titleFor(isEnglish),
+                                                        color = Color.White,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    )
+                                                    Text(
+                                                        text = v.source,
+                                                        color = Color.White.copy(alpha = 0.75f),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    )
+                                                }
+
+                                                Icon(
+                                                    imageVector = Icons.Filled.OpenInNew,
+                                                    contentDescription = null,
+                                                    tint = Color.White.copy(alpha = 0.85f),
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                             }
-
-                                            Icon(
-                                                imageVector = Icons.Filled.OpenInNew,
-                                                contentDescription = null,
-                                                tint = Color.White.copy(alpha = 0.85f),
-                                                modifier = Modifier.size(18.dp)
-                                            )
                                         }
                                     }
                                 }
                             }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showDemoVideos = false }) {
-                            Text(tr("סגור", "Close"), color = Color.White)
-                        }
-                    },
-                    containerColor = Color(0xFF0E1630), // מתאים לגרדיאנט שלך
-                    titleContentColor = Color.White,
-                    textContentColor = Color.White
-                )
-            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showDemoVideos = false }) {
+                                Text(tr("סגור", "Close"), color = Color.White)
+                            }
+                        },
+                        containerColor = Color(0xFF0E1630), // מתאים לגרדיאנט שלך
+                        titleContentColor = Color.White,
+                        textContentColor = Color.White
+                    )
+                }
 
-            // ←— רמז לגלילה בתחתית —→
-            DrawerScrollAffordance(
-                scroll = scroll,
-                modifier = Modifier.align(Alignment.BottomCenter)
+                // ←— רמז לגלילה בתחתית —→
+                DrawerScrollAffordance(
+                    scroll = scroll,
+                    modifier = Modifier.align(Alignment.BottomCenter)
                 )
             } // end inner Box
         } // end Box

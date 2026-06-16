@@ -36,11 +36,21 @@ private fun Typography.scaled(scale: Float): Typography {
         t.copy(fontSize = t.fontSize * scale, lineHeight = t.lineHeight * scale)
 
     return Typography(
-        displayLarge = ts(displayLarge), displayMedium = ts(displayMedium), displaySmall = ts(displaySmall),
-        headlineLarge = ts(headlineLarge), headlineMedium = ts(headlineMedium), headlineSmall = ts(headlineSmall),
-        titleLarge = ts(titleLarge), titleMedium = ts(titleMedium), titleSmall = ts(titleSmall),
-        bodyLarge = ts(bodyLarge), bodyMedium = ts(bodyMedium), bodySmall = ts(bodySmall),
-        labelLarge = ts(labelLarge), labelMedium = ts(labelMedium), labelSmall = ts(labelSmall),
+        displayLarge = ts(displayLarge),
+        displayMedium = ts(displayMedium),
+        displaySmall = ts(displaySmall),
+        headlineLarge = ts(headlineLarge),
+        headlineMedium = ts(headlineMedium),
+        headlineSmall = ts(headlineSmall),
+        titleLarge = ts(titleLarge),
+        titleMedium = ts(titleMedium),
+        titleSmall = ts(titleSmall),
+        bodyLarge = ts(bodyLarge),
+        bodyMedium = ts(bodyMedium),
+        bodySmall = ts(bodySmall),
+        labelLarge = ts(labelLarge),
+        labelMedium = ts(labelMedium),
+        labelSmall = ts(labelSmall),
     )
 }
 
@@ -360,11 +370,13 @@ fun MainApp(
                                 }
 
                                 DisposableEffect(spUser) {
-                                    val l = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
-                                        if (k == "user_role") {
-                                            roleState.value = spUser.getString("user_role", "trainee")
+                                    val l =
+                                        SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
+                                            if (k == "user_role") {
+                                                roleState.value =
+                                                    spUser.getString("user_role", "trainee")
+                                            }
                                         }
-                                    }
                                     spUser.registerOnSharedPreferenceChangeListener(l)
                                     onDispose {
                                         spUser.unregisterOnSharedPreferenceChangeListener(l)
@@ -487,7 +499,11 @@ fun MainApp(
                                         } else {
                                             runCatching {
                                                 nav.navigate(
-                                                    "attendance/mark/${Uri.encode(branch)}/${Uri.encode(groupKey)}"
+                                                    "attendance/mark/${Uri.encode(branch)}/${
+                                                        Uri.encode(
+                                                            groupKey
+                                                        )
+                                                    }"
                                                 ) {
                                                     launchSingleTop = true
                                                 }
@@ -521,6 +537,9 @@ fun MainApp(
                                     isAdmin = false,
                                     onOpenAdminUsers = {
                                         nav.navigate(Route.AdminUsers.route)
+                                    },
+                                    onOpenAdminDiagnostics = {
+                                        nav.navigate("admin_diagnostics")
                                     },
 
                                     onClose = {

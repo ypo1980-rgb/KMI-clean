@@ -223,7 +223,7 @@ object ExerciseCountProvider {
 
         if (subTopic != null) {
             return ExerciseCountStats(
-                subTopicCount = subTopic.subTopics.size,
+                subTopicCount = 0,
                 exerciseCount = subTopic.totalExercisesCountDeep()
             )
         }
@@ -250,20 +250,14 @@ object ExerciseCountProvider {
         isEnglish: Boolean,
         showZeroSubTopics: Boolean = false
     ): String {
-        val shouldShowSubTopics = stats.subTopicCount >= 2 || showZeroSubTopics
-
         return if (isEnglish) {
-            if (shouldShowSubTopics) {
-                "${stats.subTopicCount} sub-topics • ${stats.exerciseCount} exercises"
+            if (stats.exerciseCount == 1) {
+                "1 exercise"
             } else {
                 "${stats.exerciseCount} exercises"
             }
         } else {
-            if (shouldShowSubTopics) {
-                "${stats.subTopicCount} תתי נושאים • ${stats.exerciseCount} תרגילים"
-            } else {
-                "${stats.exerciseCount} תרגילים"
-            }
+            "${stats.exerciseCount} תרגילים"
         }
     }
 }

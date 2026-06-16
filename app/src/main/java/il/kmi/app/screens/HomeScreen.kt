@@ -177,15 +177,15 @@ private fun TrainingsWeekHeader(
 ) {
     val heb = java.util.Locale("he", "IL")
     val dateFmt = java.text.SimpleDateFormat("dd/MM", heb)
-    val dayFmt  = java.text.SimpleDateFormat("EEEE", heb)   // שם היום בעברית
+    val dayFmt = java.text.SimpleDateFormat("EEEE", heb)   // שם היום בעברית
     val start = java.util.Calendar.getInstance()
-    val end   = (start.clone() as java.util.Calendar).apply {
+    val end = (start.clone() as java.util.Calendar).apply {
         add(java.util.Calendar.DAY_OF_YEAR, 6)
     }
 
     // היום + תאריך: "יום חמישי 11/12"
     val startLabel = "${dayFmt.format(start.time)} ${dateFmt.format(start.time)}"
-    val endLabel   = "${dayFmt.format(end.time)} ${dateFmt.format(end.time)}"
+    val endLabel = "${dayFmt.format(end.time)} ${dateFmt.format(end.time)}"
 
     Box(
         modifier = modifier
@@ -218,7 +218,10 @@ private fun TrainingsWeekHeader(
 
 @Suppress("NOTHING_TO_INLINE")
 inline fun <T : AccessibleObject> T.makeAccessible(): T {
-    try { isAccessible = true } catch (_: SecurityException) { /* ignore */ }
+    try {
+        isAccessible = true
+    } catch (_: SecurityException) { /* ignore */
+    }
     return this
 }
 
@@ -354,9 +357,9 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
-                    top    = padding.calculateTopPadding(),
-                    start  = padding.calculateStartPadding(LocalLayoutDirection.current),
-                    end    = padding.calculateEndPadding(LocalLayoutDirection.current),
+                    top = padding.calculateTopPadding(),
+                    start = padding.calculateStartPadding(LocalLayoutDirection.current),
+                    end = padding.calculateEndPadding(LocalLayoutDirection.current),
                     bottom = padding.calculateBottomPadding()
                 )
                 .background(backgroundBrush)
@@ -380,21 +383,22 @@ fun HomeScreen(
             }
 
             DisposableEffect(userSp, subsSp, legacySp) {
-                val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
-                    if (
-                        key == "has_full_access" ||
-                        key == "full_access" ||
-                        key == "subscription_active" ||
-                        key == "is_subscribed" ||
-                        key == "google_subscription_verified" ||
-                        key == "google_subscription_checked_at" ||
-                        key == "sub_product" ||
-                        key == "sub_access_until" ||
-                        key == "access_changed_at"
-                    ) {
-                        homeAccessRefreshTick++
+                val listener =
+                    SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
+                        if (
+                            key == "has_full_access" ||
+                            key == "full_access" ||
+                            key == "subscription_active" ||
+                            key == "is_subscribed" ||
+                            key == "google_subscription_verified" ||
+                            key == "google_subscription_checked_at" ||
+                            key == "sub_product" ||
+                            key == "sub_access_until" ||
+                            key == "access_changed_at"
+                        ) {
+                            homeAccessRefreshTick++
+                        }
                     }
-                }
 
                 userSp.registerOnSharedPreferenceChangeListener(listener)
                 subsSp.registerOnSharedPreferenceChangeListener(listener)
@@ -1213,15 +1217,22 @@ fun HomeScreen(
                 fun readSlot(slot: Any): SlotLike {
                     val cls = slot::class.java
 
-                    val dayField = runCatching { cls.getDeclaredField("day").makeAccessibleSafe() }.getOrNull()
+                    val dayField =
+                        runCatching { cls.getDeclaredField("day").makeAccessibleSafe() }.getOrNull()
                     val startField =
-                        runCatching { cls.getDeclaredField("start").makeAccessibleSafe() }.getOrNull()
-                    val endField = runCatching { cls.getDeclaredField("end").makeAccessibleSafe() }.getOrNull()
+                        runCatching {
+                            cls.getDeclaredField("start").makeAccessibleSafe()
+                        }.getOrNull()
+                    val endField =
+                        runCatching { cls.getDeclaredField("end").makeAccessibleSafe() }.getOrNull()
 
                     if (dayField != null && startField != null && endField != null) {
-                        val dayEnum = runCatching { dayField.get(slot) as? java.time.DayOfWeek }.getOrNull()
-                        val startLt = runCatching { startField.get(slot) as? java.time.LocalTime }.getOrNull()
-                        val endLt = runCatching { endField.get(slot) as? java.time.LocalTime }.getOrNull()
+                        val dayEnum =
+                            runCatching { dayField.get(slot) as? java.time.DayOfWeek }.getOrNull()
+                        val startLt =
+                            runCatching { startField.get(slot) as? java.time.LocalTime }.getOrNull()
+                        val endLt =
+                            runCatching { endField.get(slot) as? java.time.LocalTime }.getOrNull()
 
                         val calDay = when (dayEnum) {
                             java.time.DayOfWeek.SUNDAY -> java.util.Calendar.SUNDAY
@@ -1258,10 +1269,27 @@ fun HomeScreen(
                     }
 
                     return SlotLike(
-                        dayOfWeek = intField("dayOfWeek", "day", "dow", fallback = java.util.Calendar.MONDAY),
+                        dayOfWeek = intField(
+                            "dayOfWeek",
+                            "day",
+                            "dow",
+                            fallback = java.util.Calendar.MONDAY
+                        ),
                         startHour = intField("startHour", "hour", "h", fallback = 19),
-                        startMinute = intField("startMinute", "minute", "min", "startMin", fallback = 0),
-                        durationMinutes = intField("durationMinutes", "duration", "dur", "length", fallback = 90)
+                        startMinute = intField(
+                            "startMinute",
+                            "minute",
+                            "min",
+                            "startMin",
+                            fallback = 0
+                        ),
+                        durationMinutes = intField(
+                            "durationMinutes",
+                            "duration",
+                            "dur",
+                            "length",
+                            fallback = 90
+                        )
                     )
                 }
 
@@ -1309,7 +1337,10 @@ fun HomeScreen(
 
                 Spacer(Modifier.height(10.dp))
 
-                fun rollForwardIfPast(src: java.util.Calendar, graceMinutes: Int = 60): java.util.Calendar {
+                fun rollForwardIfPast(
+                    src: java.util.Calendar,
+                    graceMinutes: Int = 60
+                ): java.util.Calendar {
                     val now = System.currentTimeMillis() - graceMinutes * 60_000L
                     val c = src.clone() as java.util.Calendar
                     while (c.timeInMillis <= now) c.add(java.util.Calendar.DAY_OF_YEAR, 7)
@@ -1412,7 +1443,8 @@ fun HomeScreen(
                         clean,
                         clean.replace("+", " + "),
                         clean.replace(" + ", "+"),
-                        il.kmi.app.training.TrainingCatalog.normalizeGroupName(group).ifBlank { group }
+                        il.kmi.app.training.TrainingCatalog.normalizeGroupName(group)
+                            .ifBlank { group }
                     )
                         .map { it.trim() }
                         .filter { it.isNotBlank() }
@@ -1466,7 +1498,9 @@ fun HomeScreen(
                     val dbEn = databaseGroupEn.trim()
 
                     if (wanted.equals(dbHe, ignoreCase = true)) return true
-                    if (selectedGroup.trim().equals(databaseGroupHe.trim(), ignoreCase = true)) return true
+                    if (selectedGroup.trim()
+                            .equals(databaseGroupHe.trim(), ignoreCase = true)
+                    ) return true
                     if (selectedGroup.trim().equals(dbEn, ignoreCase = true)) return true
 
                     // התאמות מרחיבות כמו ב-TrainingCatalog:
@@ -1561,10 +1595,11 @@ fun HomeScreen(
                                         }
                                     }
                                     .mapNotNull { pair ->
-                                        val found = il.kmi.app.training.TrainingDirectory.getSchedule(
-                                            pair.first,
-                                            pair.second
-                                        )
+                                        val found =
+                                            il.kmi.app.training.TrainingDirectory.getSchedule(
+                                                pair.first,
+                                                pair.second
+                                            )
 
                                         if (found != null) {
                                             matchedBranch = pair.first
@@ -1802,7 +1837,10 @@ fun HomeScreen(
                                             ) {
                                                 Row(
                                                     modifier = Modifier
-                                                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                                                        .padding(
+                                                            horizontal = 8.dp,
+                                                            vertical = 5.dp
+                                                        ),
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                                 ) {
@@ -2303,7 +2341,10 @@ fun HomeScreen(
                                                 Column(
                                                     modifier = Modifier
                                                         .weight(1f)
-                                                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                                                        .padding(
+                                                            horizontal = 14.dp,
+                                                            vertical = 14.dp
+                                                        ),
                                                     horizontalAlignment = if (isEnglish) {
                                                         Alignment.Start
                                                     } else {
@@ -2428,7 +2469,10 @@ fun HomeScreen(
                                                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                                                 modifier = Modifier
                                                                     .fillMaxWidth()
-                                                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                                                                    .padding(
+                                                                        horizontal = 10.dp,
+                                                                        vertical = 5.dp
+                                                                    )
                                                             )
                                                         }
                                                     }
@@ -2462,7 +2506,9 @@ fun HomeScreen(
                                                                         vertical = 4.dp
                                                                     ),
                                                                     verticalAlignment = Alignment.CenterVertically,
-                                                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                                                    horizontalArrangement = Arrangement.spacedBy(
+                                                                        5.dp
+                                                                    )
                                                                 ) {
                                                                     Icon(
                                                                         imageVector = Icons.Filled.DateRange,
@@ -3078,7 +3124,11 @@ private fun TrainingCardCompact(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    var rememberChoice by rememberSaveable(training.cal.timeInMillis) { mutableStateOf(true) }
+                    var rememberChoice by rememberSaveable(training.cal.timeInMillis) {
+                        mutableStateOf(
+                            true
+                        )
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -3174,7 +3224,7 @@ private fun TrainingCardCompact(
     val timeText = remember(training.cal.timeInMillis, durationMin) {
         val fmt = java.text.SimpleDateFormat("HH:mm", locale)
         val start = fmt.format(training.cal.time)
-        val end   = fmt.format(java.util.Date(training.cal.timeInMillis + durationMin * 60_000L))
+        val end = fmt.format(java.util.Date(training.cal.timeInMillis + durationMin * 60_000L))
         "$start – $end"
     }
     val dateTimeText = remember(dayText, dateText, timeText, isEnglish) {
