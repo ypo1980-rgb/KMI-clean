@@ -735,6 +735,7 @@ private fun InlineSubTopicsExpansionCard(
 
         return counts[clean]
             ?: when (clean) {
+                // שחרורים
                 "Release from Hand / Hair / Shirt Grabs" ->
                     counts["שחרור מתפיסות ידיים / שיער / חולצה"] ?: 0
 
@@ -745,6 +746,16 @@ private fun InlineSubTopicsExpansionCard(
                 "Hug Releases" ->
                     counts["שחרור מחביקות"] ?: 0
 
+                // עבודת ידיים
+                "Hand Strikes" ->
+                    counts["מכות יד"] ?: 0
+
+                "Elbow Strikes" ->
+                    counts["מכות מרפק"] ?: 0
+
+                "Stick / Rifle Strikes" ->
+                    counts["מכות במקל / רובה"] ?: 0
+
                 else -> 0
             }
     }
@@ -752,75 +763,69 @@ private fun InlineSubTopicsExpansionCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 8.dp),
-        shape = RoundedCornerShape(22.dp),
-        color = Color.White.copy(alpha = 0.82f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.20f)),
-        shadowElevation = 3.dp
+            .padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 6.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = accent.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f)),
+        shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             picks.forEachIndexed { index, pick ->
                 val cleanTitle = stripLockSuffix(pick)
 
-                Surface(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .clickable { onPick(pick) },
-                    shape = RoundedCornerShape(18.dp),
-                    color = Color.White.copy(alpha = 0.88f),
-                    border = BorderStroke(1.dp, accent.copy(alpha = 0.18f))
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onPick(pick) }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Icon(
+                        imageVector = Icons.Filled.ChevronLeft,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(15.dp)
+                    )
+
+                    Spacer(Modifier.width(6.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.ChevronLeft,
-                            contentDescription = null,
-                            tint = accent,
-                            modifier = Modifier.size(18.dp)
+                        Text(
+                            text = cleanTitle,
+                            color = Color(0xFF111827),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            lineHeight = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
                         )
 
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.height(1.dp))
 
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                        ) {
-                            Text(
-                                text = cleanTitle,
-                                color = Color(0xFF111827),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(Modifier.height(2.dp))
-
-                            Text(
-                                text = countLabel(countForDisplay(pick)),
-                                color = accent,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                        Text(
+                            text = countLabel(countForDisplay(pick)),
+                            color = accent,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            lineHeight = 12.sp,
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
 
                 if (index != picks.lastIndex) {
                     HorizontalDivider(
-                        color = Color(0x14000000),
+                        color = accent.copy(alpha = 0.22f),
                         thickness = 0.8.dp,
                         modifier = Modifier.padding(horizontal = 8.dp)
                     )
@@ -848,26 +853,30 @@ private fun SubjectRootCardPremium(
     val imageRes = remember(subjectId) { subjectImageFor(subjectId) }
 
     val titleColor = if (isDarkMode) Color.White else Color(0xFF111827)
+
     val subtitleColor = if (isDarkMode) {
-        Color.White.copy(alpha = 0.74f)
+        Color.White.copy(alpha = 0.78f)
     } else {
         Color(0xFF64748B)
     }
-    val countColor = accent.copy(alpha = 1f)
+
+    val countColor = if (isDarkMode) {
+        accent.copy(alpha = 0.98f)
+    } else {
+        accent.copy(alpha = 0.95f)
+    }
+
     val isTitleLocked = title.endsWith(" 🔒")
     val displayTitle = stripLockSuffix(title)
 
     @Composable
     fun SubjectVisual() {
         if (imageRes != null) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Color.White.copy(alpha = if (isDarkMode) 0.08f else 0.92f),
-                border = BorderStroke(1.dp, accent.copy(alpha = 0.22f)),
-                shadowElevation = if (isDarkMode) 0.dp else 3.dp,
+            Box(
                 modifier = Modifier
                     .width(76.dp)
                     .height(58.dp)
+                    .clip(RoundedCornerShape(14.dp))
             ) {
                 Image(
                     painter = painterResource(id = imageRes),
@@ -877,20 +886,16 @@ private fun SubjectRootCardPremium(
                 )
             }
         } else {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = accent.copy(alpha = 0.18f),
-                border = BorderStroke(1.dp, accent.copy(alpha = 0.26f)),
-                modifier = Modifier.size(30.dp)
+            Box(
+                modifier = Modifier.size(30.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }
@@ -898,14 +903,9 @@ private fun SubjectRootCardPremium(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = if (isDarkMode) Color.White.copy(alpha = 0.055f) else Color.Transparent,
+        color = Color.Transparent,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = if (isDarkMode) {
-            BorderStroke(1.dp, Color.White.copy(alpha = 0.07f))
-        } else {
-            null
-        },
         modifier = Modifier.fillMaxWidth()
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -951,7 +951,10 @@ private fun SubjectRootCardPremium(
                         ) {
                             Text(
                                 text = displayTitle,
-                                style = MaterialTheme.typography.titleSmall,
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontSize = 14.sp,
+                                    lineHeight = 16.sp
+                                ),
                                 fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Start,
                                 color = titleColor,
@@ -962,7 +965,9 @@ private fun SubjectRootCardPremium(
 
                             if (isTitleLocked) {
                                 Spacer(modifier = Modifier.width(5.dp))
-                                PremiumTopicLockIcon()
+                                PremiumTopicLockIcon(
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
 
                             if (showExpandArrow) {
@@ -970,7 +975,7 @@ private fun SubjectRootCardPremium(
                                 Text(
                                     text = if (isExpanded) "⌃" else "⌄",
                                     color = accent,
-                                    fontSize = 14.sp,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.ExtraBold
                                 )
                             }
@@ -999,20 +1004,34 @@ private fun SubjectRootCardPremium(
                             ),
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Center,
-                            color = Color(0xFF6B7280).copy(alpha = 0.92f),
+                            color = countColor,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 2,
                             overflow = TextOverflow.Clip
                         )
                     }
                 } else {
-                    Box(
-                        modifier = Modifier.width(28.dp),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.width(54.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
                     ) {
+                        if (showExpandArrow) {
+                            Text(
+                                text = if (isExpanded) "⌃" else "⌄",
+                                color = accent,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+
+                        if (showExpandArrow && isTitleLocked) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+
                         if (isTitleLocked) {
                             PremiumTopicLockIcon(
-                                modifier = Modifier.offset(x = 20.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -1023,37 +1042,19 @@ private fun SubjectRootCardPremium(
                         modifier = Modifier.weight(1f),
                         horizontalAlignment = Alignment.End
                     ) {
-                        Row(
+                        Text(
+                            text = displayTitle,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 15.sp,
+                                lineHeight = 17.sp
+                            ),
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = TextAlign.Right,
+                            color = titleColor,
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            if (showExpandArrow) {
-                                Text(
-                                    text = if (isExpanded) "⌃" else "⌄",
-                                    color = accent,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                            }
-
-                            Text(
-                                text = displayTitle,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                textAlign = TextAlign.Right,
-                                color = titleColor,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            if (isTitleLocked) {
-                                Spacer(modifier = Modifier.width(5.dp))
-                                PremiumTopicLockIcon()
-                            }
-                        }
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
 
                         if (subtitle.isNotBlank()) {
                             Spacer(modifier = Modifier.height(2.dp))
@@ -1073,12 +1074,12 @@ private fun SubjectRootCardPremium(
                         Text(
                             text = countText,
                             style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.sp,
-                                lineHeight = 13.sp
+                                fontSize = 9.5.sp,
+                                lineHeight = 12.sp
                             ),
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Right,
-                            color = Color(0xFF6B7280).copy(alpha = 0.92f),
+                            color = countColor,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 2,
                             overflow = TextOverflow.Clip
@@ -1165,7 +1166,6 @@ internal fun TopicsBySubjectCard(
     }
 
     var askDefense by rememberSaveable { mutableStateOf(false) }
-    var askHands by rememberSaveable { mutableStateOf(false) }
     var askKind by rememberSaveable { mutableStateOf<il.kmi.app.domain.DefenseKind?>(null) }
 
     fun applyPayload(payload: SubjectTopicsUiLogic.TopicsUiCountsPayload) {
@@ -1705,11 +1705,6 @@ internal fun TopicsBySubjectCard(
                 } else {
                     MaterialTheme.colorScheme.surface.copy(alpha = 0.97f)
                 },
-                border = if (isDarkMode) {
-                    BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
-                } else {
-                    null
-                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp)
@@ -1946,8 +1941,52 @@ internal fun TopicsBySubjectCard(
                             countText = handsRootCard.countText,
                             showLeftBadge = true,
                             isDarkMode = isDarkMode,
-                            onClick = { askHands = true }
+                            showExpandArrow = true,
+                            isExpanded = expandedSubTopicsForId == "hands_root",
+                            onClick = {
+                                expandedSubTopicsForId =
+                                    if (expandedSubTopicsForId == "hands_root") null else "hands_root"
+                            }
                         )
+
+                        if (expandedSubTopicsForId == "hands_root") {
+                            val handsPicks = remember(handsBase) {
+                                SubjectTopicsUiLogic.handsPicks(handsBase)
+                            }
+
+                            val handsDisplayPicks = remember(handsPicks, isEnglish) {
+                                handsPicks.map { subTopicTitleForUi(it, isEnglish) }
+                            }
+
+                            InlineSubTopicsExpansionCard(
+                                picks = handsDisplayPicks,
+                                counts = handsPickCounts,
+                                isEnglish = isEnglish,
+                                accent = subjectAccentColor("hands_root"),
+                                onPick = { pickedDisplay ->
+                                    expandedSubTopicsForId = null
+
+                                    val picked = handsPicks.firstOrNull {
+                                        subTopicTitleForUi(it, isEnglish) == pickedDisplay
+                                    } ?: pickedDisplay
+
+                                    val hardSubjectId = handsSectionIdFor(picked)
+
+                                    if (hardSubjectId != null) {
+                                        onOpenHardSubjectRoute(currentBelt, hardSubjectId)
+                                    } else {
+                                        val subject = SubjectTopicsUiLogic.resolveHandsPick(
+                                            base = handsBase,
+                                            picked = picked
+                                        )
+
+                                        if (subject != null) {
+                                            openSubjectSmart(subject)
+                                        }
+                                    }
+                                }
+                            )
+                        }
 
 
                         HorizontalDivider(
@@ -2184,43 +2223,6 @@ internal fun TopicsBySubjectCard(
                                         }
 
                                         SubjectTopicsUiLogic.DefenseKindPickDecision.None -> Unit
-                                    }
-                                }
-                            )
-                        }
-
-                        if (askHands) {
-                            val handsPicks = remember(handsBase) {
-                                SubjectTopicsUiLogic.handsPicks(handsBase)
-                            }
-                            val handsDisplayPicks = remember(handsPicks, isEnglish) {
-                                handsPicks.map { subTopicTitleForUi(it, isEnglish) }
-                            }
-
-                            HandsPickModeDialogModern(
-                                picks = handsDisplayPicks,
-                                counts = handsPickCounts,
-                                onDismiss = { askHands = false },
-                                onPick = { pickedDisplay: String ->
-                                    askHands = false
-
-                                    val picked = handsPicks.firstOrNull {
-                                        subTopicTitleForUi(it, isEnglish) == pickedDisplay
-                                    } ?: pickedDisplay
-
-                                    val hardSubjectId = handsSectionIdFor(picked)
-
-                                    if (hardSubjectId != null) {
-                                        onOpenHardSubjectRoute(currentBelt, hardSubjectId)
-                                    } else {
-                                        val subject = SubjectTopicsUiLogic.resolveHandsPick(
-                                            base = handsBase,
-                                            picked = picked
-                                        )
-
-                                        if (subject != null) {
-                                            openSubjectSmart(subject)
-                                        }
                                     }
                                 }
                             )
