@@ -178,41 +178,111 @@ fun AdminDiagnosticsScreen(
                 }
 
                 googleAuthLogs = snapshot?.documents.orEmpty().map { doc ->
-                    val rawType = doc.getString("type")
-                        ?: doc.getString("event")
-                        ?: doc.getString("status")
-                        ?: "google_auth"
+                    val stage = doc.getString("stage").orEmpty()
+                    val errorClass = doc.getString("errorClass").orEmpty()
+                    val errorMessage = doc.getString("errorMessage").orEmpty()
+                    val apiStatusCode = doc.getLong("apiStatusCode")
 
-                    val rawMessage = doc.getString("message")
-                        ?: doc.getString("error")
-                        ?: doc.getString("exception")
-                        ?: doc.getString("reason")
-                        ?: ""
+                    val message = doc.getString("message").orEmpty()
+
+                    val isRealUserCancel =
+                        errorMessage.contains("User cancelled", ignoreCase = true) ||
+                                errorMessage.contains("Cancelled by user", ignoreCase = true) ||
+                                errorMessage.contains("cancelled the selector", ignoreCase = true)
+
+                    val isReauth16 =
+                        errorMessage.contains("Account reauth failed", ignoreCase = true) ||
+                                errorMessage.contains("reauth failed", ignoreCase = true) ||
+                                errorMessage.contains("[16]", ignoreCase = true)
 
                     val isError =
-                        rawType.contains("fail", ignoreCase = true) ||
-                                rawType.contains("error", ignoreCase = true) ||
-                                rawType.contains("cancel", ignoreCase = true) ||
-                                rawMessage.contains("fail", ignoreCase = true) ||
-                                rawMessage.contains("error", ignoreCase = true) ||
-                                rawMessage.contains("exception", ignoreCase = true)
+                        isReauth16 ||
+                                apiStatusCode != null ||
+                                errorClass.isNotBlank() && !isRealUserCancel ||
+                                errorMessage.isNotBlank() && !isRealUserCancel ||
+                                stage.contains("failure", ignoreCase = true) ||
+                                stage.contains("failed", ignoreCase = true) ||
+                                stage.contains("exception", ignoreCase = true) ||
+                                stage.contains("no_credential", ignoreCase = true) ||
+                                stage.contains("invalid", ignoreCase = true) ||
+                                stage.contains("blank", ignoreCase = true)
+
+                    val isSuccess =
+                        stage.contains("success", ignoreCase = true) ||
+                                stage.contains("firebase_success", ignoreCase = true) ||
+                                stage.contains("result_user_ready", ignoreCase = true)
+
+                    val type = when {
+                        isError -> "google_auth_error"
+                        isSuccess -> "google_auth_success"
+                        isRealUserCancel -> "google_auth_cancelled"
+                        else -> "google_auth_login"
+                    }
+
+                    val title = when {
+                        isError -> if (isEnglish) {
+                            "Google sign-in issue"
+                        } else {
+                            "תקלה בכניסה עם Google"
+                        }
+
+                        isSuccess -> if (isEnglish) {
+                            "Google sign-in success"
+                        } else {
+                            "כניסה עם Google הצליחה"
+                        }
+
+                        isRealUserCancel -> if (isEnglish) {
+                            "Google sign-in cancelled"
+                        } else {
+                            "כניסה עם Google בוטלה"
+                        }
+
+                        else -> if (isEnglish) {
+                            "Google sign-in event"
+                        } else {
+                            "אירוע כניסה עם Google"
+                        }
+                    }
+
+                    val fullMessage = buildString {
+                        if (stage.isNotBlank()) append("stage=$stage")
+                        if (errorClass.isNotBlank()) {
+                            if (isNotBlank()) append("\n")
+                            append("errorClass=$errorClass")
+                        }
+                        if (errorMessage.isNotBlank()) {
+                            if (isNotBlank()) append("\n")
+                            append("errorMessage=$errorMessage")
+                        }
+                        if (apiStatusCode != null) {
+                            if (isNotBlank()) append("\n")
+                            append("apiStatusCode=$apiStatusCode")
+                        }
+                        if (message.isNotBlank()) {
+                            if (isNotBlank()) append("\n")
+                            append(message)
+                        }
+                    }
 
                     AdminDiagnosticLog(
                         id = "google_${doc.id}",
-                        type = "google_auth_$rawType",
-                        title = if (isError) {
-                            if (isEnglish) "Google sign-in issue" else "תקלה בכניסה עם Google"
-                        } else {
-                            if (isEnglish) "Google sign-in event" else "אירוע כניסה עם Google"
-                        },
-                        message = rawMessage.ifBlank {
+                        type = type,
+                        title = title,
+                        message = fullMessage.ifBlank {
                             if (isEnglish) "Google authentication diagnostic event"
                             else "אירוע אבחון של התחברות Google"
                         },
                         area = "google_auth",
-                        severity = if (isError) "error" else "info",
+                        severity = when {
+                            isError -> "error"
+                            isSuccess -> "success"
+                            else -> "info"
+                        },
                         userRole = doc.getString("userRole") ?: "unknown",
-                        appVersion = doc.getString("appVersion").orEmpty(),
+                        appVersion = doc.getString("versionName")
+                            ?: doc.getString("appVersion")
+                            ?: "",
                         deviceModel = doc.getString("deviceModel")
                             ?: doc.getString("device")
                             ?: "",
@@ -284,6 +354,12 @@ fun AdminDiagnosticsScreen(
 
     fun logGroupKey(log: AdminDiagnosticLog): String {
         return when {
+            log.severity.equals("error", ignoreCase = true) ||
+                    log.type.contains("error", ignoreCase = true) ||
+                    log.type.contains("failed", ignoreCase = true) ||
+                    log.type.contains("failure", ignoreCase = true) ->
+                "errors"
+
             log.type.contains("screen_view", ignoreCase = true) ||
                     log.area.equals("screen", ignoreCase = true) ->
                 "screen_views"
@@ -294,11 +370,6 @@ fun AdminDiagnosticsScreen(
 
             log.type.contains("login", ignoreCase = true) ->
                 "login"
-
-            log.severity.equals("error", ignoreCase = true) ||
-                    log.type.contains("error", ignoreCase = true) ||
-                    log.type.contains("failed", ignoreCase = true) ->
-                "errors"
 
             log.type.contains("search", ignoreCase = true) ->
                 "search"
@@ -352,17 +423,33 @@ fun AdminDiagnosticsScreen(
     val errorCount = filteredLogs.count {
         it.severity.equals("error", ignoreCase = true) ||
                 it.type.contains("error", ignoreCase = true) ||
-                it.type.contains("failed", ignoreCase = true)
+                it.type.contains("failed", ignoreCase = true) ||
+                it.type.contains("failure", ignoreCase = true) ||
+                it.message.contains("errorClass=", ignoreCase = true) ||
+                it.message.contains("errorMessage=", ignoreCase = true) ||
+                it.message.contains("apiStatusCode=", ignoreCase = true)
     }
-    val loginCount = filteredLogs.count { it.type.contains("login", ignoreCase = true) }
+
+    val loginCount = filteredLogs.count {
+        it.type.contains("login", ignoreCase = true) ||
+                it.type.contains("google_auth", ignoreCase = true) ||
+                it.area.equals("google_auth", ignoreCase = true)
+    }
+
     val searchNoResultsCount = filteredLogs.count {
-        it.type.contains("search", ignoreCase = true) &&
-                it.type.contains("no", ignoreCase = true)
+        it.type.contains("search_no_results", ignoreCase = true) ||
+                (
+                        it.type.contains("search", ignoreCase = true) &&
+                                it.type.contains("no", ignoreCase = true)
+                        )
     }
+
     val successCount = filteredLogs.count {
         it.severity.equals("success", ignoreCase = true) ||
                 it.type.contains("success", ignoreCase = true) ||
-                it.type.contains("saved", ignoreCase = true)
+                it.type.contains("saved", ignoreCase = true) ||
+                it.message.contains("firebase_success", ignoreCase = true) ||
+                it.message.contains("result_user_ready", ignoreCase = true)
     }
 
     Scaffold(

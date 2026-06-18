@@ -406,76 +406,6 @@ private fun BeltBadge(
 }
 
 @Composable
-private fun IntroDynamicUserAndBeltOverlay(
-    greeting: String,
-    rank: IntroRankDisplay?,
-    isEnglish: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Box(modifier = modifier.fillMaxSize()) {
-
-        // ✅ שם המתאמן — דינמי לפי SharedPreferences / Firebase
-        Text(
-            text = greeting,
-            style = MaterialTheme.typography.headlineMedium.copy(
-                fontSize = 26.sp,
-                lineHeight = 30.sp,
-                textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
-            ),
-            fontWeight = FontWeight.ExtraBold,
-            color = Color(0xFF172033),
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 116.dp)
-                .fillMaxWidth()
-                .padding(horizontal = 52.dp)
-        )
-
-        if (rank != null) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 420.dp)
-                    .fillMaxWidth()
-                    .padding(horizontal = 76.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = if (isEnglish) rank.en else rank.he,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 22.sp,
-                        lineHeight = 24.sp,
-                        textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
-                    ),
-                    fontWeight = FontWeight.ExtraBold,
-                    color = when (rank.baseBelt) {
-                        Belt.WHITE -> Color(0xFF98A2B3)
-                        else -> rank.color
-                    },
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(y = (-3).dp)
-                )
-
-                Image(
-                    painter = painterResource(id = introBeltDrawableRes(rank.baseBelt)),
-                    contentDescription = if (isEnglish) rank.en else rank.he,
-                    modifier = Modifier
-                        .offset(y = (-14).dp)
-                        .width(402.dp)
-                        .height(125.dp),
-                    contentScale = ContentScale.Fit
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun IntroWelcomeImageScreen(
     isEnglish: Boolean,
     greeting: String,
@@ -485,110 +415,135 @@ private fun IntroWelcomeImageScreen(
     onGoogleClick: () -> Unit,
     onRegularClick: () -> Unit
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.White),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.intro_welcome_screen),
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.985f),
-                contentScale = ContentScale.Fit
-            )
-        }
+        val isCompactHeight = maxHeight < 760.dp
+        val isVeryCompactHeight = maxHeight < 690.dp
 
-        IntroDynamicUserAndBeltOverlay(
-            greeting = greeting,
-            rank = rank,
-            isEnglish = isEnglish,
-            modifier = Modifier.matchParentSize()
+        val horizontalPadding = if (isCompactHeight) 24.dp else 30.dp
+
+        // מיקום יחסי של הברכה לפי גובה המסך, כדי שיהיה יציב בין מכשירים
+        val greetingTopSpace = maxHeight * 0.185f
+
+        val greetingHeight = if (isCompactHeight) 38.dp else 42.dp
+
+        // מיקום יחסי של שורת החגורה לפי גובה המסך, כדי שיהיה יציב בין מכשירים
+        val beltTopSpace = maxHeight * 0.435f
+
+        val beltRowHeight = if (isCompactHeight) 40.dp else 46.dp
+        val beltImageHeight = if (isCompactHeight) 22.dp else 26.dp
+
+        Image(
+            painter = painterResource(id = R.drawable.intro_welcome_screen_v2),
+            contentDescription = null,
+            modifier = Modifier
+                .matchParentSize(),
+            contentScale = ContentScale.Crop
         )
 
-        // ✅ משפט מוטיבציה על כרטיס לבן כדי שיהיה קריא וברור מעל הרקע.
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 315.dp)
-                .fillMaxWidth()
-                .padding(horizontal = 36.dp)
-                .shadow(
-                    elevation = 4.dp,
-                    shape = RoundedCornerShape(16.dp),
-                    clip = false
-                )
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color.White.copy(alpha = 0.86f))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = if (isEnglish) {
-                    buildAnnotatedString {
-                        append("Strong in body, sharp in mind,\n")
-                        append("undefeated in spirit.")
-                    }
-                } else {
-                    buildAnnotatedString {
-                        append("חזק בגוף, חד ")
-
-                        withStyle(
-                            SpanStyle(
-                                color = Color(0xFF6B4DFF),
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                        ) {
-                            append("במחשבה")
-                        }
-
-                        append(",\nבלתי מנוצח ")
-
-                        withStyle(
-                            SpanStyle(
-                                color = Color(0xFF4385FF),
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                        ) {
-                            append("ברוח.")
-                        }
-                    }
-                },
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    fontSize = 14.sp,
-                    lineHeight = 14.sp,
-                    textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
-                ),
-                fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF172033),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        // ✅ אזורי לחיצה אמיתיים מעל הכפתורים שבתמונה.
-        // קטנים יותר ונמוכים יותר כדי שלא יעלו על אזור החגורה.
         Column(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
+                .fillMaxSize()
+                .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 19.dp),
+                .padding(horizontal = horizontalPadding),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(Modifier.height(greetingTopSpace))
+
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.96f)
-                    .height(34.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .fillMaxWidth(0.80f)
+                    .height(greetingHeight)
+                    .shadow(
+                        elevation = 4.dp,
+                        shape = RoundedCornerShape(10.dp),
+                        clip = false
+                    )
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.88f))
+                    .padding(horizontal = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = greeting,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = if (isCompactHeight) 22.sp else 26.sp,
+                        lineHeight = if (isCompactHeight) 25.sp else 29.sp,
+                        textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+                    ),
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF172033),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(Modifier.height(beltTopSpace))
+
+            if (rank != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth(0.78f)
+                        .height(beltRowHeight),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = if (isEnglish) rank.en else rank.he,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = if (isCompactHeight) 19.sp else 22.sp,
+                            lineHeight = if (isCompactHeight) 21.sp else 24.sp,
+                            textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+                        ),
+                        fontWeight = FontWeight.ExtraBold,
+                        color = when (rank.baseBelt) {
+                            Belt.WHITE -> Color(0xFF98A2B3)
+                            else -> rank.color
+                        },
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+
+                    Spacer(Modifier.width(if (isCompactHeight) 8.dp else 12.dp))
+
+                    Image(
+                        painter = painterResource(id = introBeltDrawableRes(rank.baseBelt)),
+                        contentDescription = if (isEnglish) rank.en else rank.he,
+                        modifier = Modifier
+                            .width(if (isCompactHeight) 96.dp else 112.dp)
+                            .height(beltImageHeight),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            } else {
+                Spacer(Modifier.height(beltRowHeight))
+            }
+
+            Spacer(Modifier.weight(1.25f))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.90f)
+                    .height(if (isCompactHeight) 36.dp else 40.dp)
+                    .shadow(
+                        elevation = 6.dp,
+                        shape = RoundedCornerShape(24.dp),
+                        clip = false
+                    )
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color(0xFF12A8F4),
+                                Color(0xFF4C18D8)
+                            )
+                        )
+                    )
                     .clickable(enabled = !isGoogleLoading) {
                         onGoogleClick()
                     },
@@ -596,24 +551,52 @@ private fun IntroWelcomeImageScreen(
             ) {
                 if (isGoogleLoading) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(20.dp),
                         color = Color.White,
-                        strokeWidth = 2.4.dp
+                        strokeWidth = 2.2.dp
+                    )
+                } else {
+                    Text(
+                        text = if (isEnglish) {
+                            "★ Continue with Google"
+                        } else {
+                            "התחברות עם Google ★"
+                        },
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = if (isCompactHeight) 13.sp else 15.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
                     )
                 }
             }
 
-            Spacer(Modifier.height(11.dp))
+            Spacer(Modifier.height(8.dp))
 
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.96f)
-                    .height(30.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .fillMaxWidth(0.90f)
+                    .height(if (isCompactHeight) 32.dp else 36.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color.White.copy(alpha = 0.88f))
                     .clickable(enabled = !isGoogleLoading) {
                         onRegularClick()
-                    }
-            )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isEnglish) {
+                        "Existing login / regular registration"
+                    } else {
+                        "כניסה / רישום בדרך הרגילה"
+                    },
+                    color = Color(0xFF172033),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (isCompactHeight) 12.sp else 14.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
 
             if (!googleError.isNullOrBlank()) {
                 Spacer(Modifier.height(6.dp))
@@ -630,22 +613,9 @@ private fun IntroWelcomeImageScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-        }
 
-        Text(
-            text = "❤️ פותח באהבה ע\"י יובל פולק ❤️",
-            color = Color(0xFF172033).copy(alpha = 0.42f),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 10.sp,
-                lineHeight = 11.sp
-            ),
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 0.dp)
-        )
+            Spacer(Modifier.height(if (isCompactHeight) 2.dp else 4.dp))
+        }
     }
 }
 
@@ -1027,414 +997,6 @@ fun IntroScreen(
         onGoogleClick = startGoogleLogin,
         onRegularClick = openRegularLogin
     )
-
-    return
-
-    val accent = Color(0xFF16C47F)
-    val bgTop = Color(0xFF071019)
-    val bgBottom = Color(0xFF0E1A26)
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        bgTop,
-                        bgBottom,
-                        Color(0xFF101F2E)
-                    )
-                )
-            )
-            .statusBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 6.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            accent.copy(alpha = 0.16f),
-                            Color.Transparent
-                        ),
-                        radius = 1200f
-                    )
-                )
-        ) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                accent.copy(alpha = 0.16f),
-                                Color.Transparent
-                            ),
-                            radius = 1200f
-                        )
-                    )
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .navigationBarsPadding(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Spacer(Modifier.height(8.dp))
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 0.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = if (isEnglish) "KAMI" else "ק.מ.י",
-                    fontSize = 58.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
-                    modifier = Modifier.alpha(alpha).scale(scale)
-                )
-                Text(
-                    text = if (isEnglish) "Israeli Krav Magen" else "קרב מגן ישראלי",
-                    fontSize = if (isEnglish) 22.sp else 30.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.9f),
-                    maxLines = 1,
-                    modifier = Modifier.alpha(alpha).scale(scale)
-                )
-
-                Text(
-                    text = dynamicGreeting,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,      // מודגש
-                    color = Color.White.copy(alpha = 0.92f),
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .alpha(alpha)
-                        .scale(scale)
-                )
-
-                if (traineeRankOrNull != null) {
-                    Spacer(Modifier.height(2.dp))
-                    BeltBadge(
-                        rank = traineeRankOrNull,
-                        lang = currentLang,
-                        modifier = Modifier
-                            .offset(y = 30.dp)
-                            .alpha(alpha)
-                            .scale(scale)
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(232.dp)
-                        .padding(top = 0.dp, bottom = 0.dp)
-                        .alpha(alpha),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val imageScale = (scale * 1.84f).coerceAtMost(2.02f)
-
-                    Image(
-                        painter = painterResource(id = R.drawable.fighters_blackbelt),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .wrapContentHeight()
-                            .offset(y = 0.dp)
-                            .graphicsLayer {
-                                scaleX = imageScale
-                                scaleY = imageScale
-                                clip = false
-                            },
-                        contentScale = ContentScale.Fit
-                    )
-                }
-
-                val buttonTransition = rememberInfiniteTransition(label = "introButtonAnim")
-                val bubbleOffset by buttonTransition.animateFloat(
-                    initialValue = -70f,
-                    targetValue = 70f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = 2200, easing = LinearEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "introBubbleOffset"
-                )
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp, bottom = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Button(
-                        onClick = {
-                            GoogleAuthManager.logUiStage(
-                                context = ctx,
-                                stage = "intro_google_button_clicked",
-                                message = "isGoogleLoading=$isGoogleLoading, googleFlowLocked=$googleFlowLocked"
-                            )
-
-                            if (isGoogleLoading || googleFlowLocked) {
-                                GoogleAuthManager.logUiStage(
-                                    context = ctx,
-                                    stage = "intro_google_button_ignored_locked"
-                                )
-                                return@Button
-                            }
-
-                            googleError = null
-                            isGoogleLoading = true
-                            googleFlowLocked = true
-
-                            scope.launch {
-                                GoogleAuthManager.logUiStage(
-                                    context = ctx,
-                                    stage = "intro_credential_manager_flow_start"
-                                )
-
-                                val loginResult = GoogleAuthManager.signInWithGoogle(ctx)
-
-                                loginResult
-                                    .onSuccess {
-                                        GoogleAuthManager.logUiStage(
-                                            context = ctx,
-                                            stage = "intro_credential_manager_login_success_before_profile_check"
-                                        )
-
-                                        isGoogleLoading = false
-                                        googleFlowLocked = false
-
-                                        completeGoogleLoginAfterFirebaseAuth(
-                                            ctx = ctx,
-                                            userSp = userSp,
-                                            legacySp = legacySp,
-                                            onProfileComplete = onProfileComplete,
-                                            onProfileMissing = onProfileMissing
-                                        )
-                                    }
-                                    .onFailure { error ->
-                                        GoogleAuthManager.logUiStage(
-                                            context = ctx,
-                                            stage = "intro_credential_manager_login_failure",
-                                            error = error
-                                        )
-
-                                        if (GoogleAuthManager.shouldUseClassicGoogleFallback(error)) {
-                                            GoogleAuthManager.logUiStage(
-                                                context = ctx,
-                                                stage = "intro_classic_fallback_launch_start"
-                                            )
-
-                                            runCatching {
-                                                classicGoogleLauncher.launch(
-                                                    GoogleAuthManager.classicGoogleSignInIntent(ctx)
-                                                )
-                                            }.onFailure { launchError ->
-                                                GoogleAuthManager.logUiStage(
-                                                    context = ctx,
-                                                    stage = "intro_classic_fallback_launch_failure",
-                                                    error = launchError
-                                                )
-
-                                                isGoogleLoading = false
-                                                googleFlowLocked = false
-
-                                                googleError = googleLoginErrorMessage(
-                                                    error = launchError,
-                                                    isEnglish = isEnglish
-                                                )
-
-                                                if (!googleError.isNullOrBlank()) {
-                                                    Toast.makeText(
-                                                        ctx,
-                                                        googleError.orEmpty(),
-                                                        Toast.LENGTH_LONG
-                                                    ).show()
-                                                }
-                                            }
-                                        } else {
-                                            GoogleAuthManager.logUiStage(
-                                                context = ctx,
-                                                stage = "intro_no_classic_fallback_show_error",
-                                                error = error
-                                            )
-
-                                            isGoogleLoading = false
-                                            googleFlowLocked = false
-
-                                            googleError = googleLoginErrorMessage(
-                                                error = error,
-                                                isEnglish = isEnglish
-                                            )
-
-                                            if (!googleError.isNullOrBlank()) {
-                                                Toast.makeText(
-                                                    ctx,
-                                                    googleError.orEmpty(),
-                                                    Toast.LENGTH_LONG
-                                                ).show()
-                                            }
-                                        }
-                                    }
-                            }
-                        },
-                        enabled = !isGoogleLoading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(54.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                        contentPadding = PaddingValues(),
-                        shape = RoundedCornerShape(28.dp),
-                        elevation = ButtonDefaults.buttonElevation(
-                            defaultElevation = 10.dp,
-                            pressedElevation = 14.dp
-                        )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(28.dp))
-                                .background(
-                                    Brush.horizontalGradient(
-                                        listOf(
-                                            Color(0xFF1E88E5),
-                                            Color(0xFF5E35B1)
-                                        )
-                                    )
-                                )
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = bubbleOffset.dp)
-                                    .size(140.dp)
-                                    .background(
-                                        Brush.radialGradient(
-                                            listOf(
-                                                Color.White.copy(alpha = 0.42f),
-                                                Color.Transparent
-                                            )
-                                        ),
-                                        shape = CircleShape
-                                    )
-                            )
-
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isGoogleLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.5.dp
-                                    )
-                                } else {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Star,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-
-                                        Spacer(Modifier.width(8.dp))
-
-                                        Text(
-                                            text = if (isEnglish) {
-                                                "Continue with Google"
-                                            } else {
-                                                "התחברות עם Google"
-                                            },
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (!googleError.isNullOrBlank()) {
-                        Spacer(Modifier.height(4.dp))
-
-                        Text(
-                            text = googleError.orEmpty(),
-                            color = Color(0xFFFFCDD2),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 12.sp,
-                                lineHeight = 14.sp
-                            ),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-
-                    Spacer(Modifier.height(0.dp))
-
-                    TextButton(
-                        onClick = {
-                            GoogleAuthManager.logUiStage(
-                                context = ctx,
-                                stage = "intro_regular_login_clicked",
-                                message = "isGoogleLoading=$isGoogleLoading, googleFlowLocked=$googleFlowLocked, currentUserUid=${FirebaseAuth.getInstance().currentUser?.uid.orEmpty()}, isAnonymous=${FirebaseAuth.getInstance().currentUser?.isAnonymous}"
-                            )
-
-                            // מונע פתיחת סרגל צד בטעות בזמן המעבר למסך כניסה / רישום
-                            userSp.edit()
-                                .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
-                                .apply()
-
-                            legacySp.edit()
-                                .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
-                                .apply()
-
-                            GoogleAuthManager.logUiStage(
-                                context = ctx,
-                                stage = "intro_regular_login_call_on_continue"
-                            )
-
-                            onContinue()
-                        },
-                        enabled = !isGoogleLoading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 34.dp),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = if (isEnglish) {
-                                "Use existing login / sign up screen"
-                            } else {
-                                "כניסה / רישום בדרך הרגילה"
-                            },
-                            color = Color.White.copy(alpha = 0.88f),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = if (isEnglish) 13.sp else 15.sp,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
 
 /** איור וקטורי עם הגבלה דינמית של סקייל כדי שלא ייחתך מהמסך */

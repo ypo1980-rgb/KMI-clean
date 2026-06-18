@@ -193,6 +193,31 @@ object GoogleAuthManager {
                 null
             }
 
+            val cleanError = listOfNotNull(
+                error?.localizedMessage,
+                error?.message,
+                error?.toString(),
+                error?.cause?.localizedMessage,
+                error?.cause?.message,
+                error?.cause?.toString()
+            ).joinToString(" ")
+
+            val isReauth16 =
+                cleanError.contains("Account reauth failed", ignoreCase = true) ||
+                        cleanError.contains("reauth failed", ignoreCase = true) ||
+                        cleanError.contains("[16]", ignoreCase = true)
+
+            val isRealUserCancel =
+                (
+                        cleanError.contains("User cancelled", ignoreCase = true) ||
+                                cleanError.contains("Cancelled by user", ignoreCase = true) ||
+                                cleanError.contains("cancelled the selector", ignoreCase = true) ||
+                                cleanError.contains("canceled", ignoreCase = true)
+                        ) && !isReauth16
+
+            val isGoogleAuthError =
+                error != null && !isRealUserCancel
+
             val data = mutableMapOf<String, Any?>(
                 "createdAt" to FieldValue.serverTimestamp(),
                 "stage" to stage,
