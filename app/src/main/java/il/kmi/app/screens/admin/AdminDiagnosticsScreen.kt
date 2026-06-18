@@ -4,6 +4,7 @@ package il.kmi.app.screens.admin
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,6 +41,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -119,6 +123,7 @@ fun AdminDiagnosticsScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var selectedRange by remember { mutableStateOf(AdminDiagnosticsRange.Week) }
     var selectedType by remember { mutableStateOf(AdminDiagnosticsType.All) }
+    var expandedLogGroupKey by rememberSaveable { mutableStateOf<String?>(null) }
 
     val logs = adminLogs + googleAuthLogs
     val loading = loadingAdminLogs || loadingGoogleLogs || loadingScreens
@@ -225,8 +230,7 @@ fun AdminDiagnosticsScreen(
                 loadingScreens = false
 
                 if (error != null) {
-                    // screen_views הוא נתון סטטיסטי משני.
-                    // לא מציגים אותו כשגיאת מסך כללית כדי לא לזהם את הלוגים.
+                    errorMessage = "screen_views: ${error.localizedMessage}"
                     topScreens = emptyList()
                     return@addSnapshotListener
                 }
@@ -276,6 +280,73 @@ fun AdminDiagnosticsScreen(
                     log.severity.contains(selectedType.key, ignoreCase = true)
             inRange && inType
         }
+    }
+
+    fun logGroupKey(log: AdminDiagnosticLog): String {
+        return when {
+            log.type.contains("screen_view", ignoreCase = true) ||
+                    log.area.equals("screen", ignoreCase = true) ->
+                "screen_views"
+
+            log.type.contains("google_auth", ignoreCase = true) ||
+                    log.area.equals("google_auth", ignoreCase = true) ->
+                "google_auth"
+
+            log.type.contains("login", ignoreCase = true) ->
+                "login"
+
+            log.severity.equals("error", ignoreCase = true) ||
+                    log.type.contains("error", ignoreCase = true) ||
+                    log.type.contains("failed", ignoreCase = true) ->
+                "errors"
+
+            log.type.contains("search", ignoreCase = true) ->
+                "search"
+
+            else ->
+                "other"
+        }
+    }
+
+    fun logGroupTitle(key: String): String {
+        return when (key) {
+            "screen_views" -> tr("צפיות במסכים", "Screen views")
+            "google_auth" -> tr("אירועי כניסה עם Google", "Google sign-in events")
+            "login" -> tr("אירועי כניסה", "Login events")
+            "errors" -> tr("שגיאות ותקלות", "Errors and issues")
+            "search" -> tr("אירועי חיפוש", "Search events")
+            else -> tr("אירועים נוספים", "Other events")
+        }
+    }
+
+    fun logGroupColor(key: String): Color {
+        return when (key) {
+            "screen_views" -> Color(0xFF0284C7)
+            "google_auth" -> Color(0xFF7C3AED)
+            "login" -> Color(0xFF16A34A)
+            "errors" -> Color(0xFFE11D48)
+            "search" -> Color(0xFFD97706)
+            else -> Color(0xFF475569)
+        }
+    }
+
+    val groupedLogs = remember(filteredLogs) {
+        val order = listOf(
+            "errors",
+            "google_auth",
+            "login",
+            "search",
+            "screen_views",
+            "other"
+        )
+
+        filteredLogs
+            .groupBy { logGroupKey(it) }
+            .toList()
+            .sortedBy { pair ->
+                val index = order.indexOf(pair.first)
+                if (index == -1) Int.MAX_VALUE else index
+            }
     }
 
     val errorCount = filteredLogs.count {
@@ -466,11 +537,32 @@ fun AdminDiagnosticsScreen(
                     }
 
                     else -> {
-                        items(filteredLogs, key = { it.id }) { log ->
-                            AdminLogCard(
-                                log = log,
-                                isEnglish = isEnglish
-                            )
+                        groupedLogs.forEach { (groupKey, groupItems) ->
+                            item(key = "group_header_$groupKey") {
+                                AdminLogGroupHeader(
+                                    title = logGroupTitle(groupKey),
+                                    count = groupItems.size,
+                                    color = logGroupColor(groupKey),
+                                    expanded = expandedLogGroupKey == groupKey,
+                                    isEnglish = isEnglish,
+                                    onClick = {
+                                        expandedLogGroupKey =
+                                            if (expandedLogGroupKey == groupKey) null else groupKey
+                                    }
+                                )
+                            }
+
+                            if (expandedLogGroupKey == groupKey) {
+                                items(
+                                    items = groupItems,
+                                    key = { log -> log.id }
+                                ) { log ->
+                                    AdminLogCard(
+                                        log = log,
+                                        isEnglish = isEnglish
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -593,9 +685,12 @@ private fun FilterRow(
     onTypeSelected: (AdminDiagnosticsType) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
         ) {
             AdminDiagnosticsRange.values().forEach { range ->
                 FilterChip(
@@ -630,9 +725,11 @@ private fun FilterRow(
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
         ) {
-            AdminDiagnosticsType.values().take(4).forEach { type ->
+            AdminDiagnosticsType.values().forEach { type ->
                 FilterChip(
                     selected = selectedType == type,
                     onClick = { onTypeSelected(type) },
@@ -660,6 +757,86 @@ private fun FilterRow(
                         )
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminLogGroupHeader(
+    title: String,
+    count: Int,
+    color: Color,
+    expanded: Boolean,
+    isEnglish: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White.copy(alpha = 0.94f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.45f)),
+        shadowElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (expanded) "⌃" else "⌄",
+                color = color,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Black,
+                modifier = Modifier.width(28.dp),
+                textAlign = TextAlign.Center
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+            ) {
+                Text(
+                    text = title,
+                    color = Color(0xFF102033),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp,
+                    lineHeight = 17.sp,
+                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Text(
+                    text = if (isEnglish) "$count events" else "$count אירועים",
+                    color = color,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Surface(
+                shape = CircleShape,
+                color = color.copy(alpha = 0.16f),
+                modifier = Modifier.size(34.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.Assessment,
+                        contentDescription = null,
+                        tint = color,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }

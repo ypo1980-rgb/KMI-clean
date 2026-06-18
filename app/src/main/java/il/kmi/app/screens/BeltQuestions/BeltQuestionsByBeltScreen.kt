@@ -650,13 +650,23 @@ internal fun BeltPangoLayout(
             val langManager = remember { AppLanguageManager(contextLang) }
 
             il.kmi.app.ui.KmiTopBar(
-                title = beltTitleForUi(currentBelt, langManager.getCurrentLanguage()),
+                title = if (topicsViewMode == TopicsViewMode.BY_TOPIC) {
+                    if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) {
+                        "Exercises by Topic"
+                    } else {
+                        "תרגילים לפי נושא"
+                    }
+                } else {
+                    beltTitleForUi(currentBelt, langManager.getCurrentLanguage())
+                },
                 onHome = onBackHome,
                 // החיפוש הגלובלי נפתח ומטופל פנימית בתוך KmiTopBar
                 lockSearch = false,
                 showBottomActions = true,
                 centerTitle = true,
                 showTopHome = false,
+                showTopBeltIcon = topicsViewMode == TopicsViewMode.BY_BELT,
+                topBeltIconRes = if (topicsViewMode == TopicsViewMode.BY_TOPIC) null else null,
                 currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
                 onToggleLanguage = {
                     val newLang =
@@ -1104,17 +1114,16 @@ private fun TopicsCardForBelt(
     val titleColor = if (isDarkTheme) Color(0xFFF8FAFC) else Color(0xFF263238)
     val rowTitleColor = if (isDarkTheme) Color(0xFFF8FAFC) else Color(0xFF1F2937)
 
-    // צבע ספירה לפי החגורה, בלי לצבוע את כל הכרטיס
+    // ✅ צבע הספירה לפי צבע החגורה — יותר ברור, בלי לצבוע את כל שורת הנושא
     val rowSubColor = if (isDarkTheme) {
-        belt.color.copy(alpha = 0.96f)
+        belt.color.copy(alpha = 1f)
     } else {
-        belt.color.copy(alpha = 0.92f)
+        belt.color.copy(alpha = 1f)
     }
 
-    // חשוב: בלי רקע צבעוני לשורת הנושא
+    // ✅ שורת הנושא עצמה נשארת נקייה, בלי ריבועים
     val rowBg = Color.Transparent
 
-    // חשוב: בלי גרדיאנט שגורם לריבועים המכוערים
     val rowGradient = Brush.verticalGradient(
         colors = listOf(
             Color.Transparent,
@@ -1122,11 +1131,23 @@ private fun TopicsCardForBelt(
         )
     )
 
-    // קווי תתי־נושאים בצבע החגורה בלבד
-    val subDividerColor = if (isDarkTheme) {
-        belt.color.copy(alpha = 0.24f)
+    // ✅ כרטיס תתי־הנושאים יקבל צבע חגורה עדין אבל עם נוכחות
+    val subTopicsCardBg = if (isDarkTheme) {
+        belt.color.copy(alpha = 0.16f)
     } else {
-        belt.color.copy(alpha = 0.26f)
+        belt.color.copy(alpha = 0.13f)
+    }
+
+    val subTopicsCardBorder = if (isDarkTheme) {
+        belt.color.copy(alpha = 0.34f)
+    } else {
+        belt.color.copy(alpha = 0.38f)
+    }
+
+    val subDividerColor = if (isDarkTheme) {
+        belt.color.copy(alpha = 0.34f)
+    } else {
+        belt.color.copy(alpha = 0.42f)
     }
 
     val rawTopicTitles: List<String> = remember(belt) {
@@ -1325,7 +1346,7 @@ private fun TopicsCardForBelt(
                         val floatingAccent = Brush.verticalGradient(
                             colors = listOf(
                                 belt.color.copy(alpha = 1f),
-                                belt.color.copy(alpha = if (isDarkTheme) 0.88f else 0.72f)
+                                belt.color.copy(alpha = if (isDarkTheme) 1f else 0.95f)
                             )
                         )
 
@@ -1465,166 +1486,189 @@ private fun TopicsCardForBelt(
                                 }
 
                                 if (hasSubs && isExpanded) {
-                                    Spacer(Modifier.height(2.dp))
+                                    Spacer(Modifier.height(4.dp))
 
-                                    val parentLocked =
+                                    val parentLockedForSubTopics =
                                         LockedContentPolicy.shouldShowLock(accessMode, title)
 
-                                    Column(
+                                    Surface(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 6.dp),
-                                        verticalArrangement = Arrangement.spacedBy(0.dp),
-                                        horizontalAlignment = horizontalByLang
+                                            .padding(
+                                                start = 16.dp,
+                                                end = 16.dp,
+                                                top = 2.dp,
+                                                bottom = 6.dp
+                                            ),
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = subTopicsCardBg,
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color = subTopicsCardBorder
+                                        ),
+                                        shadowElevation = 0.dp,
+                                        tonalElevation = 0.dp
                                     ) {
-                                        subTitles.forEachIndexed { index, sub ->
-                                            val displaySub = topicTitleForUi(sub, lang)
+                                        Column(
+                                            modifier = Modifier.padding(
+                                                horizontal = 10.dp,
+                                                vertical = 6.dp
+                                            ),
+                                            verticalArrangement = Arrangement.spacedBy(0.dp),
+                                            horizontalAlignment = horizontalByLang
+                                        ) {
+                                            subTitles.forEachIndexed { subIndex, sub ->
+                                                val displaySub = topicTitleForUi(sub, lang)
 
-                                            val subTopicStatsLine =
-                                                remember(belt, title, sub, lang) {
-                                                    SharedContentRepo.getSubTopicsFor(
-                                                        belt = belt,
-                                                        topicTitle = title
-                                                    )
-                                                        .firstOrNull { it.title.trim() == sub.trim() }
-                                                        ?.let { subTopicStatsLineForUi(it, lang) }
-                                                        .orEmpty()
-                                                }
-
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .clickable {
-                                                        clickSound()
-                                                        haptic(true)
-
-                                                        val canOpenSubTopic =
-                                                            accessMode == AccessMode.OPEN ||
-                                                                    LockedContentPolicy.canOpenTopic(
-                                                                        accessMode,
-                                                                        title
-                                                                    )
-
-                                                        if (!canOpenSubTopic) {
-                                                            onOpenSubscription()
-                                                        } else {
-                                                            onOpenSubTopic(belt, title, sub)
-                                                        }
+                                                val subTopicStatsLine =
+                                                    remember(belt, title, sub, lang) {
+                                                        SharedContentRepo.getSubTopicsFor(
+                                                            belt = belt,
+                                                            topicTitle = title
+                                                        )
+                                                            .firstOrNull { it.title.trim() == sub.trim() }
+                                                            ?.let { subTopicStatsLineForUi(it, lang) }
+                                                            .orEmpty()
                                                     }
-                                                    .padding(horizontal = 8.dp, vertical = 5.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.ChevronLeft,
-                                                    contentDescription = null,
-                                                    tint = belt.color.copy(alpha = 0.88f),
-                                                    modifier = Modifier.size(15.dp)
-                                                )
 
-                                                Spacer(Modifier.width(6.dp))
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .clickable {
+                                                            clickSound()
+                                                            haptic(true)
 
-                                                Column(
-                                                    modifier = Modifier.weight(1f),
-                                                    horizontalAlignment = horizontalByLang
-                                                ) {
-                                                    Text(
-                                                        text = displaySub,
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        textAlign = titleTextAlignByLang,
-                                                        color = floatingTitleColor,
-                                                        style = MaterialTheme.typography.bodySmall.copy(
-                                                            fontSize = 12.sp,
-                                                            lineHeight = 14.sp
+                                                            val canOpenSubTopic =
+                                                                accessMode == AccessMode.OPEN ||
+                                                                        LockedContentPolicy.canOpenTopic(
+                                                                            accessMode,
+                                                                            title
+                                                                        )
+
+                                                            if (!canOpenSubTopic) {
+                                                                onOpenSubscription()
+                                                            } else {
+                                                                onOpenSubTopic(belt, title, sub)
+                                                            }
+                                                        }
+                                                        .padding(
+                                                            horizontal = 8.dp,
+                                                            vertical = 6.dp
                                                         ),
-                                                        fontWeight = FontWeight.Bold,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.ChevronLeft,
+                                                        contentDescription = null,
+                                                        tint = belt.color.copy(alpha = 1f),
+                                                        modifier = Modifier.size(15.dp)
                                                     )
 
-                                                    if (subTopicStatsLine.isNotBlank()) {
-                                                        Spacer(Modifier.height(1.dp))
+                                                    Spacer(Modifier.width(6.dp))
 
+                                                    Column(
+                                                        modifier = Modifier.weight(1f),
+                                                        horizontalAlignment = horizontalByLang
+                                                    ) {
                                                         Text(
-                                                            text = subTopicStatsLine,
+                                                            text = displaySub,
                                                             modifier = Modifier.fillMaxWidth(),
                                                             textAlign = titleTextAlignByLang,
-                                                            color = belt.color.copy(alpha = 0.95f),
-                                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                                fontSize = 10.sp,
-                                                                lineHeight = 12.sp
+                                                            color = rowTitleColor,
+                                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                                fontSize = 12.sp,
+                                                                lineHeight = 14.sp
                                                             ),
                                                             fontWeight = FontWeight.Bold,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis
                                                         )
+
+                                                        if (subTopicStatsLine.isNotBlank()) {
+                                                            Spacer(Modifier.height(1.dp))
+
+                                                            Text(
+                                                                text = subTopicStatsLine,
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                textAlign = titleTextAlignByLang,
+                                                                color = belt.color.copy(alpha = 1f),
+                                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                                    fontSize = 10.sp,
+                                                                    lineHeight = 12.sp
+                                                                ),
+                                                                fontWeight = FontWeight.Bold,
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        }
+                                                    }
+
+                                                    if (parentLockedForSubTopics) {
+                                                        Spacer(Modifier.width(8.dp))
+                                                        PremiumPulsingLockBadge(
+                                                            modifier = Modifier.size(16.dp),
+                                                            isDarkTheme = isDarkTheme
+                                                        )
                                                     }
                                                 }
 
-                                                if (parentLocked) {
-                                                    Spacer(Modifier.width(8.dp))
-                                                    PremiumPulsingLockBadge(
-                                                        modifier = Modifier.size(16.dp),
-                                                        isDarkTheme = isDarkTheme
+                                                if (subIndex != subTitles.lastIndex) {
+                                                    HorizontalDivider(
+                                                        color = subDividerColor,
+                                                        thickness = 0.8.dp,
+                                                        modifier = Modifier.padding(horizontal = 8.dp)
                                                     )
                                                 }
                                             }
 
-                                            if (index != subTitles.lastIndex) {
-                                                HorizontalDivider(
-                                                    color = subDividerColor,
-                                                    thickness = 0.8.dp,
-                                                    modifier = Modifier.padding(horizontal = 10.dp)
-                                                )
-                                            }
-                                        }
+                                            Spacer(Modifier.height(4.dp))
 
-                                        Spacer(Modifier.height(4.dp))
-
-                                        Text(
-                                            text = if (isEnglish) "Close topic" else "סגור נושא",
-                                            modifier = Modifier
-                                                .align(horizontalByLang)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable {
-                                                    clickSound()
-                                                    haptic(true)
-                                                    expandedTopic = null
-                                                }
-                                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                                            color = belt.color.copy(alpha = 0.95f),
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontSize = 11.sp,
-                                                lineHeight = 13.sp
-                                            ),
-                                            fontWeight = FontWeight.Bold
-                                        )
-
-                                        Spacer(Modifier.height(2.dp))
-
-                                        Text(
-                                            text = if (isEnglish) "Open full topic" else "פתח את כל הנושא",
-                                            modifier = Modifier
-                                                .align(horizontalByLang)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable {
-                                                    clickSound()
-                                                    haptic(true)
-
-                                                    if (isDefenseTopic) {
-                                                        onOpenDefenseMenu(belt, title)
-                                                    } else {
-                                                        onOpenTopic(belt, title)
+                                            Text(
+                                                text = if (isEnglish) "Close topic" else "סגור נושא",
+                                                modifier = Modifier
+                                                    .align(horizontalByLang)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clickable {
+                                                        clickSound()
+                                                        haptic(true)
+                                                        expandedTopic = null
                                                     }
-                                                }
-                                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                                            color = belt.color.copy(alpha = 0.95f),
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontSize = 11.sp,
-                                                lineHeight = 13.sp
-                                            ),
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                color = belt.color.copy(alpha = 1f),
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontSize = 11.sp,
+                                                    lineHeight = 13.sp
+                                                ),
+                                                fontWeight = FontWeight.Bold
+                                            )
+
+                                            Spacer(Modifier.height(2.dp))
+
+                                            Text(
+                                                text = if (isEnglish) "Open full topic" else "פתח את כל הנושא",
+                                                modifier = Modifier
+                                                    .align(horizontalByLang)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .clickable {
+                                                        clickSound()
+                                                        haptic(true)
+
+                                                        if (isDefenseTopic) {
+                                                            onOpenDefenseMenu(belt, title)
+                                                        } else {
+                                                            onOpenTopic(belt, title)
+                                                        }
+                                                    }
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                color = belt.color.copy(alpha = 1f),
+                                                style = MaterialTheme.typography.bodySmall.copy(
+                                                    fontSize = 11.sp,
+                                                    lineHeight = 13.sp
+                                                ),
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             }

@@ -549,16 +549,18 @@ fun BeltQuestionsByTopicScreen(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             il.kmi.app.ui.KmiTopBar(
-                title = beltTitleForUi(effectiveBelt, isEnglish),
+                title = if (isEnglish) "Exercises by Topic" else "תרגילים לפי נושא",
                 onHome = { },
                 lockHome = false,
                 showTopHome = false,
+                showTopBeltIcon = false,
+                topBeltIconRes = null,
                 // החיפוש הגלובלי נפתח ומטופל פנימית בתוך KmiTopBar
                 lockSearch = false,
                 showBottomActions = true,
                 centerTitle = true
             )
-        },
+                 },
         bottomBar = {}
     ) { innerPadding ->
         Box(
@@ -654,15 +656,40 @@ fun BeltQuestionsByTopicScreen(
 }
 
 private fun subjectAccentColor(subjectId: String): Color =
-    when (subjectId) {
-        "defense_root" -> Color(0xFF5E35B1)      // סגול
-        "hands_root" -> Color(0xFF00897B)        // טורקיז
-        "releases" -> Color(0xFF1E88E5)          // כחול
-        "releases_hugs" -> Color(0xFF3949AB)     // אינדיגו
-        "rolls_breakfalls" -> Color(0xFF6D4C41)  // חום
-        "topic_ready_stance" -> Color(0xFF43A047)// ירוק
-        "topic_ground_prep" -> Color(0xFF8E24AA) // סגול בהיר
-        "topic_kavaler" -> Color(0xFFFB8C00)     // כתום
+    when (subjectId.trim().lowercase()) {
+        // 1
+        "defense_root",
+        "defenses_root",
+        "defenses" -> Color(0xFF5E35B1)          // סגול
+
+        // 2
+        "releases" -> Color(0xFF0284C7)          // כחול ים
+
+        // 3
+        "hands_root",
+        "hands_all" -> Color(0xFF00897B)         // טורקיז
+
+        // 4
+        "rolls_breakfalls",
+        "topic_breakfalls_rolls" -> Color(0xFF6D4C41) // חום
+
+        // 5
+        "topic_ready_stance" -> Color(0xFF43A047) // ירוק
+
+        // 6
+        "topic_ground_prep" -> Color(0xFFD81B60) // ורוד/ארגמן
+
+        // 7
+        "topic_kavaler",
+        "kavaler" -> Color(0xFFFB8C00)           // כתום
+
+        // 8
+        "kicks",
+        "topic_kicks" -> Color(0xFF1565C0)       // כחול חזק שונה מהשחרורים
+
+        // לא אמור להופיע ככרטיס ראשי, אבל כדי שלא יחזור על צבע קיים
+        "releases_hugs" -> Color(0xFF3949AB)
+
         else -> Color(0xFF7E57C2)
     }
 
@@ -765,8 +792,7 @@ private fun InlineSubTopicsExpansionCard(
             .fillMaxWidth()
             .padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 6.dp),
         shape = RoundedCornerShape(18.dp),
-        color = accent.copy(alpha = 0.08f),
-        border = BorderStroke(1.dp, accent.copy(alpha = 0.18f)),
+        color = accent.copy(alpha = 0.075f),
         shadowElevation = 0.dp
     ) {
         Column(
@@ -852,6 +878,12 @@ private fun SubjectRootCardPremium(
     val icon = remember(subjectId) { subjectIconFor(subjectId) }
     val imageRes = remember(subjectId) { subjectImageFor(subjectId) }
 
+    val topicCardBg = if (isDarkMode) {
+        accent.copy(alpha = 0.12f)
+    } else {
+        accent.copy(alpha = 0.075f)
+    }
+
     val titleColor = if (isDarkMode) Color.White else Color(0xFF111827)
 
     val subtitleColor = if (isDarkMode) {
@@ -860,11 +892,7 @@ private fun SubjectRootCardPremium(
         Color(0xFF64748B)
     }
 
-    val countColor = if (isDarkMode) {
-        accent.copy(alpha = 0.98f)
-    } else {
-        accent.copy(alpha = 0.95f)
-    }
+    val countColor = titleColor
 
     val isTitleLocked = title.endsWith(" 🔒")
     val displayTitle = stripLockSuffix(title)
@@ -874,9 +902,9 @@ private fun SubjectRootCardPremium(
         if (imageRes != null) {
             Box(
                 modifier = Modifier
-                    .width(76.dp)
-                    .height(58.dp)
-                    .clip(RoundedCornerShape(14.dp))
+                    .width(68.dp)
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(12.dp))
             ) {
                 Image(
                     painter = painterResource(id = imageRes),
@@ -887,14 +915,14 @@ private fun SubjectRootCardPremium(
             }
         } else {
             Box(
-                modifier = Modifier.size(30.dp),
+                modifier = Modifier.size(28.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = accent,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(17.dp)
                 )
             }
         }
@@ -903,7 +931,7 @@ private fun SubjectRootCardPremium(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = Color.Transparent,
+        color = topicCardBg,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth()
@@ -912,7 +940,7 @@ private fun SubjectRootCardPremium(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                    .padding(horizontal = 8.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (isEnglish) {
@@ -921,9 +949,9 @@ private fun SubjectRootCardPremium(
                             .width(4.dp)
                             .height(
                                 when {
-                                    imageRes != null -> 58.dp
-                                    showLeftBadge -> 38.dp
-                                    else -> 30.dp
+                                    imageRes != null -> 52.dp
+                                    showLeftBadge -> 36.dp
+                                    else -> 28.dp
                                 }
                             )
                     ) {
@@ -952,13 +980,13 @@ private fun SubjectRootCardPremium(
                             Text(
                                 text = displayTitle,
                                 style = MaterialTheme.typography.titleSmall.copy(
-                                    fontSize = 14.sp,
-                                    lineHeight = 16.sp
+                                    fontSize = 12.sp,
+                                    lineHeight = 14.sp
                                 ),
                                 fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Start,
                                 color = titleColor,
-                                maxLines = 2,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
                             )
@@ -999,40 +1027,48 @@ private fun SubjectRootCardPremium(
                         Text(
                             text = countText,
                             style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.sp,
-                                lineHeight = 13.sp
+                                fontSize = 9.sp,
+                                lineHeight = 11.sp
                             ),
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Start,
                             color = countColor,
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 2,
-                            overflow = TextOverflow.Clip
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 } else {
                     Row(
                         modifier = Modifier.width(54.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                        horizontalArrangement = Arrangement.Start
                     ) {
-                        if (showExpandArrow) {
-                            Text(
-                                text = if (isExpanded) "⌃" else "⌄",
-                                color = accent,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold
-                            )
+                        Box(
+                            modifier = Modifier.width(18.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (showExpandArrow) {
+                                Text(
+                                    text = if (isExpanded) "⌃" else "⌄",
+                                    color = accent,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
                         }
 
-                        if (showExpandArrow && isTitleLocked) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
+                        Spacer(modifier = Modifier.width(8.dp))
 
-                        if (isTitleLocked) {
-                            PremiumTopicLockIcon(
-                                modifier = Modifier.size(16.dp)
-                            )
+                        Box(
+                            modifier = Modifier.width(18.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isTitleLocked) {
+                                PremiumTopicLockIcon(
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
                     }
 
@@ -1045,14 +1081,14 @@ private fun SubjectRootCardPremium(
                         Text(
                             text = displayTitle,
                             style = MaterialTheme.typography.titleSmall.copy(
-                                fontSize = 15.sp,
-                                lineHeight = 17.sp
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp
                             ),
                             fontWeight = FontWeight.ExtraBold,
                             textAlign = TextAlign.Right,
                             color = titleColor,
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
 
@@ -1074,15 +1110,15 @@ private fun SubjectRootCardPremium(
                         Text(
                             text = countText,
                             style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 9.5.sp,
-                                lineHeight = 12.sp
+                                fontSize = 8.5.sp,
+                                lineHeight = 10.5.sp
                             ),
-                            fontWeight = FontWeight.SemiBold,
+                            fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Right,
                             color = countColor,
                             modifier = Modifier.fillMaxWidth(),
-                            maxLines = 2,
-                            overflow = TextOverflow.Clip
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 

@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import il.kmi.app.analytics.KmiDiagnostics
 import il.kmi.app.ui.DrawerBridge
 import kotlinx.coroutines.launch
 
@@ -145,6 +146,20 @@ fun MainApp(
     val mainBackStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = mainBackStackEntry?.destination?.route
     val activeRouteForDrawer = currentRoute ?: resolvedStartDestination
+
+    val ctxForDiagnostics = LocalContext.current.applicationContext
+
+    LaunchedEffect(currentRoute) {
+        val route = currentRoute.orEmpty()
+
+        if (route.isNotBlank()) {
+            KmiDiagnostics.trackScreen(
+                context = ctxForDiagnostics,
+                screenName = route,
+                route = route
+            )
+        }
+    }
 
     val ctxForForumPush = LocalContext.current.applicationContext
     val forumPushSp = remember(ctxForForumPush) {
