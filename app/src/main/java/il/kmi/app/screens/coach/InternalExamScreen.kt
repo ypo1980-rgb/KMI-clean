@@ -1063,6 +1063,22 @@ fun InternalExamScreen(
     }
 
     Scaffold(
+        topBar = {
+            KmiTopBar(
+                title = examTr(isEnglish, "מבחן פנימי", "Internal exam"),
+                showMenu = true,
+                showBottomActions = true,
+                showRoleStatus = true,
+                showModePill = true,
+                showTopHome = false,
+                showTopSearch = true,
+                showSettings = true,
+                showTopShare = false,
+                centerTitle = true,
+                onHome = onBack,
+                onPickSearchResult = {}
+            )
+        }
     ) { padding ->
 
         Box(
@@ -1295,21 +1311,23 @@ fun InternalExamScreen(
                                                 top = 2.dp,
                                                 bottom = 4.dp
                                             ),
-                                        shape = RoundedCornerShape(24.dp),
-                                        color = Color.White.copy(alpha = 0.72f),
-                                        shadowElevation = 7.dp,
+                                        shape = RoundedCornerShape(22.dp),
+                                        color = Color(0xFFEAF6FF).copy(alpha = 0.86f),
+                                        shadowElevation = 5.dp,
                                         border = BorderStroke(
                                             width = 1.dp,
-                                            color = Color(0xFFD8E3F5)
+                                            color = Color.White.copy(alpha = 0.72f)
                                         )
                                     ) {
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 8.dp, vertical = 8.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalArrangement = Arrangement.spacedBy(0.dp)
                                         ) {
-                                            subTopicGroups.forEach { (subTopic, subTopicExercises) ->
+                                            subTopicGroups.entries.forEachIndexed { index, entry ->
+                                                val subTopic = entry.key
+                                                val subTopicExercises = entry.value
                                                 val subTopicKey = "$topic||$subTopic"
                                                 val subTopicExpanded = expandedSubTopicKey == subTopicKey
 
@@ -1324,6 +1342,14 @@ fun InternalExamScreen(
                                                             if (subTopicExpanded) null else subTopicKey
                                                     }
                                                 )
+
+                                                if (index < subTopicGroups.size - 1 || directExercises.isNotEmpty()) {
+                                                    Divider(
+                                                        color = Color(0xFF7FAED6).copy(alpha = 0.46f),
+                                                        thickness = 1.dp,
+                                                        modifier = Modifier.padding(horizontal = 10.dp)
+                                                    )
+                                                }
 
                                                 if (subTopicExpanded) {
                                                     subTopicExercises.forEach { ex ->
@@ -1902,25 +1928,12 @@ private fun SubTopicHeader(
 
     Surface(
         shape = cardShape,
-        color = Color.White.copy(alpha = 0.96f),
-        shadowElevation = 6.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (expanded) {
-                Color(0xFF9CC7E8)
-            } else {
-                Color(0xFFD8E3F5)
-            }
-        ),
+        color = Color.Transparent,
+        shadowElevation = 0.dp,
+        border = null,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(
-                start = if (isEnglish) 34.dp else 10.dp,
-                end = if (isEnglish) 10.dp else 34.dp,
-                top = 4.dp,
-                bottom = 4.dp
-            )
-            .height(46.dp)
+            .height(40.dp)
             .clip(cardShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -1932,16 +1945,8 @@ private fun SubTopicHeader(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.White,
-                            Color(0xFFF4F8FF),
-                            Color.White
-                        )
-                    )
-                )
-                .padding(horizontal = 10.dp, vertical = 7.dp),
+                .background(Color.Transparent)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -1952,8 +1957,8 @@ private fun SubTopicHeader(
                     Color(0xFFBFD0E8)
                 },
                 modifier = Modifier
-                    .width(5.dp)
-                    .height(28.dp)
+                    .width(4.dp)
+                    .height(26.dp)
             ) {}
 
             Spacer(Modifier.width(9.dp))
@@ -1965,8 +1970,8 @@ private fun SubTopicHeader(
                 } else {
                     Color(0xFF6B778B)
                 },
-                shadowElevation = 3.dp,
-                modifier = Modifier.size(24.dp)
+                shadowElevation = 2.dp,
+                modifier = Modifier.size(22.dp)
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -1976,8 +1981,8 @@ private fun SubTopicHeader(
                         text = if (expanded) "−" else "+",
                         color = Color.White,
                         fontWeight = FontWeight.Black,
-                        fontSize = 13.sp,
-                        lineHeight = 13.sp
+                        fontSize = 12.sp,
+                        lineHeight = 12.sp
                     )
                 }
             }
@@ -2359,34 +2364,6 @@ fun InternalExamEntryScreen(
                     Box(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Surface(
-                            onClick = onBack,
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.92f),
-                            shadowElevation = 6.dp,
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color = Color(0xFFD8E3F5)
-                            ),
-                            modifier = Modifier
-                                .size(34.dp)
-                                .align(if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd)
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "×",
-                                    color = Color(0xFF5E6C80),
-                                    fontSize = 22.sp,
-                                    lineHeight = 22.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-
                         Text(
                             text = examTr(
                                 isEnglish,
@@ -2397,8 +2374,8 @@ fun InternalExamEntryScreen(
                                 .fillMaxWidth()
                                 .padding(
                                     top = 6.dp,
-                                    start = 42.dp,
-                                    end = 42.dp
+                                    start = 16.dp,
+                                    end = 16.dp
                                 )
                                 .align(Alignment.Center),
                             textAlign = TextAlign.Center,
@@ -4109,22 +4086,35 @@ private fun ExerciseRow(
     onScoreChange: (Int?) -> Unit // null = לא סומן
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.985f)
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFFD8E3F5)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .padding(horizontal = 9.dp, vertical = 6.dp)
         ) {
             Text(
                 text = name,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                style = MaterialTheme.typography.bodyMedium,
+                    .padding(bottom = 4.dp),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 12.8.sp,
+                    lineHeight = 15.sp
+                ),
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF172033),
                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -4134,10 +4124,10 @@ private fun ExerciseRow(
             androidx.compose.foundation.layout.FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(
-                    space = 10.dp,
+                    space = 6.dp,
                     alignment = Alignment.CenterHorizontally
                 ),
-                verticalArrangement = Arrangement.spacedBy(7.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
                 maxItemsInEachRow = 5
             ) {
                 for (v in 1..10) {
@@ -4230,7 +4220,7 @@ private fun ScoreChip(
 
     Surface(
         modifier = Modifier
-            .size(30.dp)
+            .size(25.dp)
             .clip(RoundedCornerShape(7.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -4238,15 +4228,15 @@ private fun ScoreChip(
             ) { onClick() },
         color = bg,
         border = BorderStroke(
-            width = if (selected) 1.8.dp else 1.2.dp,
+            width = if (selected) 1.4.dp else 0.9.dp,
             color = if (selected) base else base.copy(alpha = 0.82f)
         ),
-        shadowElevation = if (selected) 2.dp else 0.dp
+        shadowElevation = if (selected) 1.dp else 0.dp
     ) {
         OutlinedNumberText(
             text = value.toString(),
-            fontSizeSp = 11,
-            strokeWidthPx = 4f
+            fontSizeSp = 9,
+            strokeWidthPx = 3f
         )
     }
 }
@@ -4627,9 +4617,11 @@ private fun buildInternalExamExercisesFromContent(belt: Belt): List<ExamExercise
         }.getOrDefault(emptyList())
     }
 
-    topicTitles.forEach { topicTitle ->
+    topicTitles.distinct().forEach { topicTitle ->
         val rawItems = itemsForTopicFlattenInternal(belt, topicTitle)
         if (rawItems.isEmpty()) return@forEach
+
+        val seenNamesInTopic = mutableSetOf<String>()
 
         rawItems.forEach { rawItem ->
             val cleanName = rawItem
@@ -4637,6 +4629,18 @@ private fun buildInternalExamExercisesFromContent(belt: Belt): List<ExamExercise
                 .substringAfter(":")
                 .trim()
                 .ifBlank { rawItem.trim() }
+
+            val dedupeKey = cleanName
+                .replace("־", "-")
+                .replace("–", "-")
+                .replace("—", "-")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+                .lowercase()
+
+            if (!seenNamesInTopic.add(dedupeKey)) {
+                return@forEach
+            }
 
             val subTopicTitle = findSubTopicTitleForItemInternal(belt, topicTitle, cleanName)
                 ?.takeIf { it.isNotBlank() && it != topicTitle }
@@ -4658,7 +4662,16 @@ private fun buildInternalExamExercisesFromContent(belt: Belt): List<ExamExercise
         }
     }
 
-    return result
+    return result.distinctBy { item ->
+        item.topic.trim().lowercase() + "|" +
+                item.name
+                    .replace("־", "-")
+                    .replace("–", "-")
+                    .replace("—", "-")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+                    .lowercase()
+    }
 }
 
 // עזר: שליפה שטוחה של תרגילים לנושא

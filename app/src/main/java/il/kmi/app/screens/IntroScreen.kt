@@ -431,7 +431,7 @@ private fun IntroWelcomeImageScreen(
         val greetingHeight = if (isCompactHeight) 38.dp else 42.dp
 
         // מיקום יחסי של שורת החגורה לפי גובה המסך, כדי שיהיה יציב בין מכשירים
-        val beltTopSpace = maxHeight * 0.435f
+        val beltTopSpace = maxHeight * 0.455f
 
         val beltRowHeight = if (isCompactHeight) 40.dp else 46.dp
         val beltImageHeight = if (isCompactHeight) 22.dp else 26.dp

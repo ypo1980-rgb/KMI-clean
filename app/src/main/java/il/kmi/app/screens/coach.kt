@@ -116,6 +116,10 @@ data class TraineeProfile(
     val branch: String = "",
     val groupKey: String = "",
 
+    // ✅ איחוד מתאמנים כפולים לפי מייל / טלפון
+    val email: String = "",
+    val phone: String = "",
+
     // ✅ מזהה מסמך אמיתי ב-Firestore: users/{userDocId}
     // כל שמירה של תאריכים / הערות תתבצע לפיו ולא לפי שם.
     val userDocId: String = "",
@@ -1312,7 +1316,9 @@ fun CoachTraineesScreen(
                     age = 0,
                     attendancePct = 0,
                     branch = branchDbKey,
-                    groupKey = groupName
+                    groupKey = groupName,
+                    email = "",
+                    phone = ""
                 )
             }
 
@@ -1621,6 +1627,8 @@ fun CoachTraineesScreen(
 
             data class FireUserInfo(
                 val userDocId: String,
+                val email: String,
+                val phone: String,
                 val age: Int,
                 val beltHeb: String,
                 val seniority: String,
@@ -1633,6 +1641,41 @@ fun CoachTraineesScreen(
             )
 
             val userInfoByName = mutableMapOf<String, FireUserInfo>() // nameKey -> full user info
+
+            fun normalizeEmailForMerge(value: String): String =
+                value.trim().lowercase(Locale.US)
+
+            fun normalizePhoneForMerge(value: String): String {
+                val digits = value.filter { it.isDigit() }
+                return when {
+                    digits.startsWith("972") && digits.length >= 11 -> "0" + digits.drop(3)
+                    digits.startsWith("05") -> digits
+                    digits.length == 9 && digits.startsWith("5") -> "0$digits"
+                    else -> digits
+                }
+            }
+
+            fun primaryEmailFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): String =
+                listOf(
+                    doc.getString("email"),
+                    doc.getString("userEmail"),
+                    doc.getString("mail"),
+                    doc.getString("gmail")
+                ).firstOrNull { !it.isNullOrBlank() }
+                    ?.trim()
+                    .orEmpty()
+
+            fun primaryPhoneFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): String =
+                listOf(
+                    doc.getString("phone"),
+                    doc.getString("phoneNumber"),
+                    doc.getString("mobile"),
+                    doc.getString("mobilePhone"),
+                    doc.getString("cellPhone"),
+                    doc.getString("phone_number")
+                ).firstOrNull { !it.isNullOrBlank() }
+                    ?.trim()
+                    .orEmpty()
 
             fun String.normProfileKey(): String = this
                 .trim()
@@ -1767,6 +1810,9 @@ fun CoachTraineesScreen(
                     ?: doc.getString("displayName")
                     ?: continue).normKey()
 
+                val email = primaryEmailFromDoc(doc)
+                val phone = primaryPhoneFromDoc(doc)
+
                 val belt = beltFromDoc(doc)
                 val age = ageFromDoc(doc)
                 val seniority = seniorityFromDoc(doc)
@@ -1813,6 +1859,8 @@ fun CoachTraineesScreen(
 
                 userInfoByName[n] = FireUserInfo(
                     userDocId = doc.id,
+                    email = email,
+                    phone = phone,
                     age = age,
                     beltHeb = belt,
                     seniority = seniority,
@@ -1834,6 +1882,8 @@ fun CoachTraineesScreen(
                 val key = m.displayName.normKey()
                 val info = userInfoByName[key]
                 val userDocId = info?.userDocId.orEmpty()
+                val email = info?.email.orEmpty()
+                val phone = info?.phone.orEmpty()
                 val age = info?.age ?: 0
                 val belt = info?.beltHeb.orEmpty()
                 val seniority = info?.seniority.orEmpty()
@@ -1853,6 +1903,8 @@ fun CoachTraineesScreen(
                     attendancePct = pct,
                     branch = branchDbKey,
                     groupKey = groupName,
+                    email = email,
+                    phone = phone,
                     userDocId = userDocId,
                     beltAwardDates = beltAwardDates,
                     beltAwardDescriptions = beltAwardDescriptions,
@@ -1864,6 +1916,30 @@ fun CoachTraineesScreen(
             }
 
             traineeProfiles = builtProfiles
+                .groupBy { profile ->
+                    val emailKey = normalizeEmailForMerge(profile.email)
+                    val phoneKey = normalizePhoneForMerge(profile.phone)
+                    val nameKey = profile.fullName.normKey()
+
+                    when {
+                        phoneKey.isNotBlank() -> "phone:$phoneKey"
+                        emailKey.isNotBlank() -> "email:$emailKey"
+                        else -> "name:$nameKey"
+                    }
+                }
+                .map { (_, duplicates) ->
+                    duplicates.maxWithOrNull(
+                        compareBy<TraineeProfile> {
+                            if (it.userDocId.isNotBlank()) 1 else 0
+                        }.thenBy {
+                            it.attendancePct
+                        }.thenBy {
+                            it.belt.length
+                        }
+                    ) ?: duplicates.first()
+                }
+                .sortedBy { it.fullName.trim() }
+
             isProfilesLoading = false
             isInitialServerSyncRunning = false
             didFinishInitialProfilesLoad = true
@@ -1938,10 +2014,44 @@ fun CoachTraineesScreen(
     val uiProfiles = remember(traineeProfiles, traineeSearchQuery) {
         val query = normalizeCoachSearchText(traineeSearchQuery)
 
+        val mergedProfiles = traineeProfiles
+            .groupBy { profile ->
+                val phoneKey = profile.phone.filter { it.isDigit() }
+                    .let { digits ->
+                        when {
+                            digits.startsWith("972") && digits.length >= 11 -> "0" + digits.drop(3)
+                            digits.startsWith("05") -> digits
+                            digits.length == 9 && digits.startsWith("5") -> "0$digits"
+                            else -> digits
+                        }
+                    }
+
+                val emailKey = profile.email.trim().lowercase(Locale.US)
+                val nameKey = normalizeCoachSearchText(profile.fullName)
+
+                when {
+                    phoneKey.isNotBlank() -> "phone:$phoneKey"
+                    emailKey.isNotBlank() -> "email:$emailKey"
+                    else -> "name:$nameKey"
+                }
+            }
+            .map { (_, duplicates) ->
+                duplicates.maxWithOrNull(
+                    compareBy<TraineeProfile> {
+                        if (it.userDocId.isNotBlank()) 1 else 0
+                    }.thenBy {
+                        it.attendancePct
+                    }.thenBy {
+                        it.belt.length
+                    }
+                ) ?: duplicates.first()
+            }
+            .sortedBy { it.fullName.trim() }
+
         if (query.isBlank()) {
-            traineeProfiles
+            mergedProfiles
         } else {
-            traineeProfiles.filter { trainee ->
+            mergedProfiles.filter { trainee ->
                 listOf(
                     trainee.fullName,
                     trainee.belt,
