@@ -125,14 +125,6 @@ fun UnifiedSubjectExercisesScreen(
             TopAppBar(
                 title = {
                     Text(resultTitle(subjectId = subjectId, result = result))
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "חזרה"
-                        )
-                    }
                 }
             )
         }
@@ -774,90 +766,97 @@ private fun BeltGroupsContent(
 
     var selectedExercise by remember { mutableStateOf<SelectedHardExercise?>(null) }
 
+    val isKickDefenseScreen =
+        title.trim() == "הגנות נגד בעיטות" ||
+                title.trim() == "Defenses against kicks" ||
+                title.trim() == "Defenses Against Kicks"
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        item {
-            Text(
-                text = if (isEnglish) translateHardTopicTitle(title) else title,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 22.sp,
-                    lineHeight = 25.sp
-                ),
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-                text = if (isEnglish) "Exercises by belt" else "תרגילים לפי חגורות",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 12.sp,
-                    lineHeight = 14.sp
-                ),
-                color = Color(0xFF5B6472),
-                fontWeight = FontWeight.SemiBold,
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = if (isEnglish) {
-                    "← Swipe sideways to see more stats →"
-                } else {
-                    "→→ הזז לצד כדי לראות עוד נתונים →→"
-                },
-                color = Color(0xFF5B6472),
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HardTopStatChip(
-                    value = hardTotalCount.toString(),
-                    label = if (isEnglish) "Exercises" else "תרגילים",
-                    containerColor = Color(0xFF98A2B3)
+        if (!isKickDefenseScreen) {
+            item {
+                Text(
+                    text = if (isEnglish) translateHardTopicTitle(title) else title,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 22.sp,
+                        lineHeight = 25.sp
+                    ),
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                HardTopStatChip(
-                    value = hardKnownCount.toString(),
-                    label = if (isEnglish) "Known" else "יודע",
-                    containerColor = Color(0xFF7ACB88)
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    text = if (isEnglish) "Exercises by belt" else "תרגילים לפי חגורות",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp
+                    ),
+                    color = Color(0xFF5B6472),
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                HardTopStatChip(
-                    value = hardUnknownCount.toString(),
-                    label = if (isEnglish) "Unknown" else "לא יודע",
-                    containerColor = Color(0xFFF1A97A)
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    text = if (isEnglish) {
+                        "← Swipe sideways to see more stats →"
+                    } else {
+                        "→→ הזז לצד כדי לראות עוד נתונים →→"
+                    },
+                    color = Color(0xFF5B6472),
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                HardTopStatChip(
-                    value = hardFavoriteCount.toString(),
-                    label = if (isEnglish) "Favorites" else "מועדפים",
-                    containerColor = Color(0xFFE7A3B5)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HardTopStatChip(
+                        value = hardTotalCount.toString(),
+                        label = if (isEnglish) "Exercises" else "תרגילים",
+                        containerColor = Color(0xFF98A2B3)
+                    )
 
-                HardTopStatChip(
-                    value = hardUnmarkedCount.toString(),
-                    label = if (isEnglish) "Unmarked" else "לא סומן",
-                    containerColor = Color(0xFF8596C9)
-                )
+                    HardTopStatChip(
+                        value = hardKnownCount.toString(),
+                        label = if (isEnglish) "Known" else "יודע",
+                        containerColor = Color(0xFF7ACB88)
+                    )
+
+                    HardTopStatChip(
+                        value = hardUnknownCount.toString(),
+                        label = if (isEnglish) "Unknown" else "לא יודע",
+                        containerColor = Color(0xFFF1A97A)
+                    )
+
+                    HardTopStatChip(
+                        value = hardFavoriteCount.toString(),
+                        label = if (isEnglish) "Favorites" else "מועדפים",
+                        containerColor = Color(0xFFE7A3B5)
+                    )
+
+                    HardTopStatChip(
+                        value = hardUnmarkedCount.toString(),
+                        label = if (isEnglish) "Unmarked" else "לא סומן",
+                        containerColor = Color(0xFF8596C9)
+                    )
+                }
             }
         }
 
@@ -981,6 +980,63 @@ private fun BeltGroupsContent(
     }
 }
 
+private fun kickDefenseSectionTitleFor(
+    rawItem: String,
+    isEnglish: Boolean
+): String? {
+    val clean = rawItem
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+    return when {
+        clean.contains("ברך") -> {
+            if (isEnglish) "Defenses Against Knee Strikes" else "הגנות נגד ברך"
+        }
+
+        clean.contains("מגל") -> {
+            if (isEnglish) "Defenses Against Round Kicks" else "הגנות נגד בעיטות מגל"
+        }
+
+        clean.contains("לצד") ||
+                clean.contains("בעיטת צד") ||
+                clean.contains("בעיטה צד") -> {
+            if (isEnglish) "Defenses Against Side Kicks" else "הגנות נגד בעיטות לצד"
+        }
+
+        clean.contains("בעיטה ישרה") ||
+                clean.contains("בעיטה רגילה") ||
+                clean.contains("רגילה") ||
+                clean.contains("ישרה") -> {
+            if (isEnglish) "Defenses Against Regular Kicks" else "הגנות נגד בעיטה רגילה"
+        }
+
+        else -> null
+    }
+}
+
+@Composable
+private fun HardExerciseSectionHeader(
+    text: String,
+    isEnglish: Boolean
+) {
+    Text(
+        text = text,
+        color = Color(0xFF4CAF50),
+        fontSize = 12.sp,
+        lineHeight = 14.sp,
+        fontWeight = FontWeight.ExtraBold,
+        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp)
+    )
+}
+
 @Composable
 private fun BeltSectionCard(
     group: HardSectionsResolver.BeltItems,
@@ -998,9 +1054,9 @@ private fun BeltSectionCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.96f)
+            containerColor = group.belt.color.copy(alpha = 0.07f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -1039,7 +1095,66 @@ private fun BeltSectionCard(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
+
+            val groupTotalCount = group.items.size
+
+            val groupKnownCount = group.items.count { rawItem ->
+                hardItemStates[statusIdFor(group.belt, title, rawItem)] == true
+            }
+
+            val groupUnknownCount = group.items.count { rawItem ->
+                hardItemStates[statusIdFor(group.belt, title, rawItem)] == false
+            }
+
+            val groupFavoriteCount = group.items.count { rawItem ->
+                favoriteIdFor(group.belt, title, rawItem) in favoriteIds
+            }
+
+            val groupUnmarkedCount = group.items.count { rawItem ->
+                hardItemStates[statusIdFor(group.belt, title, rawItem)] == null
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(top = 4.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HardTopStatChip(
+                    value = groupTotalCount.toString(),
+                    label = if (isEnglish) "Exercises" else "תרגילים",
+                    containerColor = Color(0xFF98A2B3)
+                )
+
+                HardTopStatChip(
+                    value = groupKnownCount.toString(),
+                    label = if (isEnglish) "Known" else "יודע",
+                    containerColor = Color(0xFF7ACB88)
+                )
+
+                HardTopStatChip(
+                    value = groupUnknownCount.toString(),
+                    label = if (isEnglish) "Unknown" else "לא יודע",
+                    containerColor = Color(0xFFF1A97A)
+                )
+
+                HardTopStatChip(
+                    value = groupFavoriteCount.toString(),
+                    label = if (isEnglish) "Favorites" else "מועדפים",
+                    containerColor = Color(0xFFE7A3B5)
+                )
+
+                HardTopStatChip(
+                    value = groupUnmarkedCount.toString(),
+                    label = if (isEnglish) "Unmarked" else "לא סומן",
+                    containerColor = Color(0xFF8596C9)
+                )
+            }
+
+            var lastSectionTitle: String? = null
 
             group.items.forEachIndexed { index, rawItem ->
                 val statusId = statusIdFor(group.belt, title, rawItem)
@@ -1047,6 +1162,25 @@ private fun BeltSectionCard(
                 val mastered = hardItemStates[statusId]
                 val displayItem = if (isEnglish) translateHardExerciseTitle(rawItem) else rawItem
                 val isFavorite = favoriteId in favoriteIds
+
+                val sectionTitle = if (
+                    title.trim() == "הגנות נגד בעיטות" ||
+                    title.trim() == "Defenses against kicks" ||
+                    title.trim() == "Defenses Against Kicks"
+                ) {
+                    kickDefenseSectionTitleFor(rawItem, isEnglish)
+                } else {
+                    null
+                }
+
+                if (sectionTitle != null && sectionTitle != lastSectionTitle) {
+                    HardExerciseSectionHeader(
+                        text = sectionTitle,
+                        isEnglish = isEnglish
+                    )
+
+                    lastSectionTitle = sectionTitle
+                }
 
                 HardExerciseRowCard(
                     exerciseNumber = index + 1,
@@ -1090,11 +1224,13 @@ private fun HardExerciseRowCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp)),
-        color = Color.White,
-        tonalElevation = 1.dp,
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White.copy(alpha = 0.98f),
+        tonalElevation = 0.dp,
+        shadowElevation = 4.dp,
         border = BorderStroke(
             1.dp,
-            belt.color.copy(alpha = 0.30f)
+            belt.color.copy(alpha = 0.22f)
         )
     ) {
         Row(
@@ -1215,10 +1351,10 @@ private fun HardExerciseRowCard(
 
             Box(
                 modifier = Modifier
-                    .width(3.dp)
-                    .heightIn(min = 34.dp)
+                    .width(4.dp)
+                    .heightIn(min = 38.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(belt.color.copy(alpha = 0.90f))
+                    .background(belt.color.copy(alpha = 1f))
             )
         }
     }

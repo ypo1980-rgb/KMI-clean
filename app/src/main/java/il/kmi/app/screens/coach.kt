@@ -1296,35 +1296,12 @@ fun CoachTraineesScreen(
                 return@collectLatest
             }
 
-            // ✅ יש members בסיסיים מהשרת/DB:
-            // מציגים מיד רשימה חלקית כדי שלא יהיה מסך ריק,
-            // ורק אחר כך ממשיכים ברקע להעשיר גיל/חגורה/נוכחות/הערות.
-            val existingProfilesById = traineeProfiles.associateBy { it.id }
-
-            traineeProfiles = members.map { m ->
-                val existing = existingProfilesById[m.id.toString()]
-
-                existing?.copy(
-                    fullName = m.displayName,
-                    branch = branchDbKey,
-                    groupKey = groupName
-                ) ?: TraineeProfile(
-                    id = m.id.toString(),
-                    fullName = m.displayName,
-                    belt = "",
-                    seniority = "",
-                    age = 0,
-                    attendancePct = 0,
-                    branch = branchDbKey,
-                    groupKey = groupName,
-                    email = "",
-                    phone = ""
-                )
-            }
-
-            isProfilesLoading = false
-            isInitialServerSyncRunning = false
-            didFinishInitialProfilesLoad = true
+            // ✅ לא מציגים רשימת members זמנית לפני איחוד.
+            // קודם מעשירים את הנתונים מ-Firestore ומאחדים לפי טלפון/מייל/שם,
+            // ורק בסוף מעדכנים traineeProfiles כדי שלא יופיעו כפולים לרגע.
+            isProfilesLoading = true
+            isInitialServerSyncRunning = true
+            didFinishInitialProfilesLoad = false
 
             // 1) אחוז נוכחות מה-DB המקומי
             val today = LocalDate.now()
@@ -1915,7 +1892,7 @@ fun CoachTraineesScreen(
                 )
             }
 
-            traineeProfiles = builtProfiles
+            val mergedProfiles = builtProfiles
                 .groupBy { profile ->
                     val emailKey = normalizeEmailForMerge(profile.email)
                     val phoneKey = normalizePhoneForMerge(profile.phone)
@@ -1940,6 +1917,7 @@ fun CoachTraineesScreen(
                 }
                 .sortedBy { it.fullName.trim() }
 
+            traineeProfiles = mergedProfiles
             isProfilesLoading = false
             isInitialServerSyncRunning = false
             didFinishInitialProfilesLoad = true
@@ -2069,8 +2047,13 @@ fun CoachTraineesScreen(
 
     // בחירה נוכחית
     var selectedId by remember { mutableStateOf<String?>(null) }
-    val selected: TraineeProfile? = uiProfiles.firstOrNull { it.id == selectedId }
-        ?: uiProfiles.firstOrNull()
+    val selected: TraineeProfile? =
+        if (isProfilesLoading || isInitialServerSyncRunning || !didFinishInitialProfilesLoad) {
+            null
+        } else {
+            uiProfiles.firstOrNull { it.id == selectedId }
+                ?: uiProfiles.firstOrNull()
+        }
 
     // הערות מאמן לפי מתאמן
     val coachNotes = remember { mutableStateMapOf<String, String>() }

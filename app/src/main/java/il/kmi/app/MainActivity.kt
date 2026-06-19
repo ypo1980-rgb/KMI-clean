@@ -29,6 +29,7 @@ import il.kmi.app.screens.CoachMessageGateScreen
 
 // Screens / App
 import il.kmi.app.screens.IntroScreen
+import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.ui.KmiTtsManager
 import il.yuval.ui.theme.AppTheme
 
@@ -942,15 +943,32 @@ private fun AndroidAppRoot(
                 },
 
                 // Google Login הצליח והפרופיל מלא
-                // מדלגים על מסך משתמש חדש / משתמש קיים ונכנסים לבית
+                // קודם מציגים מסך טעינה נקי, בלי MainApp ובלי Drawer.
+                // אחרי הטעינה נכנסים ישירות לבית כדי לא לפתוח שוב את Splash.
                 onProfileComplete = {
+                    userSp.edit()
+                        .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                        .commit()
+
+                    sp.edit()
+                        .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                        .commit()
+
                     startRoute = Route.Home.route
-                    currentScreen = "main"
+                    currentScreen = "startup_loading_after_intro"
                 },
 
                 // Google Login הצליח אבל חסרים פרטי KMI
-                // מדלגים על מסך משתמש חדש / משתמש קיים ונכנסים ישר להשלמת פרטים
+                // נכנסים ישר להשלמת פרטים, בלי לפתוח Drawer בדרך
                 onProfileMissing = {
+                    userSp.edit()
+                        .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                        .commit()
+
+                    sp.edit()
+                        .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                        .commit()
+
                     startRoute = "google_profile_completion"
                     currentScreen = "main"
                 }
@@ -963,6 +981,16 @@ private fun AndroidAppRoot(
                 vm = vm,
                 startRoute = Route.RegistrationLanding.route,
                 kmiPrefs = kmiPrefs
+            )
+        }
+
+        "startup_loading_after_intro" -> {
+            KmiStartupLoadingScreen(
+                isEnglish = isEnglish,
+                onFinished = {
+                    startRoute = Route.Home.route
+                    currentScreen = "main"
+                }
             )
         }
 

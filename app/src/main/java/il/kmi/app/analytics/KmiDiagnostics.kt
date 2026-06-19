@@ -40,6 +40,37 @@ object KmiDiagnostics {
             .take(120)
     }
 
+    private fun markCurrentUserUsage(context: Context) {
+        val user = FirebaseAuth.getInstance().currentUser ?: return
+        val uid = user.uid
+        if (uid.isBlank()) return
+
+        val now = System.currentTimeMillis()
+
+        val payload = mutableMapOf<String, Any>(
+            "uid" to uid,
+            "appOpenCount" to FieldValue.increment(1),
+            "lastSeenAtMillis" to now,
+            "lastSeenAt" to FieldValue.serverTimestamp(),
+            "lastUsageSource" to "trackScreen",
+            "appVersion" to appVersion(context),
+            "deviceModel" to "${Build.MANUFACTURER} ${Build.MODEL}"
+        )
+
+        user.email?.trim()?.takeIf { it.isNotBlank() }?.let {
+            payload["email"] = it
+        }
+
+        user.displayName?.trim()?.takeIf { it.isNotBlank() }?.let {
+            payload["displayName"] = it
+        }
+
+        Firebase.firestore
+            .collection("users")
+            .document(uid)
+            .set(payload, SetOptions.merge())
+    }
+
     fun logEvent(
         context: Context,
         type: String,
@@ -84,6 +115,8 @@ object KmiDiagnostics {
         screenName: String,
         route: String = screenName
     ) {
+        markCurrentUserUsage(context)
+
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         val docId = safeDocId(screenName)
 

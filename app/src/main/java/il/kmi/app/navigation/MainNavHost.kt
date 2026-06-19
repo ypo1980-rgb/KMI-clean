@@ -214,9 +214,10 @@ fun MainNavHost(
     // לא עוברים דרך app_entry / splash כדי למנוע מסך לבן ומעבר מיותר.
     val actualStartDestination = remember(startDestination) {
         when (startDestination) {
-            // ✅ לא מאפשרים יותר להתחיל ישירות ממסך הבית.
-            // גם אם MainApp מבקש Home אחרי Google Login / Auth restore,
-            // נתחיל מ-APP_ENTRY_ROUTE כדי לעבור דרך KmiStartupLoadingScreen.
+            // ✅ אחרי מסך הטעינה הנקי מ-AndroidAppRoot מותר להתחיל ישירות בבית.
+            // זה מונע צורך בלחיצה כפולה על "דלג".
+            Route.Home.route,
+
             GOOGLE_PROFILE_COMPLETION_ROUTE,
             Route.RegistrationLanding.route,
             Route.Registration.route,

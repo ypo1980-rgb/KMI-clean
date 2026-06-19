@@ -218,14 +218,22 @@ fun KmiStartupLoadingScreen(
         val horizontalPadding = if (isCompactHeight) 18.dp else 22.dp
 
         // מיקומים יחסיים לפי גובה המסך, כדי שהמסך ייראה אחיד בין מכשירים
-        val videoTopSpace = maxHeight * 0.060f
-        val titleTopSpace = maxHeight * 0.195f
+        val videoTopSpace =
+            if (isVeryCompactHeight) maxHeight * 0.145f
+            else if (isCompactHeight) maxHeight * 0.155f
+            else maxHeight * 0.165f
+
+        val titleTopSpace =
+            if (isVeryCompactHeight) maxHeight * 0.255f
+            else if (isCompactHeight) maxHeight * 0.265f
+            else maxHeight * 0.275f
+
         val cardTopSpace = maxHeight * 0.580f
 
-        val videoWidth = if (isVeryCompactHeight) 220.dp else if (isCompactHeight) 236.dp else 252.dp
-        val videoHeight = if (isVeryCompactHeight) 96.dp else if (isCompactHeight) 104.dp else 112.dp
-        val glowWidth = if (isVeryCompactHeight) 254.dp else if (isCompactHeight) 276.dp else 292.dp
-        val glowHeight = if (isVeryCompactHeight) 104.dp else if (isCompactHeight) 112.dp else 120.dp
+        val videoWidth = if (isVeryCompactHeight) 184.dp else if (isCompactHeight) 198.dp else 214.dp
+        val videoHeight = if (isVeryCompactHeight) 74.dp else if (isCompactHeight) 80.dp else 88.dp
+        val glowWidth = if (isVeryCompactHeight) 206.dp else if (isCompactHeight) 222.dp else 238.dp
+        val glowHeight = if (isVeryCompactHeight) 82.dp else if (isCompactHeight) 88.dp else 96.dp
 
         Box(
             modifier = Modifier
@@ -238,7 +246,7 @@ fun KmiStartupLoadingScreen(
                     .align(Alignment.TopCenter)
                     .offset(y = videoTopSpace)
                     .fillMaxWidth()
-                    .height(if (isVeryCompactHeight) 108.dp else if (isCompactHeight) 118.dp else 126.dp)
+                    .height(if (isVeryCompactHeight) 84.dp else if (isCompactHeight) 90.dp else 98.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -299,21 +307,6 @@ fun KmiStartupLoadingScreen(
                 }
             }
 
-            Text(
-                text = if (isEnglish) "Krav Magen Israeli" else "קרב מגן ישראלי",
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = if (isCompactHeight) 20.sp else 22.sp,
-                    lineHeight = if (isCompactHeight) 23.sp else 25.sp
-                ),
-                fontWeight = FontWeight.Bold,
-                color = textPrimary,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = titleTopSpace)
-                    .fillMaxWidth()
-            )
 
             Surface(
                 modifier = Modifier

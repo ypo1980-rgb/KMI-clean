@@ -800,6 +800,16 @@ internal fun BeltPangoLayout(
                                         onOpenHardSubjectRoute(belt, subjectId)
                                     },
 
+                                    onOpenKicksHardLocal = {
+                                        android.util.Log.d(
+                                            "KMI_TOPIC_CLICK",
+                                            "OPEN_KICKS_HARD_FROM_BY_TOPIC | currentBelt=${currentBelt.id} | route=kicks_hard | accessMode=$accessMode | hasUnlockedAccess=$hasUnlockedAccess"
+                                        )
+
+                                        vm.setSelectedBelt(currentBelt)
+                                        onOpenHardSubjectRoute(currentBelt, "kicks_hard")
+                                    },
+
                                     accessMode = accessMode
                                 )
 

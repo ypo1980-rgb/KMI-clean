@@ -2,6 +2,7 @@ package il.kmi.app.screens.BeltQuestions
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -77,6 +78,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 
 //==================================================================
 
+private const val KMI_TOPIC_LOG = "KMI_TOPIC_CLICK"
 
 // ✅ FIX: פונקציית נרמול אחת בלבד, ברמת קובץ (נראית לכולם, אין forward-ref ואין אמביגיוטי)
 private fun normText(raw: String): String =
@@ -290,6 +292,7 @@ private fun hardSubjectLoadingTitle(
             "def_internal" -> "Internal defenses"
             "def_external" -> "External defenses"
             "releases_hugs" -> "Hug releases"
+            "kicks_hard" -> "Defenses against kicks"
             else -> "Loading exercises"
         }
     } else {
@@ -297,6 +300,7 @@ private fun hardSubjectLoadingTitle(
             "def_internal" -> "הגנות פנימיות"
             "def_external" -> "הגנות חיצוניות"
             "releases_hugs" -> "שחרור מחביקות"
+            "kicks_hard" -> "הגנות נגד בעיטות"
             else -> "טוען תרגילים"
         }
     }
@@ -560,7 +564,7 @@ fun BeltQuestionsByTopicScreen(
                 showBottomActions = true,
                 centerTitle = true
             )
-                 },
+        },
         bottomBar = {}
     ) { innerPadding ->
         Box(
@@ -585,14 +589,18 @@ fun BeltQuestionsByTopicScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 TopicsBySubjectCard(
                     currentBelt = effectiveBelt,
                     accessMode = accessMode,
                     hasAccess = hasAccess,
                     onOpenSubscription = {
+                        Log.d(
+                            KMI_TOPIC_LOG,
+                            "SUBSCRIPTION_OPEN_FROM TopicsBySubjectCard wrapper | hasAccess=$hasAccess | accessMode=$accessMode"
+                        )
                         onOpenSubscription()
                     },
                     onSubjectClick = { belt, subject ->
@@ -605,19 +613,48 @@ fun BeltQuestionsByTopicScreen(
                     onOpenHardSubjectRoute = { belt, subjectId ->
                         effectiveBelt = belt
 
-                        when (subjectId.trim()) {
+                        val cleanSubjectId = subjectId.trim()
+
+                        Log.d(
+                            KMI_TOPIC_LOG,
+                            "OPEN_HARD_ROUTE_REQUEST | belt=${belt.id} | subjectId=$cleanSubjectId | hasAccess=$hasAccess | accessMode=$accessMode"
+                        )
+
+                        when (cleanSubjectId) {
                             "def_internal",
                             "def_external",
-                            "releases_hugs" -> {
-                                pendingHardSubjectId = subjectId.trim()
+                            "releases_hugs",
+                            "kicks_hard" -> {
+                                Log.d(
+                                    KMI_TOPIC_LOG,
+                                    "OPEN_HARD_ROUTE_LOCAL | subjectId=$cleanSubjectId"
+                                )
+
+                                pendingHardSubjectId = cleanSubjectId
                                 localHardSubjectId = null
                                 localHardSectionId = null
                             }
 
                             else -> {
-                                onOpenHardSubjectRoute(belt, subjectId)
+                                Log.d(
+                                    KMI_TOPIC_LOG,
+                                    "OPEN_HARD_ROUTE_EXTERNAL | subjectId=$cleanSubjectId"
+                                )
+
+                                onOpenHardSubjectRoute(belt, cleanSubjectId)
                             }
                         }
+                    },
+                    onOpenKicksHardLocal = {
+                        Log.d(
+                            KMI_TOPIC_LOG,
+                            "OPEN_KICKS_HARD_LOCAL_DIRECT | set pendingHardSubjectId=kicks_hard"
+                        )
+
+                        effectiveBelt = Belt.GREEN
+                        pendingHardSubjectId = "kicks_hard"
+                        localHardSubjectId = null
+                        localHardSectionId = null
                     },
                     onQuickViewClick = {
                         quickMenuExpanded = true
@@ -626,7 +663,7 @@ fun BeltQuestionsByTopicScreen(
 
                 // ✅ אין יותר כפתור תחתון של "מבט מהיר".
                 // התפריט המהיר נפתח עכשיו מהמלבן הצדדי כמו במסך לפי חגורה.
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(14.dp))
             }
 
             FloatingQuickMenu(
@@ -648,6 +685,8 @@ fun BeltQuestionsByTopicScreen(
                 onVoice = { onOpenVoiceAssistant(effectiveBelt) },
                 onPdf = { onOpenPdfMaterials(effectiveBelt) }
             )
+
+            // החץ הוסר: כרטיס הנושאים נפרס לגובה מלא כדי להציג את כל הנושאים
         }
 
         // אין כאן יותר דיאלוג חיפוש/הסבר מקומי.
@@ -657,40 +696,90 @@ fun BeltQuestionsByTopicScreen(
 
 private fun subjectAccentColor(subjectId: String): Color =
     when (subjectId.trim().lowercase()) {
-        // 1
         "defense_root",
         "defenses_root",
-        "defenses" -> Color(0xFF5E35B1)          // סגול
+        "defenses" -> Color(0xFF7C5CFF)          // violet premium
 
-        // 2
-        "releases" -> Color(0xFF0284C7)          // כחול ים
+        "releases" -> Color(0xFF19A7E0)          // aqua premium
 
-        // 3
         "hands_root",
-        "hands_all" -> Color(0xFF00897B)         // טורקיז
+        "hands_all" -> Color(0xFF16B39A)         // emerald premium
 
-        // 4
         "rolls_breakfalls",
-        "topic_breakfalls_rolls" -> Color(0xFF6D4C41) // חום
+        "topic_breakfalls_rolls" -> Color(0xFFB88746) // bronze premium
 
-        // 5
-        "topic_ready_stance" -> Color(0xFF43A047) // ירוק
+        "topic_ready_stance" -> Color(0xFF59B96F) // green premium
 
-        // 6
-        "topic_ground_prep" -> Color(0xFFD81B60) // ורוד/ארגמן
+        "topic_ground_prep" -> Color(0xFFD05AA0) // pink premium
 
-        // 7
         "topic_kavaler",
-        "kavaler" -> Color(0xFFFB8C00)           // כתום
+        "kavaler" -> Color(0xFFF09A2A)           // amber premium
 
-        // 8
         "kicks",
-        "topic_kicks" -> Color(0xFF1565C0)       // כחול חזק שונה מהשחרורים
+        "topic_kicks" -> Color(0xFF3B82F6)       // blue premium
 
-        // לא אמור להופיע ככרטיס ראשי, אבל כדי שלא יחזור על צבע קיים
-        "releases_hugs" -> Color(0xFF3949AB)
+        "releases_hugs" -> Color(0xFF5B6CFF)
 
-        else -> Color(0xFF7E57C2)
+        else -> Color(0xFF7C5CFF)
+    }
+
+private fun subjectPremiumBackgroundColors(subjectId: String): List<Color> =
+    when (subjectId.trim().lowercase()) {
+        "defense_root",
+        "defenses_root",
+        "defenses" -> listOf(
+            Color(0xFFF3EEFF),
+            Color(0xFFE9E0FF)
+        )
+
+        "releases" -> listOf(
+            Color(0xFFEAF7FF),
+            Color(0xFFDCEFFF)
+        )
+
+        "hands_root",
+        "hands_all" -> listOf(
+            Color(0xFFEAF9F5),
+            Color(0xFFDDF4ED)
+        )
+
+        "rolls_breakfalls",
+        "topic_breakfalls_rolls" -> listOf(
+            Color(0xFFF8F1E7),
+            Color(0xFFF0E4D2)
+        )
+
+        "topic_ready_stance" -> listOf(
+            Color(0xFFEEF9EE),
+            Color(0xFFE1F3E2)
+        )
+
+        "topic_ground_prep" -> listOf(
+            Color(0xFFF9EDF4),
+            Color(0xFFF2DFEA)
+        )
+
+        "topic_kavaler",
+        "kavaler" -> listOf(
+            Color(0xFFFFF3E5),
+            Color(0xFFFFE6C8)
+        )
+
+        "kicks",
+        "topic_kicks" -> listOf(
+            Color(0xFFEEF5FF),
+            Color(0xFFDDEBFF)
+        )
+
+        "releases_hugs" -> listOf(
+            Color(0xFFEEF0FF),
+            Color(0xFFE2E6FF)
+        )
+
+        else -> listOf(
+            Color(0xFFF4F0FF),
+            Color(0xFFE9E3FF)
+        )
     }
 
 private fun subjectIconFor(subjectId: String): ImageVector =
@@ -792,11 +881,21 @@ private fun InlineSubTopicsExpansionCard(
             .fillMaxWidth()
             .padding(start = 18.dp, end = 18.dp, top = 2.dp, bottom = 6.dp),
         shape = RoundedCornerShape(18.dp),
-        color = accent.copy(alpha = 0.075f),
+        color = Color.Transparent,
         shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            accent.copy(alpha = 0.20f),
+                            accent.copy(alpha = 0.10f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .padding(horizontal = 10.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             picks.forEachIndexed { index, pick ->
@@ -826,7 +925,7 @@ private fun InlineSubTopicsExpansionCard(
                         Text(
                             text = cleanTitle,
                             color = Color(0xFF111827),
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             fontSize = 12.sp,
                             lineHeight = 14.sp,
                             maxLines = 1,
@@ -840,7 +939,7 @@ private fun InlineSubTopicsExpansionCard(
                         Text(
                             text = countLabel(countForDisplay(pick)),
                             color = accent,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.ExtraBold,
                             fontSize = 10.sp,
                             lineHeight = 12.sp,
                             textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
@@ -877,34 +976,34 @@ private fun SubjectRootCardPremium(
     val accent = remember(subjectId) { subjectAccentColor(subjectId) }
     val icon = remember(subjectId) { subjectIconFor(subjectId) }
     val imageRes = remember(subjectId) { subjectImageFor(subjectId) }
+    val bgColors = remember(subjectId) { subjectPremiumBackgroundColors(subjectId) }
 
-    val topicCardBg = if (isDarkMode) {
-        accent.copy(alpha = 0.12f)
-    } else {
-        accent.copy(alpha = 0.075f)
-    }
-
-    val titleColor = if (isDarkMode) Color.White else Color(0xFF111827)
-
+    val titleColor = if (isDarkMode) Color.White else Color(0xFF18212F)
     val subtitleColor = if (isDarkMode) {
-        Color.White.copy(alpha = 0.78f)
+        Color.White.copy(alpha = 0.80f)
     } else {
-        Color(0xFF64748B)
+        Color(0xFF5F6C7B)
     }
-
-    val countColor = titleColor
+    val countColor = if (isDarkMode) Color.White.copy(alpha = 0.92f) else Color(0xFF2F3B4A)
 
     val isTitleLocked = title.endsWith(" 🔒")
     val displayTitle = stripLockSuffix(title)
+
+    val isRollsBreakfallsCard = subjectId.trim().lowercase() == "rolls_breakfalls" ||
+            subjectId.trim().lowercase() == "topic_breakfalls_rolls"
+
+    val titleFontSize = if (isRollsBreakfallsCard) 9.8.sp else 10.8.sp
+    val titleLineHeight = if (isRollsBreakfallsCard) 11.4.sp else 12.8.sp
+    val titleMaxLines = if (isRollsBreakfallsCard) 1 else 2
 
     @Composable
     fun SubjectVisual() {
         if (imageRes != null) {
             Box(
                 modifier = Modifier
-                    .width(68.dp)
-                    .height(52.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .width(46.dp)
+                    .height(31.dp)
+                    .clip(RoundedCornerShape(10.dp))
             ) {
                 Image(
                     painter = painterResource(id = imageRes),
@@ -915,14 +1014,14 @@ private fun SubjectRootCardPremium(
             }
         } else {
             Box(
-                modifier = Modifier.size(28.dp),
+                modifier = Modifier.size(24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = accent,
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
@@ -930,220 +1029,227 @@ private fun SubjectRootCardPremium(
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = topicCardBg,
+        shape = RoundedCornerShape(20.dp),
+        color = Color.Transparent,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (isEnglish) {
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .height(
-                                when {
-                                    imageRes != null -> 52.dp
-                                    showLeftBadge -> 36.dp
-                                    else -> 28.dp
+        Box(
+            modifier = Modifier
+                .background(
+                    brush = Brush.verticalGradient(bgColors),
+                    shape = RoundedCornerShape(20.dp)
+                )
+                .padding(horizontal = 7.dp, vertical = 3.dp)
+        ) {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isEnglish) {
+                        Box(
+                            modifier = Modifier
+                                .width(4.dp)
+                                .height(
+                                    when {
+                                        imageRes != null -> 44.dp
+                                        showLeftBadge -> 34.dp
+                                        else -> 26.dp
+                                    }
+                                )
+                                .background(
+                                    color = accent,
+                                    shape = RoundedCornerShape(999.dp)
+                                )
+                        )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+                        SubjectVisual()
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Top,
+                                horizontalArrangement = Arrangement.Start
+                            ) {
+                                Text(
+                                    text = displayTitle,
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontSize = titleFontSize,
+                                        lineHeight = titleLineHeight
+                                    ),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    textAlign = TextAlign.Start,
+                                    color = titleColor,
+                                    maxLines = titleMaxLines,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                if (isTitleLocked) {
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    PremiumTopicLockIcon(
+                                        modifier = Modifier.size(15.dp)
+                                    )
                                 }
+
+                                if (showExpandArrow) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isExpanded) "⌃" else "⌄",
+                                        color = accent,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                            }
+
+                            if (subtitle.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 10.sp,
+                                        lineHeight = 12.sp
+                                    ),
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Start,
+                                    color = subtitleColor,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            Text(
+                                text = countText,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    lineHeight = 12.sp
+                                ),
+                                fontWeight = FontWeight.ExtraBold,
+                                textAlign = TextAlign.Start,
+                                color = countColor,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = accent,
-                            modifier = Modifier.fillMaxSize()
-                        ) {}
-                    }
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    SubjectVisual()
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.Start
-                    ) {
+                        }
+                    } else {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.width(34.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Start
+                        ) {
+                            Box(
+                                modifier = Modifier.width(14.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (showExpandArrow) {
+                                    Text(
+                                        text = if (isExpanded) "⌃" else "⌄",
+                                        color = accent,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(4.dp))
+
+                            Box(
+                                modifier = Modifier.width(14.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isTitleLocked) {
+                                    PremiumTopicLockIcon(
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.End
                         ) {
                             Text(
                                 text = displayTitle,
                                 style = MaterialTheme.typography.titleSmall.copy(
-                                    fontSize = 12.sp,
-                                    lineHeight = 14.sp
+                                    fontSize = titleFontSize,
+                                    lineHeight = titleLineHeight
                                 ),
                                 fontWeight = FontWeight.ExtraBold,
-                                textAlign = TextAlign.Start,
-                                color = titleColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            if (isTitleLocked) {
-                                Spacer(modifier = Modifier.width(5.dp))
-                                PremiumTopicLockIcon(
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-
-                            if (showExpandArrow) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isExpanded) "⌃" else "⌄",
-                                    color = accent,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
-                        }
-
-                        if (subtitle.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Start,
-                                color = subtitleColor,
-                                modifier = Modifier.fillMaxWidth(),
-                                maxLines = 1
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        Text(
-                            text = countText,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 9.sp,
-                                lineHeight = 11.sp
-                            ),
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Start,
-                            color = countColor,
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.width(54.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Start
-                    ) {
-                        Box(
-                            modifier = Modifier.width(18.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (showExpandArrow) {
-                                Text(
-                                    text = if (isExpanded) "⌃" else "⌄",
-                                    color = accent,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Box(
-                            modifier = Modifier.width(18.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isTitleLocked) {
-                                PremiumTopicLockIcon(
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        Text(
-                            text = displayTitle,
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontSize = 12.sp,
-                                lineHeight = 14.sp
-                            ),
-                            fontWeight = FontWeight.ExtraBold,
-                            textAlign = TextAlign.Right,
-                            color = titleColor,
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        if (subtitle.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Right,
-                                color = subtitleColor,
+                                color = titleColor,
                                 modifier = Modifier.fillMaxWidth(),
-                                maxLines = 1
+                                maxLines = titleMaxLines,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            if (subtitle.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 10.sp,
+                                        lineHeight = 12.sp
+                                    ),
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Right,
+                                    color = subtitleColor,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            Text(
+                                text = countText,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    lineHeight = 12.sp
+                                ),
+                                fontWeight = FontWeight.ExtraBold,
+                                textAlign = TextAlign.Right,
+                                color = countColor,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        SubjectVisual()
+                        Spacer(modifier = Modifier.width(6.dp))
 
-                        Text(
-                            text = countText,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 8.5.sp,
-                                lineHeight = 10.5.sp
-                            ),
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right,
-                            color = countColor,
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                        Box(
+                            modifier = Modifier
+                                .width(4.dp)
+                                .height(
+                                    when {
+                                        imageRes != null -> 44.dp
+                                        showLeftBadge -> 34.dp
+                                        else -> 26.dp
+                                    }
+                                )
+                                .background(
+                                    color = accent,
+                                    shape = RoundedCornerShape(999.dp)
+                                )
                         )
-                    }
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    SubjectVisual()
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .height(
-                                when {
-                                    imageRes != null -> 58.dp
-                                    showLeftBadge -> 38.dp
-                                    else -> 30.dp
-                                }
-                            )
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = accent,
-                            modifier = Modifier.fillMaxSize()
-                        ) {}
                     }
                 }
             }
@@ -1162,7 +1268,8 @@ internal fun TopicsBySubjectCard(
     onOpenTopic: (Belt, String) -> Unit = { _, _ -> },
     onOpenTopicWithSub: (belt: Belt, topic: String, subTopic: String) -> Unit = { _, _, _ -> },
     onOpenDefenseList: (belt: Belt, kind: String, pick: String) -> Unit = { _, _, _ -> },
-    onOpenHardSubjectRoute: (belt: Belt, subjectId: String) -> Unit = { _, _ -> },
+    onOpenHardSubjectRoute: (belt: Belt, subjectId: String) -> Unit,
+    onOpenKicksHardLocal: () -> Unit,
     onQuickViewClick: () -> Unit = {}
 ) {
 
@@ -1497,6 +1604,7 @@ internal fun TopicsBySubjectCard(
                 val hardSubjectId = when (decision.subject.id) {
                     "releases",
                     "releases_hugs" -> releasesSectionIdFor(picked) ?: "releases_hugs"
+
                     else -> null
                 }
 
@@ -1745,327 +1853,212 @@ internal fun TopicsBySubjectCard(
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp)
             ) {
-                Box(
+                Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
-
-                    Column(
+                    Text(
+                        text = if (isEnglish) "Subjects (Categories)" else "נושאים (קטגוריות)",
+                        style = if (isDarkMode) {
+                            MaterialTheme.typography.titleSmall
+                        } else {
+                            MaterialTheme.typography.labelLarge
+                        },
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 420.dp)
-                            .verticalScroll(scrollState)
-                            .padding(vertical = 4.dp, horizontal = 8.dp)
-                            .padding(bottom = if (showScrollHint) 10.dp else 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(0.dp)
-                    ) {
+                            .padding(top = 8.dp, bottom = 6.dp),
+                        color = if (isDarkMode) Color.White else Color(0xFF263238)
+                    )
+
+                    if (!countsReady) {
                         Text(
-                            text = if (isEnglish) "Subjects (Categories)" else "נושאים (קטגוריות)",
-                            style = if (isDarkMode) {
-                                MaterialTheme.typography.titleSmall
-                            } else {
-                                MaterialTheme.typography.labelLarge
-                            },
-                            fontWeight = FontWeight.ExtraBold,
+                            text = if (isEnglish) "Loading data..." else "טוען נתונים…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isDarkMode) Color.White.copy(alpha = 0.78f) else Color(
+                                0xFF475569
+                            ),
                             textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(440.dp)
+                    ) {
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 4.dp, bottom = 6.dp),
-                            color = if (isDarkMode) Color.White else Color(0xFF263238)
-                        )
-
-                        if (!countsReady) {
-                            Text(
-                                text = if (isEnglish) "Loading data..." else "טוען נתונים…",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.78f),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        Spacer(Modifier.height(4.dp))
-
-                        val pinnedLockCards = buildList {
-                            add(
-                                Triple(
-                                    "defense_root",
-                                    defenseRootCard.title,
-                                    defenseRootCard.countText
-                                )
-                            )
-
-                            releasesRootCard?.let { releasesCard ->
+                                .verticalScroll(scrollState)
+                                .padding(horizontal = 8.dp)
+                                .padding(top = 0.dp, bottom = 0.dp),
+                            verticalArrangement = Arrangement.spacedBy(0.dp)
+                        ) {
+                            val pinnedLockCards = buildList {
                                 add(
                                     Triple(
-                                        "releases",
-                                        releasesCard.title,
-                                        releasesCard.countText
+                                        "defense_root",
+                                        defenseRootCard.title,
+                                        defenseRootCard.countText
                                     )
                                 )
-                            }
-                        }
 
-                        pinnedLockCards.forEachIndexed { index, card ->
-                            SubjectRootCardPremium(
-                                title = card.second,
-                                subtitle = "",
-                                subjectId = card.first,
-                                countText = card.third,
-                                showLeftBadge = true,
-                                isDarkMode = isDarkMode,
-                                showExpandArrow = true,
-                                isExpanded = expandedSubTopicsForId == card.first,
-                                onClick = {
-                                    when (card.first) {
-                                        "defense_root",
-                                        "defenses_root",
-                                        "defenses" -> {
-                                            if (!hasAccess) {
-                                                onOpenSubscription()
-                                            } else {
+                                releasesRootCard?.let { releasesCard ->
+                                    add(
+                                        Triple(
+                                            "releases",
+                                            releasesCard.title,
+                                            releasesCard.countText
+                                        )
+                                    )
+                                }
+                            }
+
+                            pinnedLockCards.forEachIndexed { index, card ->
+                                SubjectRootCardPremium(
+                                    title = card.second,
+                                    subtitle = "",
+                                    subjectId = card.first,
+                                    countText = card.third,
+                                    showLeftBadge = true,
+                                    isDarkMode = isDarkMode,
+                                    showExpandArrow = true,
+                                    isExpanded = expandedSubTopicsForId == card.first,
+                                    onClick = {
+                                        when (card.first) {
+                                            "defense_root",
+                                            "defenses_root",
+                                            "defenses" -> {
                                                 expandedSubTopicsForId =
                                                     if (expandedSubTopicsForId == "defense_root") null else "defense_root"
                                             }
-                                        }
 
-                                        "releases" -> {
-                                            if (!hasAccess) {
-                                                onOpenSubscription()
-                                            } else {
-                                                expandedSubTopicsForId =
-                                                    if (expandedSubTopicsForId == "releases") null else "releases"
-                                            }
-                                        }
-                                    }
-                                }
-                            )
-
-                            if (card.first == "defense_root" && expandedSubTopicsForId == "defense_root") {
-                                val defensePicks = remember(isEnglish, hasAccess) {
-                                    listOf(
-                                        if (isEnglish) "Internal Defenses" else "הגנות פנימיות",
-                                        if (isEnglish) "External Defenses" else "הגנות חיצוניות",
-                                        if (isEnglish) "Defenses Against Kicks" else "הגנות נגד בעיטות",
-                                        if (isEnglish) "Knife Defenses" else "הגנות מסכין",
-                                        if (isEnglish) "Rifle Defenses Against Knife Stabs" else "הגנות עם רובה נגד דקירות סכין",
-                                        if (isEnglish) "Gun Threat Defenses" else "הגנות מאיום אקדח",
-                                        if (isEnglish) "Defenses Against Multiple Attackers" else "הגנות נגד מספר תוקפים",
-                                        if (isEnglish) "Stick Defenses" else "הגנות נגד מקל"
-                                    ).map { title ->
-                                        withLockSuffix(title, !hasAccess)
-                                    }
-                                }
-
-                                InlineSubTopicsExpansionCard(
-                                    picks = defensePicks,
-                                    counts = defenseDialogCountsMap,
-                                    isEnglish = isEnglish,
-                                    accent = subjectAccentColor("defense_root"),
-                                    onPick = { pickedDisplay ->
-                                        expandedSubTopicsForId = null
-
-                                        val pickedClean = stripLockSuffix(pickedDisplay)
-
-                                        val pickedForLogic = when (pickedClean) {
-                                            "Internal Defenses" -> "הגנות פנימיות"
-                                            "External Defenses" -> "הגנות חיצוניות"
-                                            "Defenses Against Kicks" -> "הגנות נגד בעיטות"
-                                            "Knife Defenses" -> "הגנות מסכין"
-                                            "Rifle Defenses Against Knife Stabs" -> "הגנות עם רובה נגד דקירות סכין"
-                                            "Gun Threat Defenses" -> "הגנות מאיום אקדח"
-                                            "Defenses Against Multiple Attackers" -> "הגנות נגד מספר תוקפים"
-                                            "Stick Defenses" -> "הגנות נגד מקל"
-                                            else -> pickedClean
-                                        }
-
-                                        when (val decision =
-                                            SubjectTopicsUiLogic.resolveDefenseDialogPick(pickedForLogic)) {
-
-                                            is SubjectTopicsUiLogic.DefenseDialogDecision.AskKind -> {
-                                                val combinedId = defenseCombinedSectionIdFor(decision.kind)
-
-                                                if (combinedId != null) {
-                                                    onOpenHardSubjectRoute(currentBelt, combinedId)
+                                            "releases" -> {
+                                                if (!hasAccess) {
+                                                    onOpenSubscription()
                                                 } else {
-                                                    askKind = decision.kind
+                                                    expandedSubTopicsForId =
+                                                        if (expandedSubTopicsForId == "releases") null else "releases"
                                                 }
                                             }
-
-                                            is SubjectTopicsUiLogic.DefenseDialogDecision.OpenHardSubject -> {
-                                                when (decision.subjectId) {
-                                                    "kicks",
-                                                    "kicks_hard" -> {
-                                                        onOpenTopic(
-                                                            currentBelt,
-                                                            "הגנות נגד בעיטות"
-                                                        )
-                                                    }
-
-                                                    else -> {
-                                                        onOpenHardSubjectRoute(
-                                                            currentBelt,
-                                                            decision.subjectId
-                                                        )
-                                                    }
-                                                }
-                                            }
-
-                                            SubjectTopicsUiLogic.DefenseDialogDecision.None -> Unit
                                         }
                                     }
                                 )
-                            }
 
-                            if (card.first == "releases" && expandedSubTopicsForId == "releases") {
-                                val dialogData = remember(subjects) {
-                                    SubjectTopicsUiLogic.buildSubTopicsDialogData(
-                                        subjects = subjects,
-                                        id = "releases"
+                                if (card.first == "defense_root" && expandedSubTopicsForId == "defense_root") {
+                                    val defensePicks = remember(isEnglish, hasAccess) {
+                                        listOf(
+                                            if (isEnglish) "Internal Defenses" else "הגנות פנימיות",
+                                            if (isEnglish) "External Defenses" else "הגנות חיצוניות",
+                                            if (isEnglish) "Defenses Against Kicks" else "הגנות נגד בעיטות",
+                                            if (isEnglish) "Knife Defenses" else "הגנות מסכין",
+                                            if (isEnglish) "Rifle Defenses Against Knife Stabs" else "הגנות עם רובה נגד דקירות סכין",
+                                            if (isEnglish) "Gun Threat Defenses" else "הגנות מאיום אקדח",
+                                            if (isEnglish) "Defenses Against Multiple Attackers" else "הגנות נגד מספר תוקפים",
+                                            if (isEnglish) "Stick Defenses" else "הגנות נגד מקל"
+                                        ).map { title ->
+                                            val cleanTitle = stripLockSuffix(title).trim()
+
+                                            val isFreeKickDefense =
+                                                cleanTitle == "הגנות נגד בעיטות" ||
+                                                        cleanTitle == "Defenses Against Kicks"
+
+                                            withLockSuffix(title, !hasAccess && !isFreeKickDefense)
+                                        }
+                                    }
+
+                                    InlineSubTopicsExpansionCard(
+                                        picks = defensePicks,
+                                        counts = defenseDialogCountsMap,
+                                        isEnglish = isEnglish,
+                                        accent = subjectAccentColor("defense_root"),
+                                        onPick = { pickedDisplay ->
+                                            val pickedClean = stripLockSuffix(pickedDisplay)
+
+                                            val pickedForLogic = when (pickedClean) {
+                                                "Internal Defenses" -> "הגנות פנימיות"
+                                                "External Defenses" -> "הגנות חיצוניות"
+                                                "Defenses Against Kicks" -> "הגנות נגד בעיטות"
+                                                "Knife Defenses" -> "הגנות מסכין"
+                                                "Rifle Defenses Against Knife Stabs" -> "הגנות עם רובה נגד דקירות סכין"
+                                                "Gun Threat Defenses" -> "הגנות מאיום אקדח"
+                                                "Defenses Against Multiple Attackers" -> "הגנות נגד מספר תוקפים"
+                                                "Stick Defenses" -> "הגנות נגד מקל"
+                                                else -> pickedClean
+                                            }
+
+                                            if (pickedForLogic == "הגנות נגד בעיטות") {
+                                                Log.d(
+                                                    KMI_TOPIC_LOG,
+                                                    "KICK_DEFENSE_CLICK_DIRECT | pickedDisplay=$pickedDisplay | pickedClean=$pickedClean | pickedForLogic=$pickedForLogic | hasAccess=$hasAccess | accessMode=$accessMode"
+                                                )
+
+                                                Log.d(
+                                                    KMI_TOPIC_LOG,
+                                                    "KICK_DEFENSE_BEFORE_OPEN_HARD | belt=${currentBelt.id} | subjectId=kicks_hard"
+                                                )
+
+                                                onOpenKicksHardLocal()
+
+                                                Log.d(
+                                                    KMI_TOPIC_LOG,
+                                                    "KICK_DEFENSE_AFTER_OPEN_HARD"
+                                                )
+                                            } else {
+                                                when (val decision =
+                                                    SubjectTopicsUiLogic.resolveDefenseDialogPick(
+                                                        pickedForLogic
+                                                    )) {
+
+                                                    is SubjectTopicsUiLogic.DefenseDialogDecision.AskKind -> {
+                                                        val combinedId =
+                                                            defenseCombinedSectionIdFor(decision.kind)
+
+                                                        if (combinedId != null) {
+                                                            onOpenHardSubjectRoute(
+                                                                currentBelt,
+                                                                combinedId
+                                                            )
+                                                        } else {
+                                                            askKind = decision.kind
+                                                        }
+                                                    }
+
+                                                    is SubjectTopicsUiLogic.DefenseDialogDecision.OpenHardSubject -> {
+                                                        when (decision.subjectId) {
+                                                            "kicks",
+                                                            "kicks_hard" -> {
+                                                                onOpenKicksHardLocal()
+                                                            }
+
+                                                            else -> {
+                                                                onOpenHardSubjectRoute(
+                                                                    currentBelt,
+                                                                    decision.subjectId
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+
+                                                    SubjectTopicsUiLogic.DefenseDialogDecision.None -> Unit
+                                                }
+                                            }
+                                        }
                                     )
                                 }
 
-                                val counts = subTopicsPickCountsBySubjectId["releases"].orEmpty()
-
-                                val displayPicks = remember(
-                                    dialogData.picks,
-                                    dialogData.base,
-                                    isEnglish,
-                                    hasAccess,
-                                    accessMode
-                                ) {
-                                    dialogData.picks.map { rawPick ->
-                                        val uiTitle = subTopicTitleForUi(rawPick.trim(), isEnglish)
-
-                                        withLockSuffix(
-                                            uiTitle,
-                                            accessMode != AccessMode.OPEN &&
-                                                    LockedContentPolicy.shouldShowLock(
-                                                        accessMode,
-                                                        dialogData.base?.titleHeb.orEmpty()
-                                                    )
-                                        )
-                                    }
-                                }
-
-                                InlineSubTopicsExpansionCard(
-                                    picks = displayPicks,
-                                    counts = counts,
-                                    isEnglish = isEnglish,
-                                    accent = subjectAccentColor("releases"),
-                                    onPick = { pickedDisplay ->
-                                        expandedSubTopicsForId = null
-                                        openPickedSubTopic("releases", pickedDisplay)
-                                    }
-                                )
-                            }
-
-                            HorizontalDivider(
-                                thickness = 0.8.dp,
-                                color = if (isDarkMode) {
-                                    Color.White.copy(alpha = 0.08f)
-                                } else {
-                                    Color(0x14000000)
-                                },
-                                modifier = Modifier.padding(horizontal = if (isDarkMode) 8.dp else 6.dp)
-                            )
-                        }
-
-                        SubjectRootCardPremium(
-                            title = handsRootCard.title,
-                            subtitle = "",
-                            subjectId = "hands_root",
-                            countText = handsRootCard.countText,
-                            showLeftBadge = true,
-                            isDarkMode = isDarkMode,
-                            showExpandArrow = true,
-                            isExpanded = expandedSubTopicsForId == "hands_root",
-                            onClick = {
-                                expandedSubTopicsForId =
-                                    if (expandedSubTopicsForId == "hands_root") null else "hands_root"
-                            }
-                        )
-
-                        if (expandedSubTopicsForId == "hands_root") {
-                            val handsPicks = remember(handsBase) {
-                                SubjectTopicsUiLogic.handsPicks(handsBase)
-                            }
-
-                            val handsDisplayPicks = remember(handsPicks, isEnglish) {
-                                handsPicks.map { subTopicTitleForUi(it, isEnglish) }
-                            }
-
-                            InlineSubTopicsExpansionCard(
-                                picks = handsDisplayPicks,
-                                counts = handsPickCounts,
-                                isEnglish = isEnglish,
-                                accent = subjectAccentColor("hands_root"),
-                                onPick = { pickedDisplay ->
-                                    expandedSubTopicsForId = null
-
-                                    val picked = handsPicks.firstOrNull {
-                                        subTopicTitleForUi(it, isEnglish) == pickedDisplay
-                                    } ?: pickedDisplay
-
-                                    val hardSubjectId = handsSectionIdFor(picked)
-
-                                    if (hardSubjectId != null) {
-                                        onOpenHardSubjectRoute(currentBelt, hardSubjectId)
-                                    } else {
-                                        val subject = SubjectTopicsUiLogic.resolveHandsPick(
-                                            base = handsBase,
-                                            picked = picked
-                                        )
-
-                                        if (subject != null) {
-                                            openSubjectSmart(subject)
-                                        }
-                                    }
-                                }
-                            )
-                        }
-
-
-                        HorizontalDivider(
-                            thickness = 0.8.dp,
-                            color = if (isDarkMode) {
-                                Color.White.copy(alpha = 0.08f)
-                            } else {
-                                Color(0x14000000)
-                            },
-                            modifier = Modifier.padding(horizontal = if (isDarkMode) 8.dp else 6.dp)
-                        )
-
-                        // ✅ שאר הנושאים עם תתי־נושאים (בלי releases ובלי defenses שכבר הוצגו למעלה)
-                        otherSubjectsWithSubTopicsCards
-                            .filter { it.id != "defense_root" && it.id != "defenses_root" }
-                            .forEachIndexed { index, card ->
-                                SubjectRootCardPremium(
-                                    title = card.title,
-                                    subtitle = "",
-                                    subjectId = card.id,
-                                    countText = countTextForSubjectCard(card),
-                                    isDarkMode = isDarkMode,
-                                    showExpandArrow = card.id != "releases_hugs",
-                                    isExpanded = expandedSubTopicsForId == card.id,
-                                    onClick = {
-                                        if (card.id == "releases_hugs") {
-                                            onOpenHardSubjectRoute(currentBelt, "releases_hugs")
-                                        } else {
-                                            expandedSubTopicsForId =
-                                                if (expandedSubTopicsForId == card.id) null else card.id
-                                        }
-                                    }
-                                )
-
-                                if (expandedSubTopicsForId == card.id) {
-                                    val dialogData = remember(subjects, card.id) {
+                                if (card.first == "releases" && expandedSubTopicsForId == "releases") {
+                                    val dialogData = remember(subjects) {
                                         SubjectTopicsUiLogic.buildSubTopicsDialogData(
                                             subjects = subjects,
-                                            id = card.id
+                                            id = "releases"
                                         )
                                     }
 
-                                    val counts = subTopicsPickCountsBySubjectId[card.id].orEmpty()
+                                    val counts =
+                                        subTopicsPickCountsBySubjectId["releases"].orEmpty()
 
                                     val displayPicks = remember(
                                         dialogData.picks,
@@ -2075,7 +2068,8 @@ internal fun TopicsBySubjectCard(
                                         accessMode
                                     ) {
                                         dialogData.picks.map { rawPick ->
-                                            val uiTitle = subTopicTitleForUi(rawPick.trim(), isEnglish)
+                                            val uiTitle =
+                                                subTopicTitleForUi(rawPick.trim(), isEnglish)
 
                                             withLockSuffix(
                                                 uiTitle,
@@ -2092,10 +2086,9 @@ internal fun TopicsBySubjectCard(
                                         picks = displayPicks,
                                         counts = counts,
                                         isEnglish = isEnglish,
-                                        accent = subjectAccentColor(card.id),
+                                        accent = subjectAccentColor("releases"),
                                         onPick = { pickedDisplay ->
-                                            expandedSubTopicsForId = null
-                                            openPickedSubTopic(card.id, pickedDisplay)
+                                            openPickedSubTopic("releases", pickedDisplay)
                                         }
                                     )
                                 }
@@ -2111,42 +2104,135 @@ internal fun TopicsBySubjectCard(
                                 )
                             }
 
-                        // ✅ מציגים נושאים בלי תתי־נושאים
-                        // releases כבר מוצג למעלה יחד עם Defenses כדי לקבל מנעול כמו נושא פרימיום.
-                        otherSubjectsWithoutSubTopicsCards
-                            .filter { it.id != "defenses" }
-                            .forEachIndexed { index, card ->
+                            SubjectRootCardPremium(
+                                title = handsRootCard.title,
+                                subtitle = "",
+                                subjectId = "hands_root",
+                                countText = handsRootCard.countText,
+                                showLeftBadge = true,
+                                isDarkMode = isDarkMode,
+                                showExpandArrow = true,
+                                isExpanded = expandedSubTopicsForId == "hands_root",
+                                onClick = {
+                                    expandedSubTopicsForId =
+                                        if (expandedSubTopicsForId == "hands_root") null else "hands_root"
+                                }
+                            )
 
-                                val subject = subjects.firstOrNull { it.id == card.id }
-                                    ?: return@forEachIndexed
-                                SubjectRootCardPremium(
-                                    title = card.title,
-                                    subtitle = "",
-                                    subjectId = card.id,
-                                    countText = countTextForSubjectCard(card),
-                                    isDarkMode = isDarkMode,
-                                    onClick = {
-                                        when (card.id) {
-                                            "topic_kavaler" -> {
-                                                val action =
-                                                    SubjectTopicsUiLogic.buildOpenSubjectUiAction(
-                                                        subject = subject,
-                                                        currentBelt = currentBelt
-                                                    )
+                            if (expandedSubTopicsForId == "hands_root") {
+                                val handsPicks = remember(handsBase) {
+                                    SubjectTopicsUiLogic.handsPicks(handsBase)
+                                }
 
-                                                val chosenBelt = action.chosenBelt
+                                val handsDisplayPicks = remember(handsPicks, isEnglish) {
+                                    handsPicks.map { subTopicTitleForUi(it, isEnglish) }
+                                }
 
-                                                onOpenHardSubjectRoute(chosenBelt, "topic_kavaler")
-                                            }
+                                InlineSubTopicsExpansionCard(
+                                    picks = handsDisplayPicks,
+                                    counts = handsPickCounts,
+                                    isEnglish = isEnglish,
+                                    accent = subjectAccentColor("hands_root"),
+                                    onPick = { pickedDisplay ->
+                                        val picked = handsPicks.firstOrNull {
+                                            subTopicTitleForUi(it, isEnglish) == pickedDisplay
+                                        } ?: pickedDisplay
 
-                                            else -> {
+                                        val hardSubjectId = handsSectionIdFor(picked)
+
+                                        if (hardSubjectId != null) {
+                                            onOpenHardSubjectRoute(currentBelt, hardSubjectId)
+                                        } else {
+                                            val subject = SubjectTopicsUiLogic.resolveHandsPick(
+                                                base = handsBase,
+                                                picked = picked
+                                            )
+
+                                            if (subject != null) {
                                                 openSubjectSmart(subject)
                                             }
                                         }
                                     }
                                 )
+                            }
 
-                                if (index != otherSubjectsWithoutSubTopicsCards.lastIndex) {
+
+                            HorizontalDivider(
+                                thickness = 0.8.dp,
+                                color = if (isDarkMode) {
+                                    Color.White.copy(alpha = 0.08f)
+                                } else {
+                                    Color(0x14000000)
+                                },
+                                modifier = Modifier.padding(horizontal = if (isDarkMode) 8.dp else 6.dp)
+                            )
+
+                            // ✅ שאר הנושאים עם תתי־נושאים (בלי releases ובלי defenses שכבר הוצגו למעלה)
+                            otherSubjectsWithSubTopicsCards
+                                .filter { it.id != "defense_root" && it.id != "defenses_root" }
+                                .forEachIndexed { index, card ->
+                                    SubjectRootCardPremium(
+                                        title = card.title,
+                                        subtitle = "",
+                                        subjectId = card.id,
+                                        countText = countTextForSubjectCard(card),
+                                        isDarkMode = isDarkMode,
+                                        showExpandArrow = card.id != "releases_hugs",
+                                        isExpanded = expandedSubTopicsForId == card.id,
+                                        onClick = {
+                                            if (card.id == "releases_hugs") {
+                                                onOpenHardSubjectRoute(currentBelt, "releases_hugs")
+                                            } else {
+                                                expandedSubTopicsForId =
+                                                    if (expandedSubTopicsForId == card.id) null else card.id
+                                            }
+                                        }
+                                    )
+
+                                    if (expandedSubTopicsForId == card.id) {
+                                        val dialogData = remember(subjects, card.id) {
+                                            SubjectTopicsUiLogic.buildSubTopicsDialogData(
+                                                subjects = subjects,
+                                                id = card.id
+                                            )
+                                        }
+
+                                        val counts =
+                                            subTopicsPickCountsBySubjectId[card.id].orEmpty()
+
+                                        val displayPicks = remember(
+                                            dialogData.picks,
+                                            dialogData.base,
+                                            isEnglish,
+                                            hasAccess,
+                                            accessMode
+                                        ) {
+                                            dialogData.picks.map { rawPick ->
+                                                val uiTitle =
+                                                    subTopicTitleForUi(rawPick.trim(), isEnglish)
+
+                                                withLockSuffix(
+                                                    uiTitle,
+                                                    accessMode != AccessMode.OPEN &&
+                                                            LockedContentPolicy.shouldShowLock(
+                                                                accessMode,
+                                                                dialogData.base?.titleHeb.orEmpty()
+                                                            )
+                                                )
+                                            }
+                                        }
+
+                                        InlineSubTopicsExpansionCard(
+                                            picks = displayPicks,
+                                            counts = counts,
+                                            isEnglish = isEnglish,
+                                            accent = subjectAccentColor(card.id),
+                                            onPick = { pickedDisplay ->
+                                                openPickedSubTopic(card.id, pickedDisplay)
+                                            }
+                                        )
+                                    }
+
                                     HorizontalDivider(
                                         thickness = 0.8.dp,
                                         color = if (isDarkMode) {
@@ -2157,124 +2243,182 @@ internal fun TopicsBySubjectCard(
                                         modifier = Modifier.padding(horizontal = if (isDarkMode) 8.dp else 6.dp)
                                     )
                                 }
+
+                            // ✅ מציגים נושאים בלי תתי־נושאים
+                            // releases כבר מוצג למעלה יחד עם Defenses כדי לקבל מנעול כמו נושא פרימיום.
+                            otherSubjectsWithoutSubTopicsCards
+                                .filter { it.id != "defenses" }
+                                .forEachIndexed { index, card ->
+
+                                    val subject = subjects.firstOrNull { it.id == card.id }
+                                        ?: return@forEachIndexed
+                                    SubjectRootCardPremium(
+                                        title = card.title,
+                                        subtitle = "",
+                                        subjectId = card.id,
+                                        countText = countTextForSubjectCard(card),
+                                        isDarkMode = isDarkMode,
+                                        onClick = {
+                                            when (card.id) {
+                                                "topic_kavaler" -> {
+                                                    val action =
+                                                        SubjectTopicsUiLogic.buildOpenSubjectUiAction(
+                                                            subject = subject,
+                                                            currentBelt = currentBelt
+                                                        )
+
+                                                    val chosenBelt = action.chosenBelt
+
+                                                    onOpenHardSubjectRoute(
+                                                        chosenBelt,
+                                                        "topic_kavaler"
+                                                    )
+                                                }
+
+                                                else -> {
+                                                    openSubjectSmart(subject)
+                                                }
+                                            }
+                                        }
+                                    )
+
+                                    if (index != otherSubjectsWithoutSubTopicsCards.lastIndex) {
+                                        HorizontalDivider(
+                                            thickness = 0.8.dp,
+                                            color = if (isDarkMode) {
+                                                Color.White.copy(alpha = 0.08f)
+                                            } else {
+                                                Color(0x14000000)
+                                            },
+                                            modifier = Modifier.padding(horizontal = if (isDarkMode) 8.dp else 6.dp)
+                                        )
+                                    }
+                                }
+
+                            if (askDefense) {
+                                DefenseCategoryPickDialogModern(
+                                    counts = defenseDialogCountsMap,
+                                    hasAccess = hasAccess,
+                                    onDismiss = { askDefense = false },
+                                    onPick = { picked ->
+                                        askDefense = false
+
+                                        val pickedClean = picked
+                                            .replace("🔒", "")
+                                            .trim()
+
+                                        if (
+                                            pickedClean == "הגנות נגד בעיטות" ||
+                                            pickedClean == "Defenses Against Kicks"
+                                        ) {
+                                            Log.d(
+                                                KMI_TOPIC_LOG,
+                                                "KICK_DEFENSE_CLICK_DIALOG | picked=$picked | pickedClean=$pickedClean | hasAccess=$hasAccess | accessMode=$accessMode"
+                                            )
+
+                                            onOpenHardSubjectRoute(
+                                                currentBelt,
+                                                "kicks_hard"
+                                            )
+                                        } else if (!hasAccess) {
+                                            Log.d(
+                                                KMI_TOPIC_LOG,
+                                                "SUBSCRIPTION_OPEN_FROM DefenseCategoryPickDialogModern | picked=$picked | pickedClean=$pickedClean | hasAccess=$hasAccess | accessMode=$accessMode"
+                                            )
+
+                                            onOpenSubscription()
+                                        } else {
+                                            when (val decision =
+                                                SubjectTopicsUiLogic.resolveDefenseDialogPick(
+                                                    pickedClean
+                                                )
+                                            ) {
+                                                is SubjectTopicsUiLogic.DefenseDialogDecision.AskKind -> {
+                                                    askKind = decision.kind
+                                                }
+
+                                                is SubjectTopicsUiLogic.DefenseDialogDecision.OpenHardSubject -> {
+                                                    when (decision.subjectId) {
+                                                        "kicks",
+                                                        "kicks_hard" -> {
+                                                            onOpenHardSubjectRoute(
+                                                                currentBelt,
+                                                                "kicks_hard"
+                                                            )
+                                                        }
+
+                                                        else -> {
+                                                            onOpenHardSubjectRoute(
+                                                                currentBelt,
+                                                                decision.subjectId
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                SubjectTopicsUiLogic.DefenseDialogDecision.None -> Unit
+                                            }
+                                        }
+                                    }
+                                )
                             }
 
-                        if (askDefense && !hasAccess) {
-                            askDefense = false
-                            askKind = null
-                            onOpenSubscription()
-                        }
+                            askKind?.let { kind ->
+                                DefensePickModeDialogModern(
+                                    kind = kind,
+                                    counts = defensePickCountsMap,
+                                    hasAccess = hasAccess,
+                                    onDismiss = { askKind = null },
+                                    onPick = { picked ->
+                                        askKind = null
 
-                        if (askDefense && hasAccess) {
-                            DefenseCategoryPickDialogModern(
-                                counts = defenseDialogCountsMap,
-                                hasAccess = hasAccess,
-                                onDismiss = { askDefense = false },
-                                onPick = { picked ->
-                                    askDefense = false
+                                        val pickedClean = stripLockSuffix(picked)
 
-                                    val pickedClean = picked
-                                        .replace("🔒", "")
-                                        .trim()
+                                        when (val decision =
+                                            SubjectTopicsUiLogic.resolveDefenseKindPick(
+                                                kind,
+                                                pickedClean
+                                            )) {
+                                            is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenLegacyDefenses -> {
+                                                val canOpen = hasAccess
 
-                                    when (val decision =
-                                        SubjectTopicsUiLogic.resolveDefenseDialogPick(pickedClean)) {
-                                        is SubjectTopicsUiLogic.DefenseDialogDecision.AskKind -> {
-                                            askKind = decision.kind
-                                        }
-
-
-                                        is SubjectTopicsUiLogic.DefenseDialogDecision.OpenHardSubject -> {
-                                            when (decision.subjectId) {
-                                                "kicks",
-                                                "kicks_hard" -> {
-                                                    onOpenTopic(
+                                                if (!canOpen) {
+                                                    onOpenSubscription()
+                                                } else {
+                                                    onOpenDefenseList(
                                                         currentBelt,
-                                                        "הגנות נגד בעיטות"
-                                                    )
-                                                }
-
-                                                else -> {
-                                                    onOpenHardSubjectRoute(
-                                                        currentBelt,
-                                                        decision.subjectId
+                                                        decision.kind,
+                                                        decision.pick
                                                     )
                                                 }
                                             }
-                                        }
 
-                                        SubjectTopicsUiLogic.DefenseDialogDecision.None -> Unit
+                                            is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenHardSubject -> {
+                                                when (decision.subjectId) {
+                                                    "kicks",
+                                                    "kicks_hard" -> {
+                                                        onOpenKicksHardLocal()
+                                                    }
+
+                                                    else -> {
+                                                        onOpenHardSubjectRoute(
+                                                            currentBelt,
+                                                            decision.subjectId
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            SubjectTopicsUiLogic.DefenseKindPickDecision.None -> Unit
+                                        }
                                     }
-                                }
-                            )
-                        }
-
-                        askKind?.let { kind ->
-                            DefensePickModeDialogModern(
-                                kind = kind,
-                                counts = defensePickCountsMap,
-                                hasAccess = hasAccess,
-                                onDismiss = { askKind = null },
-                                onPick = { picked ->
-                                    askKind = null
-
-                                    val pickedClean = stripLockSuffix(picked)
-
-                                    when (val decision =
-                                        SubjectTopicsUiLogic.resolveDefenseKindPick(
-                                            kind,
-                                            pickedClean
-                                        )) {
-                                        is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenLegacyDefenses -> {
-                                            val canOpen = hasAccess
-
-                                            if (!canOpen) {
-                                                onOpenSubscription()
-                                            } else {
-                                                onOpenDefenseList(
-                                                    currentBelt,
-                                                    decision.kind,
-                                                    decision.pick
-                                                )
-                                            }
-                                        }
-
-                                        is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenHardSubject -> {
-                                            when (decision.subjectId) {
-                                                "kicks",
-                                                "kicks_hard" -> {
-                                                    onOpenTopic(
-                                                        currentBelt,
-                                                        "הגנות נגד בעיטות"
-                                                    )
-                                                }
-
-                                                else -> {
-                                                    onOpenHardSubjectRoute(
-                                                        currentBelt,
-                                                        decision.subjectId
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        SubjectTopicsUiLogic.DefenseKindPickDecision.None -> Unit
-                                    }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            if (showScrollHint) {
-                Spacer(Modifier.height(10.dp))
-
-                PremiumScrollDownHint(
-                    currentBelt = currentBelt,
-                    isDarkMode = isDarkMode,
-                    isEnglish = isEnglish
-                )
+                // החץ הועבר החוצה למסך האב כדי שיופיע מתחת לכרטיס הנושאים
             }
         }
     }
@@ -2284,7 +2428,8 @@ internal fun TopicsBySubjectCard(
 private fun PremiumScrollDownHint(
     currentBelt: Belt,
     isDarkMode: Boolean,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
 ) {
     val scrollHintPulse = rememberInfiniteTransition(label = "premiumScrollHintPulse")
 
@@ -2315,6 +2460,7 @@ private fun PremiumScrollDownHint(
     )
 
     Surface(
+        modifier = modifier,
         shape = RoundedCornerShape(999.dp),
         color = if (isDarkMode) {
             Color(0xFF162033).copy(alpha = 0.98f)

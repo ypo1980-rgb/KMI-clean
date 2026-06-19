@@ -368,6 +368,14 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
             else -> null
         }
 
+    fun intFromAnyField(vararg keys: String): Int {
+        for (key in keys) {
+            val value = intOrNull(key)
+            if (value != null && value > 0) return value
+        }
+        return 0
+    }
+
     fun stringOrNull(vararg keys: String): String? {
         for (k in keys) {
             val v = get(k)
@@ -495,9 +503,29 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         createdAtMillis = createdMillis,
 
         // ✅ נתוני שימוש באפליקציה
-        appOpenCount = intOrNull("appOpenCount") ?: 0,
+        // קורא כמה שמות אפשריים כדי לא להציג 0 אם השדה נשמר בשם אחר
+        appOpenCount = intFromAnyField(
+            "appOpenCount",
+            "app_open_count",
+            "appOpens",
+            "openCount",
+            "opensCount",
+            "launchCount",
+            "loginCount",
+            "usageCount",
+            "sessionsCount",
+            "screenViewCount"
+        ),
         lastSeenAtMillis = adminMillisFromFirestore(
-            get("lastSeenAtMillis") ?: get("lastSeenAt")
+            get("lastSeenAtMillis")
+                ?: get("lastSeenAt")
+                ?: get("lastLoginAtMillis")
+                ?: get("lastLoginAt")
+                ?: get("lastOpenAtMillis")
+                ?: get("lastOpenAt")
+                ?: get("lastUsedAtMillis")
+                ?: get("lastUsedAt")
+                ?: get("updatedAt")
         )
     )
 }
@@ -563,7 +591,21 @@ object AdminUsersPreloadCache {
             loadedUsers = raw
                 .groupBy { it.dedupeKey() }
                 .map { (_, list) ->
-                    list.maxByOrNull { it.createdAtMillis ?: 0L } ?: list.first()
+                    list.maxWithOrNull(
+                        compareBy<AdminUserRecord> {
+                            // קודם מעדיפים רשומה שיש בה שימושים בפועל
+                            it.appOpenCount
+                        }.thenBy {
+                            // אחר כך שימוש אחרון
+                            it.lastSeenAtMillis ?: 0L
+                        }.thenBy {
+                            // אחר כך תאריך יצירה
+                            it.createdAtMillis ?: 0L
+                        }.thenBy {
+                            // אחר כך רשומה עם שם אמיתי
+                            if (it.fullName.startsWith("Unknown user", ignoreCase = true)) 0 else 1
+                        }
+                    ) ?: list.first()
                 }
                 .sortedWith(
                     compareBy<AdminUserRecord> {

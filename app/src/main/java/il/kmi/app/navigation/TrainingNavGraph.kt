@@ -74,6 +74,14 @@ fun NavGraphBuilder.trainingNavGraph(
                 pick.contains("הגנה")
     }
 
+    fun hardSubjectDirectRoute(
+        belt: Belt,
+        subjectId: String,
+        sectionId: String? = null
+    ): String {
+        return "hard_subject_direct/${belt.id}/${Uri.encode(subjectId)}/${Uri.encode(sectionId ?: "_")}"
+    }
+
 // ---- בחירת חגורה (BeltQ) ----
     composable(Route.BeltQ.route) {
         val accessSp = remember(nav.context) {
@@ -276,15 +284,31 @@ fun NavGraphBuilder.trainingNavGraph(
             onOpenHardSubjectRoute = { belt, subjectId ->
                 vm.setSelectedBelt(belt)
 
-                if (shouldBlockPremiumTopic(subjectId) || isLockedPremiumDefenseRoute(subjectId)) {
+                val hasAccessNow = hasPremiumAccessNow()
+                val cleanSubjectId = subjectId.trim()
+
+                if (
+                    !hasAccessNow &&
+                    (
+                            shouldBlockPremiumTopic(cleanSubjectId) ||
+                                    isLockedPremiumDefenseRoute(cleanSubjectId)
+                            )
+                ) {
                     nav.navigate(Route.Subscription.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                } else if (cleanSubjectId == "kicks_hard") {
+                    nav.navigate(
+                        "hard_subject_direct/${belt.id}/${Uri.encode("kicks_hard")}/${Uri.encode("_")}"
+                    ) {
                         launchSingleTop = true
                         restoreState = true
                     }
                 } else {
                     val route = il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
                         belt = belt,
-                        topic = subjectId
+                        topic = cleanSubjectId
                     )
 
                     nav.navigate(route) {
@@ -560,6 +584,81 @@ fun NavGraphBuilder.trainingNavGraph(
                     launchSingleTop = true
                     restoreState = true
                 }
+            }
+        )
+    }
+
+    composable(
+        route = "hard_subject_direct/{beltId}/{subjectId}/{sectionId}",
+        arguments = listOf(
+            navArgument("beltId") { type = NavType.StringType },
+            navArgument("subjectId") { type = NavType.StringType },
+            navArgument("sectionId") { type = NavType.StringType }
+        )
+    ) { entry ->
+        val beltId = entry.arguments?.getString("beltId").orEmpty()
+        val subjectId = Uri.decode(entry.arguments?.getString("subjectId").orEmpty())
+        val rawSectionId = Uri.decode(entry.arguments?.getString("sectionId").orEmpty())
+
+        val belt = Belt.fromId(beltId) ?: Belt.GREEN
+        val sectionId = rawSectionId
+            .takeIf { it.isNotBlank() && it != "_" }
+
+        vm.setSelectedBelt(belt)
+
+        il.kmi.app.screens.UnifiedSubjectExercisesScreen(
+            subjectId = subjectId,
+            sectionId = sectionId,
+            vm = vm,
+            onOpenSection = { nextSubjectId, nextSectionId ->
+                nav.navigate(
+                    hardSubjectDirectRoute(
+                        belt = belt,
+                        subjectId = nextSubjectId,
+                        sectionId = nextSectionId
+                    )
+                ) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+            onBack = {
+                nav.popBackStack()
+            }
+        )
+    }
+
+    composable(
+        route = "hard_subject_direct/{beltId}/{subjectId}/{sectionId}",
+        arguments = listOf(
+            navArgument("beltId") { type = NavType.StringType },
+            navArgument("subjectId") { type = NavType.StringType },
+            navArgument("sectionId") { type = NavType.StringType }
+        )
+    ) { entry ->
+        val beltId = entry.arguments?.getString("beltId").orEmpty()
+        val subjectId = Uri.decode(entry.arguments?.getString("subjectId").orEmpty())
+        val rawSectionId = Uri.decode(entry.arguments?.getString("sectionId").orEmpty())
+
+        val belt = Belt.fromId(beltId) ?: Belt.GREEN
+        val sectionId = rawSectionId.takeIf { it.isNotBlank() && it != "_" }
+
+        vm.setSelectedBelt(belt)
+
+        il.kmi.app.screens.UnifiedSubjectExercisesScreen(
+            subjectId = subjectId,
+            sectionId = sectionId,
+            vm = vm,
+            onOpenSection = { nextSubjectId, nextSectionId ->
+                nav.navigate(
+                    "hard_subject_direct/${belt.id}/${Uri.encode(nextSubjectId)}/${Uri.encode(nextSectionId ?: "_")}"
+                ) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+            onBack = {
+                nav.popBackStack()
             }
         )
     }
