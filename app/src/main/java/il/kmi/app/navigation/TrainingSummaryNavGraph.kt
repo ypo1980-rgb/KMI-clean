@@ -54,6 +54,16 @@ fun NavGraphBuilder.trainingSummaryNavGraph(
             belt = belt,
             pickedDateIso = pickedDateIso.ifBlank { null },
             onBack = onBack,
+            onHome = {
+                nav.navigate(Route.Home.route) {
+                    launchSingleTop = true
+                    restoreState = false
+
+                    popUpTo(nav.graph.startDestinationId) {
+                        inclusive = false
+                    }
+                }
+            },
             onOpenCalendar = {
                 nav.navigate(Route.MonthlyCalendar.route) {
                     launchSingleTop = true

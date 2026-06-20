@@ -82,14 +82,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.abs
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -98,6 +97,10 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextFieldDefaults
+
+
+//========================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -143,7 +146,7 @@ fun FreeSessionsScreen(
                 showTopHome = false,
                 showTopSearch = false,
                 showBottomActions = true,
-                lockSearch = true,
+                lockSearch = false,
                 lockHome = false,
                 centerTitle = true,
                 onHome = onBack
@@ -277,112 +280,224 @@ fun FreeSessionsScreen(
 
     // ===== Create dialog UI =====
     if (showCreate) {
-        AlertDialog(
-            onDismissRequest = { showCreate = false },
-            title = {
-                Text(
-                    text = "יצירת אימון חדש",
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            text = {
-                val scroll = rememberScrollState()
-
-                Column(
+        Dialog(
+            onDismissRequest = { showCreate = false }
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp),
+                shape = RoundedCornerShape(34.dp),
+                color = Color.Transparent,
+                shadowElevation = 24.dp,
+                tonalElevation = 0.dp
+            ) {
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(scroll)
-                        // ✅ נותן מקום למקלדת, כדי שהצ'יפים לא ייחתכו
-                        .padding(bottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        singleLine = true,
-                        label = { Text("כותרת") },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                        keyboardActions = KeyboardActions(onNext = { })
-                    )
-
-                    OutlinedTextField(
-                        value = locationName,
-                        onValueChange = { locationName = it },
-                        singleLine = true,
-                        label = { Text("מקום (אופציונלי)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { })
-                    )
-
-                    TimeQuickPicker(
-                        startsAt = startsAt,
-                        onPick = { startsAt = it }
-                    )
-
-                    Text(
-                        text = "זמן שנבחר: ${fmtTimeHeb(startsAt)}",
-                        color = Color(0xFF334155),
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Right
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val cleanTitle = title.trim()
-                    if (cleanTitle.isBlank()) {
-                        Toast.makeText(ctx, "נא להזין כותרת", Toast.LENGTH_SHORT).show()
-                        return@TextButton
-                    }
-
-                    scope.launch {
-                        val result = runCatching {
-                            repo.createFreeSession(
-                                branch = branch,
-                                groupKey = groupKey,
-                                title = cleanTitle,
-                                locationName = locationName.trim().ifBlank { null },
-                                lat = null,
-                                lng = null,
-                                startsAt = startsAt,
-                                createdByUid = currentUid,
-                                createdByName = currentName
+                        .clip(RoundedCornerShape(34.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFF07152E),
+                                    Color(0xFF0B1E48),
+                                    Color(0xFF103C89),
+                                    Color(0xFF18BDEB)
+                                )
                             )
-                        }
+                        )
+                        .padding(1.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(33.dp),
+                        color = Color(0xFF061832).copy(alpha = 0.98f),
+                        tonalElevation = 0.dp
+                    ) {
+                        val scroll = rememberScrollState()
 
-                        if (result.isSuccess) {
-                            title = ""
-                            locationName = ""
-                            startsAt = System.currentTimeMillis() + 60 * 60 * 1000L
-                            showCreate = false
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scroll)
+                                .padding(horizontal = 18.dp, vertical = 18.dp)
+                                .padding(bottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = Alignment.End
+                                ) {
+                                    Text(
+                                        text = "יצירת אימון חדש",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 26.sp,
+                                        lineHeight = 30.sp,
+                                        textAlign = TextAlign.Right,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
 
-                            Toast
-                                .makeText(ctx, "האימון נוצר בהצלחה ✅", Toast.LENGTH_SHORT)
-                                .show()
-                        } else {
-                            val e = result.exceptionOrNull()
+                                    Spacer(Modifier.height(4.dp))
 
-                            // אם זה PERMISSION_DENIED / חסר אינדקס / רשת וכו' – תראה לפחות טקסט מועיל
-                            val msg = e?.message?.takeIf { it.isNotBlank() } ?: "יצירת אימון נכשלה"
-                            Toast
-                                .makeText(ctx, msg, Toast.LENGTH_LONG)
-                                .show()
+                                    Text(
+                                        text = "בחר כותרת, מקום, תאריך ושעה לאימון החופשי",
+                                        color = Color(0xFFBFDBFE),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        lineHeight = 15.sp,
+                                        textAlign = TextAlign.Right,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                Spacer(Modifier.width(12.dp))
+
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.White.copy(alpha = 0.10f),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        Color.White.copy(alpha = 0.18f)
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Schedule,
+                                        contentDescription = null,
+                                        tint = Color(0xFF67E8F9),
+                                        modifier = Modifier
+                                            .padding(11.dp)
+                                            .size(24.dp)
+                                    )
+                                }
+                            }
+
+                            Divider(color = Color.White.copy(alpha = 0.14f))
+
+                            PremiumCreateInputField(
+                                label = "כותרת",
+                                value = title,
+                                onValueChange = { title = it },
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                keyboardActions = KeyboardActions(onNext = { })
+                            )
+
+                            PremiumCreateInputField(
+                                label = "מקום (אופציונלי)",
+                                value = locationName,
+                                onValueChange = { locationName = it },
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { })
+                            )
+
+                            PremiumDateTimeCard(
+                                startsAt = startsAt,
+                                onPick = { startsAt = it }
+                            )
+
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(22.dp),
+                                color = Color.White.copy(alpha = 0.08f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.13f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.Start,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextButton(
+                                        onClick = { showCreate = false }
+                                    ) {
+                                        Text(
+                                            text = "ביטול",
+                                            color = Color(0xFFBFDBFE),
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 16.sp
+                                        )
+                                    }
+
+                                    Spacer(Modifier.width(10.dp))
+
+                                    Surface(
+                                        onClick = {
+                                            val cleanTitle = title.trim()
+
+                                            if (cleanTitle.isBlank()) {
+                                                Toast.makeText(ctx, "נא להזין כותרת", Toast.LENGTH_SHORT).show()
+                                                return@Surface
+                                            }
+
+                                            scope.launch {
+                                                val result = runCatching {
+                                                    repo.createFreeSession(
+                                                        branch = branch,
+                                                        groupKey = groupKey,
+                                                        title = cleanTitle,
+                                                        locationName = locationName.trim().ifBlank { null },
+                                                        lat = null,
+                                                        lng = null,
+                                                        startsAt = startsAt,
+                                                        createdByUid = currentUid,
+                                                        createdByName = currentName
+                                                    )
+                                                }
+
+                                                if (result.isSuccess) {
+                                                    title = ""
+                                                    locationName = ""
+                                                    startsAt = System.currentTimeMillis() + 60 * 60 * 1000L
+                                                    showCreate = false
+
+                                                    Toast
+                                                        .makeText(ctx, "האימון נוצר בהצלחה ✅", Toast.LENGTH_SHORT)
+                                                        .show()
+                                                } else {
+                                                    val e = result.exceptionOrNull()
+                                                    val msg = e?.message?.takeIf { it.isNotBlank() } ?: "יצירת אימון נכשלה"
+
+                                                    Toast
+                                                        .makeText(ctx, msg, Toast.LENGTH_LONG)
+                                                        .show()
+                                                }
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = Color(0xFF22D3EE),
+                                        shadowElevation = 6.dp
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(
+                                                horizontal = 30.dp,
+                                                vertical = 11.dp
+                                            ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "צור",
+                                                color = Color(0xFF04101F),
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 16.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
-                }) {
-                    Text("צור")
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreate = false }) { Text("ביטול") }
             }
-        )
+        }
     }
 
     // ===== Details bottom sheet =====
@@ -489,6 +604,149 @@ private fun EmptyStateCard(
                 color = Color(0xFFE5E7EB),
                 textAlign = TextAlign.End,
                 modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun PremiumCreateInputField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    keyboardOptions: KeyboardOptions,
+    keyboardActions: KeyboardActions
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        Text(
+            text = label,
+            color = Color(0xFF67E8F9),
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Right,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = Color.White.copy(alpha = 0.08f),
+            border = BorderStroke(
+                1.dp,
+                Color.White.copy(alpha = 0.16f)
+            ),
+            tonalElevation = 0.dp
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = keyboardOptions,
+                keyboardActions = keyboardActions,
+                textStyle = MaterialTheme.typography.titleMedium.copy(
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Right
+                ),
+                placeholder = {
+                    Text(
+                        text = label,
+                        color = Color.White.copy(alpha = 0.48f),
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    cursorColor = Color(0xFF22D3EE),
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedLabelColor = Color(0xFF67E8F9),
+                    unfocusedLabelColor = Color(0xFF67E8F9)
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun PremiumDateTimeCard(
+    startsAt: Long,
+    onPick: (Long) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White.copy(alpha = 0.08f),
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            1.dp,
+            Color.White.copy(alpha = 0.16f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "בחירת יום ושעה",
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Right
+                )
+
+                Spacer(Modifier.width(8.dp))
+
+                Icon(
+                    imageVector = Icons.Filled.Schedule,
+                    contentDescription = null,
+                    tint = Color(0xFF22D3EE)
+                )
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xFF0A234A),
+                tonalElevation = 0.dp,
+                border = BorderStroke(
+                    1.dp,
+                    Color(0xFF67E8F9).copy(alpha = 0.32f)
+                )
+            ) {
+                Text(
+                    text = fmtTimeHeb(startsAt),
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 17.sp,
+                    lineHeight = 22.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 14.dp)
+                )
+            }
+
+            TimeQuickPicker(
+                startsAt = startsAt,
+                onPick = onPick
             )
         }
     }
@@ -972,15 +1230,392 @@ private fun ParticipantRow(p: FreeSessionPart) {
     }
 }
 
+@Composable
+private fun PremiumFreeSessionDatePickerDialog(
+    selectedMillis: Long,
+    onDismiss: () -> Unit,
+    onDateSelected: (Long) -> Unit
+) {
+    val zone = ZoneId.systemDefault()
+    val hebrewLocale = Locale("he", "IL")
+
+    val selectedDate = remember(selectedMillis) {
+        Instant.ofEpochMilli(selectedMillis)
+            .atZone(zone)
+            .toLocalDate()
+    }
+
+    var visibleMonth by remember(selectedDate) {
+        mutableStateOf(YearMonth.from(selectedDate))
+    }
+
+    val today = remember {
+        LocalDate.now()
+    }
+
+    val firstDayOfMonth = remember(visibleMonth) {
+        visibleMonth.atDay(1)
+    }
+
+    // ראשון = 0, שני = 1 ... שבת = 6
+    val leadingEmptyDays = remember(firstDayOfMonth) {
+        firstDayOfMonth.dayOfWeek.value % 7
+    }
+
+    val daysInMonth = remember(visibleMonth) {
+        visibleMonth.lengthOfMonth()
+    }
+
+    val monthTitle = remember(visibleMonth) {
+        visibleMonth.atDay(1)
+            .format(DateTimeFormatter.ofPattern("MMMM yyyy", hebrewLocale))
+    }
+
+    val selectedTitle = remember(selectedDate) {
+        selectedDate.format(
+            DateTimeFormatter.ofPattern("EEEE • d MMMM yyyy", hebrewLocale)
+        )
+    }
+
+    fun dateToMillis(date: LocalDate): Long {
+        return date
+            .atStartOfDay(zone)
+            .toInstant()
+            .toEpochMilli()
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp),
+            shape = RoundedCornerShape(30.dp),
+            color = Color.Transparent,
+            shadowElevation = 22.dp,
+            tonalElevation = 0.dp
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFF07152E),
+                                Color(0xFF0B1E48),
+                                Color(0xFF103C89),
+                                Color(0xFF18BDEB)
+                            )
+                        )
+                    )
+                    .padding(1.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(29.dp),
+                    color = Color(0xFF061832).copy(alpha = 0.97f),
+                    tonalElevation = 0.dp
+                ) {
+                    CompositionLocalProvider(
+                        LocalLayoutDirection provides LayoutDirection.Rtl
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = Alignment.End
+                                ) {
+                                    Text(
+                                        text = "בחר תאריך לאימון",
+                                        color = Color(0xFFBFDBFE),
+                                        fontWeight = FontWeight.ExtraBold,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        textAlign = TextAlign.Right,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Spacer(Modifier.height(6.dp))
+
+                                    Text(
+                                        text = selectedTitle,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Black,
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontSize = 23.sp,
+                                            lineHeight = 27.sp
+                                        ),
+                                        textAlign = TextAlign.Right,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+
+                                Spacer(Modifier.width(12.dp))
+
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.White.copy(alpha = 0.09f),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        Color.White.copy(alpha = 0.18f)
+                                    )
+                                ) {
+                                    Text(
+                                        text = "📅",
+                                        fontSize = 22.sp,
+                                        modifier = Modifier.padding(10.dp)
+                                    )
+                                }
+                            }
+
+                            Divider(color = Color.White.copy(alpha = 0.14f))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    onClick = {
+                                        visibleMonth = visibleMonth.minusMonths(1)
+                                    },
+                                    shape = CircleShape,
+                                    color = Color(0xFF0A234A),
+                                    modifier = Modifier.size(42.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "›",
+                                            color = Color.White,
+                                            fontSize = 28.sp,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = monthTitle,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Black,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = 22.sp,
+                                        lineHeight = 25.sp
+                                    ),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Surface(
+                                    onClick = {
+                                        visibleMonth = visibleMonth.plusMonths(1)
+                                    },
+                                    shape = CircleShape,
+                                    color = Color(0xFF0A234A),
+                                    modifier = Modifier.size(42.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "‹",
+                                            color = Color.White,
+                                            fontSize = 28.sp,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                    }
+                                }
+                            }
+
+                            val weekDays = listOf("א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳")
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color.White.copy(alpha = 0.08f))
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                weekDays.forEach { dayName ->
+                                    Text(
+                                        text = dayName,
+                                        color = Color(0xFF67E8F9),
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 15.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+
+                            val cells = buildList<Int?> {
+                                repeat(leadingEmptyDays) { add(null) }
+
+                                for (day in 1..daysInMonth) {
+                                    add(day)
+                                }
+
+                                while (size % 7 != 0) {
+                                    add(null)
+                                }
+                            }
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(Color.White.copy(alpha = 0.08f))
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                cells.chunked(7).forEach { week ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        week.forEach { day ->
+                                            val cellDate = day?.let {
+                                                visibleMonth.atDay(it)
+                                            }
+
+                                            val isSelected = cellDate == selectedDate
+                                            val isToday = cellDate == today
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(38.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (day != null && cellDate != null) {
+                                                    Surface(
+                                                        modifier = Modifier
+                                                            .size(34.dp)
+                                                            .clickable {
+                                                                onDateSelected(
+                                                                    dateToMillis(cellDate)
+                                                                )
+                                                            },
+                                                        shape = CircleShape,
+                                                        color = when {
+                                                            isSelected -> Color(0xFF22D3EE)
+                                                            isToday -> Color.White.copy(alpha = 0.14f)
+                                                            else -> Color.Transparent
+                                                        },
+                                                        border = when {
+                                                            isSelected -> null
+                                                            isToday -> BorderStroke(
+                                                                1.dp,
+                                                                Color(0xFF22D3EE)
+                                                            )
+                                                            else -> null
+                                                        }
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier.fillMaxSize(),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Text(
+                                                                text = day.toString(),
+                                                                color = if (isSelected) {
+                                                                    Color(0xFF020617)
+                                                                } else {
+                                                                    Color.White
+                                                                },
+                                                                fontWeight = FontWeight.Black,
+                                                                fontSize = 16.sp,
+                                                                textAlign = TextAlign.Center
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp),
+                                color = Color.White.copy(alpha = 0.07f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.12f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.Start,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextButton(
+                                        onClick = onDismiss
+                                    ) {
+                                        Text(
+                                            text = "ביטול",
+                                            color = Color(0xFFBFDBFE),
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 15.sp
+                                        )
+                                    }
+
+                                    Spacer(Modifier.width(8.dp))
+
+                                    Surface(
+                                        onClick = {
+                                            onDateSelected(dateToMillis(today))
+                                        },
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = Color(0xFF22D3EE),
+                                        shadowElevation = 5.dp
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(
+                                                horizontal = 24.dp,
+                                                vertical = 10.dp
+                                            ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "היום",
+                                                color = Color(0xFF04101F),
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 15.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimeQuickPicker(
     startsAt: Long,
     onPick: (Long) -> Unit
 ) {
-    val scroll = rememberScrollState()
-
-    // ✅ NEW: "אחר…" (בחירת תאריך+שעה חופשיים)
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
@@ -988,18 +1623,10 @@ private fun TimeQuickPicker(
     var customHour by remember { mutableStateOf(19) }
     var customMinute by remember { mutableStateOf(0) }
 
-    fun isClose(a: Long, b: Long): Boolean =
-        abs(a - b) <= 60_000L // דקה סבילות (כדי שה-"עוד שעה" יסומן נכון)
-
-    val now = System.currentTimeMillis()
-    val targetPlus1h = now + 60 * 60 * 1000L
-    val targetPlus2h = now + 2 * 60 * 60 * 1000L
-    val targetToday20 = forceTodayAtHour(20)
-    val targetTomorrow18 = forceTomorrowAtHour(18)
-
     fun buildMillisFromDateAndTime(dateMillis: Long, hour: Int, minute: Int): Long {
         val z = ZoneId.systemDefault()
         val date = Instant.ofEpochMilli(dateMillis).atZone(z).toLocalDate()
+
         return date
             .atTime(hour.coerceIn(0, 23), minute.coerceIn(0, 59))
             .atZone(z)
@@ -1007,131 +1634,108 @@ private fun TimeQuickPicker(
             .toEpochMilli()
     }
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.End
-    ) {
-        Text(
-            text = "בחר זמן במהירות",
-            style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF111827),
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Right
-        )
+    Surface(
+        onClick = {
+            if (customDateMillis == null) {
+                customDateMillis = startsAt
+            }
 
-        Row(
+            showDatePicker = true
+        },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(999.dp),
+        color = Color(0xFF22D3EE),
+        shadowElevation = 6.dp
+    ) {
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(scroll, reverseScrolling = true),
-            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)
+                .padding(horizontal = 18.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
         ) {
-            QuickTimeChip(
-                text = "אחר…",
-                selected = false
-            ) {
-                if (customDateMillis == null) customDateMillis = System.currentTimeMillis()
-                showDatePicker = true
-            }
-
-            QuickTimeChip(
-                text = "עוד שעה",
-                selected = isClose(startsAt, targetPlus1h)
-            ) {
-                onPick(System.currentTimeMillis() + 60 * 60 * 1000L)
-            }
-
-            QuickTimeChip(
-                text = "עוד 2 שעות",
-                selected = isClose(startsAt, targetPlus2h)
-            ) {
-                onPick(System.currentTimeMillis() + 2 * 60 * 60 * 1000L)
-            }
-
-            QuickTimeChip(
-                text = "היום בערב (20:00)",
-                selected = isClose(startsAt, targetToday20)
-            ) {
-                onPick(forceTodayAtHour(20))
-            }
-
-            QuickTimeChip(
-                text = "מחר (18:00)",
-                selected = isClose(startsAt, targetTomorrow18)
-            ) {
-                onPick(forceTomorrowAtHour(18))
-            }
+            Text(
+                text = "בחר יום ושעה",
+                color = Color(0xFF04101F),
+                fontWeight = FontWeight.Black,
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center
+            )
         }
     }
 
-    // ✅ DatePickerDialog
     if (showDatePicker) {
-        val dateState = rememberDatePickerState(
-            initialSelectedDateMillis = customDateMillis ?: System.currentTimeMillis()
-        )
-
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    customDateMillis = dateState.selectedDateMillis ?: System.currentTimeMillis()
-                    showDatePicker = false
-                    showTimePicker = true
-                }) { Text("אישור") }
+        PremiumFreeSessionDatePickerDialog(
+            selectedMillis = customDateMillis ?: startsAt,
+            onDismiss = {
+                showDatePicker = false
             },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("ביטול") }
+            onDateSelected = { selectedMillis ->
+                customDateMillis = selectedMillis
+                showDatePicker = false
+                showTimePicker = true
             }
-        ) {
-            DatePicker(state = dateState)
-        }
+        )
     }
 
-    // ✅ TimePicker dialog (AlertDialog)
     if (showTimePicker) {
+        val selectedTime = remember(startsAt) {
+            Instant.ofEpochMilli(startsAt)
+                .atZone(ZoneId.systemDefault())
+                .toLocalTime()
+        }
+
         val tp = rememberTimePickerState(
-            initialHour = customHour,
-            initialMinute = customMinute,
+            initialHour = selectedTime.hour,
+            initialMinute = selectedTime.minute,
             is24Hour = true
         )
 
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
+            containerColor = Color(0xFF061832),
+            title = {
+                Text(
+                    text = "בחר שעה לאימון",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     customHour = tp.hour
                     customMinute = tp.minute
                     showTimePicker = false
 
-                    val d = customDateMillis ?: System.currentTimeMillis()
+                    val d = customDateMillis ?: startsAt
                     onPick(buildMillisFromDateAndTime(d, customHour, customMinute))
-                }) { Text("אישור") }
+                }) {
+                    Text(
+                        text = "אישור",
+                        color = Color(0xFF22D3EE),
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) { Text("ביטול") }
+                TextButton(onClick = { showTimePicker = false }) {
+                    Text(
+                        text = "ביטול",
+                        color = Color(0xFFBFDBFE),
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
             },
-            text = { TimePicker(state = tp) }
+            text = {
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides LayoutDirection.Ltr
+                ) {
+                    TimePicker(state = tp)
+                }
+            }
         )
     }
-}
-
-@Composable
-private fun QuickTimeChip(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(text) },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = Color(0xFF0EA5E9).copy(alpha = 0.20f),
-            selectedLabelColor = Color(0xFF0B1220),
-            containerColor = Color(0xFFF1F5F9),
-            labelColor = Color(0xFF0B1220)
-        )
-    )
 }
 
 /* ---------------- helpers ---------------- */

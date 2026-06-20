@@ -94,23 +94,31 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.sp
 
 
 // ===========================
 // Training Summary Palette
 // ===========================
 
-private val SummaryBgTop = Color(0xFF08101F)
-private val SummaryBgBottom = Color(0xFF1A315C)
+private val SummaryBgTop = Color(0xFFF8FBFF)
+private val SummaryBgMid1 = Color(0xFFEAF4FF)
+private val SummaryBgMid2 = Color(0xFFB7DDF7)
+private val SummaryBgBottom = Color(0xFF062B4A)
 
-private val SummaryCard = Color(0xFF223454)
-private val SummaryCardInner = Color(0xFF2B3D5F)
+private val SummaryCard = Color(0xFFEAF2FF)
+private val SummaryCardInner = Color(0xFFDDEAFF)
 
-private val SummaryBorder = Color(0xFF39527F)
-private val SummaryDivider = Color(0xFF364A72)
+private val SummaryBorder = Color(0xFFD8E3F5)
+private val SummaryDivider = Color(0xFFC7D7EE)
 
-private val SummaryChip = Color(0xFF32486F)
-private val SummaryChipSelected = Color(0xFF47649A)
+private val SummaryChip = Color(0xFFDDEAFF)
+private val SummaryChipSelected = Color(0xFFB7DDF7)
+
+private val SummaryTextDark = Color(0xFF1E2A3D)
+private val SummaryTextMuted = Color(0xFF5E6C80)
+private val SummaryPrimaryButton = Color(0xFF0EA5E9)
+private val SummaryPurpleButton = Color(0xFF7B57D1)
 
 /**
  * פריט תרגיל "לבחירה" שמגיע מהקטלוג (ContentRepo).
@@ -141,32 +149,34 @@ private fun SummarySectionHeader(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleLarge.merge(rtlStyle),
+                    style = MaterialTheme.typography.titleMedium.merge(rtlStyle),
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
+                    color = SummaryTextDark,
                     textAlign = TextAlign.Right,
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall.merge(rtlStyle),
-                    color = Color.White.copy(alpha = 0.72f),
+                    style = MaterialTheme.typography.labelLarge.merge(rtlStyle),
+                    color = SummaryTextMuted,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Right,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
 
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(42.dp)
                     .background(
                         brush = Brush.radialGradient(
                             listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.95f),
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                                Color(0xFF22D3EE),
+                                Color(0xFF0EA5E9),
+                                Color(0xFF7B57D1)
                             )
                         ),
                         shape = CircleShape
@@ -177,7 +187,7 @@ private fun SummarySectionHeader(
                     imageVector = icon,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -195,7 +205,7 @@ private fun PremiumSummaryCard(
         shape = shape,
         color = SummaryCard,
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
+        shadowElevation = 6.dp,
         border = BorderStroke(
             1.dp,
             SummaryBorder
@@ -222,6 +232,7 @@ fun TrainingSummaryScreen(
     belt: Belt,
     pickedDateIso: String? = null,
     onBack: (() -> Unit)? = null,
+    onHome: (() -> Unit)? = null,
     onOpenCalendar: (() -> Unit)? = null
 ) {
     val state by vm.state.collectAsState()
@@ -317,7 +328,13 @@ fun TrainingSummaryScreen(
                 KmiTopBar(
                     title = tr("סיכום אימון", "Training summary"),
                     showTopHome = false,
-                    lockSearch = true
+                    showTopSearch = false,
+                    showBottomActions = true,
+                    lockSearch = false,
+                    lockHome = false,
+                    onHome = {
+                        onHome?.invoke()
+                    }
                 )
             }
         },
@@ -328,22 +345,22 @@ fun TrainingSummaryScreen(
         val granite = Brush.verticalGradient(
             colors = listOf(
                 SummaryBgTop,
-                Color(0xFF0E1A33),
-                Color(0xFF15284D),
+                SummaryBgMid1,
+                SummaryBgMid2,
+                Color(0xFF1F78B4),
                 SummaryBgBottom
             )
         )
 
         val graniteNoise = Brush.linearGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.030f),
+                Color.White.copy(alpha = 0.16f),
                 Color.Transparent,
-                Color.White.copy(alpha = 0.018f),
-                Color.Transparent,
-                Color.White.copy(alpha = 0.014f)
+                Color.White.copy(alpha = 0.08f),
+                Color.Transparent
             ),
             start = Offset(0f, 0f),
-            end = Offset(1400f, 1400f)
+            end = Offset(1200f, 1200f)
         )
 
         Box(
@@ -387,7 +404,7 @@ fun TrainingSummaryScreen(
                     PremiumSummaryCard {
                         SummarySectionHeader(
                             title = tr("הוספת תרגילים", "Add exercises"),
-                            subtitle = tr("בחר אם להוסיף תרגילים שבוצעו באימון", "Choose whether to add exercises performed in training"),
+                            subtitle = tr("בחר תרגילים שבוצעו באימון", "Choose exercises performed in training"),
                             icon = Icons.Filled.PlaylistAddCheck
                         )
 
@@ -409,7 +426,8 @@ fun TrainingSummaryScreen(
                                 )
                             },
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.72f),
+                            color = SummaryTextMuted,
+                            fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -421,7 +439,7 @@ fun TrainingSummaryScreen(
                         onClick = { showAddExercisesSheet = true },
                         shape = RoundedCornerShape(999.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                            containerColor = SummaryPurpleButton,
                             contentColor = Color.White
                         )
                     ) {
@@ -559,18 +577,18 @@ fun TrainingSummaryScreen(
                         },
                         minLines = 6,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = Color.White
+                            color = Color(0xFF1E293B)
                         ),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
+                            focusedTextColor = Color(0xFF1E293B),
+                            unfocusedTextColor = Color(0xFF1E293B),
                             focusedBorderColor = SummaryBorder,
                             unfocusedBorderColor = SummaryDivider,
-                            focusedLabelColor = Color.White.copy(alpha = 0.90f),
-                            unfocusedLabelColor = Color.White.copy(alpha = 0.72f),
-                            cursorColor = Color.White,
-                            focusedContainerColor = SummaryCardInner,
-                            unfocusedContainerColor = SummaryCardInner
+                            focusedLabelColor = Color(0xFF64748B),
+                            unfocusedLabelColor = Color(0xFF64748B),
+                            cursorColor = Color(0xFF7B57D1),
+                            focusedContainerColor = Color(0xFFF7FAFF),
+                            unfocusedContainerColor = Color(0xFFF7FAFF)
                         )
                     )
                 }
@@ -649,10 +667,10 @@ fun TrainingSummaryScreen(
                             },
                             enabled = !state.isSaving,
                         shape = RoundedCornerShape(999.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = Color(0xFF2563EB).copy(alpha = 0.90f),
-                            contentColor = Color.White
-                        )
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = SummaryPrimaryButton,
+                                contentColor = Color.White
+                            )
                     ) {
                         Text(
                             text = if (state.isSaving)
@@ -1162,7 +1180,7 @@ private fun TrainingInfoCard(
         shape = RoundedCornerShape(24.dp),
         color = SummaryCard,
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
+        shadowElevation = 6.dp,
         border = BorderStroke(1.dp, SummaryBorder)
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -1171,8 +1189,8 @@ private fun TrainingInfoCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1184,14 +1202,14 @@ private fun TrainingInfoCard(
                     ) {
                         Text(
                             text = tr("פרטי האימון", "Training details"),
-                            style = MaterialTheme.typography.titleLarge.merge(rtlStyle),
+                            style = MaterialTheme.typography.titleMedium.merge(rtlStyle),
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
+                            color = SummaryTextDark,
                             textAlign = TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(2.dp))
 
                         Text(
                             text = validDateIso?.let { prettyDate(it) }
@@ -1199,18 +1217,19 @@ private fun TrainingInfoCard(
                                     "יש לבחור תאריך לסיכום האימון",
                                     "Choose a date for the training summary"
                                 ),
-                            style = MaterialTheme.typography.bodySmall.merge(rtlStyle),
-                            color = Color.White.copy(alpha = 0.75f),
+                            style = MaterialTheme.typography.labelLarge.merge(rtlStyle),
+                            color = SummaryTextMuted,
+                            fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
 
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(8.dp))
 
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(38.dp)
                             .background(
                                 brush = Brush.radialGradient(
                                     listOf(Color(0xFF8B5CF6), Color(0xFF312E81))
@@ -1223,7 +1242,7 @@ private fun TrainingInfoCard(
                             imageVector = Icons.Filled.FitnessCenter,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
@@ -1231,24 +1250,24 @@ private fun TrainingInfoCard(
                 FilledTonalButton(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(42.dp),
                     onClick = {
                         onOpenCalendar?.invoke()
                     },
                     shape = RoundedCornerShape(999.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                        containerColor = SummaryPurpleButton,
                         contentColor = Color.White
                     )
                 ) {
                     Icon(
                         imageVector = Icons.Filled.CalendarMonth,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(15.dp),
                         tint = Color.White
                     )
 
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
 
                     Text(
                         text = if (validDateIso == null) {
@@ -1262,7 +1281,8 @@ private fun TrainingInfoCard(
                                 "Change training date"
                             )
                         },
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.ExtraBold,
                         color = Color.White
                     )
                 }
@@ -1270,7 +1290,7 @@ private fun TrainingInfoCard(
                 if (validDateIso == null) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(16.dp),
                         color = SummaryCardInner
                     ) {
                         Text(
@@ -1278,23 +1298,24 @@ private fun TrainingInfoCard(
                                 "בחר תאריך בלוח האימונים החודשי כדי להתחיל למלא את סיכום האימון.",
                                 "Choose a date in the monthly training calendar to start filling out the training summary."
                             ),
-                            color = Color.White.copy(alpha = 0.86f),
+                            color = SummaryTextDark,
                             style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.ExtraBold,
                             textAlign = TextAlign.Right,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 16.dp)
+                                .padding(horizontal = 12.dp, vertical = 12.dp)
                         )
                     }
                 } else {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(14.dp),
                         color = SummaryCardInner
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                             horizontalAlignment = Alignment.End
                         ) {
                             PremiumInfoRow(
@@ -1324,12 +1345,17 @@ private fun TrainingInfoCard(
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
+                            color = Color(0xFFFFE4E6),
+                            border = BorderStroke(
+                                1.dp,
+                                Color(0xFFFDA4AF)
+                            )
                         ) {
                             Text(
                                 text = errorText,
-                                color = Color.White,
+                                color = Color(0xFF9F1239),
                                 style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Right,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1612,21 +1638,22 @@ private fun PremiumInfoRow(
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = horizontalEnd,
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+            verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall.merge(textDirectionStyle),
-                color = Color(0xFFBFDBFE),
+                color = SummaryTextMuted,
+                fontWeight = FontWeight.Bold,
                 textAlign = textAlignPrimary,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodyMedium.merge(textDirectionStyle),
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodySmall.merge(textDirectionStyle),
+                color = SummaryTextDark,
+                fontWeight = FontWeight.ExtraBold,
                 textAlign = textAlignPrimary,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1766,9 +1793,8 @@ private fun SelectedExerciseEditor(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = horizontalEnd
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = item.name,
