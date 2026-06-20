@@ -734,6 +734,40 @@ fun HomeScreen(
                         return out.distinct()
                     }
 
+                    fun mapListFromDoc(
+                        doc: com.google.firebase.firestore.DocumentSnapshot,
+                        vararg keys: String
+                    ): List<Map<String, String>> {
+                        val out = mutableListOf<Map<String, String>>()
+
+                        keys.forEach { key ->
+                            val value = doc.get(key)
+
+                            if (value is List<*>) {
+                                value.forEach { item ->
+                                    val map = item as? Map<*, *> ?: return@forEach
+
+                                    val cleanMap = map.mapNotNull { entry ->
+                                        val k = entry.key?.toString()?.trim().orEmpty()
+                                        val v = entry.value?.toString()?.trim().orEmpty()
+
+                                        if (k.isBlank() || v.isBlank()) {
+                                            null
+                                        } else {
+                                            k to v
+                                        }
+                                    }.toMap()
+
+                                    if (cleanMap.isNotEmpty()) {
+                                        out += cleanMap
+                                    }
+                                }
+                            }
+                        }
+
+                        return out
+                    }
+
                     fun firstStringFromDoc(
                         doc: com.google.firebase.firestore.DocumentSnapshot,
                         vararg keys: String
@@ -794,6 +828,60 @@ fun HomeScreen(
 
                         if (uid.isNotBlank() && uidTargets.any { it.trim() == uid }) {
                             return true
+                        }
+
+                        val recipientMaps = mapListFromDoc(
+                            doc,
+                            "targetRecipients",
+                            "recipients",
+                            "selectedRecipients"
+                        )
+
+                        if (recipientMaps.isNotEmpty()) {
+                            val mapUids = recipientMaps
+                                .mapNotNull { it["uid"]?.trim()?.takeIf { value -> value.isNotBlank() } }
+
+                            if (uid.isNotBlank() && mapUids.any { it == uid }) {
+                                return true
+                            }
+
+                            val mapEmails = recipientMaps
+                                .mapNotNull { it["email"]?.trim()?.takeIf { value -> value.isNotBlank() } }
+
+                            if (
+                                currentEmail.isNotBlank() &&
+                                mapEmails.any { it.equals(currentEmail, ignoreCase = true) }
+                            ) {
+                                return true
+                            }
+
+                            val mapPhones = recipientMaps
+                                .mapNotNull { it["phone"]?.trim()?.takeIf { value -> value.isNotBlank() } }
+                                .map { normalizePhone(it) }
+                                .filter { it.isNotBlank() }
+
+                            if (
+                                currentPhones.isNotEmpty() &&
+                                mapPhones.any { target ->
+                                    currentPhones.any { current -> current == target }
+                                }
+                            ) {
+                                return true
+                            }
+
+                            val mapNames = recipientMaps
+                                .mapNotNull { it["name"]?.trim()?.takeIf { value -> value.isNotBlank() } }
+
+                            if (
+                                currentNames.isNotEmpty() &&
+                                mapNames.any { target ->
+                                    currentNames.any { current ->
+                                        current.trim().equals(target.trim(), ignoreCase = true)
+                                    }
+                                }
+                            ) {
+                                return true
+                            }
                         }
 
                         val emailTargets = stringListFromDoc(

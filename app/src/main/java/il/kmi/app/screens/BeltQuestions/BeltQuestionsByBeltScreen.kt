@@ -1238,7 +1238,7 @@ private fun TopicsCardForBelt(
     }
 
     var expandedTopic by rememberSaveable(belt.id) { mutableStateOf<String?>(null) }
-    val rowMinHeight = 60.dp
+    val rowMinHeight = 54.dp
 
     // ✅ מגדיל את גובה כרטיסיית הנושאים,
     // כדי שתרד נמוך יותר לכיוון העיגול המרכזי.
@@ -1332,17 +1332,26 @@ private fun TopicsCardForBelt(
 
                         val countsLine = if (isEnglish) {
                             if (subCount > 0) {
-                                "$subCount sub-topics\n$itemCount exercises"
+                                "$subCount sub-topics · $itemCount exercises"
                             } else {
                                 "$itemCount exercises"
                             }
                         } else {
                             if (subCount > 0) {
-                                "$subCount תתי נושאים\n$itemCount תרגילים"
+                                "\u200F$subCount\u00A0תתי נושאים · $itemCount\u00A0תרגילים\u200F"
                             } else {
                                 "$itemCount תרגילים"
                             }
                         }
+
+                        val isCombinedCountText =
+                            subCount > 0
+
+                        val topicTitleFontSize = 10.8.sp
+                        val topicTitleLineHeight = 12.8.sp
+
+                        val topicCountFontSize = 7.8.sp
+                        val topicCountLineHeight = 9.2.sp
 
                         val isExpanded = expandedTopic == title
                         val isDefenseTopic = title.trim().contains("הגנות")
@@ -1364,7 +1373,7 @@ private fun TopicsCardForBelt(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = rowMinHeight)
-                                .padding(horizontal = 10.dp, vertical = 3.dp)
+                                .padding(horizontal = 10.dp, vertical = 1.dp)
                                 .clickable {
                                     clickSound()
                                     haptic(true)
@@ -1393,7 +1402,7 @@ private fun TopicsCardForBelt(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    .padding(horizontal = 7.dp, vertical = 4.dp),
                                 horizontalAlignment = horizontalByLang
                             ) {
                                 val parentLocked =
@@ -1416,13 +1425,14 @@ private fun TopicsCardForBelt(
                                                 .background(floatingAccent)
                                         )
 
-                                        Spacer(Modifier.width(8.dp))
+                                        Spacer(Modifier.width(5.dp))
 
                                         if (topicImageRes != null) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(42.dp)
-                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .width(38.dp)
+                                                    .height(31.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
                                             ) {
                                                 Image(
                                                     painter = painterResource(id = topicImageRes),
@@ -1432,7 +1442,7 @@ private fun TopicsCardForBelt(
                                                 )
                                             }
 
-                                            Spacer(Modifier.width(10.dp))
+                                            Spacer(Modifier.width(6.dp))
                                         }
 
                                         Column(
@@ -1441,7 +1451,10 @@ private fun TopicsCardForBelt(
                                         ) {
                                             Text(
                                                 text = displayTitle,
-                                                style = MaterialTheme.typography.titleSmall,
+                                                style = MaterialTheme.typography.titleSmall.copy(
+                                                    fontSize = topicTitleFontSize,
+                                                    lineHeight = topicTitleLineHeight
+                                                ),
                                                 fontWeight = FontWeight.ExtraBold,
                                                 color = floatingTitleColor,
                                                 textAlign = titleTextAlignByLang,
@@ -1450,29 +1463,34 @@ private fun TopicsCardForBelt(
                                                 modifier = Modifier.fillMaxWidth()
                                             )
 
-                                            Spacer(Modifier.height(2.dp))
+                                            Spacer(Modifier.height(1.dp))
 
                                             Text(
                                                 text = countsLine,
-                                                style = MaterialTheme.typography.labelSmall,
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontSize = topicCountFontSize,
+                                                    lineHeight = topicCountLineHeight
+                                                ),
+                                                fontWeight = FontWeight.ExtraBold,
                                                 color = floatingSubColor,
                                                 textAlign = titleTextAlignByLang,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Clip,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                         }
 
                                         if (parentLocked) {
-                                            Spacer(Modifier.width(8.dp))
+                                            Spacer(Modifier.width(5.dp))
 
                                             PremiumPulsingLockBadge(
+                                                modifier = Modifier.size(16.dp),
                                                 isDarkTheme = isDarkTheme
                                             )
                                         }
 
                                         if (hasSubs) {
-                                            Spacer(Modifier.width(8.dp))
+                                            Spacer(Modifier.width(5.dp))
 
                                             Icon(
                                                 imageVector = if (isExpanded) {
@@ -1481,15 +1499,16 @@ private fun TopicsCardForBelt(
                                                     Icons.Filled.KeyboardArrowDown
                                                 },
                                                 contentDescription = null,
-                                                tint = belt.color.copy(alpha = 0.85f)
+                                                tint = belt.color.copy(alpha = 0.85f),
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         } else if (parentLocked) {
                                             // ✅ כאשר נושא נעול בלי תתי־נושאים, למשל שחרורים בחגורה חומה,
                                             // שומרים מקום של חץ כדי שהמנעול יהיה מיושר מתחת למנעול של הגנות.
-                                            Spacer(Modifier.width(8.dp))
+                                            Spacer(Modifier.width(5.dp))
 
                                             Box(
-                                                modifier = Modifier.size(24.dp)
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     }
@@ -1590,7 +1609,7 @@ private fun TopicsCardForBelt(
                                                                 fontSize = 12.sp,
                                                                 lineHeight = 14.sp
                                                             ),
-                                                            fontWeight = FontWeight.Bold,
+                                                            fontWeight = FontWeight.ExtraBold,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis
                                                         )

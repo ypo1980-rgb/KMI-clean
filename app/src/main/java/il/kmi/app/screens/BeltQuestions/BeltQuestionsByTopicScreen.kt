@@ -2,7 +2,6 @@ package il.kmi.app.screens.BeltQuestions
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -77,8 +76,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
 //==================================================================
-
-private const val KMI_TOPIC_LOG = "KMI_TOPIC_CLICK"
 
 // ✅ FIX: פונקציית נרמול אחת בלבד, ברמת קובץ (נראית לכולם, אין forward-ref ואין אמביגיוטי)
 private fun normText(raw: String): String =
@@ -597,10 +594,6 @@ fun BeltQuestionsByTopicScreen(
                     accessMode = accessMode,
                     hasAccess = hasAccess,
                     onOpenSubscription = {
-                        Log.d(
-                            KMI_TOPIC_LOG,
-                            "SUBSCRIPTION_OPEN_FROM TopicsBySubjectCard wrapper | hasAccess=$hasAccess | accessMode=$accessMode"
-                        )
                         onOpenSubscription()
                     },
                     onSubjectClick = { belt, subject ->
@@ -615,42 +608,22 @@ fun BeltQuestionsByTopicScreen(
 
                         val cleanSubjectId = subjectId.trim()
 
-                        Log.d(
-                            KMI_TOPIC_LOG,
-                            "OPEN_HARD_ROUTE_REQUEST | belt=${belt.id} | subjectId=$cleanSubjectId | hasAccess=$hasAccess | accessMode=$accessMode"
-                        )
-
                         when (cleanSubjectId) {
                             "def_internal",
                             "def_external",
                             "releases_hugs",
                             "kicks_hard" -> {
-                                Log.d(
-                                    KMI_TOPIC_LOG,
-                                    "OPEN_HARD_ROUTE_LOCAL | subjectId=$cleanSubjectId"
-                                )
-
                                 pendingHardSubjectId = cleanSubjectId
                                 localHardSubjectId = null
                                 localHardSectionId = null
                             }
 
                             else -> {
-                                Log.d(
-                                    KMI_TOPIC_LOG,
-                                    "OPEN_HARD_ROUTE_EXTERNAL | subjectId=$cleanSubjectId"
-                                )
-
                                 onOpenHardSubjectRoute(belt, cleanSubjectId)
                             }
                         }
                     },
                     onOpenKicksHardLocal = {
-                        Log.d(
-                            KMI_TOPIC_LOG,
-                            "OPEN_KICKS_HARD_LOCAL_DIRECT | set pendingHardSubjectId=kicks_hard"
-                        )
-
                         effectiveBelt = Belt.GREEN
                         pendingHardSubjectId = "kicks_hard"
                         localHardSubjectId = null
@@ -996,6 +969,13 @@ private fun SubjectRootCardPremium(
     val titleLineHeight = if (isRollsBreakfallsCard) 11.4.sp else 12.8.sp
     val titleMaxLines = if (isRollsBreakfallsCard) 1 else 2
 
+    val isCombinedCountText =
+        countText.contains("תתי נושאים") ||
+                countText.contains("sub-topics", ignoreCase = true)
+
+    val countFontSize = if (isCombinedCountText) 8.6.sp else 10.sp
+    val countLineHeight = if (isCombinedCountText) 10.sp else 12.sp
+
     @Composable
     fun SubjectVisual() {
         if (imageRes != null) {
@@ -1033,7 +1013,9 @@ private fun SubjectRootCardPremium(
         color = Color.Transparent,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
     ) {
         Box(
             modifier = Modifier
@@ -1132,15 +1114,15 @@ private fun SubjectRootCardPremium(
                             Text(
                                 text = countText,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                    lineHeight = 12.sp
+                                    fontSize = countFontSize,
+                                    lineHeight = countLineHeight
                                 ),
                                 fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Start,
                                 color = countColor,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Clip
                             )
                         }
                     } else {
@@ -1219,15 +1201,15 @@ private fun SubjectRootCardPremium(
                             Text(
                                 text = countText,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                    lineHeight = 12.sp
+                                    fontSize = countFontSize,
+                                    lineHeight = countLineHeight
                                 ),
                                 fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Right,
                                 color = countColor,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Clip
                             )
                         }
 
@@ -1348,6 +1330,13 @@ internal fun TopicsBySubjectCard(
     fun formatCount(n: Int): String =
         if (isEnglish) "exercises $n" else "$n תרגילים"
 
+    fun formatSubTopicsAndExercises(subTopics: Int, exercises: Int): String =
+        if (isEnglish) {
+            "$subTopics sub-topics · $exercises exercises"
+        } else {
+            "\u200F$subTopics\u00A0תתי נושאים · $exercises\u00A0תרגילים\u200F"
+        }
+
     fun translateCardCountText(raw: String): String {
         if (!isEnglish) return raw
 
@@ -1358,7 +1347,8 @@ internal fun TopicsBySubjectCard(
 
     fun countTextFromSubTopicTotalsOrFallback(
         counts: Map<String, Int>,
-        fallback: String
+        fallback: String,
+        subTopicsCount: Int
     ): String {
         val totalExercises = counts
             .filterKeys { it.trim().isNotBlank() }
@@ -1367,7 +1357,11 @@ internal fun TopicsBySubjectCard(
             .sum()
 
         if (totalExercises > 0) {
-            return formatCount(totalExercises)
+            return if (subTopicsCount > 0) {
+                formatSubTopicsAndExercises(subTopicsCount, totalExercises)
+            } else {
+                formatCount(totalExercises)
+            }
         }
 
         val fallbackExerciseCount = Regex("""\d+""")
@@ -1376,7 +1370,11 @@ internal fun TopicsBySubjectCard(
             .lastOrNull()
             ?: 0
 
-        return formatCount(fallbackExerciseCount)
+        return if (subTopicsCount > 0 && fallbackExerciseCount > 0) {
+            formatSubTopicsAndExercises(subTopicsCount, fallbackExerciseCount)
+        } else {
+            formatCount(fallbackExerciseCount)
+        }
     }
 
     fun normalizeCountPart(value: String): String =
@@ -1545,7 +1543,11 @@ internal fun TopicsBySubjectCard(
             return translateCardCountText(card.countText)
         }
 
-        return formatCount(finalItemCount)
+        return if (finalSubTopicCount > 0) {
+            formatSubTopicsAndExercises(finalSubTopicCount, finalItemCount)
+        } else {
+            formatCount(finalItemCount)
+        }
     }
 
     fun openSubjectSmart(subject: SubjectTopic) {
@@ -1762,7 +1764,8 @@ internal fun TopicsBySubjectCard(
                 title = if (hasAccess) baseTitle else "$baseTitle 🔒",
                 countText = countTextFromSubTopicTotalsOrFallback(
                     counts = releaseCounts,
-                    fallback = it.countText
+                    fallback = it.countText,
+                    subTopicsCount = releaseCounts.size
                 )
             )
         }
@@ -1797,7 +1800,8 @@ internal fun TopicsBySubjectCard(
             title = if (hasAccess) baseTitle else "$baseTitle 🔒",
             countText = countTextFromSubTopicTotalsOrFallback(
                 counts = defenseDialogCountsMap,
-                fallback = base.countText
+                fallback = base.countText,
+                subTopicsCount = defenseDialogCountsMap.size
             )
         )
     }
@@ -1820,7 +1824,8 @@ internal fun TopicsBySubjectCard(
             ),
             countText = countTextFromSubTopicTotalsOrFallback(
                 counts = handsPickCounts,
-                fallback = base.countText
+                fallback = base.countText,
+                subTopicsCount = handsPickCounts.size
             )
         )
     }
@@ -1990,22 +1995,7 @@ internal fun TopicsBySubjectCard(
                                             }
 
                                             if (pickedForLogic == "הגנות נגד בעיטות") {
-                                                Log.d(
-                                                    KMI_TOPIC_LOG,
-                                                    "KICK_DEFENSE_CLICK_DIRECT | pickedDisplay=$pickedDisplay | pickedClean=$pickedClean | pickedForLogic=$pickedForLogic | hasAccess=$hasAccess | accessMode=$accessMode"
-                                                )
-
-                                                Log.d(
-                                                    KMI_TOPIC_LOG,
-                                                    "KICK_DEFENSE_BEFORE_OPEN_HARD | belt=${currentBelt.id} | subjectId=kicks_hard"
-                                                )
-
                                                 onOpenKicksHardLocal()
-
-                                                Log.d(
-                                                    KMI_TOPIC_LOG,
-                                                    "KICK_DEFENSE_AFTER_OPEN_HARD"
-                                                )
                                             } else {
                                                 when (val decision =
                                                     SubjectTopicsUiLogic.resolveDefenseDialogPick(
@@ -2311,21 +2301,11 @@ internal fun TopicsBySubjectCard(
                                             pickedClean == "הגנות נגד בעיטות" ||
                                             pickedClean == "Defenses Against Kicks"
                                         ) {
-                                            Log.d(
-                                                KMI_TOPIC_LOG,
-                                                "KICK_DEFENSE_CLICK_DIALOG | picked=$picked | pickedClean=$pickedClean | hasAccess=$hasAccess | accessMode=$accessMode"
-                                            )
-
                                             onOpenHardSubjectRoute(
                                                 currentBelt,
                                                 "kicks_hard"
                                             )
                                         } else if (!hasAccess) {
-                                            Log.d(
-                                                KMI_TOPIC_LOG,
-                                                "SUBSCRIPTION_OPEN_FROM DefenseCategoryPickDialogModern | picked=$picked | pickedClean=$pickedClean | hasAccess=$hasAccess | accessMode=$accessMode"
-                                            )
-
                                             onOpenSubscription()
                                         } else {
                                             when (val decision =

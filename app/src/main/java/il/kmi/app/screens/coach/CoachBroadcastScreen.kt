@@ -552,11 +552,18 @@ fun CoachBroadcastScreen(
         val selectedGroupNames = effectiveGroupKeys.map { it.norm() }
 
         if (regionNorm.isBlank() || branchNames.isEmpty()) {
+            availableBranchGroups = emptyList()
+            availableBranchGroupCounts = emptyMap()
+            selectedTargetGroups = emptySet()
             isRecipientsLoading = false
             recipients = emptyList()
             return@LaunchedEffect
         }
 
+        // ✅ לא מאפסים כאן selectedTargetGroups.
+        // הסיבה: שינוי בחירת קבוצה מפעיל מחדש את LaunchedEffect,
+        // ואם נאפס כאן — הקבוצה לא תישאר מסומנת והמתאמנים לא ייטענו.
+        recipients = emptyList()
         isRecipientsLoading = true
 
         val branchCandidates = branchNames
@@ -1129,10 +1136,14 @@ fun CoachBroadcastScreen(
                                             onClick = {
                                                 branch = b
                                                 sendScope = "groups"
+
+                                                // ✅ ניקוי מיידי לפני טעינת קבוצות הסניף החדש
                                                 availableBranchGroups = emptyList()
                                                 availableBranchGroupCounts = emptyMap()
                                                 selectedTargetGroups = emptySet()
                                                 recipients = emptyList()
+                                                isRecipientsLoading = true
+
                                                 expandedBranch = false
                                             }
                                         )
@@ -1282,6 +1293,12 @@ fun CoachBroadcastScreen(
                                                             "בטל סימון לכולם",
                                                             "Unselect all"
                                                         )
+                                                    } else if (availableBranchGroups.size == 1) {
+                                                        coachBroadcastTr(
+                                                            isEnglish,
+                                                            "בחר את קבוצת ${availableBranchGroups.first()}",
+                                                            "Select ${availableBranchGroups.first()}"
+                                                        )
                                                     } else {
                                                         coachBroadcastTr(
                                                             isEnglish,
@@ -1302,8 +1319,14 @@ fun CoachBroadcastScreen(
                                                     text = if (areAllGroupsSelected) {
                                                         coachBroadcastTr(
                                                             isEnglish,
-                                                            "כל הקבוצות מסומנות",
-                                                            "All groups selected"
+                                                            "הקבוצה מסומנת לשליחה",
+                                                            "Group selected for sending"
+                                                        )
+                                                    } else if (availableBranchGroups.size == 1) {
+                                                        coachBroadcastTr(
+                                                            isEnglish,
+                                                            "לחץ כאן או סמן את הריבוע למטה",
+                                                            "Tap here or tick the checkbox below"
                                                         )
                                                     } else {
                                                         coachBroadcastTr(
@@ -1420,36 +1443,107 @@ fun CoachBroadcastScreen(
                                                 )
                                             }
 
-                                            Checkbox(
-                                                checked = isSelected,
-                                                onCheckedChange = { checked ->
-                                                    sendScope = "groups"
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (isSelected) {
+                                                        coachBroadcastTr(
+                                                            isEnglish,
+                                                            "נבחר",
+                                                            "Selected"
+                                                        )
+                                                    } else {
+                                                        coachBroadcastTr(
+                                                            isEnglish,
+                                                            "בחר",
+                                                            "Select"
+                                                        )
+                                                    },
+                                                    color = if (isSelected) {
+                                                        Color(0xFF16A34A)
+                                                    } else {
+                                                        Color(0xFFE0F2FE)
+                                                    },
+                                                    fontSize = 11.sp,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                                                    maxLines = 1
+                                                )
 
-                                                    selectedTargetGroups =
-                                                        if (checked) {
-                                                            selectedTargetGroups + groupName
+                                                Surface(
+                                                    modifier = Modifier
+                                                        .size(24.dp)
+                                                        .clickable {
+                                                            sendScope = "groups"
+
+                                                            selectedTargetGroups =
+                                                                if (isSelected) {
+                                                                    selectedTargetGroups - groupName
+                                                                } else {
+                                                                    selectedTargetGroups + groupName
+                                                                }
+
+                                                            recipients = emptyList()
+                                                            isRecipientsLoading = true
+                                                        },
+                                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                                                    color = if (isSelected) {
+                                                        Color(0xFF16A34A)
+                                                    } else {
+                                                        Color.Transparent
+                                                    },
+                                                    border = BorderStroke(
+                                                        width = 1.4.dp,
+                                                        color = if (isSelected) {
+                                                            Color(0xFF22C55E)
                                                         } else {
-                                                            selectedTargetGroups - groupName
+                                                            Color(0xFF64748B)
                                                         }
-
-                                                    recipients = emptyList()
-                                                    isRecipientsLoading = true
+                                                    )
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        if (isSelected) {
+                                                            Text(
+                                                                text = "✓",
+                                                                color = Color.White,
+                                                                fontSize = 16.sp,
+                                                                fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                                                                textAlign = TextAlign.Center
+                                                            )
+                                                        }
+                                                    }
                                                 }
-                                            )
+                                            }
                                         }
                                     }
                                 }
                             }
 
                             Text(
-                                text = coachBroadcastTr(
-                                    isEnglish,
-                                    "ההודעה תישלח רק למתאמנים בקבוצות שסומנו.",
-                                    "The message will be sent only to trainees in the selected groups."
-                                ),
-                                color = Color(0xFF5E6C80),
+                                text = if (selectedTargetGroups.isEmpty()) {
+                                    coachBroadcastTr(
+                                        isEnglish,
+                                        "סמן את הריבוע ליד הקבוצה כדי להציג את המתאמנים ולשלוח הודעה.",
+                                        "Tick the group checkbox to show trainees and send a message."
+                                    )
+                                } else {
+                                    coachBroadcastTr(
+                                        isEnglish,
+                                        "ההודעה תישלח רק למתאמנים בקבוצות שסומנו.",
+                                        "The message will be sent only to trainees in the selected groups."
+                                    )
+                                },
+                                color = if (selectedTargetGroups.isEmpty()) {
+                                    Color(0xFF0F5E9C)
+                                } else {
+                                    Color(0xFF5E6C80)
+                                },
                                 style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
                                 textAlign = screenTextAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
