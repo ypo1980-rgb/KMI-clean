@@ -209,11 +209,12 @@ fun NavGraphBuilder.attendanceNavGraph(
                 }
             },
             onHomeClick = {
-                val popped = nav.popBackStack()
-                if (!popped) {
-                    nav.navigate(Route.Home.route) {
-                        popUpTo(Route.Home.route) { inclusive = false }
-                        launchSingleTop = true
+                nav.navigate(Route.Home.route) {
+                    launchSingleTop = true
+                    restoreState = false
+
+                    popUpTo(nav.graph.startDestinationId) {
+                        inclusive = false
                     }
                 }
             }

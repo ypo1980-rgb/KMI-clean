@@ -242,6 +242,14 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         }
 
         val gateSp = getSharedPreferences(CoachGate.SP_NAME, Context.MODE_PRIVATE)
+        val settingsSp = getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+
+        settingsSp.edit()
+            .putBoolean("coach_broadcast_open_from_push", true)
+            .putBoolean("coach_broadcast_open_dialog", true)
+            .putString("coach_broadcast_push_id", broadcastId)
+            .putLong("coach_broadcast_push_received_at", System.currentTimeMillis())
+            .apply()
 
         val text = firstStringExtra(
             CoachGate.EXTRA_TEXT,
@@ -804,6 +812,12 @@ private fun AndroidAppRoot(
         )
     }
 
+    var hasPendingCoachBroadcastPush by remember {
+        mutableStateOf(
+            settingsPushSp.getBoolean("coach_broadcast_open_from_push", false)
+        )
+    }
+
     DisposableEffect(gateSp) {
         val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == CoachGate.SP_HAS_PENDING) {
@@ -825,6 +839,15 @@ private fun AndroidAppRoot(
                 hasPendingForumPush =
                     forumPushSp.getBoolean("has_pending_forum_push", false) ||
                             settingsPushSp.getBoolean("forum_open_from_push", false)
+            }
+
+            if (
+                key == "coach_broadcast_open_from_push" ||
+                key == "coach_broadcast_open_dialog" ||
+                key == "coach_broadcast_push_id"
+            ) {
+                hasPendingCoachBroadcastPush =
+                    settingsPushSp.getBoolean("coach_broadcast_open_from_push", false)
             }
         }
 
@@ -899,22 +922,26 @@ private fun AndroidAppRoot(
             when {
                 !initialLanguageSelected -> "language"
 
-                // ✅ לחיצה על התראת פורום צריכה להכניס ל-MainApp,
-                // כדי ש-MainNavHost יוכל לנווט לפורום.
-                hasPendingForumPush -> "main"
+                // ✅ לחיצה על התראת פורום / הודעת מאמן צריכה להכניס ל-MainApp
+                hasPendingForumPush || hasPendingCoachBroadcastPush -> "main"
 
                 else -> "intro"
             }
         )
     }
 
-    LaunchedEffect(hasPendingForumPush, initialLanguageSelected, currentScreen) {
+    LaunchedEffect(
+        hasPendingForumPush,
+        hasPendingCoachBroadcastPush,
+        initialLanguageSelected,
+        currentScreen
+    ) {
         if (
-            hasPendingForumPush &&
+            (hasPendingForumPush || hasPendingCoachBroadcastPush) &&
             initialLanguageSelected &&
             currentScreen != "main"
         ) {
-            startRoute = Route.Splash.route
+            startRoute = Route.Home.route
             currentScreen = "main"
         }
     }

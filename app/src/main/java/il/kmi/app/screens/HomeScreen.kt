@@ -370,6 +370,7 @@ fun HomeScreen(
             val userSp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
             val subsSp = remember { ctx.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE) }
             val legacySp = remember { ctx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
+            val settingsSp = remember { ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE) }
 
             var homeAccessRefreshTick by remember { mutableIntStateOf(0) }
 
@@ -483,6 +484,28 @@ fun HomeScreen(
                 mutableStateOf(false)
             }
 
+            var openCoachMessagesFromPush by remember {
+                mutableStateOf(settingsSp.getBoolean("coach_broadcast_open_dialog", false))
+            }
+
+            DisposableEffect(settingsSp) {
+                val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                    if (
+                        key == "coach_broadcast_open_dialog" ||
+                        key == "coach_broadcast_open_from_push"
+                    ) {
+                        openCoachMessagesFromPush =
+                            settingsSp.getBoolean("coach_broadcast_open_dialog", false)
+                    }
+                }
+
+                settingsSp.registerOnSharedPreferenceChangeListener(listener)
+
+                onDispose {
+                    settingsSp.unregisterOnSharedPreferenceChangeListener(listener)
+                }
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -589,6 +612,21 @@ fun HomeScreen(
                 }
 
                 // === KMI_MULTI_GROUPS (FIX) ===
+
+                LaunchedEffect(openCoachMessagesFromPush, recentCoachMessages.size) {
+                    if (openCoachMessagesFromPush && recentCoachMessages.isNotEmpty()) {
+                        showCoachMessagesDialog = true
+
+                        settingsSp.edit()
+                            .putBoolean("coach_broadcast_open_dialog", false)
+                            .putBoolean("coach_broadcast_open_from_push", false)
+                            .remove("coach_broadcast_push_id")
+                            .remove("coach_broadcast_push_received_at")
+                            .apply()
+
+                        openCoachMessagesFromPush = false
+                    }
+                }
 
                 // =========================
                 // ⭐ הודעות מהמאמן – Firestore
@@ -812,6 +850,18 @@ fun HomeScreen(
                             currentGroups.isEmpty()
                         ) {
                             return false
+                        }
+
+                        val authorUid = (
+                                doc.getString("authorUid")
+                                    ?: doc.getString("coachUid")
+                                    ?: doc.getString("senderUid")
+                                    ?: ""
+                                ).trim()
+
+                        // ✅ המאמן ששלח את ההודעה יראה אותה גם במסך הבית שלו
+                        if (uid.isNotBlank() && authorUid == uid) {
+                            return true
                         }
 
                         val uidTargets = stringListFromDoc(

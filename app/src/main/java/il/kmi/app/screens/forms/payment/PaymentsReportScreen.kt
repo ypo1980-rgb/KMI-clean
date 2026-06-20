@@ -579,7 +579,7 @@ fun PaymentsReportScreen(
                 title = title,
                 onHome = onClose,
                 showTopHome = false,
-                lockSearch = true,
+                lockSearch = false,
                 showBottomActions = true,
                 currentLang = if (isEnglish) "en" else "he"
             )

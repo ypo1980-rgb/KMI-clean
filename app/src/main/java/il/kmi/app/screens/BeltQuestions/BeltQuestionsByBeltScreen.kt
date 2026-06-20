@@ -1803,15 +1803,6 @@ private fun BeltArcPicker(
                 .size(size)
                 .alpha(alpha)
                 .zIndex(if (isCenter) 2f else 1f)
-                .then(
-                    if (isCenter) {
-                        Modifier.circleGlow(
-                            color = circleColor,
-                            radius = size * 0.95f,
-                            intensity = 0.58f
-                        )
-                    } else Modifier
-                )
 
             val gestures = Modifier
                 .pointerInput(belts, index, reverseSwipeDirection) {

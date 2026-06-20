@@ -333,7 +333,7 @@ private fun CoachTopStatsCard(
             horizontalAlignment = coachHorizontalAlignment(isEnglish)
         ) {
             Text(
-                text = coachTr(isEnglish, "רשימת המתאמנים", "Trainees list"),
+                text = coachTr(isEnglish, "רשימת מתאמנים", "Trainees list"),
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontSize = 17.sp,
                     lineHeight = 20.sp
@@ -1934,12 +1934,12 @@ fun CoachTraineesScreen(
                 val langManager = remember { AppLanguageManager(contextLang) }
 
                 KmiTopBar(
-                    title = coachTr(isEnglish, "רשימת המתאמנים", "Trainees list"),
+                    title = coachTr(isEnglish, "רשימת מתאמנים", "Trainees list"),
                     onOpenDrawer = onOpenDrawer,
                     onHome = onOpenHome,
                     showTopHome = false,
                     showRoleStatus = false,
-                    lockSearch = true,
+                    lockSearch = false,
                     showBottomActions = true,
                     currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
                     onToggleLanguage = {
@@ -2299,13 +2299,13 @@ fun CoachTraineesScreen(
                 title = if (showStatsSheet) {
                     coachTr(isEnglish, "סטטיסטיקת קבוצה", "Group statistics")
                 } else {
-                    coachTr(isEnglish, "רשימת המתאמנים", "Trainees list")
+                    coachTr(isEnglish, "רשימת מתאמנים", "Trainees list")
                 },
                 onOpenDrawer = onOpenDrawer,
                 onHome = onOpenHome,
                 showTopHome = false,
                 showRoleStatus = false,
-                lockSearch = true,
+                lockSearch = false,
                 showBottomActions = true,
                 currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
                 onToggleLanguage = {

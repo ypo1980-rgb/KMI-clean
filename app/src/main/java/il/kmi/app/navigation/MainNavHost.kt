@@ -780,7 +780,17 @@ fun MainNavHost(
             composable("coach/trainees") {
                 il.kmi.app.screens.coach.CoachTraineesScreen(
                     onBack = { nav.popBackStack() },
-                    onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() }
+                    onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
+                    onOpenHome = {
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = false
+
+                            popUpTo(nav.graph.startDestinationId) {
+                                inclusive = false
+                            }
+                        }
+                    }
                 )
             }
 
@@ -938,7 +948,19 @@ fun MainNavHost(
                 MyProfileScreen(
                     sp = userPrefsForEntry,
                     kmiPrefs = kmiPrefs,
-                    onClose = { nav.popBackStack() },
+                    onClose = {
+                        nav.popBackStack()
+                    },
+                    onHome = {
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = false
+
+                            popUpTo(nav.graph.startDestinationId) {
+                                inclusive = false
+                            }
+                        }
+                    },
                     onEditProfile = {
                         nav.navigate(PROFILE_EDIT_ROUTE) {
                             launchSingleTop = true
@@ -1091,7 +1113,14 @@ fun MainNavHost(
                 PaymentsReportScreen(
                     isEnglish = isEnglish,
                     onClose = {
-                        nav.popBackStack()
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = false
+
+                            popUpTo(nav.graph.startDestinationId) {
+                                inclusive = false
+                            }
+                        }
                     },
                     onSaveManualPayment = { traineeId, amount, method, notes ->
                         // כאן נחבר בהמשך ל-Firebase / Firestore

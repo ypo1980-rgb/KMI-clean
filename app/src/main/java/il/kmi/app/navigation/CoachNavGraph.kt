@@ -36,10 +36,12 @@ fun NavGraphBuilder.coachNavGraph(
             onBack = { nav.popBackStack() },
             onHome = {
                 nav.navigate(Route.Home.route) {
-                    popUpTo(Route.Home.route) {
-                        inclusive = false
-                    }
                     launchSingleTop = true
+                    restoreState = false
+
+                    popUpTo(Route.CoachBroadcast.route) {
+                        inclusive = true
+                    }
                 }
             },
 
@@ -121,11 +123,12 @@ fun NavGraphBuilder.coachNavGraph(
             },
 
             onHomeClick = {
-                val popped = nav.popBackStack()
-                if (!popped) {
-                    nav.navigate(Route.Home.route) {
-                        popUpTo(Route.Home.route) { inclusive = false }
-                        launchSingleTop = true
+                nav.navigate(Route.Home.route) {
+                    launchSingleTop = true
+                    restoreState = false
+
+                    popUpTo(nav.graph.startDestinationId) {
+                        inclusive = false
                     }
                 }
             }

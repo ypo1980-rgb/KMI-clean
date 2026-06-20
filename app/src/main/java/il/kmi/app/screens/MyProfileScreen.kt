@@ -23,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
@@ -408,6 +407,7 @@ fun MyProfileScreen(
     sp: SharedPreferences,
     kmiPrefs: KmiPrefs,
     onClose: () -> Unit,
+    onHome: () -> Unit = onClose,
     onEditProfile: () -> Unit = {}
 ) {
     // עזר: בוחר מחרוזת לא ריקה מהמקורות הנתונים
@@ -807,14 +807,15 @@ fun MyProfileScreen(
                         "My Profile"
                     ),
                     onHome = {
-                        runCatching { onClose() }.onFailure {
+                        runCatching { onHome() }.onFailure {
                             backDispatcher?.onBackPressed()
                         }
                     },
                     showTopHome = false,
                     showTopSearch = false,
                     showBottomActions = true,
-                    lockSearch = true,
+                    lockSearch = false,
+                    lockHome = false,
                     centerTitle = true,
                     currentLang = if (isEnglish) "en" else "he"
                 )

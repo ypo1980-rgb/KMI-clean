@@ -70,6 +70,7 @@ fun persistCoachBroadcast(
     message: String,
     targetUids: List<String>,
     targetRecipients: List<Map<String, String>> = emptyList(),
+    targetGroups: List<String> = emptyList(),
     onResult: (Boolean, Throwable?) -> Unit = { _, _ -> }
 ) {
     val auth = FirebaseAuth.getInstance()
@@ -87,6 +88,11 @@ fun persistCoachBroadcast(
     val cleanBranch = branch.trim()
     val cleanMessage = message.trim()
     val cleanTargetUids = targetUids
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+
+    val cleanTargetGroups = targetGroups
         .map { it.trim() }
         .filter { it.isNotBlank() }
         .distinct()
@@ -168,6 +174,14 @@ fun persistCoachBroadcast(
 
         "region" to cleanRegion,
         "branch" to cleanBranch,
+
+        // קבוצות יעד — חשוב למסך הבית ולסינון הודעות מאמן
+        "group" to cleanTargetGroups.joinToString(", "),
+        "groupKey" to cleanTargetGroups.joinToString(", "),
+        "groups" to cleanTargetGroups,
+        "targetGroup" to cleanTargetGroups.joinToString(", "),
+        "targetGroups" to cleanTargetGroups,
+        "selectedGroups" to cleanTargetGroups,
 
         // תאימות למסכים קיימים
         "text" to cleanMessage,
@@ -909,6 +923,7 @@ fun CoachBroadcastScreen(
             message = cleanMessage,
             targetUids = selectedUids,
             targetRecipients = selectedRecipientSnapshots,
+            targetGroups = effectiveGroupKeys,
             onResult = { ok, error ->
                 if (ok) {
                     isSending = false
@@ -983,7 +998,7 @@ fun CoachBroadcastScreen(
                     onHome = onHome,
                     onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
                     showRoleStatus = false,
-                    lockSearch = true,
+                    lockSearch = false,
 
                     // ✅ לא נועל את הבית בסרגל האייקונים התחתון.
                     // ✅ רק מסתיר את אייקון הבית הקטן ליד הכותרת העליונה.
