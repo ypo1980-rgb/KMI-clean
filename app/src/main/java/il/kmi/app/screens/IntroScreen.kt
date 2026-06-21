@@ -521,7 +521,38 @@ private fun IntroWelcomeImageScreen(
                     )
                 }
             } else {
-                Spacer(Modifier.height(beltRowHeight))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.78f)
+                        .height(beltRowHeight)
+                        .shadow(
+                            elevation = 4.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            clip = false
+                        )
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White.copy(alpha = 0.86f))
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isEnglish) {
+                            "Belt has not been updated yet"
+                        } else {
+                            "עדיין לא עודכנה חגורה"
+                        },
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = if (isCompactHeight) 13.sp else 15.sp,
+                            lineHeight = if (isCompactHeight) 15.sp else 17.sp,
+                            textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+                        ),
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF172033),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             Spacer(Modifier.weight(1.25f))

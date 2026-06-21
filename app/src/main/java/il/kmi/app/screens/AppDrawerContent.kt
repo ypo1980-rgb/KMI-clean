@@ -33,8 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -789,32 +787,9 @@ fun AppDrawerContent(
             // עטיפה ב־Box כדי שנוכל ליישר את החץ לתחתית מעל התוכן
             Box(Modifier.fillMaxSize()) {
 
-                AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn(animationSpec = tween(220)) +
-                            slideInHorizontally(
-                                initialOffsetX = { fullWidth ->
-                                    if (isEnglish) fullWidth else -fullWidth
-                                },
-                                animationSpec = tween(
-                                    durationMillis = 320,
-                                    easing = androidx.compose.animation.core.FastOutSlowInEasing
-                                )
-                            ),
-                    exit = fadeOut(animationSpec = tween(160)) +
-                            slideOutHorizontally(
-                                targetOffsetX = { fullWidth ->
-                                    if (isEnglish) fullWidth else -fullWidth
-                                },
-                                animationSpec = tween(
-                                    durationMillis = 240,
-                                    easing = androidx.compose.animation.core.FastOutSlowInEasing
-                                )
-                            )
+                Column(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
                         // ←—— כותרת + כפתור X קבועים מעל אזור הגלילה ——→
                         val topInset =
                             WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -1588,8 +1563,7 @@ fun AppDrawerContent(
                             )
                             Spacer(Modifier.height(8.dp))
                         } // end scroll Column
-                    } // end fixed header Column
-                } // end AnimatedVisibility
+                } // end drawer content Column
 
                 // ─────────────────────────────────────────────
                 // 📄💳 דיאלוג: טפסים ותשלומים

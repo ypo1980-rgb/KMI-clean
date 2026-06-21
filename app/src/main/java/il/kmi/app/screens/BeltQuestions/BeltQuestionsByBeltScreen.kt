@@ -1583,8 +1583,9 @@ private fun TopicsCardForBelt(
                                                         }
                                                         .padding(
                                                             horizontal = 8.dp,
-                                                            vertical = 6.dp
-                                                        ),
+                                                            vertical = 5.dp
+                                                        )
+                                                        .heightIn(min = 48.dp),
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Icon(
@@ -1606,11 +1607,11 @@ private fun TopicsCardForBelt(
                                                             textAlign = titleTextAlignByLang,
                                                             color = rowTitleColor,
                                                             style = MaterialTheme.typography.bodySmall.copy(
-                                                                fontSize = 12.sp,
-                                                                lineHeight = 14.sp
+                                                                fontSize = 10.2.sp,
+                                                                lineHeight = 11.8.sp
                                                             ),
                                                             fontWeight = FontWeight.ExtraBold,
-                                                            maxLines = 1,
+                                                            maxLines = 2,
                                                             overflow = TextOverflow.Ellipsis
                                                         )
 
@@ -1623,8 +1624,8 @@ private fun TopicsCardForBelt(
                                                                 textAlign = titleTextAlignByLang,
                                                                 color = belt.color.copy(alpha = 1f),
                                                                 style = MaterialTheme.typography.labelSmall.copy(
-                                                                    fontSize = 10.sp,
-                                                                    lineHeight = 12.sp
+                                                                    fontSize = 8.6.sp,
+                                                                    lineHeight = 10.sp
                                                                 ),
                                                                 fontWeight = FontWeight.Bold,
                                                                 maxLines = 1,

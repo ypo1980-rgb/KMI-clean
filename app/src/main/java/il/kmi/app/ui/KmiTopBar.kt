@@ -68,7 +68,6 @@ import kotlinx.coroutines.delay
 import androidx.core.view.doOnPreDraw
 import shareCurrentScreen
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions

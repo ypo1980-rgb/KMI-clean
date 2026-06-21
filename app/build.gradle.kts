@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "il.kmi.training"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 35
         versionCode = 156
         versionName = "1.0.15"
@@ -144,6 +144,9 @@ dependencies {
 
     // Material classic (optional)
     implementation("com.google.android.material:material:1.12.0")
+
+    // ✅ Google Places SDK - חיפוש מקומות / השלמה אוטומטית
+    implementation("com.google.android.libraries.places:places:4.3.1")
 
     // Coroutines ל־Firebase/Google Play Services (בשביל tasks.await())
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")

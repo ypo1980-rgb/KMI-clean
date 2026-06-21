@@ -1015,6 +1015,14 @@ private fun AndroidAppRoot(
             KmiStartupLoadingScreen(
                 isEnglish = isEnglish,
                 onFinished = {
+                    userSp.edit()
+                        .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                        .commit()
+
+                    sp.edit()
+                        .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                        .commit()
+
                     startRoute = Route.Home.route
                     currentScreen = "main"
                 }

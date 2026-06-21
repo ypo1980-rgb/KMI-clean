@@ -124,6 +124,21 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
     ) {
         val context = applicationContext
 
+        fun firstDataString(vararg keys: String): String {
+            return keys
+                .asSequence()
+                .map { key -> data[key].orEmpty().trim() }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+        }
+
+        val broadcastId = firstDataString(
+            "broadcastId",
+            "broadcast_id",
+            "coachBroadcastId",
+            "coach_broadcast_id"
+        )
+
         // יצירת ערוץ התראות (נדרש מ-Android 8+)
         createChannelIfNeeded()
 
@@ -151,9 +166,20 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
                 putExtra(key, value)
             }
 
-            data["broadcastId"]?.let { putExtra("broadcastId", it) }
-            data["branchId"]?.let { putExtra("branchId", it) }
-            data["groupKey"]?.let { putExtra("groupKey", it) }
+            if (broadcastId.isNotBlank()) {
+                putExtra("broadcastId", broadcastId)
+                putExtra("broadcast_id", broadcastId)
+                putExtra("coachBroadcastId", broadcastId)
+                putExtra(CoachGate.EXTRA_BROADCAST_ID, broadcastId)
+            }
+
+            firstDataString("branchId", "branch_id").takeIf { it.isNotBlank() }?.let {
+                putExtra("branchId", it)
+            }
+
+            firstDataString("groupKey", "group_key").takeIf { it.isNotBlank() }?.let {
+                putExtra("groupKey", it)
+            }
 
             // נתוני פורום — לשימוש עתידי בפתיחה ישירה לחדר/הודעה
             data["roomId"]?.let { putExtra("forumRoomId", it) }
@@ -161,40 +187,54 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
             data["messageId"]?.let { putExtra("forumMessageId", it) }
             data["senderId"]?.let { putExtra("forumSenderId", it) }
 
-            // ✅ אם זו הודעת מאמן – פותחים קודם "כרטיס הודעה" לפני מסך הכניסה
+            // ✅ אם זו הודעת מאמן – שומרים גם Intent וגם SharedPreferences
             val isCoachBroadcast =
-                type == "coach_broadcast" || data["broadcastId"]?.isNotBlank() == true
+                type == "coach_broadcast" || broadcastId.isNotBlank()
 
             if (isCoachBroadcast) {
                 putExtra(CoachGate.EXTRA_OPEN, true)
 
-                // נעדיף ID אם קיים (להמשך עתידי)
-                data["broadcastId"]?.let { putExtra(CoachGate.EXTRA_BROADCAST_ID, it) }
+                if (broadcastId.isNotBlank()) {
+                    putExtra(CoachGate.EXTRA_BROADCAST_ID, broadcastId)
+                }
 
-                // הטקסט שמוצג בכרטיס (ננסה כמה שדות נפוצים)
                 val gateText =
-                    data["text"]
-                        ?: data["body"]
-                        ?: data["message"]
-                        ?: data["content"]
-                        ?: body
+                    firstDataString("text", "body", "message", "content", "push_body")
+                        .ifBlank { body }
+
                 putExtra(CoachGate.EXTRA_TEXT, gateText)
 
-                // מי שלח (אם נשלח)
                 val gateFrom =
-                    data["coachName"]
-                        ?: data["coach_name"]
-                        ?: data["from"]
-                        ?: "המאמן"
+                    firstDataString("coachName", "coach_name", "from", "senderName", "sender_name")
+                        .ifBlank { "המאמן" }
+
                 putExtra(CoachGate.EXTRA_FROM, gateFrom)
 
-                // זמן (אם נשלח; אחרת נשים עכשיו)
                 val sentAtMillis =
-                    data["sentAt"]?.toLongOrNull()
-                        ?: data["createdAt"]?.toLongOrNull()
+                    firstDataString("sentAt", "createdAt", "createdAtMillis", "sentAtMillis")
+                        .toLongOrNull()
                         ?: System.currentTimeMillis()
 
                 putExtra(CoachGate.EXTRA_SENT_AT, sentAtMillis)
+
+                // ✅ שכבת ביטחון:
+                // גם אם ה־Intent לא ייקלט מסיבה כלשהי, האפליקציה כבר תדע שיש הודעת מאמן ממתינה.
+                context.getSharedPreferences(CoachGate.SP_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(CoachGate.SP_HAS_PENDING, true)
+                    .putString(CoachGate.SP_TEXT, gateText)
+                    .putString(CoachGate.SP_FROM, gateFrom)
+                    .putLong(CoachGate.SP_SENT_AT, sentAtMillis)
+                    .putString(CoachGate.SP_BROADCAST_ID, broadcastId)
+                    .apply()
+
+                context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("coach_broadcast_open_from_push", true)
+                    .putBoolean("coach_broadcast_open_dialog", true)
+                    .putString("coach_broadcast_push_id", broadcastId)
+                    .putLong("coach_broadcast_push_received_at", System.currentTimeMillis())
+                    .apply()
             }
         }
 

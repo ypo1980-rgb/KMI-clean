@@ -1,5 +1,9 @@
 package il.kmi.app.free_sessions.ui
 
+import android.content.Context
+import android.content.SharedPreferences
+import android.location.Geocoder
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
@@ -16,6 +20,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -25,6 +30,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -38,7 +45,10 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -73,14 +83,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.free_sessions.data.FreeSessionsRepository
 import il.kmi.shared.free_sessions.data.freeSessionsRepository
 import il.kmi.shared.free_sessions.model.FreeSession
 import il.kmi.shared.free_sessions.model.FreeSessionPart
 import il.kmi.shared.free_sessions.model.ParticipantState
+import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -98,9 +113,139 @@ import android.net.Uri
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.tasks.await
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.model.AutocompleteSessionToken
+import com.google.android.libraries.places.api.model.Place
+import com.google.android.libraries.places.api.net.FetchPlaceRequest
+import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
+import il.kmi.app.R
 
 
 //========================================================================
+
+private const val FREE_SESSIONS_DEBUG = "KMI_FREE_SESSIONS"
+
+private val KmiFreeBgTop = Color(0xFFF8FBFF)
+private val KmiFreeBgMid = Color(0xFFEAF4FF)
+private val KmiFreeBgBottom = Color(0xFF0EA5D7)
+private val KmiFreeCardColor = Color(0xFFF7FBFF)
+private val KmiFreeCardColorSoft = Color(0xFFFFFFFF)
+private val KmiFreeBorderColor = Color(0xFFBFD7EF)
+private val KmiFreeBorderColorStrong = Color(0xFF0EA5D7)
+private val KmiFreeTitleColor = Color(0xFF0F172A)
+private val KmiFreeTextColor = Color(0xFF111827)
+private val KmiFreeSubTextColor = Color(0xFF64748B)
+
+private data class FreeSessionPlaceSuggestion(
+    val name: String,
+    val address: String,
+    val lat: Double?,
+    val lng: Double?,
+    val placeId: String? = null
+)
+
+private fun readFreeSessionPrefsList(
+    sp: SharedPreferences,
+    vararg keys: String
+): List<String> {
+    val out = mutableListOf<String>()
+
+    keys.forEach { key ->
+        when (val value = sp.all[key]) {
+            is String -> {
+                val raw = value.trim()
+
+                if (raw.isBlank()) {
+                    // no-op
+                } else if (raw.startsWith("[")) {
+                    runCatching {
+                        val arr = org.json.JSONArray(raw)
+                        for (i in 0 until arr.length()) {
+                            arr.optString(i)
+                                .trim()
+                                .takeIf { it.isNotBlank() }
+                                ?.let { out += it }
+                        }
+                    }
+                } else {
+                    raw.split(',', ';', '|', '\n')
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .forEach { out += it }
+                }
+            }
+
+            is Set<*> -> {
+                value
+                    .mapNotNull { it?.toString()?.trim() }
+                    .filter { it.isNotBlank() }
+                    .forEach { out += it }
+            }
+        }
+    }
+
+    return out
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+private fun normalizeFreeSessionText(raw: String): String {
+    return raw.trim()
+        .replace('־', '-')
+        .replace('–', '-')
+        .replace('—', '-')
+        .replace(Regex("\\s+"), " ")
+        .lowercase(Locale("he", "IL"))
+}
+
+private fun fallbackGroupsForFreeSessionBranch(
+    allGroups: List<String>
+): List<String> {
+    return allGroups
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+private fun splitFreeSessionCsv(raw: String): List<String> {
+    return raw
+        .split(',', ';', '|', '\n')
+        .map { it.trim().trim('"') }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+private fun sanitizeFreeSessionGroupsForBranch(
+    branch: String,
+    groups: List<String>
+): List<String> {
+    // לא מבצעים כאן שום תיקון קשיח לפי שם סניף.
+    // הקבוצות חייבות להגיע ממיפוי אמיתי מהשרת:
+    // branchGroups / groupsByBranch / branchToGroups
+    // או ממסמך מתאמן שבו יש שיוך חד-משמעי של סניף וקבוצה.
+    return groups
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+private fun readFreeSessionCoachUid(sp: SharedPreferences): String {
+    return listOf(
+        sp.getString("coachUid", null),
+        sp.getString("coach_uid", null),
+        sp.getString("trainerUid", null),
+        sp.getString("trainer_uid", null),
+        sp.getString("instructorUid", null),
+        sp.getString("instructor_uid", null)
+    )
+        .map { it.orEmpty().trim() }
+        .firstOrNull { it.isNotBlank() }
+        .orEmpty()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,10 +261,580 @@ fun FreeSessionsScreen(
     val vm = remember { FreeSessionsViewModel(repo) }
     val ctx = LocalContext.current   // ✅ חובה לטוסטים
 
-    LaunchedEffect(branch, groupKey, currentUid, currentName) {
+    val langManager = remember(ctx) { AppLanguageManager(ctx) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val screenDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val screenTextAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val screenHorizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
+
+    val userSp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+    }
+
+    val availableBranches = remember(userSp, branch) {
+        (
+                readFreeSessionPrefsList(
+                    userSp,
+                    "active_branch",
+                    "branch",
+                    "branches",
+                    "branches_json",
+                    "selected_branches",
+                    "branch2",
+                    "branch3"
+                ) + listOf(branch)
+                )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    val availableGroups = remember(userSp, groupKey) {
+        (
+                readFreeSessionPrefsList(
+                    userSp,
+                    "active_group",
+                    "group",
+                    "groups",
+                    "groups_json",
+                    "selected_groups",
+                    "age_group",
+                    "age_groups"
+                ) + listOf(groupKey)
+                )
+            .map {
+                il.kmi.app.training.TrainingCatalog
+                    .normalizeGroupName(it)
+                    .ifBlank { it }
+            }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    var selectedBranch by rememberSaveable(availableBranches.joinToString("|")) {
+        mutableStateOf(
+            branch.takeIf { it.isNotBlank() }
+                ?: availableBranches.firstOrNull()
+                ?: ""
+        )
+    }
+
+    var serverGroupsByBranch by remember {
+        mutableStateOf<Map<String, List<String>>>(emptyMap())
+    }
+
+    var branchGroupsLoading by remember {
+        mutableStateOf(false)
+    }
+
+    var branchGroupsLoadedOnce by remember {
+        mutableStateOf(false)
+    }
+
+    var resolvedCoachUid by remember {
+        mutableStateOf(readFreeSessionCoachUid(userSp))
+    }
+
+    fun normalizedBranchKey(raw: String): String {
+        return normalizeFreeSessionText(raw)
+    }
+
+    LaunchedEffect(currentUid, availableBranches.joinToString("|")) {
+        if (currentUid.isBlank()) {
+            serverGroupsByBranch = emptyMap()
+            branchGroupsLoading = false
+            branchGroupsLoadedOnce = true
+
+            Log.d(
+                FREE_SESSIONS_DEBUG,
+                "groups_load_skip | reason=currentUid_blank"
+            )
+
+            return@LaunchedEffect
+        }
+
+        branchGroupsLoading = true
+        branchGroupsLoadedOnce = false
+
+        Log.d(
+            FREE_SESSIONS_DEBUG,
+            "groups_load_start | currentUid=$currentUid | availableBranches=${
+                availableBranches.joinToString(
+                    " | "
+                )
+            }"
+        )
+
+        val db = FirebaseFirestore.getInstance()
+
+        fun cleanGroups(rawGroups: List<String>): List<String> {
+            return rawGroups
+                .map {
+                    il.kmi.app.training.TrainingCatalog
+                        .normalizeGroupName(it)
+                        .ifBlank { it }
+                        .trim()
+                }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
+        fun groupsFromAny(value: Any?): List<String> {
+            return when (value) {
+                is String -> splitFreeSessionCsv(value)
+
+                is List<*> -> value
+                    .mapNotNull { it?.toString()?.trim() }
+                    .filter { it.isNotBlank() }
+
+                is Set<*> -> value
+                    .mapNotNull { it?.toString()?.trim() }
+                    .filter { it.isNotBlank() }
+
+                else -> emptyList()
+            }
+        }
+
+        fun branchesFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): List<String> {
+            val out = mutableListOf<String>()
+
+            listOf(
+                "active_branch",
+                "activeBranch",
+                "branch",
+                "branchName",
+                "branch_name",
+                "branches",
+                "selected_branches",
+                "branches_json"
+            ).forEach { key ->
+                when (val value = doc.get(key)) {
+                    is String -> {
+                        if (value.trim().startsWith("[")) {
+                            runCatching {
+                                val arr = org.json.JSONArray(value)
+                                for (i in 0 until arr.length()) {
+                                    arr.optString(i)
+                                        .trim()
+                                        .takeIf { it.isNotBlank() }
+                                        ?.let { out += it }
+                                }
+                            }
+                        } else {
+                            out += splitFreeSessionCsv(value)
+                        }
+                    }
+
+                    is List<*> -> {
+                        value.mapNotNull { it?.toString()?.trim() }
+                            .filter { it.isNotBlank() }
+                            .forEach { out += it }
+                    }
+
+                    is Set<*> -> {
+                        value.mapNotNull { it?.toString()?.trim() }
+                            .filter { it.isNotBlank() }
+                            .forEach { out += it }
+                    }
+                }
+            }
+
+            return out
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
+        fun groupsFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): List<String> {
+            val out = mutableListOf<String>()
+
+            listOf(
+                "active_group",
+                "activeGroup",
+                "group",
+                "groupKey",
+                "group_key",
+                "primaryGroup",
+                "groups",
+                "groups_json",
+                "selected_groups",
+                "age_group",
+                "age_groups"
+            ).forEach { key ->
+                when (val value = doc.get(key)) {
+                    is String -> {
+                        if (value.trim().startsWith("[")) {
+                            runCatching {
+                                val arr = org.json.JSONArray(value)
+                                for (i in 0 until arr.length()) {
+                                    arr.optString(i)
+                                        .trim()
+                                        .takeIf { it.isNotBlank() }
+                                        ?.let { out += it }
+                                }
+                            }
+                        } else {
+                            out += splitFreeSessionCsv(value)
+                        }
+                    }
+
+                    is List<*> -> {
+                        value.mapNotNull { it?.toString()?.trim() }
+                            .filter { it.isNotBlank() }
+                            .forEach { out += it }
+                    }
+
+                    is Set<*> -> {
+                        value.mapNotNull { it?.toString()?.trim() }
+                            .filter { it.isNotBlank() }
+                            .forEach { out += it }
+                    }
+                }
+            }
+
+            return cleanGroups(out)
+        }
+
+        fun mergeInto(
+            target: MutableMap<String, MutableSet<String>>,
+            branchName: String,
+            groups: List<String>
+        ) {
+            val cleanBranch = branchName.trim()
+
+            val cleanGroupsList = sanitizeFreeSessionGroupsForBranch(
+                branch = cleanBranch,
+                groups = cleanGroups(groups)
+            )
+
+            if (cleanBranch.isBlank() || cleanGroupsList.isEmpty()) return
+
+            val key = normalizedBranchKey(cleanBranch)
+            val set = target.getOrPut(key) { linkedSetOf() }
+            cleanGroupsList.forEach { set += it }
+        }
+
+        db.collection("users")
+            .document(currentUid)
+            .get()
+            .addOnSuccessListener { currentUserDoc ->
+
+                val docCoachUid = listOf(
+                    currentUserDoc.getString("coachUid"),
+                    currentUserDoc.getString("coach_uid"),
+                    currentUserDoc.getString("trainerUid"),
+                    currentUserDoc.getString("trainer_uid"),
+                    currentUserDoc.getString("instructorUid"),
+                    currentUserDoc.getString("instructor_uid")
+                )
+                    .map { it.orEmpty().trim() }
+                    .firstOrNull { it.isNotBlank() }
+                    .orEmpty()
+
+                val effectiveCoachUid = resolvedCoachUid
+                    .ifBlank { docCoachUid }
+                    .ifBlank { currentUid }
+
+                resolvedCoachUid = effectiveCoachUid
+
+                val directResult = linkedMapOf<String, MutableSet<String>>()
+                val coachDoc = currentUserDoc
+
+                fun readCoachMapField(vararg keys: String) {
+                    keys.forEach { key ->
+                        val value = coachDoc.get(key)
+                        val map = value as? Map<*, *> ?: return@forEach
+
+                        map.forEach { entry ->
+                            val branchName = entry.key?.toString()?.trim().orEmpty()
+                            val groups = groupsFromAny(entry.value)
+                            mergeInto(directResult, branchName, groups)
+                        }
+                    }
+                }
+
+                readCoachMapField(
+                    "branchGroups",
+                    "groupsByBranch",
+                    "branchToGroups",
+                    "branchesToGroups",
+                    "branch_groups"
+                )
+
+                val coachBranchesValue = coachDoc.get("branches")
+                if (coachBranchesValue is List<*>) {
+                    coachBranchesValue.forEach { item ->
+                        val map = item as? Map<*, *> ?: return@forEach
+
+                        val branchName = listOf(
+                            "name",
+                            "branch",
+                            "branchName",
+                            "branch_name",
+                            "title"
+                        )
+                            .mapNotNull { key -> map[key]?.toString()?.trim() }
+                            .firstOrNull { it.isNotBlank() }
+                            .orEmpty()
+
+                        val groups = listOf(
+                            "groups",
+                            "ageGroups",
+                            "age_groups",
+                            "groupKeys",
+                            "group_keys"
+                        )
+                            .flatMap { key -> groupsFromAny(map[key]) }
+
+                        mergeInto(directResult, branchName, groups)
+                    }
+                }
+
+                if (directResult.isNotEmpty()) {
+                    serverGroupsByBranch = directResult.mapValues { it.value.toList() }
+                    branchGroupsLoading = false
+                    branchGroupsLoadedOnce = true
+
+                    Log.d(
+                        FREE_SESSIONS_DEBUG,
+                        "groups_load_finish | source=coach_direct_fields | map=$serverGroupsByBranch"
+                    )
+
+                    return@addOnSuccessListener
+                }
+
+                fun loadTraineesByBranchesFallback() {
+                    db.collection("users")
+                        .limit(800)
+                        .get()
+                        .addOnSuccessListener { allUsersSnap ->
+
+                            Log.d(
+                                FREE_SESSIONS_DEBUG,
+                                "branches_fallback_start | usersCount=${allUsersSnap.size()} | availableBranches=${
+                                    availableBranches.joinToString(
+                                        " | "
+                                    )
+                                }"
+                            )
+
+                            val wantedBranches = availableBranches
+                                .map { normalizedBranchKey(it) }
+                                .filter { it.isNotBlank() }
+                                .toSet()
+
+                            val fromBranches = linkedMapOf<String, MutableSet<String>>()
+
+                            allUsersSnap.documents.forEach { userDoc ->
+                                val userBranches = branchesFromDoc(userDoc)
+                                val userGroups = groupsFromDoc(userDoc)
+
+                                val matchedBranches = userBranches.filter { userBranch ->
+                                    val cleanUserBranch = normalizedBranchKey(userBranch)
+
+                                    wantedBranches.any { wanted ->
+                                        cleanUserBranch == wanted ||
+                                                cleanUserBranch.contains(wanted) ||
+                                                wanted.contains(cleanUserBranch)
+                                    }
+                                }
+
+                                // חשוב:
+                                // אם למשתמש יש כמה סניפים וכמה קבוצות,
+                                // אין דרך לדעת איזו קבוצה שייכת לאיזה סניף.
+                                // לכן לא משייכים כדי לא לזהם את כל הסניפים.
+                                val isUnambiguous =
+                                    matchedBranches.size == 1 && userGroups.isNotEmpty()
+
+                                if (isUnambiguous) {
+                                    Log.d(
+                                        FREE_SESSIONS_DEBUG,
+                                        "branches_fallback_match | id=${userDoc.id} | branch=${matchedBranches.first()} | groups=${
+                                            userGroups.joinToString(
+                                                " | "
+                                            )
+                                        }"
+                                    )
+
+                                    mergeInto(
+                                        target = fromBranches,
+                                        branchName = matchedBranches.first(),
+                                        groups = userGroups
+                                    )
+                                } else if (matchedBranches.isNotEmpty() && userGroups.isNotEmpty()) {
+                                    Log.d(
+                                        FREE_SESSIONS_DEBUG,
+                                        "branches_fallback_skip_ambiguous | id=${userDoc.id} | branches=${
+                                            userBranches.joinToString(
+                                                " | "
+                                            )
+                                        } | matched=${matchedBranches.joinToString(" | ")} | groups=${
+                                            userGroups.joinToString(
+                                                " | "
+                                            )
+                                        }"
+                                    )
+                                }
+                            }
+
+                            serverGroupsByBranch = fromBranches.mapValues { it.value.toList() }
+                            branchGroupsLoading = false
+                            branchGroupsLoadedOnce = true
+
+                            Log.d(
+                                FREE_SESSIONS_DEBUG,
+                                "groups_load_finish | source=branches_fallback | map=$serverGroupsByBranch"
+                            )
+                        }
+                        .addOnFailureListener { error ->
+                            serverGroupsByBranch = emptyMap()
+                            branchGroupsLoading = false
+                            branchGroupsLoadedOnce = true
+
+                            Log.e(
+                                FREE_SESSIONS_DEBUG,
+                                "groups_load_failed | source=branches_fallback | message=${error.message.orEmpty()}",
+                                error
+                            )
+                        }
+                }
+
+                // ✅ fallback אמיתי מהשרת:
+                // אם במסמך המאמן אין מיפוי branch -> groups,
+                // בונים אותו מהמתאמנים שמשויכים למאמן.
+                fun loadTraineesByCoachField(
+                    fieldName: String,
+                    onEmpty: () -> Unit
+                ) {
+                    db.collection("users")
+                        .whereEqualTo(fieldName, effectiveCoachUid)
+                        .limit(400)
+                        .get()
+                        .addOnSuccessListener { traineesSnap ->
+
+                            Log.d(
+                                FREE_SESSIONS_DEBUG,
+                                "trainees_query_success | field=$fieldName | coachUid=$effectiveCoachUid | count=${traineesSnap.size()}"
+                            )
+
+                            if (traineesSnap.isEmpty) {
+                                onEmpty()
+                                return@addOnSuccessListener
+                            }
+
+                            val fromTrainees = linkedMapOf<String, MutableSet<String>>()
+
+                            traineesSnap.documents.forEach { traineeDoc ->
+                                val traineeBranches = branchesFromDoc(traineeDoc)
+                                val traineeGroups = groupsFromDoc(traineeDoc)
+
+                                Log.d(
+                                    FREE_SESSIONS_DEBUG,
+                                    "trainee_doc | id=${traineeDoc.id} | branches=${
+                                        traineeBranches.joinToString(
+                                            " | "
+                                        )
+                                    } | groups=${traineeGroups.joinToString(" | ")}"
+                                )
+
+                                traineeBranches.forEach { traineeBranch ->
+                                    mergeInto(
+                                        target = fromTrainees,
+                                        branchName = traineeBranch,
+                                        groups = traineeGroups
+                                    )
+                                }
+                            }
+
+                            serverGroupsByBranch = fromTrainees.mapValues { it.value.toList() }
+                            branchGroupsLoading = false
+                            branchGroupsLoadedOnce = true
+
+                            Log.d(
+                                FREE_SESSIONS_DEBUG,
+                                "groups_load_finish | source=trainees_$fieldName | map=$serverGroupsByBranch"
+                            )
+                        }
+                        .addOnFailureListener { error ->
+                            serverGroupsByBranch = emptyMap()
+                            branchGroupsLoading = false
+                            branchGroupsLoadedOnce = true
+
+                            Log.e(
+                                FREE_SESSIONS_DEBUG,
+                                "groups_load_failed | source=trainees_$fieldName | message=${error.message.orEmpty()}",
+                                error
+                            )
+                        }
+                }
+
+                loadTraineesByCoachField(
+                    fieldName = "coachUid",
+                    onEmpty = {
+                        loadTraineesByCoachField(
+                            fieldName = "coach_uid",
+                            onEmpty = {
+                                loadTraineesByBranchesFallback()
+                            }
+                        )
+                    }
+                )
+            }
+            .addOnFailureListener { error ->
+                serverGroupsByBranch = emptyMap()
+                branchGroupsLoading = false
+                branchGroupsLoadedOnce = true
+
+                Log.e(
+                    FREE_SESSIONS_DEBUG,
+                    "groups_load_failed | source=current_user_doc | message=${error.message.orEmpty()}",
+                    error
+                )
+            }
+    }
+
+    val groupsForSelectedBranch = remember(
+        selectedBranch,
+        serverGroupsByBranch,
+        branchGroupsLoading,
+        branchGroupsLoadedOnce
+    ) {
+        val rawGroups =
+            serverGroupsByBranch[normalizedBranchKey(selectedBranch)]
+                ?.takeIf { it.isNotEmpty() }
+                ?: emptyList()
+
+        sanitizeFreeSessionGroupsForBranch(
+            branch = selectedBranch,
+            groups = rawGroups
+        )
+    }
+
+    var selectedGroupKey by rememberSaveable(
+        availableGroups.joinToString("|"),
+        selectedBranch
+    ) {
+        mutableStateOf(
+            groupKey
+                .takeIf { it.isNotBlank() && it in groupsForSelectedBranch }
+                ?: groupsForSelectedBranch.firstOrNull()
+                ?: ""
+        )
+    }
+
+    LaunchedEffect(selectedBranch, groupsForSelectedBranch.joinToString("|")) {
+        if (selectedGroupKey !in groupsForSelectedBranch) {
+            selectedGroupKey = groupsForSelectedBranch.firstOrNull().orEmpty()
+        }
+    }
+
+    LaunchedEffect(selectedBranch, selectedGroupKey, currentUid, currentName) {
         vm.setContext(
-            branch = branch,
-            groupKey = groupKey,
+            branch = selectedBranch,
+            groupKey = selectedGroupKey,
             myUid = currentUid,
             myName = currentName
         )
@@ -130,7 +845,8 @@ fun FreeSessionsScreen(
     // ===== Create dialog =====
     var showCreate by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
-    var locationName by remember { mutableStateOf("") }
+    var locationQuery by remember { mutableStateOf("") }
+    var selectedPlace by remember { mutableStateOf<FreeSessionPlaceSuggestion?>(null) }
 
     // ברירת מחדל: עוד שעה
     var startsAt by remember { mutableLongStateOf(System.currentTimeMillis() + 60 * 60 * 1000L) }
@@ -142,7 +858,7 @@ fun FreeSessionsScreen(
     Scaffold(
         topBar = {
             KmiTopBar(
-                title = "אימונים חופשיים",
+                title = tr("אימונים חופשיים", "Free Sessions"),
                 showTopHome = false,
                 showTopSearch = false,
                 showBottomActions = true,
@@ -169,8 +885,7 @@ fun FreeSessionsScreen(
         contentWindowInsets = WindowInsets(0)
     ) { p ->
 
-        // ✅ חובה: RTL אמיתי לכל התוכן במסך (מסדר Row/Start/End/TopEnd וכו')
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        CompositionLocalProvider(LocalLayoutDirection provides screenDirection) {
 
             Box(
                 modifier = Modifier
@@ -178,10 +893,9 @@ fun FreeSessionsScreen(
                     .background(
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFF020617),
-                                Color(0xFF111827),
-                                Color(0xFF1D4ED8),
-                                Color(0xFF22D3EE)
+                                KmiFreeBgTop,
+                                KmiFreeBgMid,
+                                KmiFreeBgBottom
                             )
                         )
                     )
@@ -194,12 +908,24 @@ fun FreeSessionsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
 
-                    HeaderCard(branch = branch, groupKey = groupKey, count = sessions.size)
+                    HeaderCard(
+                        branch = selectedBranch,
+                        groupKey = selectedGroupKey,
+                        count = sessions.size,
+                        isEnglish = isEnglish
+                    )
 
                     if (sessions.isEmpty()) {
                         EmptyStateCard(
-                            title = "אין עדיין אימונים מתוכננים",
-                            subtitle = "אפשר ליצור אימון חדש ולשלוח הזמנה לכל המתאמנים בקבוצה."
+                            title = tr(
+                                "אין עדיין אימונים מתוכננים",
+                                "No free sessions planned yet"
+                            ),
+                            subtitle = tr(
+                                "אפשר ליצור אימון חדש ולשלוח הזמנה לכל המתאמנים בקבוצה.",
+                                "Create a new free session and invite the group."
+                            ),
+                            isEnglish = isEnglish
                         )
                     } else {
                         // ✅ NEW: Delete confirm dialog state
@@ -208,15 +934,16 @@ fun FreeSessionsScreen(
                         sessions.forEach { s ->
                             FreeSessionCard(
                                 session = s,
+                                isEnglish = isEnglish,
                                 onClick = { selected = s },
 
-                                // ✅ NEW: רק יוצר האימון רואה עריכה/מחיקה
+                                // ✅ רק יוצר האימון רואה עריכה/מחיקה
                                 canManage = (s.createdByUid == currentUid),
 
-                                // ✅ NEW: כרגע "עריכה" פשוט פותחת את ה-Details sheet
+                                // כרגע "עריכה" פשוט פותחת את ה-Details sheet
                                 onEdit = { selected = s },
 
-                                // ✅ NEW: דיאלוג אישור לפני מחיקה
+                                // דיאלוג אישור לפני מחיקה
                                 onDelete = { pendingDelete = s }
                             )
                         }
@@ -246,19 +973,24 @@ fun FreeSessionsScreen(
                                         scope.launch {
                                             val res = runCatching {
                                                 repo.deleteFreeSession(
-                                                    branch = branch,
-                                                    groupKey = groupKey,
+                                                    branch = selectedBranch,
+                                                    groupKey = selectedGroupKey,
                                                     sessionId = sid
                                                 )
                                             }
 
                                             if (res.isSuccess) {
-                                                Toast.makeText(ctx, "האימון נמחק ✅", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(
+                                                    ctx,
+                                                    "האימון נמחק ✅",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
                                                 pendingDelete = null
                                                 selected = null // אם במקרה פתוח שיט של אותו אימון
                                             } else {
                                                 val e = res.exceptionOrNull()
-                                                val msg = e?.message?.takeIf { it.isNotBlank() } ?: "מחיקת אימון נכשלה"
+                                                val msg = e?.message?.takeIf { it.isNotBlank() }
+                                                    ?: "מחיקת אימון נכשלה"
                                                 Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
                                                 pendingDelete = null
                                             }
@@ -299,10 +1031,9 @@ fun FreeSessionsScreen(
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
-                                    Color(0xFF07152E),
-                                    Color(0xFF0B1E48),
-                                    Color(0xFF103C89),
-                                    Color(0xFF18BDEB)
+                                    KmiFreeBorderColorStrong,
+                                    KmiFreeBorderColor,
+                                    KmiFreeBgTop
                                 )
                             )
                         )
@@ -311,7 +1042,7 @@ fun FreeSessionsScreen(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(33.dp),
-                        color = Color(0xFF061832).copy(alpha = 0.98f),
+                        color = KmiFreeBgMid.copy(alpha = 0.98f),
                         tonalElevation = 0.dp
                     ) {
                         val scroll = rememberScrollState()
@@ -319,11 +1050,9 @@ fun FreeSessionsScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .verticalScroll(scroll)
-                                .padding(horizontal = 18.dp, vertical = 18.dp)
-                                .padding(bottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()),
+                                .padding(horizontal = 18.dp, vertical = 18.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
-                            horizontalAlignment = Alignment.End
+                            horizontalAlignment = screenHorizontalEnd
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -331,27 +1060,32 @@ fun FreeSessionsScreen(
                             ) {
                                 Column(
                                     modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.End
+                                    horizontalAlignment = screenHorizontalEnd
                                 ) {
                                     Text(
-                                        text = "יצירת אימון חדש",
-                                        color = Color.White,
+                                        text = tr("יצירת אימון חדש", "Create New Session"),
+                                        color = KmiFreeTitleColor,
                                         fontWeight = FontWeight.Black,
-                                        fontSize = 26.sp,
-                                        lineHeight = 30.sp,
-                                        textAlign = TextAlign.Right,
+                                        fontSize = 22.sp,
+                                        lineHeight = 25.sp,
+                                        textAlign = screenTextAlign,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.fillMaxWidth()
                                     )
 
                                     Spacer(Modifier.height(4.dp))
 
                                     Text(
-                                        text = "בחר כותרת, מקום, תאריך ושעה לאימון החופשי",
-                                        color = Color(0xFFBFDBFE),
+                                        text = tr(
+                                            "בחר כותרת, מקום, תאריך ושעה לאימון החופשי",
+                                            "Choose a title, location, date and time for the free session"
+                                        ),
+                                        color = KmiFreeSubTextColor,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         lineHeight = 15.sp,
-                                        textAlign = TextAlign.Right,
+                                        textAlign = screenTextAlign,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
@@ -377,118 +1111,183 @@ fun FreeSessionsScreen(
                                 }
                             }
 
-                            Divider(color = Color.White.copy(alpha = 0.14f))
+                            Divider(color = KmiFreeBorderColor)
 
-                            PremiumCreateInputField(
-                                label = "כותרת",
-                                value = title,
-                                onValueChange = { title = it },
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                                keyboardActions = KeyboardActions(onNext = { })
-                            )
-
-                            PremiumCreateInputField(
-                                label = "מקום (אופציונלי)",
-                                value = locationName,
-                                onValueChange = { locationName = it },
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { })
-                            )
-
-                            PremiumDateTimeCard(
-                                startsAt = startsAt,
-                                onPick = { startsAt = it }
-                            )
-
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(22.dp),
-                                color = Color.White.copy(alpha = 0.08f),
-                                border = BorderStroke(
-                                    1.dp,
-                                    Color.White.copy(alpha = 0.13f)
-                                )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 560.dp)
+                                    .verticalScroll(scroll)
+                                    .padding(
+                                        bottom = WindowInsets.ime
+                                            .asPaddingValues()
+                                            .calculateBottomPadding() + 190.dp
+                                    ),
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                                horizontalAlignment = screenHorizontalEnd
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.Start,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    TextButton(
-                                        onClick = { showCreate = false }
-                                    ) {
-                                        Text(
-                                            text = "ביטול",
-                                            color = Color(0xFFBFDBFE),
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 16.sp
-                                        )
+
+                                PremiumBranchGroupSelector(
+                                    branches = availableBranches,
+                                    groups = groupsForSelectedBranch,
+                                    selectedBranch = selectedBranch,
+                                    selectedGroup = selectedGroupKey,
+                                    isEnglish = isEnglish,
+                                    isLoadingGroups = branchGroupsLoading && !branchGroupsLoadedOnce,
+                                    onBranchSelected = { selectedBranch = it },
+                                    onGroupSelected = { selectedGroupKey = it }
+                                )
+
+                                PremiumCreateInputField(
+                                    label = tr("כותרת", "Title"),
+                                    isEnglish = isEnglish,
+                                    value = title,
+                                    onValueChange = { title = it },
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                    keyboardActions = KeyboardActions(onNext = { })
+                                )
+
+                                WazeStyleLocationSearchField(
+                                    query = locationQuery,
+                                    selectedPlace = selectedPlace,
+                                    isEnglish = isEnglish,
+                                    branchHint = selectedBranch,
+                                    existingPlaces = sessions
+                                        .mapNotNull { it.locationName?.trim() }
+                                        .filter { it.isNotBlank() }
+                                        .distinct(),
+                                    onQueryChange = {
+                                        locationQuery = it
+                                        selectedPlace = null
+                                    },
+                                    onPlaceSelected = { place ->
+                                        selectedPlace = place
+                                        locationQuery = place.name.ifBlank { place.address }
                                     }
+                                )
 
-                                    Spacer(Modifier.width(10.dp))
+                                PremiumDateTimeCard(
+                                    startsAt = startsAt,
+                                    isEnglish = isEnglish,
+                                    onPick = { startsAt = it }
+                                )
 
-                                    Surface(
-                                        onClick = {
-                                            val cleanTitle = title.trim()
-
-                                            if (cleanTitle.isBlank()) {
-                                                Toast.makeText(ctx, "נא להזין כותרת", Toast.LENGTH_SHORT).show()
-                                                return@Surface
-                                            }
-
-                                            scope.launch {
-                                                val result = runCatching {
-                                                    repo.createFreeSession(
-                                                        branch = branch,
-                                                        groupKey = groupKey,
-                                                        title = cleanTitle,
-                                                        locationName = locationName.trim().ifBlank { null },
-                                                        lat = null,
-                                                        lng = null,
-                                                        startsAt = startsAt,
-                                                        createdByUid = currentUid,
-                                                        createdByName = currentName
-                                                    )
-                                                }
-
-                                                if (result.isSuccess) {
-                                                    title = ""
-                                                    locationName = ""
-                                                    startsAt = System.currentTimeMillis() + 60 * 60 * 1000L
-                                                    showCreate = false
-
-                                                    Toast
-                                                        .makeText(ctx, "האימון נוצר בהצלחה ✅", Toast.LENGTH_SHORT)
-                                                        .show()
-                                                } else {
-                                                    val e = result.exceptionOrNull()
-                                                    val msg = e?.message?.takeIf { it.isNotBlank() } ?: "יצירת אימון נכשלה"
-
-                                                    Toast
-                                                        .makeText(ctx, msg, Toast.LENGTH_LONG)
-                                                        .show()
-                                                }
-                                            }
-                                        },
-                                        shape = RoundedCornerShape(999.dp),
-                                        color = Color(0xFF22D3EE),
-                                        shadowElevation = 6.dp
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(22.dp),
+                                    color = KmiFreeCardColor.copy(alpha = 0.94f),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        KmiFreeBorderColor
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.Start,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Box(
-                                            modifier = Modifier.padding(
-                                                horizontal = 30.dp,
-                                                vertical = 11.dp
-                                            ),
-                                            contentAlignment = Alignment.Center
+                                        TextButton(
+                                            onClick = { showCreate = false }
                                         ) {
                                             Text(
-                                                text = "צור",
-                                                color = Color(0xFF04101F),
-                                                fontWeight = FontWeight.Black,
+                                                text = tr("ביטול", "Cancel"),
+                                                color = KmiFreeSubTextColor,
+                                                fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 16.sp
                                             )
+                                        }
+
+                                        Spacer(Modifier.width(10.dp))
+
+                                        Surface(
+                                            onClick = {
+                                                val cleanTitle = title.trim()
+
+                                                if (cleanTitle.isBlank()) {
+                                                    Toast.makeText(
+                                                        ctx,
+                                                        tr(
+                                                            "נא להזין כותרת",
+                                                            "Please enter a title"
+                                                        ),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                    return@Surface
+                                                }
+
+                                                scope.launch {
+                                                    val result = runCatching {
+                                                        repo.createFreeSession(
+                                                            branch = selectedBranch,
+                                                            groupKey = selectedGroupKey,
+                                                            title = cleanTitle,
+                                                            locationName = (
+                                                                    selectedPlace?.name
+                                                                        ?: locationQuery
+                                                                    )
+                                                                .trim()
+                                                                .ifBlank { null },
+                                                            lat = selectedPlace?.lat,
+                                                            lng = selectedPlace?.lng,
+                                                            startsAt = startsAt,
+                                                            createdByUid = currentUid,
+                                                            createdByName = currentName
+                                                        )
+                                                    }
+
+                                                    if (result.isSuccess) {
+                                                        title = ""
+                                                        locationQuery = ""
+                                                        selectedPlace = null
+                                                        startsAt =
+                                                            System.currentTimeMillis() + 60 * 60 * 1000L
+                                                        showCreate = false
+
+                                                        Toast
+                                                            .makeText(
+                                                                ctx,
+                                                                tr(
+                                                                    "האימון נוצר בהצלחה ✅",
+                                                                    "Session created successfully ✅"
+                                                                ),
+                                                                Toast.LENGTH_SHORT
+                                                            )
+                                                            .show()
+                                                    } else {
+                                                        val e = result.exceptionOrNull()
+                                                        val msg =
+                                                            e?.message?.takeIf { it.isNotBlank() }
+                                                                ?: tr(
+                                                                    "יצירת אימון נכשלה",
+                                                                    "Failed to create session"
+                                                                )
+
+                                                        Toast
+                                                            .makeText(ctx, msg, Toast.LENGTH_LONG)
+                                                            .show()
+                                                    }
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(999.dp),
+                                            color = Color(0xFF22D3EE),
+                                            shadowElevation = 6.dp
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.padding(
+                                                    horizontal = 30.dp,
+                                                    vertical = 11.dp
+                                                ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = tr("צור", "Create"),
+                                                    color = Color(0xFF04101F),
+                                                    fontWeight = FontWeight.Black,
+                                                    fontSize = 16.sp
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -509,9 +1308,10 @@ fun FreeSessionsScreen(
         ) {
             FreeSessionDetailsSheet(
                 repo = repo,
+                isEnglish = isEnglish,
                 session = session,
-                branch = branch,
-                groupKey = groupKey,
+                branch = selectedBranch,
+                groupKey = selectedGroupKey,
                 currentUid = currentUid,
                 currentName = currentName,
                 onClose = { selected = null }
@@ -526,50 +1326,55 @@ fun FreeSessionsScreen(
 private fun HeaderCard(
     branch: String,
     groupKey: String,
-    count: Int
+    count: Int,
+    isEnglish: Boolean
 ) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.08f),
+        color = KmiFreeCardColor,
         tonalElevation = 0.dp,
-        border = BorderStroke(1.dp, Color(0xFF1E3A8A))
+        border = BorderStroke(1.dp, KmiFreeBorderColor)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = Alignment.Start
+            horizontalAlignment = horizontal
         ) {
 
             Text(
-                text = "סניף: ${branch.trim()}",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Start,
+                text = "${tr("סניף", "Branch")}: ${branch.trim()}",
+                color = KmiFreeTextColor,
+                fontWeight = FontWeight.Black,
+                textAlign = align,
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
 
             Text(
-                text = "קבוצה: ${groupKey.trim()}",
-                color = Color(0xFFBFDBFE),
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Start,
+                text = "${tr("קבוצה", "Group")}: ${groupKey.trim()}",
+                color = KmiFreeSubTextColor,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = align,
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
 
-            Divider(color = Color(0xFF1F2937))
+            Divider(color = KmiFreeBorderColor)
 
             Text(
-                text = "אימונים עתידיים: $count",
-                color = Color(0xFFECFEFF),
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Start,
+                text = "${tr("אימונים עתידיים", "Upcoming sessions")}: $count",
+                color = KmiFreeTextColor,
+                fontWeight = FontWeight.Black,
+                textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -579,30 +1384,41 @@ private fun HeaderCard(
 @Composable
 private fun EmptyStateCard(
     title: String,
-    subtitle: String
+    subtitle: String,
+    isEnglish: Boolean
 ) {
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.08f),
-        tonalElevation = 0.dp
+        color = KmiFreeCardColor,
+        tonalElevation = 0.dp,
+        border = BorderStroke(1.dp, KmiFreeBorderColor)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            horizontalAlignment = Alignment.End
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = horizontal
         ) {
             Text(
                 text = title,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.End,
+                color = KmiFreeTextColor,
+                fontWeight = FontWeight.Black,
+                fontSize = 17.sp,
+                lineHeight = 22.sp,
+                textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
+
             Text(
                 text = subtitle,
-                color = Color(0xFFE5E7EB),
-                textAlign = TextAlign.End,
+                color = KmiFreeSubTextColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                lineHeight = 22.sp,
+                textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -612,32 +1428,36 @@ private fun EmptyStateCard(
 @Composable
 private fun PremiumCreateInputField(
     label: String,
+    isEnglish: Boolean,
     value: String,
     onValueChange: (String) -> Unit,
     keyboardOptions: KeyboardOptions,
     keyboardActions: KeyboardActions
 ) {
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(7.dp),
-        horizontalAlignment = Alignment.End
+        horizontalAlignment = horizontal
     ) {
         Text(
             text = label,
-            color = Color(0xFF67E8F9),
+            color = KmiFreeTitleColor,
             fontWeight = FontWeight.ExtraBold,
             fontSize = 14.sp,
-            textAlign = TextAlign.Right,
+            textAlign = align,
             modifier = Modifier.fillMaxWidth()
         )
 
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
-            color = Color.White.copy(alpha = 0.08f),
+            color = KmiFreeCardColorSoft.copy(alpha = 0.82f),
             border = BorderStroke(
                 1.dp,
-                Color.White.copy(alpha = 0.16f)
+                KmiFreeBorderColor
             ),
             tonalElevation = 0.dp
         ) {
@@ -649,28 +1469,28 @@ private fun PremiumCreateInputField(
                 keyboardOptions = keyboardOptions,
                 keyboardActions = keyboardActions,
                 textStyle = MaterialTheme.typography.titleMedium.copy(
-                    color = Color.White,
+                    color = KmiFreeTextColor,
                     fontWeight = FontWeight.ExtraBold,
-                    textAlign = TextAlign.Right
+                    textAlign = align
                 ),
                 placeholder = {
                     Text(
                         text = label,
-                        color = Color.White.copy(alpha = 0.48f),
-                        textAlign = TextAlign.Right,
+                        color = KmiFreeSubTextColor.copy(alpha = 0.78f),
+                        textAlign = align,
                         modifier = Modifier.fillMaxWidth()
                     )
                 },
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    cursorColor = Color(0xFF22D3EE),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedTextColor = KmiFreeTextColor,
+                    unfocusedTextColor = KmiFreeTextColor,
+                    cursorColor = KmiFreeBorderColorStrong,
                     focusedBorderColor = Color.Transparent,
                     unfocusedBorderColor = Color.Transparent,
-                    focusedLabelColor = Color(0xFF67E8F9),
-                    unfocusedLabelColor = Color(0xFF67E8F9)
+                    focusedLabelColor = KmiFreeTitleColor,
+                    unfocusedLabelColor = KmiFreeTitleColor
                 )
             )
         }
@@ -678,18 +1498,729 @@ private fun PremiumCreateInputField(
 }
 
 @Composable
-private fun PremiumDateTimeCard(
-    startsAt: Long,
-    onPick: (Long) -> Unit
+private fun PremiumBranchGroupSelector(
+    branches: List<String>,
+    groups: List<String>,
+    selectedBranch: String,
+    selectedGroup: String,
+    isEnglish: Boolean,
+    isLoadingGroups: Boolean,
+    onBranchSelected: (String) -> Unit,
+    onGroupSelected: (String) -> Unit
 ) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+
+    if (branches.size <= 1 && groups.size <= 1 && groups.isNotEmpty()) {
+        return
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.08f),
+        color = KmiFreeCardColor.copy(alpha = 0.94f),
+        border = BorderStroke(
+            1.dp,
+            KmiFreeBorderColor
+        ),
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = horizontal
+        ) {
+            if (branches.size > 1) {
+                PremiumComboPicker(
+                    title = tr("בחר סניף", "Choose branch"),
+                    values = branches,
+                    selected = selectedBranch,
+                    isEnglish = isEnglish,
+                    onSelected = onBranchSelected
+                )
+            }
+
+            if (groups.isEmpty()) {
+                Text(
+                    text = if (isLoadingGroups) {
+                        tr(
+                            "טוען קבוצות לפי הסניף שנבחר...",
+                            "Loading groups for the selected branch..."
+                        )
+                    } else {
+                        tr(
+                            "לא נמצא שיוך קבוצות מדויק לסניף הזה",
+                            "No exact group mapping was found for this branch"
+                        )
+                    },
+                    color = KmiFreeSubTextColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                    maxLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            if (groups.size > 1) {
+                PremiumComboPicker(
+                    title = tr("בחר קבוצה", "Choose group"),
+                    values = groups,
+                    selected = selectedGroup,
+                    isEnglish = isEnglish,
+                    onSelected = onGroupSelected
+                )
+            } else if (groups.size == 1) {
+                Text(
+                    text = "${tr("קבוצה", "Group")}: ${groups.first()}",
+                    color = KmiFreeTitleColor,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.sp,
+                    lineHeight = 15.sp,
+                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PremiumComboPicker(
+    title: String,
+    values: List<String>,
+    selected: String,
+    isEnglish: Boolean,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+        horizontalAlignment = horizontal
+    ) {
+        Text(
+            text = title,
+            color = KmiFreeTitleColor,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 12.sp,
+            lineHeight = 14.sp,
+            textAlign = align,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = selected,
+                onValueChange = {},
+                readOnly = true,
+                singleLine = false,
+                minLines = 2,
+                maxLines = 2,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 72.dp)
+                    .menuAnchor(),
+                textStyle = MaterialTheme.typography.titleSmall.copy(
+                    color = KmiFreeTextColor,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    textAlign = align
+                ),
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = KmiFreeCardColorSoft.copy(alpha = 0.86f),
+                    unfocusedContainerColor = KmiFreeCardColorSoft.copy(alpha = 0.82f),
+                    focusedTextColor = KmiFreeTextColor,
+                    unfocusedTextColor = KmiFreeTextColor,
+                    cursorColor = KmiFreeTitleColor,
+                    focusedBorderColor = KmiFreeBorderColorStrong,
+                    unfocusedBorderColor = KmiFreeBorderColor
+                ),
+                shape = RoundedCornerShape(20.dp)
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                containerColor = Color(0xFF0A234A)
+            ) {
+                values.forEach { item ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = item,
+                                color = Color.White,
+                                fontWeight = if (item == selected) {
+                                    FontWeight.Black
+                                } else {
+                                    FontWeight.Bold
+                                },
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp,
+                                textAlign = align,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        onClick = {
+                            expanded = false
+                            onSelected(item)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WazeStyleLocationSearchField(
+    query: String,
+    selectedPlace: FreeSessionPlaceSuggestion?,
+    isEnglish: Boolean,
+    branchHint: String,
+    existingPlaces: List<String>,
+    onQueryChange: (String) -> Unit,
+    onPlaceSelected: (FreeSessionPlaceSuggestion) -> Unit
+) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val bringLocationIntoViewRequester = remember { BringIntoViewRequester() }
+
+    val placesClient = remember(ctx, isEnglish) {
+        if (!Places.isInitialized()) {
+            Places.initialize(
+                ctx.applicationContext,
+                ctx.getString(R.string.google_maps_key),
+                if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
+            )
+        }
+
+        Places.createClient(ctx)
+    }
+
+    var suggestions by remember {
+        mutableStateOf<List<FreeSessionPlaceSuggestion>>(emptyList())
+    }
+
+    var searching by remember {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(query, branchHint, selectedPlace) {
+        val clean = query.trim()
+        val cleanLower = normalizeFreeSessionText(clean)
+        val branchClean = branchHint.trim()
+
+        val queryTokens = cleanLower
+            .split(" ")
+            .map { it.trim() }
+            .filter { it.length >= 2 }
+
+        fun matchesUserLocationQuery(name: String, address: String): Boolean {
+            val haystack = normalizeFreeSessionText("$name $address")
+
+            if (queryTokens.isEmpty()) {
+                return cleanLower.isNotBlank() && haystack.contains(cleanLower)
+            }
+
+            return queryTokens.any { token ->
+                haystack.contains(token)
+            }
+        }
+
+        if (clean.length < 2 || selectedPlace != null) {
+            suggestions = emptyList()
+            searching = false
+            return@LaunchedEffect
+        }
+
+        searching = true
+        delay(280)
+
+        val localSuggestions = buildList {
+            existingPlaces
+                .filter { place ->
+                    normalizeFreeSessionText(place).contains(cleanLower)
+                }
+                .take(5)
+                .forEach { place ->
+                    add(
+                        FreeSessionPlaceSuggestion(
+                            name = place,
+                            address = place,
+                            lat = null,
+                            lng = null,
+                            placeId = null
+                        )
+                    )
+                }
+
+            if (
+                branchClean.isNotBlank() &&
+                normalizeFreeSessionText(branchClean).contains(cleanLower)
+            ) {
+                add(
+                    FreeSessionPlaceSuggestion(
+                        name = branchClean,
+                        address = branchClean,
+                        lat = null,
+                        lng = null,
+                        placeId = null
+                    )
+                )
+            }
+        }
+
+        val placesSuggestions = runCatching {
+            val token = AutocompleteSessionToken.newInstance()
+
+            val searchText = buildString {
+                append(clean)
+                if (branchClean.isNotBlank()) {
+                    append(" ")
+                    append(branchClean)
+                }
+            }.trim()
+
+            val request = FindAutocompletePredictionsRequest.builder()
+                .setSessionToken(token)
+                .setQuery(searchText)
+                .setCountries(listOf("IL"))
+                .build()
+
+            placesClient
+                .findAutocompletePredictions(request)
+                .await()
+                .autocompletePredictions
+                .mapNotNull { prediction ->
+                    val name = prediction.getPrimaryText(null)
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
+
+                    val address = prediction.getSecondaryText(null)
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
+
+                    val fallbackName = prediction.getFullText(null)
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
+
+                    val finalName = name.ifBlank { fallbackName }
+
+                    if (
+                        (finalName.isBlank() && address.isBlank()) ||
+                        !matchesUserLocationQuery(finalName, address)
+                    ) {
+                        null
+                    } else {
+                        FreeSessionPlaceSuggestion(
+                            name = finalName.ifBlank { address },
+                            address = address,
+                            lat = null,
+                            lng = null,
+                            placeId = prediction.placeId
+                        )
+                    }
+                }
+                .distinctBy {
+                    "${normalizeFreeSessionText(it.name)}|${normalizeFreeSessionText(it.address)}|${it.placeId.orEmpty()}"
+                }
+                .take(6)
+        }.getOrElse { error ->
+            Log.e(
+                FREE_SESSIONS_DEBUG,
+                "places_autocomplete_failed | query=$clean | branch=$branchClean | message=${error.message.orEmpty()}",
+                error
+            )
+
+            emptyList()
+        }
+
+        val geoSuggestions = if (placesSuggestions.isEmpty()) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val geocoder = Geocoder(
+                        ctx,
+                        if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
+                    )
+
+                    val searchQueries = buildList {
+                        add(clean)
+
+                        if (branchClean.isNotBlank()) {
+                            add("$clean $branchClean")
+                        }
+
+                        add("$clean ישראל")
+                        add("$clean Israel")
+                    }
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+
+                    searchQueries
+                        .flatMap { searchText ->
+                            @Suppress("DEPRECATION")
+                            geocoder.getFromLocationName(searchText, 6).orEmpty()
+                        }
+                        .mapNotNull { address ->
+                            val title = listOfNotNull(
+                                address.featureName,
+                                address.thoroughfare,
+                                address.locality,
+                                address.subAdminArea
+                            )
+                                .firstOrNull { !it.isNullOrBlank() }
+                                ?.trim()
+                                .orEmpty()
+
+                            val fullAddress = (0..address.maxAddressLineIndex)
+                                .mapNotNull { index ->
+                                    address.getAddressLine(index)
+                                        ?.trim()
+                                        ?.takeIf { it.isNotBlank() }
+                                }
+                                .joinToString(" · ")
+
+                            val name = title.ifBlank { fullAddress }
+
+                            if (
+                                (name.isBlank() && fullAddress.isBlank()) ||
+                                !matchesUserLocationQuery(name, fullAddress)
+                            ) {
+                                null
+                            } else {
+                                FreeSessionPlaceSuggestion(
+                                    name = name.ifBlank { fullAddress },
+                                    address = fullAddress,
+                                    lat = address.latitude,
+                                    lng = address.longitude,
+                                    placeId = null
+                                )
+                            }
+                        }
+                        .distinctBy {
+                            "${normalizeFreeSessionText(it.name)}|${normalizeFreeSessionText(it.address)}"
+                        }
+                        .take(6)
+                }.getOrDefault(emptyList())
+            }
+        } else {
+            emptyList()
+        }
+
+        suggestions = (localSuggestions + placesSuggestions + geoSuggestions)
+            .filter { place ->
+                matchesUserLocationQuery(place.name, place.address)
+            }
+            .distinctBy {
+                "${normalizeFreeSessionText(it.name)}|${normalizeFreeSessionText(it.address)}|${it.placeId.orEmpty()}"
+            }
+            .take(6)
+
+        searching = false
+    }
+
+    LaunchedEffect(suggestions.size, searching) {
+        if (suggestions.isNotEmpty() || searching) {
+            delay(120)
+            bringLocationIntoViewRequester.bringIntoView()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bringLocationIntoViewRequester),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        Text(
+            text = tr("מקום (אופציונלי)", "Location (optional)"),
+            color = KmiFreeTitleColor,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 14.sp,
+            textAlign = TextAlign.Right,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = KmiFreeCardColorSoft.copy(alpha = 0.86f),
+            border = BorderStroke(
+                1.dp,
+                if (suggestions.isNotEmpty()) {
+                    KmiFreeBorderColorStrong
+                } else {
+                    KmiFreeBorderColor
+                }
+            ),
+            tonalElevation = 0.dp,
+            shadowElevation = if (suggestions.isNotEmpty()) 10.dp else 0.dp
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { }),
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Place,
+                            contentDescription = null,
+                            tint = Color(0xFF22D3EE)
+                        )
+                    },
+                    textStyle = MaterialTheme.typography.titleMedium.copy(
+                        color = KmiFreeTextColor,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Right
+                    ),
+                    placeholder = {
+                        Text(
+                            text = tr(
+                                "הקלד מקום, כתובת או עיר",
+                                "typing a place, address or city"
+                            ),
+                            color = KmiFreeSubTextColor.copy(alpha = 0.78f),
+                            textAlign = TextAlign.Right,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedTextColor = KmiFreeTextColor,
+                        unfocusedTextColor = KmiFreeTextColor,
+                        cursorColor = Color(0xFF22D3EE),
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedLabelColor = Color(0xFF67E8F9),
+                        unfocusedLabelColor = Color(0xFF67E8F9)
+                    )
+                )
+
+                if (searching) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp),
+                        color = Color(0xFF22D3EE),
+                        trackColor = Color.Transparent
+                    )
+                }
+
+                if (selectedPlace != null) {
+                    Divider(color = Color.White.copy(alpha = 0.10f))
+
+                    Text(
+                        text = "${tr("נבחר", "Selected")}: ${selectedPlace.name}",
+                        color = KmiFreeTitleColor,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Right,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 9.dp)
+                    )
+                }
+
+                if (suggestions.isNotEmpty()) {
+                    Divider(color = Color.White.copy(alpha = 0.10f))
+
+                    suggestions.forEachIndexed { index, place ->
+                        WazePlaceSuggestionRow(
+                            place = place,
+                            isEnglish = isEnglish,
+                            onClick = {
+                                scope.launch {
+                                    val resolvedPlace = if (place.placeId.isNullOrBlank()) {
+                                        place
+                                    } else {
+                                        runCatching {
+                                            val request = FetchPlaceRequest.builder(
+                                                place.placeId,
+                                                listOf(
+                                                    Place.Field.ID,
+                                                    Place.Field.NAME,
+                                                    Place.Field.ADDRESS,
+                                                    Place.Field.LAT_LNG
+                                                )
+                                            ).build()
+
+                                            val fetchedPlace = placesClient
+                                                .fetchPlace(request)
+                                                .await()
+                                                .place
+
+                                            val latLng = fetchedPlace.latLng
+
+                                            FreeSessionPlaceSuggestion(
+                                                name = fetchedPlace.name?.trim().orEmpty()
+                                                    .ifBlank { place.name },
+                                                address = fetchedPlace.address?.trim().orEmpty()
+                                                    .ifBlank { place.address },
+                                                lat = latLng?.latitude,
+                                                lng = latLng?.longitude,
+                                                placeId = fetchedPlace.id ?: place.placeId
+                                            )
+                                        }.getOrElse { error ->
+                                            Log.e(
+                                                FREE_SESSIONS_DEBUG,
+                                                "places_fetch_place_failed | placeId=${place.placeId} | name=${place.name} | message=${error.message.orEmpty()}",
+                                                error
+                                            )
+
+                                            place
+                                        }
+                                    }
+
+                                    onPlaceSelected(resolvedPlace)
+                                    suggestions = emptyList()
+                                }
+                            }
+                        )
+
+                        if (index < suggestions.lastIndex) {
+                            Divider(
+                                modifier = Modifier.padding(horizontal = 14.dp),
+                                color = Color.White.copy(alpha = 0.08f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WazePlaceSuggestionRow(
+    place: FreeSessionPlaceSuggestion,
+    isEnglish: Boolean,
+    onClick: () -> Unit
+) {
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        color = Color.Transparent,
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color(0xFF22D3EE).copy(alpha = 0.14f),
+                border = BorderStroke(
+                    1.dp,
+                    Color(0xFF22D3EE).copy(alpha = 0.30f)
+                )
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Place,
+                    contentDescription = null,
+                    tint = Color(0xFF22D3EE),
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .size(18.dp)
+                )
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = horizontal
+            ) {
+                Text(
+                    text = place.name,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp,
+                    lineHeight = 17.sp,
+                    textAlign = align,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (place.address.isNotBlank() && place.address != place.name) {
+                    Spacer(Modifier.height(2.dp))
+
+                    Text(
+                        text = place.address,
+                        color = KmiFreeSubTextColor,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        textAlign = align,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PremiumDateTimeCard(
+    startsAt: Long,
+    isEnglish: Boolean,
+    onPick: (Long) -> Unit
+) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = KmiFreeCardColor.copy(alpha = 0.94f),
         tonalElevation = 0.dp,
         border = BorderStroke(
             1.dp,
-            Color.White.copy(alpha = 0.16f)
+            KmiFreeBorderColor
         )
     ) {
         Column(
@@ -705,8 +2236,8 @@ private fun PremiumDateTimeCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "בחירת יום ושעה",
-                    color = Color.White,
+                    text = tr("בחירת יום ושעה", "Choose day and time"),
+                    color = KmiFreeTitleColor,
                     fontWeight = FontWeight.Black,
                     fontSize = 18.sp,
                     textAlign = TextAlign.Right
@@ -724,15 +2255,15 @@ private fun PremiumDateTimeCard(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                color = Color(0xFF0A234A),
+                color = KmiFreeBgBottom.copy(alpha = 0.92f),
                 tonalElevation = 0.dp,
                 border = BorderStroke(
                     1.dp,
-                    Color(0xFF67E8F9).copy(alpha = 0.32f)
+                    KmiFreeBorderColorStrong
                 )
             ) {
                 Text(
-                    text = fmtTimeHeb(startsAt),
+                    text = fmtTime(startsAt, isEnglish),
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 17.sp,
@@ -746,6 +2277,7 @@ private fun PremiumDateTimeCard(
 
             TimeQuickPicker(
                 startsAt = startsAt,
+                isEnglish = isEnglish,
                 onPick = onPick
             )
         }
@@ -755,6 +2287,7 @@ private fun PremiumDateTimeCard(
 @Composable
 private fun FreeSessionCard(
     session: FreeSession,
+    isEnglish: Boolean,
     onClick: () -> Unit,
     canManage: Boolean = false,
     onEdit: (() -> Unit)? = null,
@@ -766,8 +2299,8 @@ private fun FreeSessionCard(
             .clip(RoundedCornerShape(24.dp))
             .clickable { onClick() },
         shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, Color(0xFF1D4ED8))
+        color = KmiFreeCardColor.copy(alpha = 0.96f),
+        border = BorderStroke(1.dp, KmiFreeBorderColor)
     ) {
         Column(
             modifier = Modifier
@@ -860,8 +2393,8 @@ private fun FreeSessionCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = fmtTimeHeb(session.startsAt),
-                    color = Color(0xFFBFDBFE),
+                    text = fmtTime(session.startsAt, isEnglish),
+                    color = KmiFreeSubTextColor,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -887,7 +2420,11 @@ private fun FreeSessionCard(
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.Place, contentDescription = null, tint = Color(0xFFF97316))
+                        Icon(
+                            Icons.Filled.Place,
+                            contentDescription = null,
+                            tint = Color(0xFFF97316)
+                        )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = loc,
@@ -932,6 +2469,7 @@ private fun FreeSessionCard(
 @Composable
 private fun FreeSessionDetailsSheet(
     repo: FreeSessionsRepository,
+    isEnglish: Boolean,
     session: FreeSession,
     branch: String,
     groupKey: String,
@@ -978,14 +2516,24 @@ private fun FreeSessionDetailsSheet(
         }
 
         val ok = runCatching {
-            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(wazeDeepLink)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            ctx.startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(wazeDeepLink)
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
         }.isSuccess
 
         if (!ok) {
             // fallback לדפדפן (יעבוד גם בלי האפליקציה)
             val url = buildWazeUrl(navigate = true)
             runCatching {
-                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                ctx.startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse(url)
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
             }.onFailure {
                 Toast.makeText(ctx, "לא הצלחתי לפתוח את וויז", Toast.LENGTH_SHORT).show()
             }
@@ -1009,7 +2557,10 @@ private fun FreeSessionDetailsSheet(
             putExtra(Intent.EXTRA_TEXT, text)
         }
         runCatching {
-            ctx.startActivity(Intent.createChooser(send, "שיתוף מיקום לקבוצה").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            ctx.startActivity(
+                Intent.createChooser(send, "שיתוף מיקום לקבוצה")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
         }.onFailure {
             Toast.makeText(ctx, "שיתוף נכשל", Toast.LENGTH_SHORT).show()
         }
@@ -1034,8 +2585,13 @@ private fun FreeSessionDetailsSheet(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "זמן: ${fmtTimeHeb(session.startsAt)}",
-                    color = Color(0xFFBFDBFE),
+                    text = "${if (isEnglish) "Time" else "זמן"}: ${
+                        fmtTime(
+                            session.startsAt,
+                            isEnglish
+                        )
+                    }",
+                    color = KmiFreeSubTextColor,
                     textAlign = TextAlign.End,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1092,7 +2648,14 @@ private fun FreeSessionDetailsSheet(
                 selectedColor = Color(0xFF22C55E),
                 onClick = {
                     scope.launch {
-                        repo.setParticipantState(branch, groupKey, session.id, currentUid, currentName, ParticipantState.GOING)
+                        repo.setParticipantState(
+                            branch,
+                            groupKey,
+                            session.id,
+                            currentUid,
+                            currentName,
+                            ParticipantState.GOING
+                        )
                     }
                 }
             )
@@ -1103,7 +2666,14 @@ private fun FreeSessionDetailsSheet(
                 selectedColor = Color(0xFF0EA5E9),
                 onClick = {
                     scope.launch {
-                        repo.setParticipantState(branch, groupKey, session.id, currentUid, currentName, ParticipantState.ON_WAY)
+                        repo.setParticipantState(
+                            branch,
+                            groupKey,
+                            session.id,
+                            currentUid,
+                            currentName,
+                            ParticipantState.ON_WAY
+                        )
                     }
                 }
             )
@@ -1114,7 +2684,14 @@ private fun FreeSessionDetailsSheet(
                 selectedColor = Color(0xFF8B5CF6),
                 onClick = {
                     scope.launch {
-                        repo.setParticipantState(branch, groupKey, session.id, currentUid, currentName, ParticipantState.ARRIVED)
+                        repo.setParticipantState(
+                            branch,
+                            groupKey,
+                            session.id,
+                            currentUid,
+                            currentName,
+                            ParticipantState.ARRIVED
+                        )
                     }
                 }
             )
@@ -1125,7 +2702,14 @@ private fun FreeSessionDetailsSheet(
                 selectedColor = Color(0xFFEF4444),
                 onClick = {
                     scope.launch {
-                        repo.setParticipantState(branch, groupKey, session.id, currentUid, currentName, ParticipantState.CANT)
+                        repo.setParticipantState(
+                            branch,
+                            groupKey,
+                            session.id,
+                            currentUid,
+                            currentName,
+                            ParticipantState.CANT
+                        )
                     }
                 }
             )
@@ -1233,11 +2817,17 @@ private fun ParticipantRow(p: FreeSessionPart) {
 @Composable
 private fun PremiumFreeSessionDatePickerDialog(
     selectedMillis: Long,
+    isEnglish: Boolean,
     onDismiss: () -> Unit,
     onDateSelected: (Long) -> Unit
 ) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
     val zone = ZoneId.systemDefault()
-    val hebrewLocale = Locale("he", "IL")
+    val locale = if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
+    val direction = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
 
     val selectedDate = remember(selectedMillis) {
         Instant.ofEpochMilli(selectedMillis)
@@ -1257,7 +2847,6 @@ private fun PremiumFreeSessionDatePickerDialog(
         visibleMonth.atDay(1)
     }
 
-    // ראשון = 0, שני = 1 ... שבת = 6
     val leadingEmptyDays = remember(firstDayOfMonth) {
         firstDayOfMonth.dayOfWeek.value % 7
     }
@@ -1266,14 +2855,24 @@ private fun PremiumFreeSessionDatePickerDialog(
         visibleMonth.lengthOfMonth()
     }
 
-    val monthTitle = remember(visibleMonth) {
+    val monthTitle = remember(visibleMonth, isEnglish) {
         visibleMonth.atDay(1)
-            .format(DateTimeFormatter.ofPattern("MMMM yyyy", hebrewLocale))
+            .format(
+                if (isEnglish) {
+                    DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
+                } else {
+                    DateTimeFormatter.ofPattern("MMMM yyyy", Locale("he", "IL"))
+                }
+            )
     }
 
-    val selectedTitle = remember(selectedDate) {
+    val selectedTitle = remember(selectedDate, isEnglish) {
         selectedDate.format(
-            DateTimeFormatter.ofPattern("EEEE • d MMMM yyyy", hebrewLocale)
+            if (isEnglish) {
+                DateTimeFormatter.ofPattern("EEEE • MMMM d, yyyy", Locale.ENGLISH)
+            } else {
+                DateTimeFormatter.ofPattern("EEEE • d MMMM yyyy", Locale("he", "IL"))
+            }
         )
     }
 
@@ -1303,10 +2902,9 @@ private fun PremiumFreeSessionDatePickerDialog(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFF07152E),
-                                Color(0xFF0B1E48),
-                                Color(0xFF103C89),
-                                Color(0xFF18BDEB)
+                                KmiFreeBorderColorStrong,
+                                KmiFreeBorderColor,
+                                KmiFreeBgTop
                             )
                         )
                     )
@@ -1315,18 +2913,18 @@ private fun PremiumFreeSessionDatePickerDialog(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(29.dp),
-                    color = Color(0xFF061832).copy(alpha = 0.97f),
+                    color = KmiFreeBgMid.copy(alpha = 0.98f),
                     tonalElevation = 0.dp
                 ) {
                     CompositionLocalProvider(
-                        LocalLayoutDirection provides LayoutDirection.Rtl
+                        LocalLayoutDirection provides direction
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
-                            horizontalAlignment = Alignment.End
+                            horizontalAlignment = horizontal
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1334,14 +2932,14 @@ private fun PremiumFreeSessionDatePickerDialog(
                             ) {
                                 Column(
                                     modifier = Modifier.weight(1f),
-                                    horizontalAlignment = Alignment.End
+                                    horizontalAlignment = horizontal
                                 ) {
                                     Text(
-                                        text = "בחר תאריך לאימון",
-                                        color = Color(0xFFBFDBFE),
+                                        text = tr("בחר תאריך לאימון", "Choose session date"),
+                                        color = KmiFreeSubTextColor,
                                         fontWeight = FontWeight.ExtraBold,
                                         style = MaterialTheme.typography.titleMedium,
-                                        textAlign = TextAlign.Right,
+                                        textAlign = align,
                                         modifier = Modifier.fillMaxWidth()
                                     )
 
@@ -1349,13 +2947,13 @@ private fun PremiumFreeSessionDatePickerDialog(
 
                                     Text(
                                         text = selectedTitle,
-                                        color = Color.White,
+                                        color = KmiFreeTextColor,
                                         fontWeight = FontWeight.Black,
                                         style = MaterialTheme.typography.titleLarge.copy(
                                             fontSize = 23.sp,
                                             lineHeight = 27.sp
                                         ),
-                                        textAlign = TextAlign.Right,
+                                        textAlign = align,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
@@ -1378,7 +2976,7 @@ private fun PremiumFreeSessionDatePickerDialog(
                                 }
                             }
 
-                            Divider(color = Color.White.copy(alpha = 0.14f))
+                            Divider(color = KmiFreeBorderColor)
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1389,7 +2987,7 @@ private fun PremiumFreeSessionDatePickerDialog(
                                         visibleMonth = visibleMonth.minusMonths(1)
                                     },
                                     shape = CircleShape,
-                                    color = Color(0xFF0A234A),
+                                    color = KmiFreeBorderColorStrong,
                                     modifier = Modifier.size(42.dp)
                                 ) {
                                     Box(
@@ -1397,7 +2995,7 @@ private fun PremiumFreeSessionDatePickerDialog(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = "›",
+                                            text = if (isEnglish) "‹" else "›",
                                             color = Color.White,
                                             fontSize = 28.sp,
                                             fontWeight = FontWeight.Black
@@ -1407,7 +3005,7 @@ private fun PremiumFreeSessionDatePickerDialog(
 
                                 Text(
                                     text = monthTitle,
-                                    color = Color.White,
+                                    color = KmiFreeTextColor,
                                     fontWeight = FontWeight.Black,
                                     style = MaterialTheme.typography.titleMedium.copy(
                                         fontSize = 22.sp,
@@ -1422,7 +3020,7 @@ private fun PremiumFreeSessionDatePickerDialog(
                                         visibleMonth = visibleMonth.plusMonths(1)
                                     },
                                     shape = CircleShape,
-                                    color = Color(0xFF0A234A),
+                                    color = KmiFreeBorderColorStrong,
                                     modifier = Modifier.size(42.dp)
                                 ) {
                                     Box(
@@ -1430,7 +3028,7 @@ private fun PremiumFreeSessionDatePickerDialog(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = "‹",
+                                            text = if (isEnglish) "›" else "‹",
                                             color = Color.White,
                                             fontSize = 28.sp,
                                             fontWeight = FontWeight.Black
@@ -1439,22 +3037,26 @@ private fun PremiumFreeSessionDatePickerDialog(
                                 }
                             }
 
-                            val weekDays = listOf("א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳")
+                            val weekDays = if (isEnglish) {
+                                listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+                            } else {
+                                listOf("א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳")
+                            }
 
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(20.dp))
-                                    .background(Color.White.copy(alpha = 0.08f))
+                                    .background(KmiFreeCardColorSoft.copy(alpha = 0.74f))
                                     .padding(vertical = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 weekDays.forEach { dayName ->
                                     Text(
                                         text = dayName,
-                                        color = Color(0xFF67E8F9),
+                                        color = KmiFreeTitleColor,
                                         fontWeight = FontWeight.Black,
-                                        fontSize = 15.sp,
+                                        fontSize = if (isEnglish) 12.sp else 15.sp,
                                         textAlign = TextAlign.Center,
                                         modifier = Modifier.weight(1f)
                                     )
@@ -1477,7 +3079,7 @@ private fun PremiumFreeSessionDatePickerDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(24.dp))
-                                    .background(Color.White.copy(alpha = 0.08f))
+                                    .background(KmiFreeCardColorSoft.copy(alpha = 0.74f))
                                     .padding(horizontal = 8.dp, vertical = 8.dp),
                                 verticalArrangement = Arrangement.spacedBy(5.dp)
                             ) {
@@ -1521,6 +3123,7 @@ private fun PremiumFreeSessionDatePickerDialog(
                                                                 1.dp,
                                                                 Color(0xFF22D3EE)
                                                             )
+
                                                             else -> null
                                                         }
                                                     ) {
@@ -1533,7 +3136,7 @@ private fun PremiumFreeSessionDatePickerDialog(
                                                                 color = if (isSelected) {
                                                                     Color(0xFF020617)
                                                                 } else {
-                                                                    Color.White
+                                                                    KmiFreeTextColor
                                                                 },
                                                                 fontWeight = FontWeight.Black,
                                                                 fontSize = 16.sp,
@@ -1561,15 +3164,19 @@ private fun PremiumFreeSessionDatePickerDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.Start,
+                                    horizontalArrangement = if (isEnglish) {
+                                        Arrangement.End
+                                    } else {
+                                        Arrangement.Start
+                                    },
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     TextButton(
                                         onClick = onDismiss
                                     ) {
                                         Text(
-                                            text = "ביטול",
-                                            color = Color(0xFFBFDBFE),
+                                            text = tr("ביטול", "Cancel"),
+                                            color = KmiFreeSubTextColor,
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 15.sp
                                         )
@@ -1593,7 +3200,7 @@ private fun PremiumFreeSessionDatePickerDialog(
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
-                                                text = "היום",
+                                                text = tr("היום", "Today"),
                                                 color = Color(0xFF04101F),
                                                 fontWeight = FontWeight.Black,
                                                 fontSize = 15.sp
@@ -1614,8 +3221,10 @@ private fun PremiumFreeSessionDatePickerDialog(
 @Composable
 private fun TimeQuickPicker(
     startsAt: Long,
+    isEnglish: Boolean,
     onPick: (Long) -> Unit
 ) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
@@ -1654,7 +3263,7 @@ private fun TimeQuickPicker(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "בחר יום ושעה",
+                text = tr("בחר יום ושעה", "Choose day and time"),
                 color = Color(0xFF04101F),
                 fontWeight = FontWeight.Black,
                 fontSize = 16.sp,
@@ -1666,6 +3275,7 @@ private fun TimeQuickPicker(
     if (showDatePicker) {
         PremiumFreeSessionDatePickerDialog(
             selectedMillis = customDateMillis ?: startsAt,
+            isEnglish = isEnglish,
             onDismiss = {
                 showDatePicker = false
             },
@@ -1695,7 +3305,7 @@ private fun TimeQuickPicker(
             containerColor = Color(0xFF061832),
             title = {
                 Text(
-                    text = "בחר שעה לאימון",
+                    text = tr("בחר שעה לאימון", "Choose session time"),
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.Right,
@@ -1712,7 +3322,7 @@ private fun TimeQuickPicker(
                     onPick(buildMillisFromDateAndTime(d, customHour, customMinute))
                 }) {
                     Text(
-                        text = "אישור",
+                        text = tr("אישור", "OK"),
                         color = Color(0xFF22D3EE),
                         fontWeight = FontWeight.ExtraBold
                     )
@@ -1721,8 +3331,8 @@ private fun TimeQuickPicker(
             dismissButton = {
                 TextButton(onClick = { showTimePicker = false }) {
                     Text(
-                        text = "ביטול",
-                        color = Color(0xFFBFDBFE),
+                        text = tr("ביטול", "Cancel"),
+                        color = KmiFreeSubTextColor,
                         fontWeight = FontWeight.ExtraBold
                     )
                 }
@@ -1740,9 +3350,15 @@ private fun TimeQuickPicker(
 
 /* ---------------- helpers ---------------- */
 
-private fun fmtTimeHeb(millis: Long): String {
+private fun fmtTime(millis: Long, isEnglish: Boolean): String {
     val dt = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
-    val fmt = DateTimeFormatter.ofPattern("EEEE · d.M.yyyy · HH:mm", Locale("he", "IL"))
+
+    val fmt = if (isEnglish) {
+        DateTimeFormatter.ofPattern("EEEE · MMM d, yyyy · HH:mm", Locale.ENGLISH)
+    } else {
+        DateTimeFormatter.ofPattern("EEEE · d.M.yyyy · HH:mm", Locale("he", "IL"))
+    }
+
     return dt.format(fmt)
 }
 

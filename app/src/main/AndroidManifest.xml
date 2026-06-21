@@ -30,6 +30,11 @@
         android:theme="@style/Theme.KMI"
         android:enableOnBackInvokedCallback="true">
 
+        <!-- ===== Google Maps / Places API Key ===== -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="@string/google_maps_key" />
+
         <!-- ===== FileProvider לשיתוף קבצים (PDF וכד') מתוך cache ===== -->
         <provider
             android:name="androidx.core.content.FileProvider"

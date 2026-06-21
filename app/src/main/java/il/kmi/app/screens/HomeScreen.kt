@@ -81,6 +81,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -488,14 +489,22 @@ fun HomeScreen(
                 mutableStateOf(settingsSp.getBoolean("coach_broadcast_open_dialog", false))
             }
 
+            var pushBroadcastId by remember {
+                mutableStateOf(settingsSp.getString("coach_broadcast_push_id", "").orEmpty())
+            }
+
             DisposableEffect(settingsSp) {
                 val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
                     if (
                         key == "coach_broadcast_open_dialog" ||
-                        key == "coach_broadcast_open_from_push"
+                        key == "coach_broadcast_open_from_push" ||
+                        key == "coach_broadcast_push_id"
                     ) {
                         openCoachMessagesFromPush =
                             settingsSp.getBoolean("coach_broadcast_open_dialog", false)
+
+                        pushBroadcastId =
+                            settingsSp.getString("coach_broadcast_push_id", "").orEmpty()
                     }
                 }
 
@@ -632,7 +641,7 @@ fun HomeScreen(
                 // ⭐ הודעות מהמאמן – Firestore
                 // מציגים הודעה אחרונה בכרטיס + 5 הודעות אחרונות בדיאלוג
                 // =========================
-                DisposableEffect(currentUid, userSp) {
+                DisposableEffect(currentUid, userSp, pushBroadcastId) {
                     val uid = currentUid.orEmpty().trim()
 
                     val currentEmail = FirebaseAuth.getInstance()
@@ -1061,7 +1070,17 @@ fun HomeScreen(
                             recentCoachMessages = snap
                                 ?.documents
                                 .orEmpty()
-                                .filter { docTargetsCurrentUser(it) }
+                                .filter { doc ->
+                                    val docBroadcastId = (
+                                            doc.getString("broadcastId")
+                                                ?: doc.getString("broadcast_id")
+                                                ?: doc.id
+                                            ).trim()
+
+                                    docTargetsCurrentUser(doc) ||
+                                            pushBroadcastId.isNotBlank() &&
+                                            docBroadcastId == pushBroadcastId
+                                }
                                 .mapNotNull { doc ->
                                     val text = (
                                             doc.getString("text")
@@ -2855,7 +2874,11 @@ private fun ModernHomeQuickFab(
                     shape = tabShape,
                     clip = false
                 )
-                .clickable(onClick = onClick),
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(

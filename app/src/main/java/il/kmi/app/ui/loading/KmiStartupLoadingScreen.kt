@@ -54,6 +54,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import il.kmi.app.R
@@ -119,6 +120,14 @@ fun KmiStartupLoadingScreen(
     var completedStagesInCycle by remember { mutableIntStateOf(0) }
     var progress by remember { mutableFloatStateOf(0f) }
 
+    var finishAlreadySent by remember { mutableStateOf(false) }
+
+    fun finishOnce() {
+        if (finishAlreadySent) return
+        finishAlreadySent = true
+        onFinished()
+    }
+
     LaunchedEffect(Unit) {
         val preloadJob = launch {
             runCatching {
@@ -152,7 +161,7 @@ fun KmiStartupLoadingScreen(
             preloadJob.join()
         }
 
-        onFinished()
+        finishOnce()
     }
 
     val currentStage = stages[currentStageIndex]
@@ -407,7 +416,9 @@ fun KmiStartupLoadingScreen(
                             .height(32.dp)
                     ) {
                         TextButton(
-                            onClick = onFinished,
+                            onClick = {
+                                finishOnce()
+                            },
                             modifier = Modifier
                                 .align(
                                     if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd

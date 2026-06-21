@@ -30,7 +30,6 @@ import il.kmi.app.analytics.KmiDiagnostics
 import il.kmi.app.ui.DrawerBridge
 import kotlinx.coroutines.launch
 
-
 // ---------- טיפוגרפיה עם סקייל ----------
 private fun Typography.scaled(scale: Float): Typography {
     fun ts(t: androidx.compose.ui.text.TextStyle) =
@@ -373,6 +372,17 @@ fun MainApp(
                                 drawerContainerColor = Color.Transparent,
                                 modifier = Modifier.fillMaxWidth(0.86f)
                             ) {
+                                val shouldRenderDrawerContent =
+                                    drawerState.currentValue == DrawerValue.Open ||
+                                            drawerState.targetValue == DrawerValue.Open
+
+                                if (!shouldRenderDrawerContent) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    return@ModalDrawerSheet
+                                }
+
                                 val ctxInner = LocalContext.current
                                 val spUser = remember {
                                     ctxInner.getSharedPreferences(
