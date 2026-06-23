@@ -454,13 +454,8 @@ fun HomeScreen(
                         legacySp.hasActiveSubscriptionAccess()
             }
 
-            // הסרגל הצף מופיע רק אחרי גלילה קטנה למטה.
-            val showFab by remember(listState) {
-                derivedStateOf {
-                    listState.firstVisibleItemIndex > 0 ||
-                            listState.firstVisibleItemScrollOffset > 24
-                }
-            }
+            // התפריט המהיר מוצג תמיד, גם כאשר אין מספיק תוכן לגלילה.
+            val showFab = true
 
             // =========================
             // ⭐ הודעות מהמאמן – state ברמת Box כדי שגם הכרטיס וגם הדיאלוג יכירו אותו
@@ -491,6 +486,121 @@ fun HomeScreen(
 
             var pushBroadcastId by remember {
                 mutableStateOf(settingsSp.getString("coach_broadcast_push_id", "").orEmpty())
+            }
+
+            LaunchedEffect(pushBroadcastId) {
+                val cleanPushId = pushBroadcastId.trim()
+                if (cleanPushId.isBlank()) return@LaunchedEffect
+
+                val db = FirebaseFirestore.getInstance()
+
+                fun messageFromDoc(
+                    doc: com.google.firebase.firestore.DocumentSnapshot
+                ): CoachHomeMessage? {
+                    val text = (
+                            doc.getString("text")
+                                ?: doc.getString("message")
+                                ?: doc.getString("body")
+                                ?: doc.getString("content")
+                            )
+                        ?.trim()
+                        .orEmpty()
+
+                    if (text.isBlank()) return null
+
+                    fun firstString(vararg keys: String): String {
+                        keys.forEach { key ->
+                            val clean = doc.getString(key)?.trim().orEmpty()
+                            if (clean.isNotBlank()) return clean
+                        }
+                        return ""
+                    }
+
+                    return CoachHomeMessage(
+                        text = text,
+                        coachName = firstString(
+                            "coachName",
+                            "coach_name",
+                            "senderName",
+                            "fromName"
+                        ).ifBlank { "המאמן" },
+                        sentAt = doc.getTimestamp("createdAt")?.toDate()
+                            ?: doc.getTimestamp("sentAt")?.toDate()
+                            ?: doc.getTimestamp("timestamp")?.toDate(),
+                        branch = firstString(
+                            "branch",
+                            "branchName",
+                            "branch_name",
+                            "targetBranch",
+                            "selectedBranch"
+                        ),
+                        group = firstString(
+                            "group",
+                            "groupKey",
+                            "group_key",
+                            "targetGroup",
+                            "selectedGroup"
+                        )
+                    )
+                }
+
+                fun openMessage(message: CoachHomeMessage) {
+                    recentCoachMessages = (
+                            listOf(message) + recentCoachMessages
+                            )
+                        .distinctBy {
+                            "${it.sentAt?.time ?: 0L}|${it.coachName}|${it.text.take(40)}"
+                        }
+                        .take(5)
+
+                    showCoachMessagesDialog = true
+
+                    settingsSp.edit()
+                        .putBoolean("coach_broadcast_open_dialog", false)
+                        .putBoolean("coach_broadcast_open_from_push", false)
+                        .remove("coach_broadcast_push_id")
+                        .remove("coach_broadcast_push_received_at")
+                        .apply()
+
+                    pushBroadcastId = ""
+                    openCoachMessagesFromPush = false
+                }
+
+                db.collection("coachBroadcasts")
+                    .document(cleanPushId)
+                    .get()
+                    .addOnSuccessListener { doc ->
+                        val directMessage = if (doc.exists()) messageFromDoc(doc) else null
+
+                        if (directMessage != null) {
+                            openMessage(directMessage)
+                        } else {
+                            db.collection("coachBroadcasts")
+                                .whereEqualTo("broadcastId", cleanPushId)
+                                .limit(1)
+                                .get()
+                                .addOnSuccessListener { snap ->
+                                    val message = snap.documents
+                                        .firstOrNull()
+                                        ?.let { messageFromDoc(it) }
+
+                                    if (message != null) {
+                                        openMessage(message)
+                                    } else {
+                                        db.collection("coachBroadcasts")
+                                            .whereEqualTo("broadcast_id", cleanPushId)
+                                            .limit(1)
+                                            .get()
+                                            .addOnSuccessListener { snap2 ->
+                                                snap2.documents
+                                                    .firstOrNull()
+                                                    ?.let { messageFromDoc(it) }
+                                                    ?.let { openMessage(it) }
+                                            }
+                                    }
+                                }
+                        }
+                    }
             }
 
             DisposableEffect(settingsSp) {
@@ -881,8 +991,21 @@ fun HomeScreen(
                             "recipientUid",
                             "uids",
                             "userIds",
+                            "userId",
+                            "targetIds",
+                            "targetId",
                             "participantIds",
-                            "selectedUids"
+                            "participantId",
+                            "selectedUids",
+                            "selectedUid",
+                            "traineeUids",
+                            "traineeUid",
+                            "traineeIds",
+                            "traineeId",
+                            "studentUids",
+                            "studentUid",
+                            "studentIds",
+                            "studentId"
                         )
 
                         if (uid.isNotBlank() && uidTargets.any { it.trim() == uid }) {
@@ -898,12 +1021,23 @@ fun HomeScreen(
 
                         if (recipientMaps.isNotEmpty()) {
                             val mapUids = recipientMaps
-                                .mapNotNull { it["uid"]?.trim()?.takeIf { value -> value.isNotBlank() } }
+                                .flatMap { recipient ->
+                                    listOf(
+                                        recipient["uid"],
+                                        recipient["userId"],
+                                        recipient["user_id"],
+                                        recipient["id"],
+                                        recipient["traineeUid"],
+                                        recipient["trainee_uid"],
+                                        recipient["studentUid"],
+                                        recipient["student_uid"]
+                                    )
+                                }
+                                .mapNotNull { it?.trim()?.takeIf { value -> value.isNotBlank() } }
 
                             if (uid.isNotBlank() && mapUids.any { it == uid }) {
                                 return true
                             }
-
                             val mapEmails = recipientMaps
                                 .mapNotNull { it["email"]?.trim()?.takeIf { value -> value.isNotBlank() } }
 
@@ -915,7 +1049,17 @@ fun HomeScreen(
                             }
 
                             val mapPhones = recipientMaps
-                                .mapNotNull { it["phone"]?.trim()?.takeIf { value -> value.isNotBlank() } }
+                                .flatMap { recipient ->
+                                    listOf(
+                                        recipient["phone"],
+                                        recipient["phoneNumber"],
+                                        recipient["phone_number"],
+                                        recipient["mobile"],
+                                        recipient["userPhone"],
+                                        recipient["user_phone"]
+                                    )
+                                }
+                                .mapNotNull { it?.trim()?.takeIf { value -> value.isNotBlank() } }
                                 .map { normalizePhone(it) }
                                 .filter { it.isNotBlank() }
 
@@ -929,7 +1073,18 @@ fun HomeScreen(
                             }
 
                             val mapNames = recipientMaps
-                                .mapNotNull { it["name"]?.trim()?.takeIf { value -> value.isNotBlank() } }
+                                .flatMap { recipient ->
+                                    listOf(
+                                        recipient["name"],
+                                        recipient["fullName"],
+                                        recipient["full_name"],
+                                        recipient["displayName"],
+                                        recipient["display_name"],
+                                        recipient["userName"],
+                                        recipient["user_name"]
+                                    )
+                                }
+                                .mapNotNull { it?.trim()?.takeIf { value -> value.isNotBlank() } }
 
                             if (
                                 currentNames.isNotEmpty() &&
@@ -1969,9 +2124,7 @@ fun HomeScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = latestMessage?.coachName
-                                                ?.takeIf { it.isNotBlank() }
-                                                ?: if (isEnglish) "Coach" else "המאמן",
+                                            text = if (isEnglish) "Coach Messages" else "הודעות מאמן",
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFF0C4A6E),
                                             style = MaterialTheme.typography.bodyMedium,
@@ -3009,8 +3162,9 @@ private fun HomePremiumQuickMenuPanel(
 
                     if (index != items.lastIndex) {
                         HorizontalDivider(
-                            thickness = 0.8.dp,
-                            color = Color(0xFF16A34A).copy(alpha = 0.18f)
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            thickness = 1.25.dp,
+                            color = Color(0xFF0F8A3D).copy(alpha = 0.62f)
                         )
                     }
                 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -1202,8 +1203,7 @@ fun MaterialsScreen(
                 ) {
                     Column(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scroll),
+                            .fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(0.dp),
                         horizontalAlignment = Alignment.End
                     ) {
@@ -1379,38 +1379,61 @@ fun MaterialsScreen(
                             }
                         } else {
                             val filtered = itemList
-                            filtered.forEachIndexed { index, item ->
-                                val currentSectionTitle = nestedSectionTitleByItem[item.trim()]
-                                val previousSectionTitle = filtered
-                                    .getOrNull(index - 1)
-                                    ?.trim()
-                                    ?.let { previousItem -> nestedSectionTitleByItem[previousItem] }
 
-                                if (
-                                    !currentSectionTitle.isNullOrBlank() &&
-                                    currentSectionTitle != previousSectionTitle
-                                ) {
-                                    Text(
-                                        text = topicTitleForUi(currentSectionTitle, currentLang),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(
-                                                start = 8.dp,
-                                                end = 8.dp,
-                                                top = 8.dp,
-                                                bottom = 4.dp
-                                            ),
-                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 12.sp,
-                                            lineHeight = 15.sp
-                                        ),
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = belt.color
-                                    )
-                                }
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(0.dp),
+                                contentPadding = PaddingValues(bottom = 12.dp)
+                            ) {
+                                filtered.forEachIndexed { index, item ->
+                                    val currentSectionTitle = nestedSectionTitleByItem[item.trim()]
+                                    val previousSectionTitle = filtered
+                                        .getOrNull(index - 1)
+                                        ?.trim()
+                                        ?.let { previousItem -> nestedSectionTitleByItem[previousItem] }
 
-                                var showNoteDialog by remember { mutableStateOf(false) }
+                                    if (
+                                        !currentSectionTitle.isNullOrBlank() &&
+                                        currentSectionTitle != previousSectionTitle
+                                    ) {
+                                        stickyHeader(
+                                            key = "section_${currentSectionTitle}_${index}"
+                                        ) {
+                                            Surface(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                color = belt.lightColor,
+                                                tonalElevation = 0.dp,
+                                                shadowElevation = 0.dp
+                                            ) {
+                                                Text(
+                                                    text = topicTitleForUi(currentSectionTitle, currentLang),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(belt.lightColor)
+                                                        .padding(
+                                                            start = 8.dp,
+                                                            end = 8.dp,
+                                                            top = 8.dp,
+                                                            bottom = 6.dp
+                                                        ),
+                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                    style = MaterialTheme.typography.labelLarge.copy(
+                                                        fontSize = 13.sp,
+                                                        lineHeight = 16.sp
+                                                    ),
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = belt.color
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    item(
+                                        key = "${index}_${item.hashCode()}"
+                                    ) {
+                                        var showNoteDialog by remember { mutableStateOf(false) }
 
                                 // ✅ מזהה אחיד להסבר / הערות / החרגות
                                 val canonicalId = remember(item, belt.id, topicUi) {
@@ -1760,7 +1783,9 @@ fun MaterialsScreen(
                                     )
                                 }
 
-                                Spacer(Modifier.height(0.dp))
+                                        Spacer(Modifier.height(0.dp))
+                                    }
+                                }
                             }
                         }
                     }

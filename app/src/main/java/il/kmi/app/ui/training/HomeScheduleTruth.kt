@@ -95,6 +95,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.scale
 
 
 // ===========================
@@ -671,17 +672,17 @@ fun TrainingSummaryScreen(
                                 containerColor = SummaryPrimaryButton,
                                 contentColor = Color.White
                             )
-                    ) {
-                        Text(
-                            text = if (state.isSaving)
-                                tr("שומר...", "Saving...")
-                            else
-                                tr("שמירת סיכום האימון", "Save training summary"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
+                        ) {
+                            Text(
+                                text = if (state.isSaving)
+                                    tr("שומר...", "Saving...")
+                                else
+                                    tr("שמירת סיכום האימון", "Save training summary"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
                 }
             }
 
@@ -726,19 +727,21 @@ private fun AddExercisesBottomSheet(
     }
 
     val darkFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = Color.White,
-        unfocusedTextColor = Color.White,
-        focusedBorderColor = SummaryBorder,
-        unfocusedBorderColor = SummaryDivider,
-        focusedLabelColor = Color.White.copy(alpha = 0.88f),
-        unfocusedLabelColor = Color.White.copy(alpha = 0.68f),
-        focusedTrailingIconColor = Color.White.copy(alpha = 0.90f),
-        unfocusedTrailingIconColor = Color.White.copy(alpha = 0.68f),
-        focusedLeadingIconColor = Color.White.copy(alpha = 0.90f),
-        unfocusedLeadingIconColor = Color.White.copy(alpha = 0.68f),
-        cursorColor = Color.White,
-        focusedContainerColor = SummaryCardInner,
-        unfocusedContainerColor = SummaryCardInner
+        focusedTextColor = SummaryTextDark,
+        unfocusedTextColor = SummaryTextDark,
+        focusedBorderColor = SummaryPrimaryButton.copy(alpha = 0.55f),
+        unfocusedBorderColor = SummaryBorder,
+        focusedLabelColor = SummaryTextDark,
+        unfocusedLabelColor = SummaryTextMuted,
+        focusedPlaceholderColor = SummaryTextMuted,
+        unfocusedPlaceholderColor = SummaryTextMuted,
+        focusedTrailingIconColor = SummaryTextDark,
+        unfocusedTrailingIconColor = SummaryTextMuted,
+        focusedLeadingIconColor = SummaryTextDark,
+        unfocusedLeadingIconColor = SummaryTextMuted,
+        cursorColor = SummaryPurpleButton,
+        focusedContainerColor = Color.White,
+        unfocusedContainerColor = Color.White
     )
 
     val topics: List<String> = remember(selectedBelt) {
@@ -805,10 +808,8 @@ private fun AddExercisesBottomSheet(
             .distinct()
     }
 
-    val filteredItems: List<String> = remember(displayItems, state.searchQuery) {
-        val q = state.searchQuery.trim()
-        if (q.isBlank()) displayItems
-        else displayItems.filter { it.contains(q, ignoreCase = true) }
+    val filteredItems: List<String> = remember(displayItems) {
+        displayItems
     }
 
     val showTopicField = selectedBelt != null
@@ -837,8 +838,8 @@ private fun AddExercisesBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF10182D),
-        scrimColor = Color.Black.copy(alpha = 0.62f),
+        containerColor = SummaryCard,
+        scrimColor = Color.Black.copy(alpha = 0.42f),
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -846,7 +847,7 @@ private fun AddExercisesBottomSheet(
                     .width(54.dp)
                     .height(5.dp)
                     .clip(RoundedCornerShape(999.dp))
-                    .background(Color.White.copy(alpha = 0.22f))
+                    .background(SummaryTextMuted.copy(alpha = 0.35f))
             )
         }
     ) {
@@ -856,9 +857,9 @@ private fun AddExercisesBottomSheet(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            Color(0xFF10182D),
-                            Color(0xFF16213F),
-                            Color(0xFF1B2C56)
+                            SummaryBgTop,
+                            SummaryBgMid1,
+                            SummaryCard
                         )
                     )
                 )
@@ -873,11 +874,18 @@ private fun AddExercisesBottomSheet(
                 horizontalAlignment = Alignment.End
             ) {
                 item {
-                    SummarySectionHeader(
-                        title = tr("הוספת תרגילים", "Add exercises"),
-                        subtitle = tr("בחר חגורה, נושא ותת־נושא והוסף תרגילים לאימון", "Choose belt, topic, and sub-topic and add exercises to training"),
-                        icon = Icons.Filled.PlaylistAddCheck
-                    )
+                    PremiumSummaryCard(
+                        shape = RoundedCornerShape(26.dp)
+                    ) {
+                        SummarySectionHeader(
+                            title = tr("הוספת תרגילים", "Add exercises"),
+                            subtitle = tr(
+                                "בחר חגורה, נושא ותת־נושא והוסף תרגילים לאימון",
+                                "Choose belt, topic, and sub-topic and add exercises to training"
+                            ),
+                            icon = Icons.Filled.PlaylistAddCheck
+                        )
+                    }
                 }
 
                 item {
@@ -903,7 +911,7 @@ private fun AddExercisesBottomSheet(
                         ExposedDropdownMenu(
                             expanded = beltOpen,
                             onDismissRequest = { beltOpen = false },
-                            containerColor = Color(0xFF182545)
+                            containerColor = Color(0xFFF7FAFF)
                         ) {
                             Belt.values()
                                 .filterNot { it == Belt.WHITE }
@@ -914,7 +922,7 @@ private fun AddExercisesBottomSheet(
                                                 text = beltHebLabel(b),
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
-                                                color = Color.White
+                                                color = SummaryTextDark
                                             )
                                         },
                                         onClick = {
@@ -953,7 +961,7 @@ private fun AddExercisesBottomSheet(
                             ExposedDropdownMenu(
                                 expanded = topicOpen,
                                 onDismissRequest = { topicOpen = false },
-                                containerColor = Color(0xFF182545)
+                                containerColor = Color(0xFFF7FAFF)
                             ) {
                                 topics.forEach { t ->
                                     DropdownMenuItem(
@@ -962,7 +970,7 @@ private fun AddExercisesBottomSheet(
                                                 text = t,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
-                                                color = Color.White
+                                                color = SummaryTextDark
                                             )
                                         },
                                         onClick = {
@@ -1002,7 +1010,7 @@ private fun AddExercisesBottomSheet(
                             ExposedDropdownMenu(
                                 expanded = subOpen,
                                 onDismissRequest = { subOpen = false },
-                                containerColor = Color(0xFF182545)
+                                containerColor = Color(0xFFF7FAFF)
                             ) {
                                 subTopics.forEach { st ->
                                     DropdownMenuItem(
@@ -1011,7 +1019,7 @@ private fun AddExercisesBottomSheet(
                                                 text = st,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
-                                                color = Color.White
+                                                color = SummaryTextDark
                                             )
                                         },
                                         onClick = {
@@ -1027,27 +1035,31 @@ private fun AddExercisesBottomSheet(
 
                 if (showSearchAndItems) {
                     item {
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = state.searchQuery,
-                            onValueChange = { vm.setSearchQuery(it) },
-                            label = { Text(tr("חיפוש תרגיל", "Search exercise")) },
-                            singleLine = true,
-                            colors = darkFieldColors
-                        )
+                        // שדה חיפוש הוסר — מציגים את כל התרגילים לבחירה ברשימה נקייה.
                     }
 
                     item {
-                        Text(
-                            text = tr(
-                                "נמצאו ${filteredItems.size} · כבר נוספו ${state.selected.size} · ממתינים לאישור ${pendingPicks.size}",
-                                "Found ${filteredItems.size} · already added ${state.selected.size} · waiting for approval ${pendingPicks.size}"
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color.White.copy(alpha = 0.78f),
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            color = SummaryCardInner,
+                            tonalElevation = 0.dp,
+                            border = BorderStroke(1.dp, SummaryBorder)
+                        ) {
+                            Text(
+                                text = tr(
+                                    "סה״כ ${filteredItems.size} תרגילים · נוספו ${state.selected.size} · ממתינים לאישור ${pendingPicks.size}",
+                                    "Total ${filteredItems.size} exercises · added ${state.selected.size} · waiting for approval ${pendingPicks.size}"
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = SummaryTextDark,
+                                fontWeight = FontWeight.ExtraBold,
+                                textAlign = TextAlign.Right,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                            )
+                        }
                     }
 
                     item {
@@ -1058,7 +1070,7 @@ private fun AddExercisesBottomSheet(
                         ) {
                             if (pendingPicks.isNotEmpty()) {
                                 TextButton(onClick = { pendingPicks = linkedMapOf() }) {
-                                    Text(tr("נקה בחירה", "Clear selection"), color = Color.White.copy(alpha = 0.82f))
+                                    Text(tr("נקה בחירה", "Clear selection"), color = SummaryTextDark.copy(alpha = 0.82f))
                                 }
                                 Spacer(Modifier.width(10.dp))
                             }
@@ -1076,7 +1088,7 @@ private fun AddExercisesBottomSheet(
                                 enabled = pendingPicks.isNotEmpty(),
                                 shape = RoundedCornerShape(999.dp),
                                 colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = Color(0xFF2563EB).copy(alpha = 0.90f),
+                                    containerColor = SummaryPurpleButton,
                                     contentColor = Color.White
                                 )
                             ) {
@@ -1086,45 +1098,77 @@ private fun AddExercisesBottomSheet(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text(tr("אשר והוסף", "Confirm and add"), fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = tr("אשר והוסף", "Confirm and add"),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    lineHeight = 15.sp,
+                                    maxLines = 2,
+                                    textAlign = TextAlign.Center
+                                )
                             }
                         }
                     }
 
-                    items(filteredItems, key = { it }) { name ->
-                        val belt = selectedBelt ?: return@items
-                        val id = "${belt.id}|$topic|$subTopic|$name"
-                        val alreadySelected = state.selected.containsKey(id)
-                        val isPending = pendingPicks.containsKey(id)
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            color = Color.White.copy(alpha = 0.98f),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 1.dp,
+                            border = BorderStroke(1.dp, SummaryBorder)
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                filteredItems.forEachIndexed { index, name ->
+                                    val belt = selectedBelt ?: return@forEachIndexed
+                                    val id = "${belt.id}|$topic|$subTopic|$name"
+                                    val alreadySelected = state.selected.containsKey(id)
+                                    val isPending = pendingPicks.containsKey(id)
 
-                        ExercisePickRow(
-                            item = ExercisePickItem(
-                                exerciseId = id,
-                                name = name,
-                                topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
-                            ),
-                            checked = alreadySelected || isPending,
-                            onToggle = {
-                                if (alreadySelected) {
-                                    vm.toggleExercise(
-                                        ExercisePickItem(
+                                    ExercisePickRow(
+                                        item = ExercisePickItem(
                                             exerciseId = id,
                                             name = name,
                                             topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
-                                        )
+                                        ),
+                                        checked = alreadySelected || isPending,
+                                        onToggle = {
+                                            if (alreadySelected) {
+                                                vm.toggleExercise(
+                                                    ExercisePickItem(
+                                                        exerciseId = id,
+                                                        name = name,
+                                                        topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
+                                                    )
+                                                )
+                                            } else {
+                                                val next = LinkedHashMap(pendingPicks)
+                                                if (next.containsKey(id)) next.remove(id)
+                                                else next[id] = ExercisePickItem(
+                                                    exerciseId = id,
+                                                    name = name,
+                                                    topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
+                                                )
+                                                pendingPicks = next
+                                            }
+                                        }
                                     )
-                                } else {
-                                    val next = LinkedHashMap(pendingPicks)
-                                    if (next.containsKey(id)) next.remove(id)
-                                    else next[id] = ExercisePickItem(
-                                        exerciseId = id,
-                                        name = name,
-                                        topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
-                                    )
-                                    pendingPicks = next
+
+                                    if (index < filteredItems.lastIndex) {
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp),
+                                            color = SummaryDivider,
+                                            shape = RoundedCornerShape(999.dp)
+                                        ) {
+                                            Spacer(Modifier.height(1.dp))
+                                        }
+                                    }
                                 }
                             }
-                        )
+                        }
                     }
                 }
 
@@ -1504,40 +1548,86 @@ private fun CalendarMonthGrid(
     Column(modifier = Modifier.padding(12.dp)) {
 
         // Header עם חצים
-        Row(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            shape = RoundedCornerShape(22.dp),
+            color = SummaryCard,
+            tonalElevation = 0.dp,
+            border = BorderStroke(1.dp, SummaryBorder)
         ) {
-            IconButton(onClick = onPrev) {
-                Icon(Icons.Filled.CalendarMonth, contentDescription = tr("חודש קודם", "Previous month"))
-            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Surface(
+                    onClick = onPrev,
+                    shape = CircleShape,
+                    color = SummaryPrimaryButton.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, SummaryBorder)
+                ) {
+                    Text(
+                        text = if (isEnglish) "‹" else "›",
+                        color = SummaryTextDark,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+                    )
+                }
 
-            Text(
-                text = monthTitle,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
-            )
+                Text(
+                    text = monthTitle,
+                    color = SummaryTextDark,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
 
-            IconButton(onClick = onNext) {
-                Icon(Icons.Filled.CalendarMonth, contentDescription = tr("חודש הבא", "Next month"))
+                Surface(
+                    onClick = onNext,
+                    shape = CircleShape,
+                    color = SummaryPrimaryButton.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, SummaryBorder)
+                ) {
+                    Text(
+                        text = if (isEnglish) "›" else "‹",
+                        color = SummaryTextDark,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
 
         Spacer(Modifier.height(8.dp))
 
         // שמות ימים
-        Row(modifier = Modifier.fillMaxWidth()) {
-            weekLabels.forEach { w ->
-                Text(
-                    text = w,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = SummaryCardInner,
+            tonalElevation = 0.dp,
+            border = BorderStroke(1.dp, SummaryBorder)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                weekLabels.forEach { w ->
+                    Text(
+                        text = w,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        color = SummaryTextDark
+                    )
+                }
             }
         }
 
@@ -1558,15 +1648,14 @@ private fun CalendarMonthGrid(
                     val isMarked = date != null && markedIsoDays.contains(date.format(isoFmt))
 
                     val bg = when {
-                        isSelected -> MaterialTheme.colorScheme.primary
-                        isMarked   -> MaterialTheme.colorScheme.secondaryContainer
-                        else       -> Color.Transparent
+                        isSelected -> SummaryPrimaryButton
+                        isMarked   -> SummaryChipSelected
+                        else       -> SummaryCardInner.copy(alpha = 0.70f)
                     }
 
                     val fg = when {
-                        isSelected -> MaterialTheme.colorScheme.onPrimary
-                        isMarked   -> MaterialTheme.colorScheme.onSecondaryContainer
-                        else       -> MaterialTheme.colorScheme.onSurface
+                        isSelected -> Color.White
+                        else       -> SummaryTextDark
                     }
 
                     Box(
@@ -1601,8 +1690,9 @@ private fun CalendarMonthGrid(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(8.dp)
+                color = SummaryChipSelected,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, SummaryBorder)
             ) { Spacer(Modifier.size(12.dp)) }
 
             Spacer(Modifier.width(8.dp))
@@ -1610,7 +1700,8 @@ private fun CalendarMonthGrid(
             Text(
                 text = tr("יש סיכום", "Has summary"),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontWeight = FontWeight.Bold,
+                color = SummaryTextMuted
             )
         }
     }
@@ -1701,56 +1792,55 @@ private fun ExercisePickRow(
     val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
 
-    Surface(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
-        color = if (checked)
-            Color(0xFF3B82F6).copy(alpha = 0.22f)
-        else
-            SummaryCardInner.copy(alpha = 0.45f),
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            1.dp,
-            if (checked) Color(0xFF60A5FA).copy(alpha = 0.45f)
-            else Color.White.copy(alpha = 0.08f)
-        )
+            .background(
+                if (checked) SummaryChipSelected.copy(alpha = 0.38f) else Color.Transparent
+            )
+            .clickable { onToggle() }
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.End
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.End
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = horizontalEnd
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = horizontalEnd
-            ) {
-                Text(
-                    text = item.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                    textAlign = textAlignPrimary,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = item.topic,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.70f),
-                    textAlign = textAlignPrimary,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            Text(
+                text = item.name,
+                fontWeight = FontWeight.ExtraBold,
+                color = SummaryTextDark,
+                textAlign = textAlignPrimary,
+                fontSize = 14.sp,
+                lineHeight = 17.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
 
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.height(2.dp))
 
-            Checkbox(
-                checked = checked,
-                onCheckedChange = { onToggle() }
+            Text(
+                text = item.topic,
+                color = SummaryTextMuted,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = textAlignPrimary,
+                fontSize = 11.sp,
+                lineHeight = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
             )
         }
+
+        Spacer(Modifier.width(10.dp))
+
+        Checkbox(
+            checked = checked,
+            onCheckedChange = { onToggle() },
+            modifier = Modifier.scale(0.82f)
+        )
     }
 }
 
@@ -1800,7 +1890,7 @@ private fun SelectedExerciseEditor(
                 text = item.name,
                 style = MaterialTheme.typography.titleLarge.merge(titleDirectionStyle),
                 fontWeight = FontWeight.ExtraBold,
-                color = Color.White,
+                color = SummaryTextDark,
                 textAlign = textAlignPrimary,
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 3,
@@ -1816,7 +1906,7 @@ private fun SelectedExerciseEditor(
                     onClick = { notesOpen = !notesOpen },
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
                         containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                        contentColor = Color.White
+                        contentColor = SummaryTextDark
                     )
                 ) {
                     Icon(
@@ -1863,7 +1953,7 @@ private fun SelectedExerciseEditor(
                     Text(
                         text = item.highlight,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
+                        color = SummaryTextDark,
                         textAlign = textAlignPrimary,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1884,18 +1974,18 @@ private fun SelectedExerciseEditor(
                     },
                     minLines = 3,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = Color.White
+                        color = SummaryTextDark
                     ),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
+                        focusedTextColor = SummaryTextDark,
+                        unfocusedTextColor = SummaryTextDark,
                         focusedBorderColor = SummaryBorder,
                         unfocusedBorderColor = SummaryDivider,
-                        focusedLabelColor = Color.White,
-                        unfocusedLabelColor = Color.White.copy(alpha = 0.78f),
-                        cursorColor = Color.White,
-                        focusedContainerColor = SummaryCardInner,
-                        unfocusedContainerColor = SummaryCardInner
+                        focusedLabelColor = SummaryTextDark,
+                        unfocusedLabelColor = SummaryTextDark.copy(alpha = 0.78f),
+                        cursorColor = SummaryPurpleButton,
+                        focusedContainerColor = Color(0xFFF7FAFF),
+                        unfocusedContainerColor = Color(0xFFF7FAFF)
                     )
                 )
             }

@@ -147,6 +147,14 @@ private data class FreeSessionPlaceSuggestion(
     val placeId: String? = null
 )
 
+private data class FreeSessionBranchUser(
+    val uid: String,
+    val name: String,
+    val email: String,
+    val phone: String,
+    val mergeKey: String
+)
+
 private fun readFreeSessionPrefsList(
     sp: SharedPreferences,
     vararg keys: String
@@ -842,7 +850,297 @@ fun FreeSessionsScreen(
 
     val sessions by vm.upcoming.collectAsStateCompat()
 
-    // ===== Create dialog =====
+    suspend fun createFreeSessionNotificationRequests(
+        sessionTitle: String,
+        locationName: String?,
+        startsAtMillis: Long
+    ) {
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val db = FirebaseFirestore.getInstance()
+
+                data class FreeSessionNotifyTarget(
+                    val uid: String,
+                    val name: String,
+                    val email: String,
+                    val phone: String,
+                    val mergeKey: String
+                )
+
+                fun splitDocValue(value: Any?): List<String> {
+                    return when (value) {
+                        is String -> {
+                            val raw = value.trim()
+
+                            if (raw.startsWith("[")) {
+                                runCatching {
+                                    val arr = org.json.JSONArray(raw)
+                                    (0 until arr.length())
+                                        .mapNotNull { index -> arr.optString(index, null) }
+                                }.getOrDefault(emptyList())
+                            } else {
+                                raw.split(',', ';', '|', '\n')
+                            }
+                        }
+
+                        is List<*> -> value.mapNotNull { it?.toString() }
+                        is Set<*> -> value.mapNotNull { it?.toString() }
+                        else -> emptyList()
+                    }
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                }
+
+                fun docBranches(doc: com.google.firebase.firestore.DocumentSnapshot): List<String> {
+                    return listOf(
+                        "active_branch",
+                        "activeBranch",
+                        "branch",
+                        "branchName",
+                        "branch_name",
+                        "branches",
+                        "branches_json",
+                        "selected_branches"
+                    )
+                        .flatMap { key -> splitDocValue(doc.get(key)) }
+                        .distinct()
+                }
+
+                fun docGroups(doc: com.google.firebase.firestore.DocumentSnapshot): List<String> {
+                    return listOf(
+                        "active_group",
+                        "activeGroup",
+                        "group",
+                        "groupKey",
+                        "group_key",
+                        "primaryGroup",
+                        "groups",
+                        "groups_json",
+                        "selected_groups",
+                        "age_group",
+                        "age_groups"
+                    )
+                        .flatMap { key -> splitDocValue(doc.get(key)) }
+                        .map {
+                            il.kmi.app.training.TrainingCatalog
+                                .normalizeGroupName(it)
+                                .ifBlank { it }
+                                .trim()
+                        }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                }
+
+                fun docName(doc: com.google.firebase.firestore.DocumentSnapshot): String {
+                    return listOf(
+                        doc.getString("fullName"),
+                        doc.getString("full_name"),
+                        doc.getString("name"),
+                        doc.getString("displayName"),
+                        doc.getString("display_name"),
+                        doc.getString("user_name"),
+                        doc.getString("email")
+                    )
+                        .map { it.orEmpty().trim() }
+                        .firstOrNull { it.isNotBlank() }
+                        .orEmpty()
+                }
+
+                fun docEmail(doc: com.google.firebase.firestore.DocumentSnapshot): String {
+                    return listOf(
+                        doc.getString("email"),
+                        doc.getString("userEmail"),
+                        doc.getString("user_email")
+                    )
+                        .map { it.orEmpty().trim().lowercase(Locale.US) }
+                        .firstOrNull { it.isNotBlank() }
+                        .orEmpty()
+                }
+
+                fun docPhone(doc: com.google.firebase.firestore.DocumentSnapshot): String {
+                    return listOf(
+                        doc.getString("phone"),
+                        doc.getString("phoneNumber"),
+                        doc.getString("phone_number"),
+                        doc.getString("mobile"),
+                        doc.getString("userPhone"),
+                        doc.getString("user_phone")
+                    )
+                        .map { it.orEmpty().filter { ch -> ch.isDigit() } }
+                        .firstOrNull { it.isNotBlank() }
+                        .orEmpty()
+                }
+
+                fun mergeKey(
+                    uid: String,
+                    name: String,
+                    email: String,
+                    phone: String
+                ): String {
+                    return when {
+                        email.isNotBlank() -> "email:$email"
+                        phone.isNotBlank() -> "phone:$phone"
+                        name.isNotBlank() -> "name:${normalizeFreeSessionText(name)}"
+                        else -> "uid:$uid"
+                    }
+                }
+
+                val wantedBranch = normalizeFreeSessionText(selectedBranch)
+                val wantedGroup = normalizeFreeSessionText(
+                    il.kmi.app.training.TrainingCatalog
+                        .normalizeGroupName(selectedGroupKey)
+                        .ifBlank { selectedGroupKey }
+                )
+
+                val targets = db.collection("users")
+                    .limit(1000)
+                    .get()
+                    .await()
+                    .documents
+                    .filter { doc ->
+                        val branchMatch = docBranches(doc).any { branchName ->
+                            val clean = normalizeFreeSessionText(branchName)
+                            clean == wantedBranch ||
+                                    clean.contains(wantedBranch) ||
+                                    wantedBranch.contains(clean)
+                        }
+
+                        val groupMatch = docGroups(doc).any { groupName ->
+                            normalizeFreeSessionText(groupName) == wantedGroup
+                        }
+
+                        branchMatch && groupMatch
+                    }
+                    .mapNotNull { doc ->
+                        val uid = listOf(
+                            doc.getString("uid"),
+                            doc.getString("authUid"),
+                            doc.id
+                        )
+                            .map { it.orEmpty().trim() }
+                            .firstOrNull { it.isNotBlank() }
+                            .orEmpty()
+
+                        val name = docName(doc)
+                        val email = docEmail(doc)
+                        val phone = docPhone(doc)
+
+                        if (uid.isBlank()) {
+                            null
+                        } else {
+                            FreeSessionNotifyTarget(
+                                uid = uid,
+                                name = name,
+                                email = email,
+                                phone = phone,
+                                mergeKey = mergeKey(uid, name, email, phone)
+                            )
+                        }
+                    }
+                    .filter { it.uid != currentUid }
+                    .distinctBy { it.mergeKey }
+
+                if (targets.isEmpty()) {
+                    Log.d(
+                        FREE_SESSIONS_DEBUG,
+                        "free_session_push_skip | reason=no_targets | branch=$selectedBranch | group=$selectedGroupKey"
+                    )
+                    return@runCatching
+                }
+
+                val timeText = fmtTime(startsAtMillis, isEnglish)
+                val locationText = locationName.orEmpty().trim()
+
+                val titleText = if (isEnglish) {
+                    "New free session"
+                } else {
+                    "נפתח אימון חופשי"
+                }
+
+                val bodyText = if (isEnglish) {
+                    buildString {
+                        append("A free session was opened")
+                        if (locationText.isNotBlank()) append(" at ").append(locationText)
+                        append(" · ").append(timeText)
+                    }
+                } else {
+                    buildString {
+                        append("נפתח אימון חופשי")
+                        if (locationText.isNotBlank()) append(" במקום ").append(locationText)
+                        append(" בשעה ").append(timeText)
+                    }
+                }
+
+                val broadcastRef = db.collection("coachBroadcasts").document()
+                val broadcastId = broadcastRef.id
+
+                broadcastRef.set(
+                    mapOf(
+                        "type" to "free_session_created",
+                        "broadcastId" to broadcastId,
+                        "broadcast_id" to broadcastId,
+
+                        // שדות קיימים של הודעות מאמן
+                        "text" to bodyText,
+                        "message" to bodyText,
+                        "body" to bodyText,
+                        "title" to titleText,
+                        "coachName" to currentName,
+                        "senderName" to currentName,
+                        "fromName" to currentName,
+                        "authorUid" to currentUid,
+                        "coachUid" to currentUid,
+                        "senderUid" to currentUid,
+
+                        // יעדים — כדי שה־Push הקיים של הודעות מאמן יידע למי לשלוח
+                        "targetUids" to targets.map { it.uid },
+                        "recipientUids" to targets.map { it.uid },
+                        "targetEmails" to targets.map { it.email }.filter { it.isNotBlank() },
+                        "targetPhones" to targets.map { it.phone }.filter { it.isNotBlank() },
+                        "targetNames" to targets.map { it.name }.filter { it.isNotBlank() },
+                        "targetRecipients" to targets.map { target ->
+                            mapOf(
+                                "uid" to target.uid,
+                                "name" to target.name,
+                                "email" to target.email,
+                                "phone" to target.phone
+                            )
+                        },
+
+                        // סינון למסך הבית ולכרטיס הודעות מאמן
+                        "branch" to selectedBranch,
+                        "branchName" to selectedBranch,
+                        "selectedBranch" to selectedBranch,
+                        "group" to selectedGroupKey,
+                        "groupKey" to selectedGroupKey,
+                        "selectedGroup" to selectedGroupKey,
+
+                        // מידע על האימון החופשי
+                        "source" to "free_sessions",
+                        "sessionTitle" to sessionTitle,
+                        "locationName" to locationText,
+                        "startsAt" to startsAtMillis,
+
+                        "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                        "sentAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                    )
+                ).await()
+
+                Log.d(
+                    FREE_SESSIONS_DEBUG,
+                    "free_session_coach_broadcast_created | broadcastId=$broadcastId | targets=${targets.size} | branch=$selectedBranch | group=$selectedGroupKey"
+                )
+            }.onFailure { error ->
+                Log.e(
+                    FREE_SESSIONS_DEBUG,
+                    "free_session_coach_broadcast_failed | message=${error.message.orEmpty()}",
+                    error
+                )
+            }
+        }
+    }
+
+// ===== Create dialog =====
     var showCreate by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
     var locationQuery by remember { mutableStateOf("") }
@@ -1238,6 +1536,22 @@ fun FreeSessionsScreen(
                                                     }
 
                                                     if (result.isSuccess) {
+                                                        val createdTitle = cleanTitle
+                                                        val createdLocation = (
+                                                                selectedPlace?.name
+                                                                    ?: locationQuery
+                                                                )
+                                                            .trim()
+                                                            .ifBlank { null }
+
+                                                        val createdStartsAt = startsAt
+
+                                                        createFreeSessionNotificationRequests(
+                                                            sessionTitle = createdTitle,
+                                                            locationName = createdLocation,
+                                                            startsAtMillis = createdStartsAt
+                                                        )
+
                                                         title = ""
                                                         locationQuery = ""
                                                         selectedPlace = null
@@ -1304,7 +1618,7 @@ fun FreeSessionsScreen(
         ModalBottomSheet(
             onDismissRequest = { selected = null },
             sheetState = sheetState,
-            containerColor = Color(0xFF0B1220)
+            containerColor = KmiFreeBgMid
         ) {
             FreeSessionDetailsSheet(
                 repo = repo,
@@ -1351,7 +1665,9 @@ private fun HeaderCard(
             Text(
                 text = "${tr("סניף", "Branch")}: ${branch.trim()}",
                 color = KmiFreeTextColor,
-                fontWeight = FontWeight.Black,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 14.sp,
+                lineHeight = 17.sp,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 1,
@@ -2299,7 +2615,8 @@ private fun FreeSessionCard(
             .clip(RoundedCornerShape(24.dp))
             .clickable { onClick() },
         shape = RoundedCornerShape(24.dp),
-        color = KmiFreeCardColor.copy(alpha = 0.96f),
+        color = Color.White.copy(alpha = 0.96f),
+        shadowElevation = 6.dp,
         border = BorderStroke(1.dp, KmiFreeBorderColor)
     ) {
         Column(
@@ -2324,9 +2641,10 @@ private fun FreeSessionCard(
                 ) {
                     Text(
                         text = session.title,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        fontSize = 17.sp,
+                        lineHeight = 21.sp,
+                        fontWeight = FontWeight.Black,
+                        color = KmiFreeTextColor,
                         textAlign = TextAlign.Start,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -2336,7 +2654,8 @@ private fun FreeSessionCard(
                     Text(
                         text = "נוצר ע״י ${session.createdByName}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFCBD5F5),
+                        color = KmiFreeSubTextColor,
+                        fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Start,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -2406,7 +2725,8 @@ private fun FreeSessionCard(
                 Spacer(Modifier.width(4.dp))
                 Text(
                     text = "${session.goingCount + session.onWayCount + session.arrivedCount + session.cantCount} משתתפים",
-                    color = Color(0xFFE5E7EB),
+                    color = KmiFreeTextColor,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2428,7 +2748,8 @@ private fun FreeSessionCard(
                         Spacer(Modifier.width(6.dp))
                         Text(
                             text = loc,
-                            color = Color(0xFFE5E7EB),
+                            color = KmiFreeTextColor,
+                            fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Start,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -2440,7 +2761,8 @@ private fun FreeSessionCard(
             Text(
                 text = "לחץ כדי לבחור סטטוס (מגיע / לא יכול / וכו׳)",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.7f),
+                color = KmiFreeSubTextColor,
+                fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Start,   // ✅ ב-RTL זה ימין
                 modifier = Modifier.fillMaxWidth()
             )
@@ -2459,7 +2781,7 @@ private fun FreeSessionCard(
                     .height(10.dp)
                     .clip(RoundedCornerShape(999.dp)),
                 color = Color(0xFF22C55E),
-                trackColor = Color(0xFF0B1220)
+                trackColor = KmiFreeBorderColor.copy(alpha = 0.55f)
             )
         }
     }
@@ -2480,14 +2802,236 @@ private fun FreeSessionDetailsSheet(
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
 
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    val detailAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val detailHorizontal = if (isEnglish) Alignment.Start else Alignment.End
+    val detailArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
+    val detailChipAlignment = if (isEnglish) Alignment.Start else Alignment.End
+
     var parts by remember { mutableStateOf<List<FreeSessionPart>>(emptyList()) }
     var myState by remember { mutableStateOf<ParticipantState?>(null) }
+
+    var branchUsers by remember {
+        mutableStateOf<List<FreeSessionBranchUser>>(emptyList())
+    }
+
+    var branchUsersLoading by remember {
+        mutableStateOf(false)
+    }
 
     LaunchedEffect(session.id) {
         repo.observeParticipants(branch, groupKey, session.id).collectLatest { list ->
             parts = list
             myState = list.firstOrNull { it.uid == currentUid }?.state
         }
+    }
+
+    LaunchedEffect(branch) {
+        val cleanBranch = branch.trim()
+
+        if (cleanBranch.isBlank()) {
+            branchUsers = emptyList()
+            branchUsersLoading = false
+            return@LaunchedEffect
+        }
+
+        branchUsersLoading = true
+
+        branchUsers = withContext(Dispatchers.IO) {
+            runCatching {
+                val db = FirebaseFirestore.getInstance()
+
+                fun normalizeBranch(raw: String): String {
+                    return normalizeFreeSessionText(raw)
+                        .replace(" - ", " – ")
+                        .replace("-", "–")
+                        .replace("—", "–")
+                        .replace("־", "–")
+                        .trim()
+                }
+
+                fun splitValue(value: Any?): List<String> {
+                    return when (value) {
+                        is String -> {
+                            val raw = value.trim()
+
+                            if (raw.startsWith("[")) {
+                                runCatching {
+                                    val arr = org.json.JSONArray(raw)
+                                    (0 until arr.length())
+                                        .mapNotNull { index -> arr.optString(index, null) }
+                                }.getOrDefault(emptyList())
+                            } else {
+                                raw.split(',', ';', '|', '\n')
+                            }
+                        }
+
+                        is List<*> -> value.mapNotNull { it?.toString() }
+                        is Set<*> -> value.mapNotNull { it?.toString() }
+                        else -> emptyList()
+                    }
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                }
+
+                fun userBranches(
+                    doc: com.google.firebase.firestore.DocumentSnapshot
+                ): List<String> {
+                    return listOf(
+                        "active_branch",
+                        "activeBranch",
+                        "branch",
+                        "branchName",
+                        "branch_name",
+                        "branches",
+                        "branches_json",
+                        "selected_branches"
+                    )
+                        .flatMap { key -> splitValue(doc.get(key)) }
+                        .distinct()
+                }
+
+                fun userName(
+                    doc: com.google.firebase.firestore.DocumentSnapshot
+                ): String {
+                    return listOf(
+                        doc.getString("fullName"),
+                        doc.getString("full_name"),
+                        doc.getString("name"),
+                        doc.getString("displayName"),
+                        doc.getString("display_name"),
+                        doc.getString("user_name"),
+                        doc.getString("email")
+                    )
+                        .map { it.orEmpty().trim() }
+                        .firstOrNull { it.isNotBlank() }
+                        .orEmpty()
+                }
+
+                fun userEmail(
+                    doc: com.google.firebase.firestore.DocumentSnapshot
+                ): String {
+                    return listOf(
+                        doc.getString("email"),
+                        doc.getString("userEmail"),
+                        doc.getString("user_email")
+                    )
+                        .map { it.orEmpty().trim().lowercase(Locale.US) }
+                        .firstOrNull { it.isNotBlank() }
+                        .orEmpty()
+                }
+
+                fun userPhone(
+                    doc: com.google.firebase.firestore.DocumentSnapshot
+                ): String {
+                    return listOf(
+                        doc.getString("phone"),
+                        doc.getString("phoneNumber"),
+                        doc.getString("phone_number"),
+                        doc.getString("mobile"),
+                        doc.getString("userPhone"),
+                        doc.getString("user_phone")
+                    )
+                        .map { it.orEmpty().filter { ch -> ch.isDigit() } }
+                        .firstOrNull { it.isNotBlank() }
+                        .orEmpty()
+                }
+
+                fun userMergeKey(
+                    uid: String,
+                    name: String,
+                    email: String,
+                    phone: String
+                ): String {
+                    return when {
+                        email.isNotBlank() -> "email:$email"
+                        phone.isNotBlank() -> "phone:$phone"
+                        name.isNotBlank() -> "name:${normalizeFreeSessionText(name)}"
+                        else -> "uid:$uid"
+                    }
+                }
+
+                val wanted = normalizeBranch(cleanBranch)
+
+                db.collection("users")
+                    .limit(1000)
+                    .get()
+                    .await()
+                    .documents
+                    .filter { doc ->
+                        userBranches(doc).any { userBranch ->
+                            val cleanUserBranch = normalizeBranch(userBranch)
+
+                            cleanUserBranch == wanted ||
+                                    cleanUserBranch.contains(wanted) ||
+                                    wanted.contains(cleanUserBranch)
+                        }
+                    }
+                    .mapNotNull { doc ->
+                        val uid = listOf(
+                            doc.getString("uid"),
+                            doc.getString("authUid"),
+                            doc.id
+                        )
+                            .map { it.orEmpty().trim() }
+                            .firstOrNull { it.isNotBlank() }
+                            .orEmpty()
+
+                        val name = userName(doc)
+                        val email = userEmail(doc)
+                        val phone = userPhone(doc)
+                        val mergeKey = userMergeKey(
+                            uid = uid,
+                            name = name,
+                            email = email,
+                            phone = phone
+                        )
+
+                        if (uid.isBlank() || name.isBlank()) {
+                            null
+                        } else {
+                            FreeSessionBranchUser(
+                                uid = uid,
+                                name = name,
+                                email = email,
+                                phone = phone,
+                                mergeKey = mergeKey
+                            )
+                        }
+                    }
+                    .distinctBy { it.mergeKey }
+                    .sortedBy { it.name }
+            }.getOrDefault(emptyList())
+        }
+
+        branchUsersLoading = false
+    }
+
+    val allParticipants = remember(parts, branchUsers) {
+        val byMergeKey = linkedMapOf<String, FreeSessionPart>()
+
+        branchUsers.forEach { user ->
+            byMergeKey[user.mergeKey] = FreeSessionPart(
+                uid = user.uid,
+                name = user.name,
+                state = ParticipantState.INVITED,
+                updatedAt = 0L
+            )
+        }
+
+        parts.forEach { part ->
+            val existingUser = branchUsers.firstOrNull { user ->
+                user.uid == part.uid ||
+                        normalizeFreeSessionText(user.name) == normalizeFreeSessionText(part.name)
+            }
+
+            val key = existingUser?.mergeKey
+                ?: "name:${normalizeFreeSessionText(part.name)}"
+
+            byMergeKey[key] = part
+        }
+
+        byMergeKey.values.toList()
     }
 
     // ✅ חדש: יצירת לינק וויז (ניווט/שיתוף) לפי lat/lng אם קיימים, אחרת לפי שם מקום
@@ -2569,70 +3113,105 @@ private fun FreeSessionDetailsSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .heightIn(max = 760.dp)
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = detailHorizontal
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = detailHorizontal) {
                 Text(
                     text = session.title,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.End,
+                    color = KmiFreeTextColor,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 20.sp,
+                    lineHeight = 24.sp,
+                    textAlign = detailAlign,
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${if (isEnglish) "Time" else "זמן"}: ${
-                        fmtTime(
-                            session.startsAt,
-                            isEnglish
-                        )
-                    }",
+                    text = "${tr("זמן", "Time")}: ${fmtTime(session.startsAt, isEnglish)}",
                     color = KmiFreeSubTextColor,
-                    textAlign = TextAlign.End,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = detailAlign,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-            TextButton(onClick = onClose) { Text("סגור") }
+            TextButton(onClick = onClose) {
+                Text(
+                    text = tr("סגור", "Close"),
+                    color = KmiFreeSubTextColor,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         session.locationName?.takeIf { it.isNotBlank() }?.let { loc ->
-            Text(
-                text = "מקום: $loc",
-                color = Color(0xFFE5E7EB),
-                textAlign = TextAlign.End,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = detailHorizontal
+            ) {
+                Text(
+                    text = "${tr("מקום", "Location")}: $loc",
+                    color = KmiFreeTextColor,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 16.sp,
+                    lineHeight = 20.sp,
+                    textAlign = detailAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             // ✅ חדש: כפתורי Waze (ניווט + שיתוף לקבוצה)
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = detailHorizontal
             ) {
-                OutlinedButton(onClick = { shareWazeToGroup() }) {
+                OutlinedButton(
+                    onClick = { shareWazeToGroup() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Icon(Icons.Filled.Group, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("שתף לקבוצה")
+                    Text(
+                        text = tr("שתף לקבוצה", "Share with group"),
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-                FilledTonalButton(onClick = { openWaze() }) {
+
+                FilledTonalButton(
+                    onClick = { openWaze() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Icon(Icons.Filled.Place, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("פתח בוויז")
+                    Text(
+                        text = tr("פתח בוויז", "Open in Waze"),
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
 
-        Divider(color = Color(0xFF1F2937))
+        Divider(color = KmiFreeBorderColor)
 
         Text(
-            text = "מה הסטטוס שלך?",
-            color = Color.White,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.End,
+            text = tr("מה הסטטוס שלך?", "What is your status?"),
+            color = KmiFreeTextColor,
+            fontWeight = FontWeight.Black,
+            fontSize = 17.sp,
+            lineHeight = 21.sp,
+            textAlign = detailAlign,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -2640,10 +3219,10 @@ private fun FreeSessionDetailsSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp, detailChipAlignment)
         ) {
             StateChip(
-                text = "אני מגיע",
+                text = tr("אני מגיע", "I'm coming"),
                 selected = myState == ParticipantState.GOING,
                 selectedColor = Color(0xFF22C55E),
                 onClick = {
@@ -2661,7 +3240,7 @@ private fun FreeSessionDetailsSheet(
             )
 
             StateChip(
-                text = "בדרך",
+                text = tr("בדרך", "On my way"),
                 selected = myState == ParticipantState.ON_WAY,
                 selectedColor = Color(0xFF0EA5E9),
                 onClick = {
@@ -2679,7 +3258,7 @@ private fun FreeSessionDetailsSheet(
             )
 
             StateChip(
-                text = "הגעתי",
+                text = tr("הגעתי", "Arrived"),
                 selected = myState == ParticipantState.ARRIVED,
                 selectedColor = Color(0xFF8B5CF6),
                 onClick = {
@@ -2697,7 +3276,7 @@ private fun FreeSessionDetailsSheet(
             )
 
             StateChip(
-                text = "לא יכול",
+                text = tr("לא יכול", "Can't come"),
                 selected = myState == ParticipantState.CANT,
                 selectedColor = Color(0xFFEF4444),
                 onClick = {
@@ -2715,28 +3294,48 @@ private fun FreeSessionDetailsSheet(
             )
         } // ✅ סגירה נכונה של ה-Row של הצ'יפים
 
-        Divider(color = Color(0xFF1F2937))
+        Divider(color = KmiFreeBorderColor)
 
         Text(
-            text = "מי מגיע?",
-            color = Color.White,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.End,
+            text = tr("מי מגיע?", "Who's coming?"),
+            color = KmiFreeTextColor,
+            fontWeight = FontWeight.Black,
+            fontSize = 17.sp,
+            lineHeight = 21.sp,
+            textAlign = detailAlign,
             modifier = Modifier.fillMaxWidth()
         )
 
-        if (parts.isEmpty()) {
+        if (branchUsersLoading) {
             Text(
-                text = "עדיין אין משתתפים.",
-                color = Color(0xFFCBD5F5),
-                textAlign = TextAlign.End,
+                text = tr("טוען מתאמנים מהסניף...", "Loading branch students..."),
+                color = KmiFreeSubTextColor,
+                fontWeight = FontWeight.Bold,
+                textAlign = detailAlign,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else if (allParticipants.isEmpty()) {
+            Text(
+                text = tr("לא נמצאו מתאמנים בסניף הזה.", "No students were found in this branch."),
+                color = KmiFreeSubTextColor,
+                fontWeight = FontWeight.Bold,
+                textAlign = detailAlign,
                 modifier = Modifier.fillMaxWidth()
             )
         } else {
-            parts.sortedByDescending { it.updatedAt }.take(50).forEach { p ->
-                ParticipantRow(p)
-                Divider(color = Color(0xFF0F172A))
-            }
+            allParticipants
+                .sortedWith(
+                    compareByDescending<FreeSessionPart> { it.updatedAt }
+                        .thenBy { it.name }
+                )
+                .take(100)
+                .forEach { p ->
+                    ParticipantRow(
+                        p = p,
+                        isEnglish = isEnglish
+                    )
+                    Divider(color = KmiFreeBorderColor)
+                }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -2765,13 +3364,22 @@ private fun StateChip(
 }
 
 @Composable
-private fun ParticipantRow(p: FreeSessionPart) {
+private fun ParticipantRow(
+    p: FreeSessionPart,
+    isEnglish: Boolean
+) {
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val rowAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+    val rowHorizontal = if (isEnglish) Alignment.Start else Alignment.End
+    val rowArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
+
     val stateLabel = when (p.state) {
-        ParticipantState.GOING -> "מגיע"
-        ParticipantState.ON_WAY -> "בדרך"
-        ParticipantState.ARRIVED -> "הגיע"
-        ParticipantState.CANT -> "לא יכול"
-        ParticipantState.INVITED -> "הוזמן"
+        ParticipantState.GOING -> tr("מגיע", "Coming")
+        ParticipantState.ON_WAY -> tr("בדרך", "On the way")
+        ParticipantState.ARRIVED -> tr("הגיע", "Arrived")
+        ParticipantState.CANT -> tr("לא יכול", "Can't come")
+        ParticipantState.INVITED -> tr("הוזמן", "Invited")
     }
 
     val stateColor = when (p.state) {
@@ -2786,14 +3394,30 @@ private fun ParticipantRow(p: FreeSessionPart) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
+        horizontalArrangement = rowArrangement,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+        if (isEnglish) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(stateColor, CircleShape)
+            )
+
+            Spacer(Modifier.width(8.dp))
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = rowHorizontal
+        ) {
             Text(
                 text = p.name,
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.End,
+                color = KmiFreeTextColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                lineHeight = 20.sp,
+                textAlign = rowAlign,
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2802,15 +3426,20 @@ private fun ParticipantRow(p: FreeSessionPart) {
                 text = stateLabel,
                 color = stateColor,
                 style = MaterialTheme.typography.labelSmall,
-                textAlign = TextAlign.End,
+                textAlign = rowAlign,
                 modifier = Modifier.fillMaxWidth()
             )
         }
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .background(stateColor, CircleShape)
-        )
+
+        if (!isEnglish) {
+            Spacer(Modifier.width(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(stateColor, CircleShape)
+            )
+        }
     }
 }
 
