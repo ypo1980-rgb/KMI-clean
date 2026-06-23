@@ -1,8 +1,9 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 
 package il.kmi.app.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.graphics.graphicsLayer
@@ -53,6 +55,9 @@ import il.kmi.app.favorites.FavoritesStore
 import il.kmi.shared.domain.content.HardSectionsCatalog
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
+
+
+//=======================================================================
 
 private fun toSharedBeltOrNull(rawId: String?): Belt? {
     val s = rawId?.trim().orEmpty()
@@ -834,13 +839,12 @@ fun SubjectExercisesScreen(
                         )
                     }
                 } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 10.dp, horizontal = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-
-                        if (filterMode == FilterMode.RECENTS) {
+                    if (filterMode == FilterMode.RECENTS) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(vertical = 10.dp, horizontal = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             itemsIndexed(
                                 items = filteredRows,
                                 key = { index, row -> "recent_${index}_${row.canonicalId}" }
@@ -901,77 +905,144 @@ fun SubjectExercisesScreen(
                                     }
                                 )
                             }
-                        } else {
-                            val grouped = filteredRows.groupBy { it.belt }
-                            val beltsToShow = beltsForUi.filter { grouped[it].orEmpty().isNotEmpty() }
+                        }
+                    } else {
+                        val grouped = filteredRows.groupBy { it.belt }
+                        val beltsToShow = beltsForUi.filter { grouped[it].orEmpty().isNotEmpty() }
 
-                            beltsToShow.forEach { belt ->
-                                val beltRows = grouped[belt].orEmpty()
+                        val flatRows = beltsToShow.flatMap { belt ->
+                            grouped[belt].orEmpty().mapIndexed { rowIndex, row ->
+                                Triple(belt, rowIndex, row)
+                            }
+                        }
 
-                                item(key = "belt_card_${belt.id}") {
-                                    BeltSectionCardModern(
-                                        belt = belt,
-                                        count = beltRows.size,
-                                        isDarkMode = isDarkMode
-                                    ) {
-                                        beltRows.forEachIndexed { rowIndex, row ->
-                                            val statusId = subjectStatusIdFor(row)
-                                            val mastered = subjectItemStates[statusId]
+                        val listState = rememberLazyListState()
 
-                                            ExerciseRowCardModern(
-                                                exerciseNumber = rowIndex + 1,
-                                                belt = belt,
-                                                topic = row.topic,
-                                                item = row.displayItem,
-                                                mastered = mastered,
-                                                isFavorite = row.canonicalId in favIds,
-                                                isEnglish = isEnglish,
-                                                isDarkMode = isDarkMode,
-                                                showMeta = (effectiveAppSubject.id != "releases"),
-                                                onStatusClick = {
-                                                    val nextValue = when (subjectItemStates[statusId]) {
-                                                        null -> true
-                                                        true -> false
-                                                        false -> null
-                                                    }
+                        val currentStickyBelt by remember(flatRows, listState) {
+                            derivedStateOf {
+                                flatRows
+                                    .getOrNull(listState.firstVisibleItemIndex)
+                                    ?.first
+                                    ?: beltsToShow.firstOrNull()
+                                    ?: Belt.YELLOW
+                            }
+                        }
 
-                                                    subjectItemStates[statusId] = nextValue
+                        val currentStickyRows = grouped[currentStickyBelt].orEmpty()
 
-                                                    subjectStatusKeysFor(row).forEach { key ->
-                                                        vm.setItemStatusNullable(
-                                                            belt = row.belt,
-                                                            topic = key,
-                                                            item = statusId,
-                                                            value = nextValue
-                                                        )
-                                                    }
+                        val currentKnownCount = currentStickyRows.count { row ->
+                            subjectItemStates[subjectStatusIdFor(row)] == true
+                        }
 
-                                                    setSubjectLocalStatus(
-                                                        row = row,
-                                                        statusId = statusId,
-                                                        value = nextValue
-                                                    )
-                                                },
-                                                onToggleFavorite = {
-                                                    FavoritesStore.toggle(row.canonicalId)
-                                                },
-                                                onInfoClick = {
-                                                    clickSound()
-                                                    haptic(true)
+                        val currentUnknownCount = currentStickyRows.count { row ->
+                            subjectItemStates[subjectStatusIdFor(row)] == false
+                        }
 
-                                                    val nextRecents = buildList {
-                                                        add(row.canonicalId)
-                                                        addAll(recentIds.filterNot { it == row.canonicalId })
-                                                    }.take(50)
+                        val currentFavoriteCount = currentStickyRows.count { row ->
+                            row.canonicalId in favIds
+                        }
 
-                                                    recentIds = nextRecents
-                                                    saveRecents(nextRecents)
+                        val currentUnmarkedCount = currentStickyRows.count { row ->
+                            subjectItemStates[subjectStatusIdFor(row)] == null
+                        }
 
-                                                    selectedRow = row
-                                                }
-                                            )
-                                        }
+                        Column(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            BeltStickyHeaderModern(
+                                belt = currentStickyBelt,
+                                count = currentStickyRows.size,
+                                knownCount = currentKnownCount,
+                                unknownCount = currentUnknownCount,
+                                favoriteCount = currentFavoriteCount,
+                                unmarkedCount = currentUnmarkedCount,
+                                isEnglish = isEnglish,
+                                isDarkMode = isDarkMode,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 10.dp)
+                            )
+
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentPadding = PaddingValues(
+                                    start = 10.dp,
+                                    end = 10.dp,
+                                    bottom = 10.dp
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                itemsIndexed(
+                                    items = flatRows,
+                                    key = { index, triple ->
+                                        val belt = triple.first
+                                        val rowIndex = triple.second
+                                        val row = triple.third
+                                        "fixed_belt_${belt.id}_${rowIndex}_${row.canonicalId}_$index"
                                     }
+                                ) { _, triple ->
+                                    val belt = triple.first
+                                    val rowIndex = triple.second
+                                    val row = triple.third
+
+                                    val statusId = subjectStatusIdFor(row)
+                                    val mastered = subjectItemStates[statusId]
+
+                                    ExerciseRowCardModern(
+                                        exerciseNumber = rowIndex + 1,
+                                        belt = belt,
+                                        topic = row.topic,
+                                        item = row.displayItem,
+                                        mastered = mastered,
+                                        isFavorite = row.canonicalId in favIds,
+                                        isEnglish = isEnglish,
+                                        isDarkMode = isDarkMode,
+                                        showMeta = (effectiveAppSubject.id != "releases"),
+                                        onStatusClick = {
+                                            val nextValue = when (subjectItemStates[statusId]) {
+                                                null -> true
+                                                true -> false
+                                                false -> null
+                                            }
+
+                                            subjectItemStates[statusId] = nextValue
+
+                                            subjectStatusKeysFor(row).forEach { key ->
+                                                vm.setItemStatusNullable(
+                                                    belt = row.belt,
+                                                    topic = key,
+                                                    item = statusId,
+                                                    value = nextValue
+                                                )
+                                            }
+
+                                            setSubjectLocalStatus(
+                                                row = row,
+                                                statusId = statusId,
+                                                value = nextValue
+                                            )
+                                        },
+                                        onToggleFavorite = {
+                                            FavoritesStore.toggle(row.canonicalId)
+                                        },
+                                        onInfoClick = {
+                                            clickSound()
+                                            haptic(true)
+
+                                            val nextRecents = buildList {
+                                                add(row.canonicalId)
+                                                addAll(recentIds.filterNot { it == row.canonicalId })
+                                            }.take(50)
+
+                                            recentIds = nextRecents
+                                            saveRecents(nextRecents)
+
+                                            selectedRow = row
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -1318,13 +1389,157 @@ private fun BeltHeaderRow(
 }
 
 @Composable
+private fun BeltStickyHeaderModern(
+    belt: Belt,
+    count: Int,
+    knownCount: Int,
+    unknownCount: Int,
+    favoriteCount: Int,
+    unmarkedCount: Int,
+    isEnglish: Boolean,
+    isDarkMode: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val onBelt = if (belt.color.luminance() < 0.5f) Color.White else Color.Black
+
+    val cleanName = remember(belt.heb) {
+        val s = belt.heb.trim()
+        if (s.startsWith("חגורה")) s.removePrefix("חגורה").trim() else s
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 0.dp),
+        shape = RoundedCornerShape(22.dp),
+        tonalElevation = if (isDarkMode) 0.dp else 2.dp,
+        shadowElevation = if (isDarkMode) 0.dp else 8.dp,
+        color = if (isDarkMode) Color(0xFF111827) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0x12000000)
+        )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Surface(
+                shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+                color = belt.color
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isEnglish) beltTitleEnglishForSticky(belt) else "חגורה $cleanName",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = onBelt,
+                        modifier = Modifier.weight(1f),
+                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            if (count == 1) "1 exercise" else "$count exercises"
+                        } else {
+                            "$count תרגילים"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = onBelt.copy(alpha = 0.95f)
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = if (isEnglish) {
+                        "← Swipe sideways to see more stats →"
+                    } else {
+                        "→→ הזז לצד כדי לראות עוד נתונים →→"
+                    },
+                    color = if (isDarkMode) {
+                        Color.White.copy(alpha = 0.78f)
+                    } else {
+                        Color(0xFF5B6472)
+                    },
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SubjectTopStatChip(
+                        value = count.toString(),
+                        label = if (isEnglish) "Exercises" else "תרגילים",
+                        containerColor = Color(0xFF98A2B3)
+                    )
+
+                    SubjectTopStatChip(
+                        value = knownCount.toString(),
+                        label = if (isEnglish) "Known" else "יודע",
+                        containerColor = Color(0xFF7ACB88)
+                    )
+
+                    SubjectTopStatChip(
+                        value = unknownCount.toString(),
+                        label = if (isEnglish) "Unknown" else "לא יודע",
+                        containerColor = Color(0xFFF1A97A)
+                    )
+
+                    SubjectTopStatChip(
+                        value = favoriteCount.toString(),
+                        label = if (isEnglish) "Favorites" else "מועדפים",
+                        containerColor = Color(0xFFE7A3B5)
+                    )
+
+                    SubjectTopStatChip(
+                        value = unmarkedCount.toString(),
+                        label = if (isEnglish) "Unmarked" else "לא סומן",
+                        containerColor = Color(0xFF8596C9)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun beltTitleEnglishForSticky(belt: Belt): String {
+    return when (belt) {
+        Belt.YELLOW -> "Yellow Belt"
+        Belt.ORANGE -> "Orange Belt"
+        Belt.GREEN -> "Green Belt"
+        Belt.BLUE -> "Blue Belt"
+        Belt.BROWN -> "Brown Belt"
+        Belt.BLACK -> "Black Belt"
+        else -> belt.name
+    }
+}
+
+@Composable
 private fun BeltSectionCardModern(
     belt: Belt,
     count: Int,
     isDarkMode: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
-) {
-    val onBelt = if (belt.color.luminance() < 0.5f) Color.White else Color.Black
+) {    val onBelt = if (belt.color.luminance() < 0.5f) Color.White else Color.Black
 
     val cleanName = remember(belt.heb) {
         val s = belt.heb.trim()

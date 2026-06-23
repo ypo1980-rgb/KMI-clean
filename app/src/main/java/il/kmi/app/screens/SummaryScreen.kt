@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -36,7 +35,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import il.kmi.app.KmiViewModel
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.color
-import il.kmi.app.ui.lightColor
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import java.io.File
@@ -565,8 +563,7 @@ private fun UserProgressComparisonCard(
     // זה מונע מצב לא הגיוני כמו "ממוצע 0%" + "מתאמנים 0".
     val hasValidComparisonData =
         c != null &&
-                c.usersCount > 0 &&
-                c.hasEnoughData
+                c.usersCount >= 2
 
     val textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
     val columnAlignment = if (isEnglish) Alignment.Start else Alignment.End
@@ -792,12 +789,20 @@ private suspend fun loadBeltComparisonFallbackFromUserProgress(
             val totalCount = (doc.getLong("totalCount") ?: 0L).toInt()
             val knownPercent = (doc.getLong("knownPercent") ?: -1L).toInt()
 
+            val userKey =
+                doc.getString("uid")
+                    ?: doc.getString("userId")
+                    ?: doc.getString("userUid")
+                    ?: doc.id
+
             if (totalCount > 0 && knownPercent in 0..100) {
-                knownPercent
+                userKey to knownPercent
             } else {
                 null
             }
         }
+        .distinctBy { it.first }
+        .map { it.second }
 
     if (percents.isEmpty()) {
         return null
@@ -1310,31 +1315,56 @@ fun SummaryScreen(
                     totalCount = overallTotal
                 )
 
-                // נותן ל-Cloud Function זמן קצר לעדכן beltStats.
-                delay(900)
+                val comparisons = mutableListOf<UserProgressComparison>()
 
-                val beltStatsComparison = UserProgressRepository.loadBeltComparison(
-                    beltId = belt.id,
-                    userKnownPercent = overallPct
-                )
+                // ✅ מנסים כמה פעמים כי לפעמים Cloud Function / Firestore עדיין לא הספיקו להתעדכן.
+                for (attempt in 0 until 4) {
+                    if (attempt > 0) {
+                        delay(700)
+                    } else {
+                        delay(350)
+                    }
 
-                // ✅ אם beltStats לא עודכן / אין מספיק נתונים שם,
-                // מחשבים fallback ישיר מתוך userProgress לפי אותה חגורה.
-                val fallbackComparison =
-                    if (
-                        beltStatsComparison == null ||
-                        beltStatsComparison.usersCount <= 0 ||
-                        !beltStatsComparison.hasEnoughData
-                    ) {
+                    val beltStatsComparison = runCatching {
+                        UserProgressRepository.loadBeltComparison(
+                            beltId = belt.id,
+                            userKnownPercent = overallPct
+                        )
+                    }.getOrNull()
+
+                    if (beltStatsComparison != null && beltStatsComparison.usersCount > 0) {
+                        comparisons += beltStatsComparison
+                    }
+
+                    val fallbackComparison = runCatching {
                         loadBeltComparisonFallbackFromUserProgress(
                             beltId = belt.id,
                             userKnownPercent = overallPct
                         )
-                    } else {
-                        null
+                    }.getOrNull()
+
+                    if (fallbackComparison != null && fallbackComparison.usersCount > 0) {
+                        comparisons += fallbackComparison
                     }
 
-                userProgressComparison = fallbackComparison ?: beltStatsComparison
+                    // ✅ אם כבר מצאנו השוואה עם לפחות שני מתאמנים — אין צורך לחכות לעוד סבבים.
+                    if (comparisons.any { it.usersCount >= 2 }) {
+                        break
+                    }
+                }
+
+                userProgressComparison = comparisons
+                    .sortedWith(
+                        compareBy<UserProgressComparison> { comparison ->
+                            if (comparison.usersCount >= 2) 1 else 0
+                        }.thenBy { comparison ->
+                            comparison.usersCount
+                        }.thenBy { comparison ->
+                            if (comparison.hasEnoughData) 1 else 0
+                        }
+                    )
+                    .lastOrNull()
+
                 userProgressComparisonLoaded = true
             }.onFailure {
                 userProgressComparison = null

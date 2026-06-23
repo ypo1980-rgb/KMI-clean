@@ -22,6 +22,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,6 +50,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -769,170 +772,178 @@ private fun BeltGroupsContent(
                 title.trim() == "Defenses against kicks" ||
                 title.trim() == "Defenses Against Kicks"
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 10.dp, horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        if (!isKickDefenseScreen) {
-            item {
-                Text(
-                    text = if (isEnglish) translateHardTopicTitle(title) else title,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 22.sp,
-                        lineHeight = 25.sp
-                    ),
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                Text(
-                    text = if (isEnglish) "Exercises by belt" else "תרגילים לפי חגורות",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 14.sp
-                    ),
-                    color = Color(0xFF5B6472),
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                Text(
-                    text = if (isEnglish) {
-                        "← Swipe sideways to see more stats →"
-                    } else {
-                        "→→ הזז לצד כדי לראות עוד נתונים →→"
-                    },
-                    color = Color(0xFF5B6472),
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(top = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    HardTopStatChip(
-                        value = hardTotalCount.toString(),
-                        label = if (isEnglish) "Exercises" else "תרגילים",
-                        containerColor = Color(0xFF98A2B3)
-                    )
-
-                    HardTopStatChip(
-                        value = hardKnownCount.toString(),
-                        label = if (isEnglish) "Known" else "יודע",
-                        containerColor = Color(0xFF7ACB88)
-                    )
-
-                    HardTopStatChip(
-                        value = hardUnknownCount.toString(),
-                        label = if (isEnglish) "Unknown" else "לא יודע",
-                        containerColor = Color(0xFFF1A97A)
-                    )
-
-                    HardTopStatChip(
-                        value = hardFavoriteCount.toString(),
-                        label = if (isEnglish) "Favorites" else "מועדפים",
-                        containerColor = Color(0xFFE7A3B5)
-                    )
-
-                    HardTopStatChip(
-                        value = hardUnmarkedCount.toString(),
-                        label = if (isEnglish) "Unmarked" else "לא סומן",
-                        containerColor = Color(0xFF8596C9)
-                    )
-                }
+    val flatRows = remember(groups, title) {
+        groups.flatMap { group ->
+            group.items.mapIndexed { index, rawItem ->
+                Triple(group.belt, index, rawItem)
             }
         }
+    }
 
-        items(groups) { group ->
-            BeltSectionCard(
-                group = group,
-                title = title,
-                isEnglish = isEnglish,
-                hardItemStates = hardItemStates,
-                favoriteIds = favoriteIds,
-                statusIdFor = { belt, topic, raw ->
-                    hardStatusIdFor(
-                        belt = belt,
-                        topic = topic,
-                        rawItem = raw
-                    )
-                },
-                favoriteIdFor = { belt, topic, raw ->
-                    hardFavoriteIdFor(
-                        belt = belt,
-                        topic = topic,
-                        rawItem = raw
-                    )
-                },
-                onToggleFavorite = { belt, topic, raw ->
-                    FavoritesStore.toggle(
-                        hardFavoriteIdFor(
-                            belt = belt,
-                            topic = topic,
-                            rawItem = raw
-                        )
-                    )
-                },
-                onStatusClick = { belt, topic, raw ->
-                    val statusId = hardStatusIdFor(
-                        belt = belt,
-                        topic = topic,
-                        rawItem = raw
-                    )
+    val listState = rememberLazyListState()
 
-                    val nextValue = when (hardItemStates[statusId]) {
-                        null -> true
-                        true -> false
-                        false -> null
-                    }
+    val currentStickyBelt by remember(flatRows, listState) {
+        derivedStateOf {
+            flatRows
+                .getOrNull(listState.firstVisibleItemIndex)
+                ?.first
+                ?: groups.firstOrNull()?.belt
+                ?: Belt.YELLOW
+        }
+    }
 
-                    hardItemStates[statusId] = nextValue
+    val currentStickyGroup = groups.firstOrNull { it.belt == currentStickyBelt }
+    val currentStickyItems = currentStickyGroup?.items.orEmpty()
 
-                    hardStatusKeysFor(
-                        belt = belt,
-                        topic = topic,
-                        rawItem = raw
-                    ).forEach { key ->
-                        vm.setItemStatusNullable(
-                            belt = belt,
-                            topic = key,
-                            item = statusId,
-                            value = nextValue
-                        )
-                    }
+    val currentGroupTotalCount = currentStickyItems.size
 
-                    setHardLocalStatus(
-                        belt = belt,
-                        topic = topic,
-                        rawItem = raw,
-                        statusId = statusId,
-                        value = nextValue
-                    )
-                },
-                onInfoClick = { belt, topic, raw, display ->
-                    selectedExercise = SelectedHardExercise(
-                        belt = belt,
-                        topic = topic,
-                        rawItem = raw,
-                        displayItem = display
+    val currentGroupKnownCount = currentStickyItems.count { rawItem ->
+        hardItemStates[hardStatusIdFor(currentStickyBelt, title, rawItem)] == true
+    }
+
+    val currentGroupUnknownCount = currentStickyItems.count { rawItem ->
+        hardItemStates[hardStatusIdFor(currentStickyBelt, title, rawItem)] == false
+    }
+
+    val currentGroupFavoriteCount = currentStickyItems.count { rawItem ->
+        hardFavoriteIdFor(currentStickyBelt, title, rawItem) in favoriteIds
+    }
+
+    val currentGroupUnmarkedCount = currentStickyItems.count { rawItem ->
+        hardItemStates[hardStatusIdFor(currentStickyBelt, title, rawItem)] == null
+    }
+
+    Column(
+        modifier = modifier.fillMaxSize()
+    ) {
+        HardBeltStickyHeader(
+            belt = currentStickyBelt,
+            count = currentGroupTotalCount,
+            knownCount = currentGroupKnownCount,
+            unknownCount = currentGroupUnknownCount,
+            favoriteCount = currentGroupFavoriteCount,
+            unmarkedCount = currentGroupUnmarkedCount,
+            isEnglish = isEnglish,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        )
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(
+                start = 12.dp,
+                end = 12.dp,
+                bottom = 10.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            itemsIndexed(
+                items = flatRows,
+                key = { index, row ->
+                    val belt = row.first
+                    val rowIndex = row.second
+                    val rawItem = row.third
+                    "hard_row_${belt.id}_${rowIndex}_${rawItem}_$index"
+                }
+            ) { index, row ->
+                val belt = row.first
+                val rowIndex = row.second
+                val rawItem = row.third
+
+                val statusId = hardStatusIdFor(
+                    belt = belt,
+                    topic = title,
+                    rawItem = rawItem
+                )
+
+                val favoriteId = hardFavoriteIdFor(
+                    belt = belt,
+                    topic = title,
+                    rawItem = rawItem
+                )
+
+                val mastered = hardItemStates[statusId]
+                val displayItem = if (isEnglish) translateHardExerciseTitle(rawItem) else rawItem
+                val isFavorite = favoriteId in favoriteIds
+
+                val sectionTitle = if (isKickDefenseScreen) {
+                    kickDefenseSectionTitleFor(rawItem, isEnglish)
+                } else {
+                    null
+                }
+
+                val previousRawItem = flatRows
+                    .getOrNull(index - 1)
+                    ?.takeIf { it.first == belt }
+                    ?.third
+
+                val previousSectionTitle = if (previousRawItem != null && isKickDefenseScreen) {
+                    kickDefenseSectionTitleFor(previousRawItem, isEnglish)
+                } else {
+                    null
+                }
+
+                if (sectionTitle != null && sectionTitle != previousSectionTitle) {
+                    HardExerciseSectionHeader(
+                        text = sectionTitle,
+                        isEnglish = isEnglish
                     )
                 }
-            )
+
+                HardExerciseRowCard(
+                    exerciseNumber = rowIndex + 1,
+                    belt = belt,
+                    item = displayItem,
+                    mastered = mastered,
+                    isFavorite = isFavorite,
+                    isEnglish = isEnglish,
+                    onStatusClick = {
+                        val nextValue = when (hardItemStates[statusId]) {
+                            null -> true
+                            true -> false
+                            false -> null
+                        }
+
+                        hardItemStates[statusId] = nextValue
+
+                        hardStatusKeysFor(
+                            belt = belt,
+                            topic = title,
+                            rawItem = rawItem
+                        ).forEach { key ->
+                            vm.setItemStatusNullable(
+                                belt = belt,
+                                topic = key,
+                                item = statusId,
+                                value = nextValue
+                            )
+                        }
+
+                        setHardLocalStatus(
+                            belt = belt,
+                            topic = title,
+                            rawItem = rawItem,
+                            statusId = statusId,
+                            value = nextValue
+                        )
+                    },
+                    onToggleFavorite = {
+                        FavoritesStore.toggle(favoriteId)
+                    },
+                    onInfoClick = {
+                        selectedExercise = SelectedHardExercise(
+                            belt = belt,
+                            topic = title,
+                            rawItem = rawItem,
+                            displayItem = displayItem
+                        )
+                    }
+                )
+            }
         }
     }
 
@@ -1033,6 +1044,105 @@ private fun HardExerciseSectionHeader(
             .fillMaxWidth()
             .padding(top = 8.dp, bottom = 4.dp)
     )
+}
+
+@Composable
+private fun HardBeltStickyHeader(
+    belt: Belt,
+    count: Int,
+    knownCount: Int,
+    unknownCount: Int,
+    favoriteCount: Int,
+    unmarkedCount: Int,
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = belt.color.copy(alpha = 0.18f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Surface(
+                tonalElevation = 2.dp,
+                shape = RoundedCornerShape(16.dp),
+                color = belt.color.copy(alpha = 0.22f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = beltTitle(belt, isEnglish),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            if (count == 1) "1 exercise" else "$count exercises"
+                        } else {
+                            "$count תרגילים"
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = belt.color
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HardTopStatChip(
+                    value = count.toString(),
+                    label = if (isEnglish) "Exercises" else "תרגילים",
+                    containerColor = Color(0xFF98A2B3)
+                )
+
+                HardTopStatChip(
+                    value = knownCount.toString(),
+                    label = if (isEnglish) "Known" else "יודע",
+                    containerColor = Color(0xFF7ACB88)
+                )
+
+                HardTopStatChip(
+                    value = unknownCount.toString(),
+                    label = if (isEnglish) "Unknown" else "לא יודע",
+                    containerColor = Color(0xFFF1A97A)
+                )
+
+                HardTopStatChip(
+                    value = favoriteCount.toString(),
+                    label = if (isEnglish) "Favorites" else "מועדפים",
+                    containerColor = Color(0xFFE7A3B5)
+                )
+
+                HardTopStatChip(
+                    value = unmarkedCount.toString(),
+                    label = if (isEnglish) "Unmarked" else "לא סומן",
+                    containerColor = Color(0xFF8596C9)
+                )
+            }
+        }
+    }
 }
 
 @Composable

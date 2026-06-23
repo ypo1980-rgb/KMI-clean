@@ -10,11 +10,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.*
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +54,7 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.localization.AppLanguage
 import androidx.compose.ui.platform.LocalContext
+import com.google.common.collect.Multimaps.index
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 
@@ -1129,168 +1134,60 @@ fun SubTopicsScreen(
                     )
                 )
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(0.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-
-                if (isHardFlow && hardSubSections.isNotEmpty()) {
-                    hardSubSections.forEach { section ->
-                        val beltCount = section.itemsFor(belt).size
-                        val displayCount =
-                            if (beltCount > 0) beltCount else section.totalItemsCount()
-
-                        HardSubTopicCategoryCard(
-                            belt = belt,
-                            title = if (isEnglish) ExerciseTitlesEn.getOrSame(section.title) else section.title,
-                            count = displayCount,
-                            onClick = { onOpenSubTopic(section.id) }
-                        )
-                    }
-
-                } else if (isHardFlow && hardBeltGroups.isNotEmpty()) {
-
-                    hardBeltGroups.forEach { group ->
-                        HardBeltGroupCard(
+            if (isHardFlow && hardBeltGroups.isNotEmpty()) {
+                HardBeltGroupsStickyContent(
+                    groups = hardBeltGroups.map { group ->
+                        HardStickyBeltGroup(
                             belt = group.belt,
-                            items = group.items,
-                            topicKey = hardTitle.ifBlank { topicDecoded },
-                            isDarkMode = isDarkMode,
-                            vm = vm,
-                            onOpenExercise = { item ->
-                                openedExerciseRequest = OpenedExerciseRequest(
-                                    belt = group.belt,
-                                    item = item
-                                )
-                            }
+                            items = group.items
                         )
-
-                        Spacer(Modifier.height(12.dp))
-                    }
-
-                } else if (isHardFlow && hardItems.isNotEmpty()) {
-
-                    var explain by rememberSaveable { mutableStateOf<String?>(null) }
-
-                    hardItems.forEach { (originalName, displayName) ->
-                        ExerciseRowWithInfo(
-                            belt = belt,
-                            itemName = originalName,
-                            displayName = displayName,
-                            accent = MaterialTheme.colorScheme.primary,
-                            onExplain = { _, item -> explain = item },
-                            onOpenExercise = { item ->
-                                openedExerciseRequest = OpenedExerciseRequest(
-                                    belt = belt,
-                                    item = item
-                                )
-                            }
+                    },
+                    topicKey = hardTitle.ifBlank { topicDecoded },
+                    isDarkMode = isDarkMode,
+                    vm = vm,
+                    onOpenExercise = { item, itemBelt ->
+                        openedExerciseRequest = OpenedExerciseRequest(
+                            belt = itemBelt,
+                            item = item
                         )
-                        Spacer(Modifier.height(8.dp))
-                    }
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
 
-                    explain?.let { item ->
-                        val titleForDialog = exerciseTitleForUi(
-                            raw = item,
-                            isEnglish = isEnglish
-                        )
+                    if (isHardFlow && hardSubSections.isNotEmpty()) {
+                        hardSubSections.forEach { section ->
+                            val beltCount = section.itemsFor(belt).size
+                            val displayCount =
+                                if (beltCount > 0) beltCount else section.totalItemsCount()
 
-                        val explanation = remember(belt, hardTitle, item, isEnglish) {
-                            findExplanationForHitLocal(
+                            HardSubTopicCategoryCard(
                                 belt = belt,
-                                rawItem = item,
-                                topic = hardTitle,
-                                isEnglish = isEnglish
+                                title = if (isEnglish) ExerciseTitlesEn.getOrSame(section.title) else section.title,
+                                count = displayCount,
+                                onClick = { onOpenSubTopic(section.id) }
                             )
                         }
 
-                        ModernExerciseInfoDialog(
-                            title = titleForDialog,
-                            subtitle = if (isEnglish) belt.en else belt.heb,
-                            explanation = explanation,
-                            accentColor = belt.color,
-                            onDismiss = { explain = null }
-                        )
-                    }
+                    } else if (isHardFlow && hardItems.isNotEmpty()) {
 
-                } else if (isHardFlow) {
+                        var explain by rememberSaveable { mutableStateOf<String?>(null) }
 
-                    Text(
-                        text = "לא נמצאו תרגילים קשיחים עבור \"$hardTitle\"",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                } else if (activeNestedLeaf != null) {
-
-                    var explain by rememberSaveable { mutableStateOf<String?>(null) }
-
-                    activeNestedLeaf.items.forEach { itemName ->
-                        ExerciseRowWithInfo(
-                            belt = belt,
-                            itemName = itemName,
-                            accent = MaterialTheme.colorScheme.primary,
-                            onExplain = { _, item -> explain = item },
-                            onOpenExercise = { item ->
-                                openedExerciseRequest = OpenedExerciseRequest(
-                                    belt = belt,
-                                    item = item
-                                )
-                            }
-                        )
-                        Spacer(Modifier.height(6.dp))
-                    }
-
-                    explain?.let { item ->
-                        val explanation = remember(belt, topicDecoded, item) {
-                            findExplanationForHitLocal(
-                                belt = belt,
-                                rawItem = item,
-                                topic = topicDecoded,
-                                isEnglish = isEnglish
-                            )
-                        }
-
-                        ModernExerciseInfoDialog(
-                            title = exerciseTitleForUi(
-                                raw = item,
-                                isEnglish = isEnglish
-                            ),
-                            subtitle = if (isEnglish) belt.en else belt.heb,
-                            explanation = explanation,
-                            accentColor = belt.color,
-                            onDismiss = { explain = null }
-                        )
-                    }
-
-                } else if (activeNestedGroup != null) {
-
-                    var explain by rememberSaveable { mutableStateOf<String?>(null) }
-
-                    activeNestedGroup.leaves.forEach { leaf ->
-                        Text(
-                            text = if (isEnglish) ExerciseTitlesEn.getOrSame(leaf.title) else leaf.title,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 6.dp),
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontSize = 13.sp,
-                                lineHeight = 16.sp
-                            ),
-                            fontWeight = FontWeight.ExtraBold,
-                            color = belt.color
-                        )
-
-                        leaf.items.forEach { itemName ->
+                        hardItems.forEach { (originalName, displayName) ->
                             ExerciseRowWithInfo(
                                 belt = belt,
-                                itemName = itemName,
+                                itemName = originalName,
+                                displayName = displayName,
                                 accent = MaterialTheme.colorScheme.primary,
                                 onExplain = { _, item -> explain = item },
                                 onOpenExercise = { item ->
@@ -1300,52 +1197,47 @@ fun SubTopicsScreen(
                                     )
                                 }
                             )
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(8.dp))
                         }
-                    }
 
-                    explain?.let { item ->
-                        val explanation = remember(belt, topicDecoded, item) {
-                            findExplanationForHitLocal(
-                                belt = belt,
-                                rawItem = item,
-                                topic = topicDecoded,
+                        explain?.let { item ->
+                            val titleForDialog = exerciseTitleForUi(
+                                raw = item,
                                 isEnglish = isEnglish
+                            )
+
+                            val explanation = remember(belt, hardTitle, item, isEnglish) {
+                                findExplanationForHitLocal(
+                                    belt = belt,
+                                    rawItem = item,
+                                    topic = hardTitle,
+                                    isEnglish = isEnglish
+                                )
+                            }
+
+                            ModernExerciseInfoDialog(
+                                title = titleForDialog,
+                                subtitle = if (isEnglish) belt.en else belt.heb,
+                                explanation = explanation,
+                                accentColor = belt.color,
+                                onDismiss = { explain = null }
                             )
                         }
 
-                        ModernExerciseInfoDialog(
-                            title = exerciseTitleForUi(
-                                raw = item,
-                                isEnglish = isEnglish
-                            ),
-                            subtitle = if (isEnglish) belt.en else belt.heb,
-                            explanation = explanation,
-                            accentColor = belt.color,
-                            onDismiss = { explain = null }
-                        )
-                    }
+                    } else if (isHardFlow) {
 
-                } else if (!hasRealSubs) {
-
-                    val items: List<String> = remember(belt, topicDecoded) {
-                        loadDirectTopicItems(
-                            belt = belt,
-                            topicTitle = topicDecoded
-                        )
-                    }
-
-                    var explain by rememberSaveable { mutableStateOf<String?>(null) }
-
-                    if (items.isEmpty()) {
                         Text(
-                            text = "לא נמצאו תתי־נושאים או תרגילים עבור \"$topicDecoded\"",
+                            text = "לא נמצאו תרגילים קשיחים עבור \"$hardTitle\"",
                             style = MaterialTheme.typography.titleMedium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
-                    } else {
-                        items.forEach { itemName ->
+
+                    } else if (activeNestedLeaf != null) {
+
+                        var explain by rememberSaveable { mutableStateOf<String?>(null) }
+
+                        activeNestedLeaf.items.forEach { itemName ->
                             ExerciseRowWithInfo(
                                 belt = belt,
                                 itemName = itemName,
@@ -1360,112 +1252,231 @@ fun SubTopicsScreen(
                             )
                             Spacer(Modifier.height(6.dp))
                         }
-                    }
 
-                    explain?.let { item ->
-                        val explanation = remember(belt, topicDecoded, item) {
-                            findExplanationForHitLocal(
-                                belt = belt,
-                                rawItem = item,
-                                topic = topicDecoded,
-                                isEnglish = isEnglish
+                        explain?.let { item ->
+                            val explanation = remember(belt, topicDecoded, item) {
+                                findExplanationForHitLocal(
+                                    belt = belt,
+                                    rawItem = item,
+                                    topic = topicDecoded,
+                                    isEnglish = isEnglish
+                                )
+                            }
+
+                            ModernExerciseInfoDialog(
+                                title = exerciseTitleForUi(
+                                    raw = item,
+                                    isEnglish = isEnglish
+                                ),
+                                subtitle = if (isEnglish) belt.en else belt.heb,
+                                explanation = explanation,
+                                accentColor = belt.color,
+                                onDismiss = { explain = null }
                             )
                         }
 
-                        ModernExerciseInfoDialog(
-                            title = item,
-                            subtitle = if (isEnglish) belt.en else belt.heb,
-                            explanation = explanation,
-                            accentColor = belt.color,
-                            onDismiss = { explain = null }
-                        )
-                    }
+                    } else if (activeNestedGroup != null) {
 
-                } else {
+                        var explain by rememberSaveable { mutableStateOf<String?>(null) }
 
-                    visibleRealSubs.forEach { subTitleRaw ->
-                        val subTitle = subTitleRaw.trim()
+                        activeNestedGroup.leaves.forEach { leaf ->
+                            Text(
+                                text = if (isEnglish) ExerciseTitlesEn.getOrSame(leaf.title) else leaf.title,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 6.dp),
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontSize = 13.sp,
+                                    lineHeight = 16.sp
+                                ),
+                                fontWeight = FontWeight.ExtraBold,
+                                color = belt.color
+                            )
 
-                        val itemCount by remember(belt, topicDecoded, subTitle) {
-                            mutableStateOf(
-                                when {
-                                    nestedGreenDefenseGroupFor(
-                                        belt = belt,
-                                        topicTitle = subTitle
-                                    ) != null -> {
+                            leaf.items.forEach { itemName ->
+                                ExerciseRowWithInfo(
+                                    belt = belt,
+                                    itemName = itemName,
+                                    accent = MaterialTheme.colorScheme.primary,
+                                    onExplain = { _, item -> explain = item },
+                                    onOpenExercise = { item ->
+                                        openedExerciseRequest = OpenedExerciseRequest(
+                                            belt = belt,
+                                            item = item
+                                        )
+                                    }
+                                )
+                                Spacer(Modifier.height(6.dp))
+                            }
+                        }
+
+                        explain?.let { item ->
+                            val explanation = remember(belt, topicDecoded, item) {
+                                findExplanationForHitLocal(
+                                    belt = belt,
+                                    rawItem = item,
+                                    topic = topicDecoded,
+                                    isEnglish = isEnglish
+                                )
+                            }
+
+                            ModernExerciseInfoDialog(
+                                title = exerciseTitleForUi(
+                                    raw = item,
+                                    isEnglish = isEnglish
+                                ),
+                                subtitle = if (isEnglish) belt.en else belt.heb,
+                                explanation = explanation,
+                                accentColor = belt.color,
+                                onDismiss = { explain = null }
+                            )
+                        }
+
+                    } else if (!hasRealSubs) {
+
+                        val items: List<String> = remember(belt, topicDecoded) {
+                            loadDirectTopicItems(
+                                belt = belt,
+                                topicTitle = topicDecoded
+                            )
+                        }
+
+                        var explain by rememberSaveable { mutableStateOf<String?>(null) }
+
+                        if (items.isEmpty()) {
+                            Text(
+                                text = "לא נמצאו תתי־נושאים או תרגילים עבור \"$topicDecoded\"",
+                                style = MaterialTheme.typography.titleMedium,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            items.forEach { itemName ->
+                                ExerciseRowWithInfo(
+                                    belt = belt,
+                                    itemName = itemName,
+                                    accent = MaterialTheme.colorScheme.primary,
+                                    onExplain = { _, item -> explain = item },
+                                    onOpenExercise = { item ->
+                                        openedExerciseRequest = OpenedExerciseRequest(
+                                            belt = belt,
+                                            item = item
+                                        )
+                                    }
+                                )
+                                Spacer(Modifier.height(6.dp))
+                            }
+                        }
+
+                        explain?.let { item ->
+                            val explanation = remember(belt, topicDecoded, item) {
+                                findExplanationForHitLocal(
+                                    belt = belt,
+                                    rawItem = item,
+                                    topic = topicDecoded,
+                                    isEnglish = isEnglish
+                                )
+                            }
+
+                            ModernExerciseInfoDialog(
+                                title = item,
+                                subtitle = if (isEnglish) belt.en else belt.heb,
+                                explanation = explanation,
+                                accentColor = belt.color,
+                                onDismiss = { explain = null }
+                            )
+                        }
+
+                    } else {
+
+                        visibleRealSubs.forEach { subTitleRaw ->
+                            val subTitle = subTitleRaw.trim()
+
+                            val itemCount by remember(belt, topicDecoded, subTitle) {
+                                mutableStateOf(
+                                    when {
                                         nestedGreenDefenseGroupFor(
                                             belt = belt,
                                             topicTitle = subTitle
-                                        )
-                                            ?.leaves
-                                            .orEmpty()
-                                            .sumOf { leaf -> leaf.items.size }
-                                    }
+                                        ) != null -> {
+                                            nestedGreenDefenseGroupFor(
+                                                belt = belt,
+                                                topicTitle = subTitle
+                                            )
+                                                ?.leaves
+                                                .orEmpty()
+                                                .sumOf { leaf -> leaf.items.size }
+                                        }
 
-                                    belt == Belt.BLACK &&
-                                            topicDecoded.trim() == "הגנות" &&
-                                            subTitle == "הגנות עם רובה נגד דקירות סכין" -> {
-                                        HardSectionsCatalog.subjectSubSectionItemsFor(
-                                            subjectId = "knife_defense",
-                                            subSectionId = "knife_defense_rifle_against_knife_stabs",
-                                            belt = belt
-                                        )
-                                            .map {
-                                                ExerciseTitleFormatter.displayName(it)
-                                                    .ifBlank { it }.trim()
-                                            }
-                                            .filter { it.isNotBlank() }
-                                            .distinct()
-                                            .size
-                                    }
+                                        belt == Belt.BLACK &&
+                                                topicDecoded.trim() == "הגנות" &&
+                                                subTitle == "הגנות עם רובה נגד דקירות סכין" -> {
+                                            HardSectionsCatalog.subjectSubSectionItemsFor(
+                                                subjectId = "knife_defense",
+                                                subSectionId = "knife_defense_rifle_against_knife_stabs",
+                                                belt = belt
+                                            )
+                                                .map {
+                                                    ExerciseTitleFormatter.displayName(it)
+                                                        .ifBlank { it }.trim()
+                                                }
+                                                .filter { it.isNotBlank() }
+                                                .distinct()
+                                                .size
+                                        }
 
-                                    belt == Belt.BLACK &&
-                                            topicDecoded.trim() == "הגנות" &&
-                                            subTitle == "הגנות נגד מספר תוקפים" -> {
-                                        HardSectionsCatalog.subjectItemsFor(
-                                            subjectId = "multiple_attackers_defense",
-                                            belt = belt
-                                        )
-                                            .map {
-                                                ExerciseTitleFormatter.displayName(it)
-                                                    .ifBlank { it }.trim()
-                                            }
-                                            .filter { it.isNotBlank() }
-                                            .distinct()
-                                            .size
-                                    }
+                                        belt == Belt.BLACK &&
+                                                topicDecoded.trim() == "הגנות" &&
+                                                subTitle == "הגנות נגד מספר תוקפים" -> {
+                                            HardSectionsCatalog.subjectItemsFor(
+                                                subjectId = "multiple_attackers_defense",
+                                                belt = belt
+                                            )
+                                                .map {
+                                                    ExerciseTitleFormatter.displayName(it)
+                                                        .ifBlank { it }.trim()
+                                                }
+                                                .filter { it.isNotBlank() }
+                                                .distinct()
+                                                .size
+                                        }
 
-                                    else -> {
-                                        ExerciseCountProvider.subTopicStats(
-                                            belt = belt,
-                                            topicTitle = topicDecoded,
-                                            subTopicTitle = subTitle
-                                        ).exerciseCount
+                                        else -> {
+                                            ExerciseCountProvider.subTopicStats(
+                                                belt = belt,
+                                                topicTitle = topicDecoded,
+                                                subTopicTitle = subTitle
+                                            ).exerciseCount
+                                        }
+                                    }
+                                )
+                            }
+
+                            HardSubTopicCategoryCard(
+                                belt = belt,
+                                title = if (isEnglish) ExerciseTitlesEn.getOrSame(subTitle) else subTitle,
+                                count = itemCount,
+                                onClick = {
+                                    val nestedGroup = nestedGreenDefenseGroupFor(
+                                        belt = belt,
+                                        topicTitle = subTitle
+                                    )
+
+                                    if (nestedGroup != null) {
+                                        openedLocalNestedLeafTitle = null
+                                        openedLocalNestedGroupTitle = subTitle
+                                    } else {
+                                        onOpenSubTopic(subTitle)
                                     }
                                 }
                             )
                         }
-
-                        HardSubTopicCategoryCard(
-                            belt = belt,
-                            title = if (isEnglish) ExerciseTitlesEn.getOrSame(subTitle) else subTitle,
-                            count = itemCount,
-                            onClick = {
-                                val nestedGroup = nestedGreenDefenseGroupFor(
-                                    belt = belt,
-                                    topicTitle = subTitle
-                                )
-
-                                if (nestedGroup != null) {
-                                    openedLocalNestedLeafTitle = null
-                                    openedLocalNestedGroupTitle = subTitle
-                                } else {
-                                    onOpenSubTopic(subTitle)
-                                }
-                            }
-                        )
                     }
                 }
+
+                // ✅ סוגר את ה-else של המסך הרגיל.
+                // במסך hardBeltGroups אנחנו משתמשים ב-HardBeltGroupsStickyContent.
             }
 
             // ===== QUICK MENU (FLOATING אמיתי) =====
@@ -1915,6 +1926,819 @@ private fun HardLegacyMetaBadge(
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
             maxLines = 1
         )
+    }
+}
+
+private data class HardStickyBeltGroup(
+    val belt: Belt,
+    val items: List<String>
+)
+
+private data class HardStickyExerciseRow(
+    val belt: Belt,
+    val indexInBelt: Int,
+    val rawItem: String,
+    val displayItem: String
+)
+
+@Composable
+private fun HardBeltGroupsStickyContent(
+    groups: List<HardStickyBeltGroup>,
+    topicKey: String,
+    isDarkMode: Boolean,
+    vm: KmiViewModel,
+    onOpenExercise: (item: String, belt: Belt) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val langManager = remember(context) { AppLanguageManager(context) }
+    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
+    val prefs = remember(context) {
+        context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE)
+    }
+
+    val actionKeyPart = remember(topicKey) {
+        topicKey
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    fun normalizeStatusPart(s: String): String =
+        s.replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    fun statusIdFor(belt: Belt, rawItem: String): String {
+        val cleanItem = normalizeStatusPart(rawItem)
+        val cleanTopic = normalizeStatusPart(topicKey)
+
+        val resolved = ExerciseIdentityRegistry.resolve(
+            belt = belt,
+            hebrewTitle = cleanItem,
+            topicKey = cleanTopic
+        )
+
+        val itemStablePart = cleanItem
+            .lowercase()
+            .replace(Regex("[^\\p{L}\\p{N}]+"), "_")
+            .trim('_')
+            .ifBlank { "item" }
+
+        return "${resolved.id}__$itemStablePart"
+    }
+
+    fun statusKeysFor(belt: Belt, rawItem: String): List<String> {
+        val statusId = statusIdFor(belt, rawItem)
+        val baseStatusId = statusId.substringBefore("__")
+
+        val identityKeys = ExerciseIdentityRegistry
+            .allKnown()
+            .firstOrNull { it.id == baseStatusId && it.belt == belt }
+            ?.topicKeys
+            .orEmpty()
+
+        return (
+                identityKeys +
+                        topicKey +
+                        "כללי"
+                )
+            .map { normalizeStatusPart(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    fun favKeyFor(belt: Belt): String = "fav_${belt.id}_$actionKeyPart"
+
+    fun excludedKeyFor(belt: Belt): String = "excluded_${belt.id}_$actionKeyPart"
+
+    fun noteKeyFor(belt: Belt, itemId: String): String =
+        "note_${belt.id}_${actionKeyPart}_$itemId"
+
+    fun loadNoteFor(belt: Belt, itemId: String): String {
+        return prefs.getString(noteKeyFor(belt, itemId), "").orEmpty()
+    }
+
+    fun saveNoteFor(belt: Belt, itemId: String, value: String) {
+        val clean = value.trim()
+
+        prefs.edit().apply {
+            if (clean.isBlank()) {
+                remove(noteKeyFor(belt, itemId))
+            } else {
+                putString(noteKeyFor(belt, itemId), clean)
+            }
+        }.apply()
+    }
+
+    fun toggleStringSet(key: String, itemId: String) {
+        val current = prefs.getStringSet(key, emptySet<String>())
+            ?.toMutableSet()
+            ?: mutableSetOf()
+
+        if (current.contains(itemId)) {
+            current.remove(itemId)
+        } else {
+            current.add(itemId)
+        }
+
+        prefs.edit().putStringSet(key, current).apply()
+    }
+
+    fun setLocalStatus(
+        belt: Belt,
+        rawItem: String,
+        statusId: String,
+        value: Boolean?
+    ) {
+        statusKeysFor(belt, rawItem).forEach { key ->
+            val masteredKey = "mastered_${belt.id}_${key}"
+            val unknownKey = "unknown_${belt.id}_${key}"
+
+            val masteredSet =
+                (prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()).toMutableSet()
+
+            val unknownSet =
+                (prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()).toMutableSet()
+
+            when (value) {
+                true -> {
+                    masteredSet.add(statusId)
+                    unknownSet.remove(statusId)
+                }
+
+                false -> {
+                    unknownSet.add(statusId)
+                    masteredSet.remove(statusId)
+                }
+
+                null -> {
+                    masteredSet.remove(statusId)
+                    unknownSet.remove(statusId)
+                }
+            }
+
+            prefs.edit()
+                .putStringSet(masteredKey, masteredSet)
+                .putStringSet(unknownKey, unknownSet)
+                .apply()
+        }
+    }
+
+    val marksVersion by vm.marksVersion.collectAsState()
+    val itemStates = remember(topicKey, groups) {
+        mutableStateMapOf<String, Boolean?>()
+    }
+
+    var refreshKey by remember { mutableIntStateOf(0) }
+    var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteEditorBeltId by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteDraft by rememberSaveable { mutableStateOf("") }
+
+    val flatRows = remember(groups, isEnglish) {
+        groups.flatMap { group: HardStickyBeltGroup ->
+            group.items.mapIndexed { index: Int, raw: String ->
+                val original = raw.trim()
+                HardStickyExerciseRow(
+                    belt = group.belt,
+                    indexInBelt = index,
+                    rawItem = original,
+                    displayItem = exerciseTitleForUi(
+                        raw = original,
+                        isEnglish = isEnglish
+                    )
+                )
+            }
+        }.filter { row ->
+            row.rawItem.isNotBlank() && row.displayItem.isNotBlank()
+        }
+    }
+
+    LaunchedEffect(flatRows, marksVersion, topicKey) {
+        flatRows.forEach { row ->
+            val statusId = statusIdFor(row.belt, row.rawItem)
+
+            var valueFromVm: Boolean? = null
+
+            for (key in statusKeysFor(row.belt, row.rawItem)) {
+                val fromKey: Boolean? =
+                    runCatching {
+                        vm.getItemStatusNullable(
+                            belt = row.belt,
+                            topic = key,
+                            item = statusId
+                        )
+                    }.getOrNull()
+                        ?: runCatching {
+                            if (
+                                vm.isMastered(
+                                    belt = row.belt,
+                                    topic = key,
+                                    item = statusId
+                                )
+                            ) true else null
+                        }.getOrNull()
+
+                if (fromKey != null) {
+                    valueFromVm = fromKey
+                    break
+                }
+            }
+
+            if (valueFromVm == null) {
+                for (key in statusKeysFor(row.belt, row.rawItem)) {
+                    val masteredKey = "mastered_${row.belt.id}_${key}"
+                    val unknownKey = "unknown_${row.belt.id}_${key}"
+
+                    val masteredSet =
+                        prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()
+
+                    val unknownSet =
+                        prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()
+
+                    val localValue: Boolean? = when {
+                        masteredSet.contains(statusId) -> true
+                        unknownSet.contains(statusId) -> false
+                        else -> null
+                    }
+
+                    if (localValue != null) {
+                        valueFromVm = localValue
+
+                        vm.setItemStatusNullable(
+                            belt = row.belt,
+                            topic = key,
+                            item = statusId,
+                            value = localValue
+                        )
+
+                        break
+                    }
+                }
+            }
+
+            itemStates[statusId] = valueFromVm
+        }
+    }
+
+    fun toggleStatus(row: HardStickyExerciseRow) {
+        val statusId = statusIdFor(row.belt, row.rawItem)
+
+        val nextValue = when (itemStates[statusId]) {
+            null -> true
+            true -> false
+            false -> null
+        }
+
+        itemStates[statusId] = nextValue
+
+        statusKeysFor(row.belt, row.rawItem).forEach { key ->
+            vm.setItemStatusNullable(
+                belt = row.belt,
+                topic = key,
+                item = statusId,
+                value = nextValue
+            )
+        }
+
+        setLocalStatus(
+            belt = row.belt,
+            rawItem = row.rawItem,
+            statusId = statusId,
+            value = nextValue
+        )
+    }
+
+    val listState = rememberLazyListState()
+
+    val currentStickyBelt by remember(flatRows, listState) {
+        derivedStateOf {
+            flatRows
+                .getOrNull(listState.firstVisibleItemIndex)
+                ?.belt
+                ?: groups.firstOrNull()?.belt
+                ?: Belt.YELLOW
+        }
+    }
+
+    val currentRows = flatRows.filter { it.belt == currentStickyBelt }
+
+    val currentKnownCount = currentRows.count { row ->
+        itemStates[statusIdFor(row.belt, row.rawItem)] == true
+    }
+
+    val currentUnknownCount = currentRows.count { row ->
+        itemStates[statusIdFor(row.belt, row.rawItem)] == false
+    }
+
+    val currentUnmarkedCount = currentRows.count { row ->
+        itemStates[statusIdFor(row.belt, row.rawItem)] == null
+    }
+
+    val currentFavorites = prefs.getStringSet(
+        favKeyFor(currentStickyBelt),
+        emptySet<String>()
+    ) ?: emptySet()
+
+    val currentExcluded = prefs.getStringSet(
+        excludedKeyFor(currentStickyBelt),
+        emptySet<String>()
+    ) ?: emptySet()
+
+    val currentFavoriteCount = currentRows.count { row ->
+        currentFavorites.contains(statusIdFor(row.belt, row.rawItem))
+    }
+
+    val currentExcludedCount = currentRows.count { row ->
+        currentExcluded.contains(statusIdFor(row.belt, row.rawItem))
+    }
+
+    Column(
+        modifier = modifier
+    ) {
+        HardBeltStickyHeaderForSubTopics(
+            belt = currentStickyBelt,
+            totalCount = currentRows.size,
+            knownCount = currentKnownCount,
+            unknownCount = currentUnknownCount,
+            favoriteCount = currentFavoriteCount,
+            excludedCount = currentExcludedCount,
+            unmarkedCount = currentUnmarkedCount,
+            isDarkMode = isDarkMode,
+            isEnglish = isEnglish,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            itemsIndexed(
+                items = flatRows,
+                key = { index, row ->
+                    "subtopic_sticky_${row.belt.id}_${row.indexInBelt}_${row.rawItem}_$index"
+                }
+            ) { index, row ->
+                val statusId = statusIdFor(row.belt, row.rawItem)
+                val mastered = itemStates[statusId]
+
+                val favSet = prefs.getStringSet(
+                    favKeyFor(row.belt),
+                    emptySet<String>()
+                ) ?: emptySet()
+
+                val excludedSet = prefs.getStringSet(
+                    excludedKeyFor(row.belt),
+                    emptySet<String>()
+                ) ?: emptySet()
+
+                val noteText = remember(row.belt.id, statusId, refreshKey) {
+                    loadNoteFor(row.belt, statusId)
+                }
+
+                val shouldShowInlineBeltHeader =
+                    row.indexInBelt == 0 && index != 0
+
+                if (shouldShowInlineBeltHeader) {
+                    val inlineRows = flatRows.filter { it.belt == row.belt }
+
+                    val inlineKnownCount = inlineRows.count { inlineRow ->
+                        itemStates[statusIdFor(inlineRow.belt, inlineRow.rawItem)] == true
+                    }
+
+                    val inlineUnknownCount = inlineRows.count { inlineRow ->
+                        itemStates[statusIdFor(inlineRow.belt, inlineRow.rawItem)] == false
+                    }
+
+                    val inlineUnmarkedCount = inlineRows.count { inlineRow ->
+                        itemStates[statusIdFor(inlineRow.belt, inlineRow.rawItem)] == null
+                    }
+
+                    val inlineFavorites = prefs.getStringSet(
+                        favKeyFor(row.belt),
+                        emptySet<String>()
+                    ) ?: emptySet()
+
+                    val inlineExcluded = prefs.getStringSet(
+                        excludedKeyFor(row.belt),
+                        emptySet<String>()
+                    ) ?: emptySet()
+
+                    val inlineFavoriteCount = inlineRows.count { inlineRow ->
+                        inlineFavorites.contains(
+                            statusIdFor(inlineRow.belt, inlineRow.rawItem)
+                        )
+                    }
+
+                    val inlineExcludedCount = inlineRows.count { inlineRow ->
+                        inlineExcluded.contains(
+                            statusIdFor(inlineRow.belt, inlineRow.rawItem)
+                        )
+                    }
+
+                    HardBeltInlineHeaderForSubTopics(
+                        belt = row.belt,
+                        totalCount = inlineRows.size,
+                        knownCount = inlineKnownCount,
+                        unknownCount = inlineUnknownCount,
+                        favoriteCount = inlineFavoriteCount,
+                        excludedCount = inlineExcludedCount,
+                        unmarkedCount = inlineUnmarkedCount,
+                        isDarkMode = isDarkMode,
+                        isEnglish = isEnglish,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                HardExerciseLegacyRow(
+                    exerciseNumber = row.indexInBelt + 1,
+                    belt = row.belt,
+                    itemName = row.rawItem,
+                    displayName = row.displayItem,
+                    mastered = mastered,
+                    isDarkMode = isDarkMode,
+                    excluded = excludedSet.contains(statusId),
+                    isFav = favSet.contains(statusId),
+                    hasNote = noteText.isNotBlank(),
+                    onStatusClick = {
+                        toggleStatus(row)
+                    },
+                    onInfoClick = {
+                        onOpenExercise(row.rawItem, row.belt)
+                    },
+                    onToggleExclude = {
+                        toggleStringSet(
+                            key = excludedKeyFor(row.belt),
+                            itemId = statusId
+                        )
+                        refreshKey++
+                    },
+                    onToggleFavorite = {
+                        toggleStringSet(
+                            key = favKeyFor(row.belt),
+                            itemId = statusId
+                        )
+                        refreshKey++
+                    },
+                    onEditNote = {
+                        noteEditorFor = statusId
+                        noteEditorBeltId = row.belt.id
+                        noteDraft = loadNoteFor(row.belt, statusId)
+                    }
+                )
+            }
+        }
+    }
+
+    val editorItemId = noteEditorFor
+    val editorBelt = noteEditorBeltId?.let { id ->
+        Belt.fromId(id)
+    }
+
+    if (editorItemId != null && editorBelt != null) {
+        ExerciseNoteEditorDialog(
+            noteText = noteDraft,
+            isEnglish = isEnglish,
+            accentColor = editorBelt.color,
+            onNoteChange = { noteDraft = it },
+            onDismiss = {
+                noteEditorFor = null
+                noteEditorBeltId = null
+            },
+            onSave = {
+                val cleanNote = noteDraft.trim()
+                noteDraft = cleanNote
+                saveNoteFor(editorBelt, editorItemId, cleanNote)
+                refreshKey++
+                noteEditorFor = null
+                noteEditorBeltId = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun HardBeltInlineHeaderForSubTopics(
+    belt: Belt,
+    totalCount: Int,
+    knownCount: Int,
+    unknownCount: Int,
+    favoriteCount: Int,
+    excludedCount: Int,
+    unmarkedCount: Int,
+    isDarkMode: Boolean,
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val title = if (isEnglish) {
+        when (belt) {
+            Belt.YELLOW -> "Yellow Belt"
+            Belt.ORANGE -> "Orange Belt"
+            Belt.GREEN -> "Green Belt"
+            Belt.BLUE -> "Blue Belt"
+            Belt.BROWN -> "Brown Belt"
+            Belt.BLACK -> "Black Belt"
+            else -> belt.en
+        }
+    } else {
+        when (belt) {
+            Belt.YELLOW -> "חגורה צהובה"
+            Belt.ORANGE -> "חגורה כתומה"
+            Belt.GREEN -> "חגורה ירוקה"
+            Belt.BLUE -> "חגורה כחולה"
+            Belt.BROWN -> "חגורה חומה"
+            Belt.BLACK -> "חגורה שחורה"
+            else -> belt.heb
+        }
+    }
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(22.dp),
+        color = if (isDarkMode) {
+            Color(0xFF111827)
+        } else {
+            belt.lightColor
+        },
+        tonalElevation = if (isDarkMode) 0.dp else 2.dp,
+        shadowElevation = if (isDarkMode) 0.dp else 4.dp,
+        border = if (isDarkMode) {
+            BorderStroke(1.dp, belt.color.copy(alpha = 0.45f))
+        } else {
+            null
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+        ) {
+            val countText = if (isEnglish) {
+                if (totalCount == 1) "1 exercise" else "$totalCount exercises"
+            } else {
+                "\u200E$totalCount\u200E תרגילים"
+            }
+
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalLayoutDirection provides
+                        androidx.compose.ui.unit.LayoutDirection.Ltr
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = countText,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 15.sp,
+                            lineHeight = 17.sp
+                        ),
+                        color = belt.color,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 18.sp,
+                            lineHeight = 21.sp
+                        ),
+                        color = belt.color,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = if (isEnglish) {
+                    "← Swipe sideways to see more stats →"
+                } else {
+                    "→→ הזז לצד כדי לראות עוד נתונים →→"
+                },
+                color = Color(0xFF5B6472),
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HardGroupStatChip(
+                    value = knownCount.toString(),
+                    label = if (isEnglish) "Known" else "יודע",
+                    containerColor = Color(0xFF7ACB88)
+                )
+
+                HardGroupStatChip(
+                    value = unknownCount.toString(),
+                    label = if (isEnglish) "Unknown" else "לא יודע",
+                    containerColor = Color(0xFFF1A97A)
+                )
+
+                HardGroupStatChip(
+                    value = favoriteCount.toString(),
+                    label = if (isEnglish) "Favorites" else "מועדפים",
+                    containerColor = Color(0xFFE7A3B5)
+                )
+
+                HardGroupStatChip(
+                    value = excludedCount.toString(),
+                    label = if (isEnglish) "Excluded" else "מוחרגים",
+                    containerColor = Color(0xFFE5A3A3)
+                )
+
+                HardGroupStatChip(
+                    value = unmarkedCount.toString(),
+                    label = if (isEnglish) "Unmarked" else "לא סומן",
+                    containerColor = Color(0xFF8596C9)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HardBeltStickyHeaderForSubTopics(
+    belt: Belt,
+    totalCount: Int,
+    knownCount: Int,
+    unknownCount: Int,
+    favoriteCount: Int,
+    excludedCount: Int,
+    unmarkedCount: Int,
+    isDarkMode: Boolean,
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val title = if (isEnglish) {
+        when (belt) {
+            Belt.YELLOW -> "Yellow Belt"
+            Belt.ORANGE -> "Orange Belt"
+            Belt.GREEN -> "Green Belt"
+            Belt.BLUE -> "Blue Belt"
+            Belt.BROWN -> "Brown Belt"
+            Belt.BLACK -> "Black Belt"
+            else -> belt.en
+        }
+    } else {
+        when (belt) {
+            Belt.YELLOW -> "חגורה צהובה"
+            Belt.ORANGE -> "חגורה כתומה"
+            Belt.GREEN -> "חגורה ירוקה"
+            Belt.BLUE -> "חגורה כחולה"
+            Belt.BROWN -> "חגורה חומה"
+            Belt.BLACK -> "חגורה שחורה"
+            else -> belt.heb
+        }
+    }
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(22.dp),
+        color = if (isDarkMode) {
+            Color(0xFF111827)
+        } else {
+            belt.lightColor
+        },
+        tonalElevation = if (isDarkMode) 0.dp else 2.dp,
+        shadowElevation = if (isDarkMode) 0.dp else 6.dp,
+        border = if (isDarkMode) {
+            BorderStroke(1.dp, belt.color.copy(alpha = 0.45f))
+        } else {
+            null
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+        ) {
+            val countText = if (isEnglish) {
+                if (totalCount == 1) "1 exercise" else "$totalCount exercises"
+            } else {
+                "\u200E$totalCount\u200E תרגילים"
+            }
+
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalLayoutDirection provides
+                        androidx.compose.ui.unit.LayoutDirection.Ltr
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = countText,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 15.sp,
+                            lineHeight = 17.sp
+                        ),
+                        color = belt.color,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 18.sp,
+                            lineHeight = 21.sp
+                        ),
+                        color = belt.color,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = if (isEnglish) {
+                    "← Swipe sideways to see more stats →"
+                } else {
+                    "→→ הזז לצד כדי לראות עוד נתונים →→"
+                },
+                color = Color(0xFF5B6472),
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HardGroupStatChip(
+                    value = knownCount.toString(),
+                    label = if (isEnglish) "Known" else "יודע",
+                    containerColor = Color(0xFF7ACB88)
+                )
+
+                HardGroupStatChip(
+                    value = unknownCount.toString(),
+                    label = if (isEnglish) "Unknown" else "לא יודע",
+                    containerColor = Color(0xFFF1A97A)
+                )
+
+                HardGroupStatChip(
+                    value = favoriteCount.toString(),
+                    label = if (isEnglish) "Favorites" else "מועדפים",
+                    containerColor = Color(0xFFE7A3B5)
+                )
+
+                HardGroupStatChip(
+                    value = excludedCount.toString(),
+                    label = if (isEnglish) "Excluded" else "מוחרגים",
+                    containerColor = Color(0xFFE5A3A3)
+                )
+
+                HardGroupStatChip(
+                    value = unmarkedCount.toString(),
+                    label = if (isEnglish) "Unmarked" else "לא סומן",
+                    containerColor = Color(0xFF8596C9)
+                )
+            }
+        }
     }
 }
 
