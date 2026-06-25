@@ -1365,10 +1365,7 @@ private fun userGroups(memory: AssistantMemory): List<String> {
         return listOf(lastGroup)
     }
 
-    return listOf(
-        "בוגרים",
-        "נוער + בוגרים"
-    )
+    return emptyList()
 }
 
 private fun isMyTrainingQuestion(norm: String): Boolean {

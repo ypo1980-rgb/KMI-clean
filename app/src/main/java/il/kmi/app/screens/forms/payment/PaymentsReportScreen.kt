@@ -78,8 +78,6 @@ import androidx.compose.ui.unit.sp
 
 //=====================================================================
 
-private const val MEMBERSHIP_REQUIRED_AMOUNT = 150.0
-
 private fun paymentNowDateText(): String {
     return SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
 }
@@ -93,10 +91,15 @@ private fun paymentCurrentYear(): Int {
 
 private fun paymentStatusFromAmount(
     paidAmount: Double,
-    requiredAmount: Double = MEMBERSHIP_REQUIRED_AMOUNT
+    requiredAmount: Double
 ): PaymentStatus {
     return when {
         paidAmount <= 0.0 -> PaymentStatus.UNPAID
+
+        // אם לא הוגדר סכום נדרש במסמך התשלום / המשתמש,
+        // לא מכניסים סכום קשיח. תשלום חיובי ייחשב כשולם.
+        requiredAmount <= 0.0 -> PaymentStatus.PAID
+
         paidAmount < requiredAmount -> PaymentStatus.PARTIAL
         else -> PaymentStatus.PAID
     }
@@ -229,6 +232,68 @@ private fun DocumentSnapshot.paymentUserPhone(): String {
         ?: ""
 }
 
+private data class PaymentUserBundle(
+    val primaryDoc: DocumentSnapshot,
+    val allDocs: List<DocumentSnapshot>
+)
+
+private fun normalizePaymentPhone(raw: String): String {
+    return raw.filter { it.isDigit() }
+}
+
+private fun DocumentSnapshot.paymentUserEmail(): String {
+    return (
+            getString("email")
+                ?: getString("emailLower")
+                ?: getString("userEmail")
+                ?: getString("user_email")
+                ?: paymentStringFromAny(
+                    "email",
+                    "emailLower",
+                    "userEmail",
+                    "user_email"
+                )
+            )
+        .trim()
+        .lowercase(Locale.ROOT)
+}
+
+private fun DocumentSnapshot.paymentUserMergeKey(): String {
+    val email = paymentUserEmail()
+    val phone = normalizePaymentPhone(paymentUserPhone())
+
+    return when {
+        email.isNotBlank() -> "email:$email"
+        phone.isNotBlank() -> "phone:$phone"
+        else -> "doc:$id"
+    }
+}
+
+private fun choosePrimaryPaymentUserDoc(
+    docs: List<DocumentSnapshot>
+): DocumentSnapshot {
+    return docs
+        .sortedWith(
+            compareByDescending<DocumentSnapshot> { it.paymentUserName().isNotBlank() }
+                .thenByDescending { normalizePaymentPhone(it.paymentUserPhone()).isNotBlank() }
+                .thenByDescending { it.paymentUserBranch().isNotBlank() }
+                .thenBy { it.id }
+        )
+        .first()
+}
+
+private fun DocumentSnapshot.paymentIdentityKeys(): List<String> {
+    return listOf(
+        id,
+        getString("uid"),
+        getString("authUid"),
+        getString("userDocId"),
+        getString("traineeId")
+    )
+        .mapNotNull { it?.trim()?.takeIf { key -> key.isNotBlank() } }
+        .distinct()
+}
+
 private fun DocumentSnapshot.paymentUserBranch(): String {
     val branchesList = get("branches") as? List<*>
     val firstBranchFromList = branchesList
@@ -241,6 +306,15 @@ private fun DocumentSnapshot.paymentUserBranch(): String {
         ?: getString("branch")?.takeIf { it.isNotBlank() }
         ?: getString("branchesCsv")?.split(",")?.firstOrNull()?.trim()?.takeIf { it.isNotBlank() }
         ?: firstBranchFromList
+}
+
+private fun DocumentSnapshot.paymentRequiredAmountFromAny(): Double {
+    return getDouble("requiredAmount")
+        ?: getDouble("membershipRequiredAmount")
+        ?: getDouble("membershipFee")
+        ?: getDouble("annualMembershipFee")
+        ?: getDouble("feeAmount")
+        ?: 0.0
 }
 
 private fun DocumentSnapshot.isPaymentRelevantTrainee(): Boolean {
@@ -282,11 +356,21 @@ private fun DocumentSnapshot.isPaymentRelevantTrainee(): Boolean {
 private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
     val db = Firebase.firestore
 
-    val usersDocs = db.collection("users")
+    val usersDocsRaw = db.collection("users")
         .get()
         .await()
         .documents
         .filter { it.isPaymentRelevantTrainee() }
+
+    val userBundles = usersDocsRaw
+        .groupBy { it.paymentUserMergeKey() }
+        .values
+        .map { docs ->
+            PaymentUserBundle(
+                primaryDoc = choosePrimaryPaymentUserDoc(docs),
+                allDocs = docs
+            )
+        }
 
     val paymentDocs = db.collection("membershipPayments")
         .get()
@@ -311,17 +395,24 @@ private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
         }
     }
 
-    return usersDocs
-        .map { userDoc ->
+    return userBundles
+        .map { bundle ->
+            val userDoc = bundle.primaryDoc
+
             val traineeId = userDoc.getString("uid")
                 ?: userDoc.getString("authUid")
                 ?: userDoc.id
 
-            val paymentDoc = paymentDocsByTraineeId[traineeId]
+            val paymentDoc = bundle.allDocs
+                .asSequence()
+                .flatMap { doc -> doc.paymentIdentityKeys().asSequence() }
+                .mapNotNull { key -> paymentDocsByTraineeId[key] }
+                .firstOrNull()
+                ?: paymentDocsByTraineeId[traineeId]
                 ?: paymentDocsByTraineeId[userDoc.id]
 
-            val requiredAmount = paymentDoc?.getDouble("requiredAmount")
-                ?: MEMBERSHIP_REQUIRED_AMOUNT
+            val requiredAmount = paymentDoc?.paymentRequiredAmountFromAny()
+                ?: userDoc.paymentRequiredAmountFromAny()
 
             val paidAmount = paymentDoc?.getDouble("paidAmount")
                 ?: 0.0
@@ -491,8 +582,8 @@ fun PaymentsReportScreen(
     }
 
     val title = if (isEnglish) "Payments Report" else "דו\"ח תשלומים"
-    val paidText = if (isEnglish) "Paid 150" else "שילמו"
-    val unpaidText = if (isEnglish) "Not paid 150" else "לא שילמו"
+    val paidText = if (isEnglish) "Paid" else "שילמו"
+    val unpaidText = if (isEnglish) "Not paid" else "לא שילמו"
 
     val screenLayoutDirection =
         if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
@@ -506,19 +597,13 @@ fun PaymentsReportScreen(
     val allBranchesLabel = if (isEnglish) "All Branches" else "כל הסניפים"
 
     val branchOptions = remember(isEnglish, items) {
-        val catalogBranches = il.kmi.app.training.TrainingCatalog.allVisibleBranches()
-
         val realBranches = items
             .map { it.branchName.trim() }
             .filter { it.isNotBlank() }
             .distinct()
+            .sorted()
 
-        listOf(allBranchesLabel) +
-                (catalogBranches + realBranches)
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-                    .distinct()
-                    .sorted()
+        listOf(allBranchesLabel) + realBranches
     }
 
     var selectedBranch by rememberSaveable {
@@ -1072,7 +1157,7 @@ private fun FilterRow(
 
         FilterChipSimple(
             modifier = Modifier.weight(1f),
-            text = if (isEnglish) "Paid\n150" else "שילמו\n150",
+            text = if (isEnglish) "Paid" else "שילמו",
             selected = selected == "PAID",
             onClick = { onSelect("PAID") }
         )

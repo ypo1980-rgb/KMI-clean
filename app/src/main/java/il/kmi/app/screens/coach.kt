@@ -1781,7 +1781,42 @@ fun CoachTraineesScreen(
                 }
             }.getOrNull().orEmpty()
 
-            for (doc in userDocs) {
+            val mergedUserDocs = userDocs
+                .groupBy { doc ->
+                    val emailKey = normalizeEmailForMerge(primaryEmailFromDoc(doc))
+                    val phoneKey = normalizePhoneForMerge(primaryPhoneFromDoc(doc))
+                    val nameKey = (
+                            doc.getString("fullName")
+                                ?: doc.getString("name")
+                                ?: doc.getString("displayName")
+                                ?: doc.id
+                            ).normKey()
+
+                    when {
+                        emailKey.isNotBlank() -> "email:$emailKey"
+                        phoneKey.isNotBlank() -> "phone:$phoneKey"
+                        else -> "name:$nameKey"
+                    }
+                }
+                .map { (_, docs) ->
+                    docs.maxWithOrNull(
+                        compareBy<com.google.firebase.firestore.DocumentSnapshot> {
+                            if (primaryEmailFromDoc(it).isNotBlank()) 1 else 0
+                        }.thenBy {
+                            if (primaryPhoneFromDoc(it).isNotBlank()) 1 else 0
+                        }.thenBy {
+                            if ((it.getString("fullName")
+                                    ?: it.getString("name")
+                                    ?: it.getString("displayName")
+                                    ?: "").isNotBlank()
+                            ) 1 else 0
+                        }.thenBy {
+                            it.id
+                        }
+                    ) ?: docs.first()
+                }
+
+            for (doc in mergedUserDocs) {
                 val n = (doc.getString("fullName")
                     ?: doc.getString("name")
                     ?: doc.getString("displayName")
@@ -1899,8 +1934,8 @@ fun CoachTraineesScreen(
                     val nameKey = profile.fullName.normKey()
 
                     when {
-                        phoneKey.isNotBlank() -> "phone:$phoneKey"
                         emailKey.isNotBlank() -> "email:$emailKey"
+                        phoneKey.isNotBlank() -> "phone:$phoneKey"
                         else -> "name:$nameKey"
                     }
                 }
@@ -1994,6 +2029,8 @@ fun CoachTraineesScreen(
 
         val mergedProfiles = traineeProfiles
             .groupBy { profile ->
+                val emailKey = profile.email.trim().lowercase(Locale.US)
+
                 val phoneKey = profile.phone.filter { it.isDigit() }
                     .let { digits ->
                         when {
@@ -2004,12 +2041,11 @@ fun CoachTraineesScreen(
                         }
                     }
 
-                val emailKey = profile.email.trim().lowercase(Locale.US)
                 val nameKey = normalizeCoachSearchText(profile.fullName)
 
                 when {
-                    phoneKey.isNotBlank() -> "phone:$phoneKey"
                     emailKey.isNotBlank() -> "email:$emailKey"
+                    phoneKey.isNotBlank() -> "phone:$phoneKey"
                     else -> "name:$nameKey"
                 }
             }
@@ -2711,7 +2747,7 @@ fun CoachTraineesScreen(
                                             modifier = Modifier.fillMaxWidth(),
                                             verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            uiProfiles.take(8).forEach { trainee ->
+                                            uiProfiles.forEach { trainee ->
                                                 val isSelected = selectedId == trainee.id
 
                                                 Surface(

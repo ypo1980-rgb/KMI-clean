@@ -998,19 +998,52 @@ fun FreeSessionsScreen(
                     .await()
                     .documents
                     .filter { doc ->
-                        val branchMatch = docBranches(doc).any { branchName ->
-                            val clean = normalizeFreeSessionText(branchName)
-                            clean == wantedBranch ||
-                                    clean.contains(wantedBranch) ||
-                                    wantedBranch.contains(clean)
+                        val userBranches = docBranches(doc)
+                        val userGroups = docGroups(doc)
+
+                        val branchMatch = userBranches.any { branchName ->
+                            val cleanBranch = normalizeFreeSessionText(branchName)
+
+                            cleanBranch == wantedBranch ||
+                                    cleanBranch.contains(wantedBranch) ||
+                                    wantedBranch.contains(cleanBranch)
                         }
 
-                        val groupMatch = docGroups(doc).any { groupName ->
-                            normalizeFreeSessionText(groupName) == wantedGroup
+                        val groupMatch = when {
+                            wantedGroup.isBlank() -> true
+
+                            // אם המשתמש רשום לסניף אבל אין לו בכלל שדה קבוצות,
+                            // לא מפילים אותו — ההתראה תישלח לפי הסניף.
+                            userGroups.isEmpty() -> true
+
+                            else -> userGroups.any { groupName ->
+                                val cleanGroup = normalizeFreeSessionText(
+                                    il.kmi.app.training.TrainingCatalog
+                                        .normalizeGroupName(groupName)
+                                        .ifBlank { groupName }
+                                )
+
+                                cleanGroup == wantedGroup ||
+                                        cleanGroup.contains(wantedGroup) ||
+                                        wantedGroup.contains(cleanGroup)
+                            }
+                        }
+
+                        if (branchMatch && groupMatch) {
+                            Log.d(
+                                FREE_SESSIONS_DEBUG,
+                                "free_session_target_match | user=${doc.id} | branch=$selectedBranch | group=$selectedGroupKey | userBranches=${userBranches.joinToString(" | ")} | userGroups=${userGroups.joinToString(" | ")}"
+                            )
+                        } else if (branchMatch) {
+                            Log.d(
+                                FREE_SESSIONS_DEBUG,
+                                "free_session_target_skip_group | user=${doc.id} | branch=$selectedBranch | group=$selectedGroupKey | userBranches=${userBranches.joinToString(" | ")} | userGroups=${userGroups.joinToString(" | ")}"
+                            )
                         }
 
                         branchMatch && groupMatch
                     }
+
                     .mapNotNull { doc ->
                         val uid = listOf(
                             doc.getString("uid"),
@@ -1043,7 +1076,7 @@ fun FreeSessionsScreen(
                 if (targets.isEmpty()) {
                     Log.d(
                         FREE_SESSIONS_DEBUG,
-                        "free_session_push_skip | reason=no_targets | branch=$selectedBranch | group=$selectedGroupKey"
+                        "free_session_push_skip | reason=no_targets | branch=$selectedBranch | group=$selectedGroupKey | wantedBranch=$wantedBranch | wantedGroup=$wantedGroup"
                     )
                     return@runCatching
                 }
@@ -1095,10 +1128,36 @@ fun FreeSessionsScreen(
                         // יעדים — כדי שה־Push הקיים של הודעות מאמן יידע למי לשלוח
                         "targetUids" to targets.map { it.uid },
                         "recipientUids" to targets.map { it.uid },
+                        "selectedUids" to targets.map { it.uid },
+                        "uids" to targets.map { it.uid },
+
                         "targetEmails" to targets.map { it.email }.filter { it.isNotBlank() },
+                        "recipientEmails" to targets.map { it.email }.filter { it.isNotBlank() },
+
                         "targetPhones" to targets.map { it.phone }.filter { it.isNotBlank() },
+                        "recipientPhones" to targets.map { it.phone }.filter { it.isNotBlank() },
+
                         "targetNames" to targets.map { it.name }.filter { it.isNotBlank() },
+                        "recipientNames" to targets.map { it.name }.filter { it.isNotBlank() },
+
                         "targetRecipients" to targets.map { target ->
+                            mapOf(
+                                "uid" to target.uid,
+                                "name" to target.name,
+                                "email" to target.email,
+                                "phone" to target.phone
+                            )
+                        },
+                        "recipients" to targets.map { target ->
+                            mapOf(
+                                "uid" to target.uid,
+                                "name" to target.name,
+                                "email" to target.email,
+                                "phone" to target.phone
+                            )
+                        },
+
+                        "recipients" to targets.map { target ->
                             mapOf(
                                 "uid" to target.uid,
                                 "name" to target.name,
@@ -1111,9 +1170,16 @@ fun FreeSessionsScreen(
                         "branch" to selectedBranch,
                         "branchName" to selectedBranch,
                         "selectedBranch" to selectedBranch,
+                        "branches" to listOf(selectedBranch).filter { it.isNotBlank() },
+                        "targetBranches" to listOf(selectedBranch).filter { it.isNotBlank() },
+                        "selectedBranches" to listOf(selectedBranch).filter { it.isNotBlank() },
+
                         "group" to selectedGroupKey,
                         "groupKey" to selectedGroupKey,
                         "selectedGroup" to selectedGroupKey,
+                        "groups" to listOf(selectedGroupKey).filter { it.isNotBlank() },
+                        "targetGroups" to listOf(selectedGroupKey).filter { it.isNotBlank() },
+                        "selectedGroups" to listOf(selectedGroupKey).filter { it.isNotBlank() },
 
                         // מידע על האימון החופשי
                         "source" to "free_sessions",

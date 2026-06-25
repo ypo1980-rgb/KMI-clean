@@ -86,7 +86,7 @@ object CoachWhitelist {
     val allowedPhones: Map<String, String> = mapOf(
         "0526664660" to "יובל פולק",
         "0524887178" to "יוני מלסה",
-        "0526969287" to "איציק ביטון",
+        "0526969287" to "אה, מאמא?איציק ביטון",
         "0585911518" to "אדם הולצמן",
         "0526319090" to "גל חג'ג'",
         "0505300596" to "אבי אביסדון"
@@ -571,14 +571,11 @@ fun RegistrationFormScreen(
             }
         }
 
-        keys.forEach { key ->
-            val list = readAnyPrefAsList(key)
-            if (list.isNotEmpty()) {
-                return list.distinct().take(3)
-            }
-        }
-
-        return emptyList()
+        return keys
+            .flatMap { key -> readAnyPrefAsList(key) }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
     }
 
     // --- סניפים נבחרים (עד 3) — מקור אמת יחיד ---
@@ -596,7 +593,7 @@ fun RegistrationFormScreen(
         )
 
         mutableStateListOf<String>().apply {
-            addAll(saved.take(3))
+            addAll(saved)
         }
     }
 
@@ -617,7 +614,7 @@ fun RegistrationFormScreen(
         )
 
         mutableStateListOf<String>().apply {
-            addAll(saved.take(3))
+            addAll(saved)
         }
     }
 
@@ -707,13 +704,7 @@ fun RegistrationFormScreen(
     // לכן לא מאפסים currentBeltId במעבר לטאב מאמן.
 
     LaunchedEffect(branchType, selectedBranches.toList(), groupsByBranch) {
-        // ✅ בחו״ל אין קבוצות גיל מתוך TrainingCatalog,
-        // לכן לא מסננים את קבוצת ברירת המחדל "חו״ל".
         if (branchType == "abroad") {
-            if (selectedBranches.isNotEmpty() && selectedGroups.isEmpty()) {
-                selectedGroups.clear()
-                selectedGroups.add("חו״ל")
-            }
             return@LaunchedEffect
         }
 
@@ -724,7 +715,7 @@ fun RegistrationFormScreen(
             }
             .distinct()
 
-        val filtered = selectedGroups.filter { it in unionGroups }.take(3)
+        val filtered = selectedGroups.filter { it in unionGroups }
         if (filtered.size != selectedGroups.size) {
             selectedGroups.clear()
             selectedGroups.addAll(filtered)
@@ -899,26 +890,24 @@ fun RegistrationFormScreen(
 
         val branchesListFinalForPrefs: List<String> =
             if (selectedBranches.isNotEmpty()) {
-                selectedBranches.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3)
+                selectedBranches.map { it.trim() }.filter { it.isNotBlank() }.distinct()
             } else {
                 selectedBranch
                     .split(',', ';', '|', '\n')
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
                     .distinct()
-                    .take(3)
             }
 
         val groupsListFinalForPrefs: List<String> =
             if (selectedGroups.isNotEmpty()) {
-                selectedGroups.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(3)
+                selectedGroups.map { it.trim() }.filter { it.isNotBlank() }.distinct()
             } else {
                 selectedGroup
                     .split(',', ';', '|', '\n')
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
                     .distinct()
-                    .take(3)
             }
 
         val branchesJson = org.json.JSONArray(branchesListFinalForPrefs).toString()
@@ -930,7 +919,7 @@ fun RegistrationFormScreen(
         // ✅ חגורה סופית גם למתאמן וגם למאמן.
         // אם משום מה לא נבחרה חגורה, לא נשאיר Firestore / SP עם belt ריק,
         // כי זה עלול להחזיר את המשתמש שוב למסך השלמת פרטים בכניסה הבאה.
-        val beltFinal = currentBeltId.ifBlank { "white" }
+        val beltFinal = currentBeltId.trim()
 
         val activeBranchFinal =
             (activeBranch.takeIf { it.isNotBlank() && it in branchesListFinalForPrefs }
@@ -1459,7 +1448,6 @@ fun RegistrationFormScreen(
                         .map { it.trim() }
                         .filter { it.isNotBlank() }
                         .distinct()
-                        .take(3)
 
                     selectedBranches.clear()
                     selectedBranches.addAll(clean)
@@ -1479,7 +1467,6 @@ fun RegistrationFormScreen(
                         .map { it.trim() }
                         .filter { it.isNotBlank() }
                         .distinct()
-                        .take(3)
 
                     selectedGroups.clear()
                     selectedGroups.addAll(clean)

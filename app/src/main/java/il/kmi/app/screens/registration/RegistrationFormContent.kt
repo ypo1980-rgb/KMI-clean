@@ -215,17 +215,6 @@ fun RegistrationFormContent(
     // גם לפני שהמשתמש לחץ על סיום רישום.
     val highlightMissingRequired = isGoogleAuth
 
-    val showFullNameMissing = (fullNameError || highlightMissingRequired) && fullName.isBlank()
-    val showPhoneMissing = (phoneError || highlightMissingRequired) && phone.isBlank()
-    val showEmailMissing = (emailError || highlightMissingRequired) && email.isBlank()
-    val showGenderMissing = (genderError || highlightMissingRequired) && gender.isBlank()
-    val showRegionMissing = (regionError || highlightMissingRequired) && selectedRegion.isBlank()
-    val showBranchMissing = (branchError || highlightMissingRequired) && selectedBranches.isEmpty()
-    val showGroupMissing = (groupError || highlightMissingRequired) &&
-            branchType == "israel" &&
-            selectedBranches.isNotEmpty() &&
-            selectedGroups.isEmpty()
-
     val allGroupsAcrossBranches by remember(ctx, selectedBranches) {
         derivedStateOf {
             selectedBranches
@@ -249,9 +238,24 @@ fun RegistrationFormContent(
                             ?: emptyList()
                     }
                 }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
                 .distinct()
         }
     }
+
+    val shouldShowGroupsPicker = selectedBranches.isNotEmpty() &&
+            allGroupsAcrossBranches.isNotEmpty()
+
+    val showFullNameMissing = (fullNameError || highlightMissingRequired) && fullName.isBlank()
+    val showPhoneMissing = (phoneError || highlightMissingRequired) && phone.isBlank()
+    val showEmailMissing = (emailError || highlightMissingRequired) && email.isBlank()
+    val showGenderMissing = (genderError || highlightMissingRequired) && gender.isBlank()
+    val showRegionMissing = (regionError || highlightMissingRequired) && selectedRegion.isBlank()
+    val showBranchMissing = (branchError || highlightMissingRequired) && selectedBranches.isEmpty()
+    val showGroupMissing = (groupError || highlightMissingRequired) &&
+            shouldShowGroupsPicker &&
+            selectedGroups.isEmpty()
 
     CompositionLocalProvider(
         LocalTextStyle provides MaterialTheme.typography.bodySmall,
@@ -637,16 +641,16 @@ fun RegistrationFormContent(
                     isEnglish = isEnglish
                 )
 
-            if (branchType == "israel" && selectedBranches.isNotEmpty()) {
-                MultiGroupsPicker(
-                    allGroupsAcrossBranches = allGroupsAcrossBranches,
-                    selectedGroups = selectedGroups,
-                    onGroupsChange = onGroupsChange,
-                    groupError = groupError,
-                    highlightMissingRequired = highlightMissingRequired,
-                    isEnglish = isEnglish
-                )
-            }
+                if (shouldShowGroupsPicker) {
+                    MultiGroupsPicker(
+                        allGroupsAcrossBranches = allGroupsAcrossBranches,
+                        selectedGroups = selectedGroups,
+                        onGroupsChange = onGroupsChange,
+                        groupError = groupError,
+                        highlightMissingRequired = highlightMissingRequired,
+                        isEnglish = isEnglish
+                    )
+                }
 
                 BeltPicker(
                     currentBeltId = currentBeltId,
@@ -1270,7 +1274,7 @@ private fun RegionAndMultiBranchPicker(
             isError = branchError,
             label = {
                 Text(
-                    text = trLocal("סניפים (עד 3)", "Branches (up to 3)"),
+                    text = trLocal("סניפים", "Branches"),
                     color = Color(0xFF374151)
                 )
             },
@@ -1294,9 +1298,9 @@ private fun RegionAndMultiBranchPicker(
             placeholder = {
                 Text(
                     text = if (branchType == "abroad") {
-                        trLocal("בחר/י 1–3 סניפים בחו״ל", "Select 1–3 abroad branches")
+                        trLocal("בחר/י סניפים בחו״ל", "Select abroad branches")
                     } else {
-                        trLocal("בחר/י 1–3 סניפים", "Select 1–3 branches")
+                        trLocal("בחר/י סניפים", "Select branches")
                     },
                     color = Color(0xFF64748B)
                 )
@@ -1337,16 +1341,7 @@ private fun RegionAndMultiBranchPicker(
                             if (checked) {
                                 tempSelection.filterNot { it == branch }
                             } else {
-                                if (tempSelection.size < 3) {
-                                    tempSelection + branch
-                                } else {
-                                    Toast.makeText(
-                                        ctx,
-                                        trLocal("ניתן לבחור עד 3 סניפים", "You can select up to 3 branches"),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    tempSelection
-                                }
+                                tempSelection + branch
                             }
                     }
                 )
@@ -1372,9 +1367,7 @@ private fun RegionAndMultiBranchPicker(
                         onBranchesConfirm(tempSelection)
 
                         if (branchType == "abroad") {
-                            onGroupsChange(
-                                if (tempSelection.isNotEmpty()) listOf("חו״ל") else emptyList()
-                            )
+                            onGroupsChange(emptyList())
                         }
 
                         branchesExpanded = false
@@ -1443,7 +1436,7 @@ private fun MultiGroupsPicker(
             readOnly = true,
             label = {
                 Text(
-                    text = trLocal("בחר/י קבוצה/ות (עד 3)", "Select group(s) - up to 3"),
+                    text = trLocal("בחר/י קבוצה/ות", "Select group(s)"),
                     color = Color.Black
                 )
             },
@@ -1470,8 +1463,8 @@ private fun MultiGroupsPicker(
             placeholder = {
                 Text(
                     text = trLocal(
-                        "בחר/י 1–3 קבוצות מכל הסניפים",
-                        "Select 1–3 groups"
+                        "בחר/י קבוצות מכל הסניפים",
+                        "Select groups"
                     ),
                     textAlign = align,
                     modifier = Modifier.fillMaxWidth()
@@ -1516,22 +1509,13 @@ private fun MultiGroupsPicker(
                             if (checked) {
                                 tempSelection.filterNot { it == g }
                             } else {
-                                if (tempSelection.size < 3) {
-                                    tempSelection + g
-                                } else {
-                                    Toast.makeText(
-                                        ctx,
-                                        trLocal("ניתן לבחור עד 3 קבוצות", "You can select up to 3 groups"),
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    tempSelection
-                                }
+                                tempSelection + g
                             }
 
                         tempSelection = newSelection
 
-                        // ⭐ התיקון הקריטי — שמירה מיידית
-                        onGroupsChange(newSelection.take(3))
+                        // ⭐ שמירה מיידית ללא מגבלת כמות
+                        onGroupsChange(newSelection)
                     }
                 )
             }
@@ -1556,7 +1540,7 @@ private fun MultiGroupsPicker(
 
                 Button(
                     onClick = {
-                        onGroupsChange(tempSelection.take(3))
+                        onGroupsChange(tempSelection)
                         expanded = false
                     }
                 ) {
@@ -1569,8 +1553,8 @@ private fun MultiGroupsPicker(
     if (groupError) {
         Text(
             text = trLocal(
-                "חובה לבחור לפחות קבוצה אחת (עד 3)",
-                "Please select at least one group (up to 3)"
+                "חובה לבחור לפחות קבוצה אחת",
+                "Please select at least one group"
             ),
             color = MaterialTheme.colorScheme.error,
             textAlign = align,

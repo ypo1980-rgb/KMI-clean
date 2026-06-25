@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.provider.CalendarContract.Calendars
 import android.provider.CalendarContract.Events
@@ -13,7 +14,8 @@ import android.widget.Toast
 import androidx.core.content.ContextCompat
 import java.util.Calendar
 import java.util.TimeZone
-import il.kmi.app.training.TrainingCatalog.addressFor
+import il.kmi.app.database.KmiDatabaseProvider
+import il.kmi.app.training.TrainingCatalog
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -29,10 +31,6 @@ fun hasCalendarPermission(ctx: Context): Boolean =
 object KmiCalendarSync {
     private const val TAG_MARK = "[KMI_SYNC]"   // מזהה פנימי לאירועי סנכרון. לא מוצג למשתמש.
     private const val TAG_MARK_SELECTED = "[KMI_SYNC_SELECTED]" // מזהה פנימי לאירועי יומן שנבחר.
-    // כותרות ואורכים
-    private const val TITLE_SOKOLOV = "אימון ק.מ.י – מתנ\"ס סוקולוב"
-    private const val TITLE_OFEK    = "אימון ק.מ.י – מרכז אופק"
-    private const val DURATION_MIN  = 90
 
     private fun tr(context: Context, he: String, en: String): String {
         return if (AppLanguageManager(context).getCurrentLanguage() == AppLanguage.ENGLISH) en else he
@@ -55,6 +53,224 @@ object KmiCalendarSync {
         Calendar.FRIDAY    -> "FR"
         Calendar.SATURDAY  -> "SA"
         else -> "SU"
+    }
+
+    private data class CalendarTrainingCandidate(
+        val title: String,
+        val location: String,
+        val dayOfWeek: Int,
+        val hour: Int,
+        val minute: Int,
+        val durationMinutes: Int
+    )
+
+    private fun prefsList(
+        sp: SharedPreferences,
+        vararg keys: String
+    ): List<String> {
+        val out = mutableListOf<String>()
+
+        keys.forEach { key ->
+            when (val value = sp.all[key]) {
+                is String -> {
+                    val raw = value.trim()
+
+                    if (raw.isBlank()) {
+                        // no-op
+                    } else if (raw.startsWith("[")) {
+                        runCatching {
+                            val arr = org.json.JSONArray(raw)
+                            for (i in 0 until arr.length()) {
+                                arr.optString(i)
+                                    .trim()
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { out += it }
+                            }
+                        }
+                    } else {
+                        raw.split(',', ';', '|', '\n')
+                            .map { it.trim().trim('"') }
+                            .filter { it.isNotBlank() }
+                            .forEach { out += it }
+                    }
+                }
+
+                is Set<*> -> {
+                    value
+                        .mapNotNull { it?.toString()?.trim() }
+                        .filter { it.isNotBlank() }
+                        .forEach { out += it }
+                }
+
+                is List<*> -> {
+                    value
+                        .mapNotNull { it?.toString()?.trim() }
+                        .filter { it.isNotBlank() }
+                        .forEach { out += it }
+                }
+            }
+        }
+
+        return out
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    private fun selectedBranchesForCalendarSync(context: Context): List<String> {
+        val sp = context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+
+        return prefsList(
+            sp,
+            "branches_json",
+            "selected_branches",
+            "branches",
+            "branch",
+            "active_branch",
+            "activeBranch",
+            "branch2",
+            "branch3"
+        )
+    }
+
+    private fun selectedGroupsForCalendarSync(context: Context): List<String> {
+        val sp = context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+
+        return prefsList(
+            sp,
+            "groups_json",
+            "selected_groups",
+            "groups",
+            "age_groups",
+            "age_group",
+            "active_group",
+            "activeGroup",
+            "group"
+        )
+            .map {
+                TrainingCatalog
+                    .normalizeGroupName(it)
+                    .ifBlank { it }
+            }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    private fun calendarDayFromDatabase(dayOfWeek: String): Int {
+        return when (dayOfWeek.trim().uppercase(java.util.Locale.US)) {
+            "SUNDAY" -> Calendar.SUNDAY
+            "MONDAY" -> Calendar.MONDAY
+            "TUESDAY" -> Calendar.TUESDAY
+            "WEDNESDAY" -> Calendar.WEDNESDAY
+            "THURSDAY" -> Calendar.THURSDAY
+            "FRIDAY" -> Calendar.FRIDAY
+            "SATURDAY" -> Calendar.SATURDAY
+            else -> -1
+        }
+    }
+
+    private fun hourFromTimeText(time: String): Int? {
+        return time
+            .substringBefore(":")
+            .trim()
+            .toIntOrNull()
+            ?.takeIf { it in 0..23 }
+    }
+
+    private fun minuteFromTimeText(time: String): Int? {
+        return time
+            .substringAfter(":", "")
+            .trim()
+            .toIntOrNull()
+            ?.takeIf { it in 0..59 }
+    }
+
+    private fun databaseGroupMatches(
+        selectedGroup: String,
+        databaseGroupHe: String,
+        databaseGroupEn: String
+    ): Boolean {
+        val wanted = TrainingCatalog
+            .normalizeGroupName(selectedGroup)
+            .ifBlank { selectedGroup }
+            .trim()
+
+        val dbHe = TrainingCatalog
+            .normalizeGroupName(databaseGroupHe)
+            .ifBlank { databaseGroupHe }
+            .trim()
+
+        val dbEn = databaseGroupEn.trim()
+
+        if (wanted.equals(dbHe, ignoreCase = true)) return true
+        if (selectedGroup.trim().equals(databaseGroupHe.trim(), ignoreCase = true)) return true
+        if (selectedGroup.trim().equals(dbEn, ignoreCase = true)) return true
+
+        if (wanted == "נוער" && dbHe == "נוער + בוגרים") return true
+        if (wanted == "בוגרים" && dbHe == "נוער + בוגרים") return true
+
+        return false
+    }
+
+    private fun calendarTrainingCandidatesForSync(
+        context: Context
+    ): List<CalendarTrainingCandidate> {
+        val isEnglish = AppLanguageManager(context).getCurrentLanguage() == AppLanguage.ENGLISH
+
+        val branches = selectedBranchesForCalendarSync(context)
+        val groups = selectedGroupsForCalendarSync(context)
+
+        if (branches.isEmpty() || groups.isEmpty()) {
+            return emptyList()
+        }
+
+        return branches.flatMap { branchName ->
+            val dbBranch = KmiDatabaseProvider.branchByName(context, branchName)
+                ?: return@flatMap emptyList()
+
+            groups.flatMap { groupName ->
+                dbBranch.trainingDays
+                    .filter { day ->
+                        databaseGroupMatches(
+                            selectedGroup = groupName,
+                            databaseGroupHe = day.groupHe,
+                            databaseGroupEn = day.groupEn
+                        )
+                    }
+                    .mapNotNull { day ->
+                        val calendarDay = calendarDayFromDatabase(day.dayOfWeek)
+                        if (calendarDay == -1) return@mapNotNull null
+
+                        val hour = hourFromTimeText(day.startTime) ?: return@mapNotNull null
+                        val minute = minuteFromTimeText(day.startTime) ?: return@mapNotNull null
+                        val duration = day.durationMinutes.takeIf { it > 0 } ?: return@mapNotNull null
+
+                        val place = dbBranch
+                            .displayPlace(isEnglish)
+                            .ifBlank { branchName }
+
+                        val location = dbBranch
+                            .displayAddress(isEnglish)
+                            .ifBlank { place }
+
+                        CalendarTrainingCandidate(
+                            title = if (isEnglish) {
+                                "KMI Training – $place"
+                            } else {
+                                "אימון ק.מ.י – $place"
+                            },
+                            location = location,
+                            dayOfWeek = calendarDay,
+                            hour = hour,
+                            minute = minute,
+                            durationMinutes = duration
+                        )
+                    }
+            }
+        }
+            .distinctBy {
+                "${it.title}|${it.location}|${it.dayOfWeek}|${it.hour}|${it.minute}|${it.durationMinutes}"
+            }
     }
 
     /** בוחר יומן בר־כתיבה. קודם כל מועדף שמור, אחריו Google, ואז נפילה ליומן הראשון שבר־כתיבה. */
@@ -213,46 +429,46 @@ object KmiCalendarSync {
         calendarId: Long,
         descriptionTag: String,
         eventKeyPrefix: String
-    ) {
+    ): Boolean {
         val sp = context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
         val leadMin = sp.getInt("lead_minutes", 60).coerceIn(0, 180)
 
-        upsertWeeklyEvent(
-            context, calendarId,
-            title = TITLE_SOKOLOV,
-            location = addressFor("נתניה – מרכז קהילתי סוקולוב"),
-            descriptionTag = descriptionTag,
-            eventKeyPrefix = eventKeyPrefix,
-            dayOfWeek = Calendar.SUNDAY,
-            hour = 20, minute = 30,
-            durationMin = DURATION_MIN,
-            leadMinutes = leadMin
-        )
-        upsertWeeklyEvent(
-            context, calendarId,
-            title = TITLE_OFEK,
-            location = addressFor("נתניה – מרכז קהילתי אופק"),
-            descriptionTag = descriptionTag,
-            eventKeyPrefix = eventKeyPrefix,
-            dayOfWeek = Calendar.MONDAY,
-            hour = 19, minute = 0,
-            durationMin = DURATION_MIN,
-            leadMinutes = leadMin
-        )
-        upsertWeeklyEvent(
-            context, calendarId,
-            title = TITLE_SOKOLOV,
-            location = addressFor("נתניה – מרכז קהילתי סוקולוב"),
-            descriptionTag = descriptionTag,
-            eventKeyPrefix = eventKeyPrefix,
-            dayOfWeek = Calendar.TUESDAY,
-            hour = 20, minute = 30,
-            durationMin = DURATION_MIN,
-            leadMinutes = leadMin
-        )
+        val candidates = calendarTrainingCandidatesForSync(context)
+
+        if (candidates.isEmpty()) {
+            Toast.makeText(
+                context,
+                tr(
+                    context,
+                    "לא נמצאו אימונים לסניפים ולקבוצות הרשומים בפרופיל",
+                    "No trainings were found for the branches and groups in the profile"
+                ),
+                Toast.LENGTH_LONG
+            ).show()
+
+            return false
+        }
+
+        candidates.forEach { candidate ->
+            upsertWeeklyEvent(
+                context = context,
+                calendarId = calendarId,
+                title = candidate.title,
+                location = candidate.location,
+                descriptionTag = descriptionTag,
+                eventKeyPrefix = eventKeyPrefix,
+                dayOfWeek = candidate.dayOfWeek,
+                hour = candidate.hour,
+                minute = candidate.minute,
+                durationMin = candidate.durationMinutes,
+                leadMinutes = leadMin
+            )
+        }
+
+        return true
     }
 
-    /** יוצר/מעדכן את שלושת האימונים הקבועים. */
+    /** יוצר/מעדכן את כל האימונים לפי הסניפים והקבוצות הרשומים בפרופיל. */
     fun upsertAll(context: Context) {
         // הרשאות?
         if (!hasCalendarPermission(context)) {
@@ -303,16 +519,13 @@ object KmiCalendarSync {
             ).show()
             return false
         }
-        upsertAllToCalendar(
+        return upsertAllToCalendar(
             context = context,
             calendarId = selectedCalendarId,
             descriptionTag = TAG_MARK_SELECTED,
             eventKeyPrefix = "KMI_SELECTED_WEEKLY"
         )
-        return true
     }
-
-
 
     /** מוחק מהיומן את כל האירועים שסונכרנו ע"י האפליקציה (בטוח לפי CUSTOM_APP_*). */
     fun removeAll(context: Context) {

@@ -674,11 +674,11 @@ fun HomeScreen(
                     }
 
                     fun readListFromPrefs(vararg keys: String): List<String> {
-                        keys.forEach { key ->
-                            val list = readPrefValueAsList(key)
-                            if (list.isNotEmpty()) return list
-                        }
-                        return emptyList()
+                        return keys
+                            .flatMap { key -> readPrefValueAsList(key) }
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinct()
                     }
 
                     return readListFromPrefs(
@@ -687,6 +687,8 @@ fun HomeScreen(
                         "groups",
                         "age_groups",
                         "age_group",
+                        "active_group",
+                        "activeGroup",
                         "group"
                     )
                         .map {
@@ -696,7 +698,6 @@ fun HomeScreen(
                         }
                         .filter { it.isNotBlank() }
                         .distinct()
-                        .take(3)
                 }
 
                 var groupsRefreshTick by remember { mutableIntStateOf(0) }
@@ -726,8 +727,7 @@ fun HomeScreen(
                 }
 
                 val groupsEffective: List<String> = remember(userSp, groupsRefreshTick) {
-                    val savedGroups = readSelectedGroups(userSp)
-                    if (savedGroups.isEmpty()) listOf("בוגרים") else savedGroups
+                    readSelectedGroups(userSp)
                 }
 
                 // === KMI_MULTI_GROUPS (FIX) ===
@@ -826,10 +826,13 @@ fun HomeScreen(
 
                     val currentBranches = prefsAsList(
                         "active_branch",
+                        "activeBranch",
                         "branch",
                         "branches",
                         "branches_json",
-                        "selected_branches"
+                        "selected_branches",
+                        "branch2",
+                        "branch3"
                     )
                         .map { normalizeText(it) }
                         .filter { it.isNotBlank() }
@@ -1329,28 +1332,28 @@ fun HomeScreen(
                     }
 
                     fun readListFromPrefs(vararg keys: String): List<String> {
-                        keys.forEach { key ->
-                            val list = readPrefValueAsList(key)
-                            if (list.isNotEmpty()) return list
-                        }
-                        return emptyList()
+                        return keys
+                            .flatMap { key -> readPrefValueAsList(key) }
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinct()
                     }
 
-                    val fromCanonical = readListFromPrefs(
+                    val fromAllSources = readListFromPrefs(
                         "branches_json",
                         "selected_branches",
                         "branches",
-                        "branch"
+                        "branch",
+                        "active_branch",
+                        "activeBranch",
+                        "branch2",
+                        "branch3"
                     )
 
-                    val b2 = readPrefValueAsList("branch2")
-                    val b3 = readPrefValueAsList("branch3")
-
-                    return (fromCanonical + b2 + b3)
+                    return fromAllSources
                         .map { it.trim() }
                         .filter { it.isNotBlank() }
                         .distinct()
-                        .take(3)
                 }
 
                 var branchesRefreshTick by remember { mutableIntStateOf(0) }
@@ -1378,7 +1381,7 @@ fun HomeScreen(
                                     ?.distinct()
                                     .orEmpty()
 
-                                if (fromList.isNotEmpty()) return fromList.take(3)
+                                if (fromList.isNotEmpty()) return fromList
 
                                 val csv = doc.getString(csvKey)
                                     ?.takeIf { it.isNotBlank() }
@@ -1390,7 +1393,6 @@ fun HomeScreen(
                                     .map { it.trim() }
                                     .filter { it.isNotBlank() }
                                     .distinct()
-                                    .take(3)
                             }
 
                             val remoteBranches = listFromFirestoreListOrCsv(
@@ -1488,11 +1490,10 @@ fun HomeScreen(
                 val isAbroadBranch = branchTypeHome == "abroad"
 
                 val branchesEffective = remember(selectedBranches, isAbroadBranch) {
-                    if (selectedBranches.isEmpty() && !isAbroadBranch) {
-                        listOf("נתניה – מרכז קהילתי אופק")
-                    } else {
-                        selectedBranches.take(3)
-                    }
+                    selectedBranches
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
                 }
 
                 // ✅ name להצגה + פרמטרים לניווט אימונים חופשיים (נעדכן state כדי שה-FAB יוכל להשתמש גם מחוץ ל-Column)
@@ -1851,7 +1852,6 @@ fun HomeScreen(
                             address = dbBranch.displayAddress(isEnglish),
                             coach = day.displayCoachName(isEnglish)
                                 .ifBlank { coachFallback }
-                                .ifBlank { "איציק ביטון" }
                         )
                     }
                 }
@@ -1926,7 +1926,7 @@ fun HomeScreen(
                                 val coach =
                                     sched?.coachName?.takeIf { it.isNotBlank() }
                                         ?: coachFromPrefs.takeIf { it.isNotBlank() }
-                                        ?: "איציק ביטון"
+                                        ?: ""
 
                                 val fallbackItems: List<TrainingData> =
                                     sched?.slots?.map { slotAny ->
@@ -1974,7 +1974,7 @@ fun HomeScreen(
                 val upcoming: List<HomeTrainingUi> = remember(currentWeekCandidates) {
                     currentWeekCandidates
                         .sortedBy { it.cal.timeInMillis }
-                        .take(4)
+                        .take(5)
                         .map { training ->
                             HomeTrainingUi(
                                 training = training,

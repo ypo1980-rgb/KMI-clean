@@ -58,6 +58,11 @@ import il.kmi.app.R
 //-----------------------------------------------------------------------------
 
 // ----- מודל נתונים להזנה נוחה -----
+data class ProfileBranchEntry(
+    val branch: String,
+    val address: String
+)
+
 data class UserProfileInfo(
     val userName: String = "שם המשתמש",
     val belt: String = "חגורה XXX",
@@ -68,10 +73,10 @@ data class UserProfileInfo(
     // ✅ משמש לציור תמונת החגורה הבאה בכרטיס התחתון
     val trainingTowardsBeltId: String = "",
 
+    val branchEntries: List<ProfileBranchEntry> = emptyList(),
     val branch: String = "סניף - XXX",
     val branchAddress: String = "כתובת הסניף - XXX",
     val group: String = "קבוצה - XXX",
-    val headCoach: String = "מאמן בכיר - איציק ביטון",
     val coach: String = "מאמן - XXXX",
     val nextTraining: String = "אימון הבא - XXX",
     val trainingTowardsBelt: String = "מתאמן לחגורה - XXX",
@@ -332,6 +337,59 @@ private fun firestoreProfileFirstString(
     return ""
 }
 
+private fun firestoreProfileStringList(
+    data: Map<String, Any?>,
+    vararg keys: String
+): List<String> {
+    val out = mutableListOf<String>()
+
+    keys.forEach { key ->
+        when (val value = data[key]) {
+            is String -> {
+                val raw = value.trim()
+
+                if (raw.isBlank()) {
+                    // no-op
+                } else if (raw.startsWith("[")) {
+                    runCatching {
+                        val arr = org.json.JSONArray(raw)
+                        for (i in 0 until arr.length()) {
+                            arr.optString(i)
+                                .trim()
+                                .takeIf { it.isNotBlank() }
+                                ?.let { out += it }
+                        }
+                    }
+                } else {
+                    raw.split(',', ';', '|', '\n')
+                        .map { it.trim().trim('"') }
+                        .filter { it.isNotBlank() }
+                        .forEach { out += it }
+                }
+            }
+
+            is List<*> -> {
+                value
+                    .mapNotNull { it?.toString()?.trim() }
+                    .filter { it.isNotBlank() }
+                    .forEach { out += it }
+            }
+
+            is Set<*> -> {
+                value
+                    .mapNotNull { it?.toString()?.trim() }
+                    .filter { it.isNotBlank() }
+                    .forEach { out += it }
+            }
+        }
+    }
+
+    return out
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
 private fun firestoreProfileFromMap(data: Map<String, Any?>): FirestoreProfileInfo {
     return FirestoreProfileInfo(
         fullName = firestoreProfileFirstString(
@@ -450,20 +508,68 @@ fun MyProfileScreen(
                 firestoreProfile = firestoreProfileFromMap(snap.data.orEmpty())
 
                 val p = firestoreProfile
+                val data = snap.data.orEmpty()
 
-                // מיישר גם את SharedPreferences כדי ששאר המסכים ייהנו מהמידע.
+                val branchesFromFirestore = firestoreProfileStringList(
+                    data,
+                    "branches",
+                    "branches_json",
+                    "selected_branches",
+                    "branchesCsv",
+                    "activeBranch",
+                    "active_branch",
+                    "branch"
+                )
+
+                val groupsFromFirestore = firestoreProfileStringList(
+                    data,
+                    "groups",
+                    "groups_json",
+                    "selected_groups",
+                    "groupsCsv",
+                    "activeGroup",
+                    "active_group",
+                    "primaryGroup",
+                    "groupKey",
+                    "group_key",
+                    "age_group",
+                    "group"
+                )
+                    .map {
+                        TrainingCatalog
+                            .normalizeGroupName(it)
+                            .ifBlank { it }
+                    }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+
+                val branchesCsv = branchesFromFirestore.joinToString(", ")
+                val groupsCsv = groupsFromFirestore.joinToString(", ")
+                val branchesJson = org.json.JSONArray(branchesFromFirestore).toString()
+                val groupsJson = org.json.JSONArray(groupsFromFirestore).toString()
+
+// מיישר גם את SharedPreferences כדי ששאר המסכים ייהנו מהמידע.
                 userSp.edit()
                     .putString("fullName", p.fullName)
                     .putString("email", p.email)
                     .putString("phone", p.phone)
-                    .putString("branch", p.branch)
-                    .putString("activeBranch", p.branch)
-                    .putString("active_branch", p.branch)
-                    .putString("group", p.group)
-                    .putString("activeGroup", p.group)
-                    .putString("active_group", p.group)
-                    .putString("groupKey", p.group)
-                    .putString("age_group", p.group)
+
+                    .putString("branch", branchesCsv)
+                    .putString("branches", branchesCsv)
+                    .putString("branches_json", branchesJson)
+                    .putString("selected_branches", branchesCsv)
+                    .putString("activeBranch", branchesFromFirestore.firstOrNull().orEmpty())
+                    .putString("active_branch", branchesFromFirestore.firstOrNull().orEmpty())
+
+                    .putString("group", groupsCsv)
+                    .putString("groups", groupsCsv)
+                    .putString("groups_json", groupsJson)
+                    .putString("selected_groups", groupsCsv)
+                    .putString("groupKey", groupsFromFirestore.firstOrNull().orEmpty())
+                    .putString("age_group", groupsCsv)
+                    .putString("activeGroup", groupsFromFirestore.firstOrNull().orEmpty())
+                    .putString("active_group", groupsFromFirestore.firstOrNull().orEmpty())
+
                     .putString("belt", p.belt)
                     .putString("current_belt", p.belt)
                     .putString("user_role", p.role)
@@ -526,24 +632,69 @@ fun MyProfileScreen(
         val branchesList: List<String> = splitBranches(branchRaw)
         val primaryBranch: String = branchesList.firstOrNull().orEmpty()
 
-        val group = TrainingCatalog.normalizeGroupName(
-            prefStr(
-                kmiPrefs.ageGroup,
-                sp.getString("activeGroup", ""),
-                sp.getString("active_group", ""),
-                sp.getString("groupKey", ""),
-                sp.getString("group_key", ""),
-                sp.getString("age_group", ""),
-                sp.getString("group", ""),
-                userSp.getString("activeGroup", ""),
-                userSp.getString("active_group", ""),
-                userSp.getString("groupKey", ""),
-                userSp.getString("group_key", ""),
-                userSp.getString("age_group", ""),
-                userSp.getString("group", ""),
-                firestoreProfile.group
-            )
+        fun profilePrefsList(vararg values: String?): List<String> {
+            val out = mutableListOf<String>()
+
+            values.forEach { value ->
+                val raw = value?.trim().orEmpty()
+
+                if (raw.isBlank()) {
+                    // no-op
+                } else if (raw.startsWith("[")) {
+                    runCatching {
+                        val arr = org.json.JSONArray(raw)
+                        for (i in 0 until arr.length()) {
+                            arr.optString(i)
+                                .trim()
+                                .takeIf { it.isNotBlank() }
+                                ?.let { out += it }
+                        }
+                    }
+                } else {
+                    raw.split(',', ';', '|', '\n')
+                        .map { it.trim().trim('"') }
+                        .filter { it.isNotBlank() }
+                        .forEach { out += it }
+                }
+            }
+
+            return out
+                .map {
+                    TrainingCatalog
+                        .normalizeGroupName(it)
+                        .ifBlank { it }
+                }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
+        val groupsList = profilePrefsList(
+            kmiPrefs.ageGroup,
+            sp.getString("groups_json", ""),
+            sp.getString("selected_groups", ""),
+            sp.getString("groups", ""),
+            sp.getString("age_groups", ""),
+            sp.getString("activeGroup", ""),
+            sp.getString("active_group", ""),
+            sp.getString("groupKey", ""),
+            sp.getString("group_key", ""),
+            sp.getString("age_group", ""),
+            sp.getString("group", ""),
+            userSp.getString("groups_json", ""),
+            userSp.getString("selected_groups", ""),
+            userSp.getString("groups", ""),
+            userSp.getString("age_groups", ""),
+            userSp.getString("activeGroup", ""),
+            userSp.getString("active_group", ""),
+            userSp.getString("groupKey", ""),
+            userSp.getString("group_key", ""),
+            userSp.getString("age_group", ""),
+            userSp.getString("group", ""),
+            firestoreProfile.group
         )
+
+        val group = groupsList.firstOrNull().orEmpty()
+        val groupDisplay = groupsList.joinToString("\n").ifBlank { "—" }
 
         fun dbGroupMatches(
             selectedGroup: String,
@@ -672,11 +823,13 @@ fun MyProfileScreen(
 
         // ✅ אימון הבא + מאמן – בודק את כל הסניפים של המשתמש ולא רק את הראשון
         val dbUpcoming = branchesList
-            .mapNotNull { branchName ->
-                nextTrainingFromDatabase(
-                    branchName = branchName,
-                    groupName = group
-                )
+            .flatMap { branchName ->
+                groupsList.mapNotNull { groupName ->
+                    nextTrainingFromDatabase(
+                        branchName = branchName,
+                        groupName = groupName
+                    )
+                }
             }
             .minByOrNull { it.cal.timeInMillis }
 
@@ -690,15 +843,17 @@ fun MyProfileScreen(
 
             branchesList
                 .asSequence()
-                .mapNotNull { branchName ->
-                    TrainingCatalog
-                        .upcomingFor(
-                            region = savedRegion,
-                            branch = branchName,
-                            group = group,
-                            count = 1
-                        )
-                        .firstOrNull()
+                .flatMap { branchName ->
+                    groupsList.asSequence().mapNotNull { groupName ->
+                        TrainingCatalog
+                            .upcomingFor(
+                                region = savedRegion,
+                                branch = branchName,
+                                group = groupName,
+                                count = 1
+                            )
+                            .firstOrNull()
+                    }
                 }
                 .minByOrNull { it.cal.timeInMillis }
         } else {
@@ -742,35 +897,49 @@ fun MyProfileScreen(
         val nextBeltText: String = nextTraineeRankDisplayNameForUi(beltId, isEnglish)
         val nextBeltId: String = nextTraineeRankId(beltId)
 
-        // --- תיקון: כתובות לסניפים מרובים (שורה לכל סניף) ---
+        // --- תיקון: בניית רשימת סניפים + כתובת מתחת לכל סניף ---
         fun fallbackCityVenue(b: String): String {
             val parts = b.split('–', '-').map { it.trim() }
-            val city  = parts.getOrNull(0)
+            val city = parts.getOrNull(0)
             val venue = parts.getOrNull(1)
             return if (!city.isNullOrBlank() && !venue.isNullOrBlank()) "$venue, $city" else "—"
         }
 
-        val branchDisplay: String = branchesList.joinToString("\n").ifBlank { "—" }
-
-        val branchAddressResolved: String = if (branchesList.isEmpty()) {
-            "—"
+        val branchEntriesResolved: List<ProfileBranchEntry> = if (branchesList.isEmpty()) {
+            emptyList()
         } else {
-            branchesList.joinToString("\n") { b ->
+            branchesList.map { b ->
                 val dbAddress = KmiDatabaseProvider
                     .branchByName(ctx, b)
                     ?.displayAddress(isEnglish = isEnglish)
                     ?.trim()
                     .orEmpty()
 
-                if (dbAddress.isNotBlank() && dbAddress != b.trim()) {
-                    dbAddress
-                } else {
-                    val mapped = TrainingCatalog.addressFor(b).trim()
-                    if (mapped.isNotBlank() && mapped != b.trim()) mapped else fallbackCityVenue(b)
+                val resolvedAddress = when {
+                    dbAddress.isNotBlank() && dbAddress != b.trim() -> dbAddress
+                    else -> {
+                        val mapped = TrainingCatalog.addressFor(b).trim()
+                        if (mapped.isNotBlank() && mapped != b.trim()) {
+                            mapped
+                        } else {
+                            fallbackCityVenue(b)
+                        }
+                    }
                 }
+
+                ProfileBranchEntry(
+                    branch = b.trim(),
+                    address = resolvedAddress.ifBlank { "—" }
+                )
             }
         }
-        // --- סוף תיקון הכתובת ---
+
+        val branchDisplay: String =
+            branchEntriesResolved.joinToString("\n") { it.branch }.ifBlank { "—" }
+
+        val branchAddressResolved: String =
+            branchEntriesResolved.joinToString("\n") { it.address }.ifBlank { "—" }
+// --- סוף תיקון הכתובת ---
 
         val info = UserProfileInfo(
             userName = if (fullName.isNotBlank()) {
@@ -783,10 +952,10 @@ fun MyProfileScreen(
             belt = beltHeb,
             currentBeltId = beltId,
             trainingTowardsBeltId = nextBeltId,
+            branchEntries = branchEntriesResolved,
             branch = branchDisplay,
             branchAddress = branchAddressResolved,
-            group = group.ifBlank { "—" },
-            headCoach = profileTr(isEnglish, "איציק ביטון", "Itzik Biton"),
+            group = groupDisplay,
             coach = coachName,
             nextTraining = nextTraining,
             trainingTowardsBelt = nextBeltText,
@@ -1083,20 +1252,8 @@ private fun UserProfileCard(
             // ─────────────────────────────────────────────
             // שורות מידע בסגנון "תגית:" ואז הערך מתחת + מפריד
             // ─────────────────────────────────────────────
-            val branchValue = info.branch
-                .removePrefix("סניף -").removePrefix("סניף")
-                .trim().ifBlank { "—" }
-
-            val addrValue = info.branchAddress
-                .removePrefix("כתובת הסניף -").removePrefix("כתובת הסניף")
-                .trim().ifBlank { "—" }
-
             val groupValue = info.group
                 .removePrefix("קבוצה -").removePrefix("קבוצה")
-                .trim().ifBlank { "—" }
-
-            val headCoachValue = info.headCoach
-                .removePrefix("מאמן בכיר -").removePrefix("מאמן בכיר")
                 .trim().ifBlank { "—" }
 
             val coachValue = info.coach
@@ -1107,24 +1264,14 @@ private fun UserProfileCard(
                 .removePrefix("אימון הבא -").removePrefix("אימון הבא")
                 .trim().ifBlank { "—" }
 
-            LabeledValueBlock(
-                label = profileTr(isEnglish, "סניף:", "Branch:"),
-                value = branchValue,
-                isEnglish = isEnglish
-            )
-            LabeledValueBlock(
-                label = profileTr(isEnglish, "כתובת הסניף:", "Branch address:"),
-                value = addrValue,
+            BranchAddressListBlock(
+                label = profileTr(isEnglish, "סניפים וכתובות:", "Branches and addresses:"),
+                entries = info.branchEntries,
                 isEnglish = isEnglish
             )
             LabeledValueBlock(
                 label = profileTr(isEnglish, "קבוצה:", "Group:"),
                 value = groupValue,
-                isEnglish = isEnglish
-            )
-            LabeledValueBlock(
-                label = profileTr(isEnglish, "מאמן בכיר:", "Head coach:"),
-                value = headCoachValue,
                 isEnglish = isEnglish
             )
             LabeledValueBlock(
@@ -1261,6 +1408,99 @@ private fun ProfileBeltImage(
                 },
             contentScale = ContentScale.Fit
         )
+    }
+}
+
+@Composable
+private fun BranchAddressListBlock(
+    label: String,
+    entries: List<ProfileBranchEntry>,
+    isEnglish: Boolean
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        horizontalAlignment = profileHorizontalAlignment(isEnglish)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall.copy(
+                color = Color(0xFF52627A),
+                fontWeight = FontWeight.Medium
+            ),
+            textAlign = profileTextAlign(isEnglish),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        if (entries.isEmpty()) {
+            Text(
+                text = "—",
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF111827)
+                ),
+                textAlign = profileTextAlign(isEnglish),
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            entries.forEachIndexed { index, entry ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (index % 2 == 0) {
+                        Color(0xFFDDEAFF)
+                    } else {
+                        Color(0xFFF3F7FF)
+                    },
+                    border = BorderStroke(
+                        1.dp,
+                        Color(0xFFBFD0E8)
+                    ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalAlignment = profileHorizontalAlignment(isEnglish)
+                    ) {
+                        Text(
+                            text = entry.branch.ifBlank { "—" },
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF1E3A8A)
+                            ),
+                            textAlign = profileTextAlign(isEnglish),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+
+                        Text(
+                            text = entry.address.ifBlank { "—" },
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF374151)
+                            ),
+                            textAlign = profileTextAlign(isEnglish),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                if (index != entries.lastIndex) {
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Divider(color = Color(0xFFBFD0E8), thickness = 1.dp)
     }
 }
 

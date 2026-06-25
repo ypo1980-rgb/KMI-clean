@@ -2003,30 +2003,39 @@ private class HomeScheduleTruth(
     private val isoFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
 
     private fun readSelectedBranches(): List<String> {
-        val fromJsonOrCsv = runCatching {
-            val js = sp.getString("branches_json", null) ?: sp.getString("branches", null)
-            if (!js.isNullOrBlank()) {
-                if (js.trim().startsWith("[")) {
-                    val arr = JSONArray(js)
-                    (0 until arr.length()).mapNotNull { arr.optString(it, null) }
+        fun splitBranchValue(raw: String?): List<String> {
+            val clean = raw?.trim().orEmpty()
+            if (clean.isBlank()) return emptyList()
+
+            return if (clean.startsWith("[")) {
+                runCatching {
+                    val arr = JSONArray(clean)
+                    (0 until arr.length())
+                        .mapNotNull { index -> arr.optString(index, null) }
+                        .map { it.trim() }
                         .filter { it.isNotBlank() }
-                } else {
-                    js.split(',', ';', '|', '\n').map { it.trim() }.filter { it.isNotBlank() }
-                }
-            } else null
-        }.getOrNull()
-        if (!fromJsonOrCsv.isNullOrEmpty()) return fromJsonOrCsv
+                }.getOrDefault(emptyList())
+            } else {
+                clean
+                    .split(',', ';', '|', '\n')
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+            }
+        }
 
-        val b1Raw = sp.getString("branch", "")?.trim().orEmpty()
-        val fromBranchCsv =
-            if (b1Raw.contains(',') || b1Raw.contains(';') || b1Raw.contains('|') || b1Raw.contains('\n'))
-                b1Raw.split(',', ';', '|', '\n').map { it.trim() }.filter { it.isNotBlank() }
-            else listOf(b1Raw).filter { it.isNotBlank() }
-
-        val b2 = sp.getString("branch2", "")?.trim().orEmpty()
-        val b3 = sp.getString("branch3", "")?.trim().orEmpty()
-
-        return (fromBranchCsv + listOf(b2, b3)).filter { it.isNotBlank() }.distinct()
+        return buildList {
+            addAll(splitBranchValue(sp.getString("branches_json", null)))
+            addAll(splitBranchValue(sp.getString("branches", null)))
+            addAll(splitBranchValue(sp.getString("branch", null)))
+            addAll(splitBranchValue(sp.getString("active_branch", null)))
+            addAll(splitBranchValue(sp.getString("activeBranch", null)))
+            addAll(splitBranchValue(sp.getString("selected_branches", null)))
+            addAll(splitBranchValue(sp.getString("branch2", null)))
+            addAll(splitBranchValue(sp.getString("branch3", null)))
+        }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
     }
 
     data class TrainingTruth(
@@ -2040,7 +2049,8 @@ private class HomeScheduleTruth(
         val date = runCatching { LocalDate.parse(dateIso.trim(), isoFmt) }.getOrNull() ?: return null
         val wantedDow = date.toCalendarDow()
 
-        val branches = readSelectedBranches().ifEmpty { listOf("נתניה – מרכז קהילתי אופק") }.take(3)
+        val branches = readSelectedBranches()
+
         val groups = groupsEffective()
 
         for (branchName in branches) {
@@ -2111,7 +2121,8 @@ private class HomeScheduleTruth(
         val date = runCatching { LocalDate.parse(dateIso.trim(), isoFmt) }.getOrNull() ?: return null
         val wantedDow = date.toCalendarDow()
 
-        val branches = readSelectedBranches().ifEmpty { listOf("נתניה – מרכז קהילתי אופק") }.take(3)
+        val branches = readSelectedBranches()
+
         val groups = groupsEffective()
 
         for (branchName in branches) {
@@ -2212,7 +2223,8 @@ private class HomeScheduleTruth(
         val date = runCatching { LocalDate.parse(dateIso.trim(), isoFmt) }.getOrNull() ?: return null
         val wantedDow = date.toCalendarDow()
 
-        val branches = readSelectedBranches().ifEmpty { listOf("נתניה – מרכז קהילתי אופק") }.take(3)
+        val branches = readSelectedBranches()
+
         val groups = groupsEffective()
 
         for (branchName in branches) {
