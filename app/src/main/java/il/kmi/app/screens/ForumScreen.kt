@@ -129,6 +129,9 @@ private const val FORUM_MESSAGE_RETENTION_DAYS = 90L
 private const val FORUM_MESSAGE_RETENTION_MILLIS =
     FORUM_MESSAGE_RETENTION_DAYS * 24L * 60L * 60L * 1000L
 
+private const val FORUM_LAST_SELECTED_BRANCH_KEY = "forum_last_selected_branch"
+private const val FORUM_LAST_SELECTED_GROUP_KEY = "forum_last_selected_group"
+
 private fun forumLastReadKey(branch: String, groupKey: String): String =
     "forum_last_read_at_${branch.trim()}_${groupKey.trim()}"
 
@@ -492,22 +495,54 @@ fun ForumScreen(
     }
 
     var selectedForumBranch by rememberSaveable(availableForumBranches) {
-        mutableStateOf(availableForumBranches.firstOrNull().orEmpty())
+        val lastBranch = userSp
+            .getString(FORUM_LAST_SELECTED_BRANCH_KEY, "")
+            .orEmpty()
+            .trim()
+
+        mutableStateOf(
+            lastBranch
+                .takeIf { it.isNotBlank() && it in availableForumBranches }
+                ?: availableForumBranches.firstOrNull().orEmpty()
+        )
     }
 
     var selectedForumGroup by rememberSaveable(availableForumGroups) {
-        mutableStateOf(availableForumGroups.firstOrNull().orEmpty())
+        val lastGroup = userSp
+            .getString(FORUM_LAST_SELECTED_GROUP_KEY, "")
+            .orEmpty()
+            .trim()
+
+        mutableStateOf(
+            lastGroup
+                .takeIf { it.isNotBlank() && it in availableForumGroups }
+                ?: availableForumGroups.firstOrNull().orEmpty()
+        )
     }
 
     LaunchedEffect(availableForumBranches) {
         if (selectedForumBranch.isBlank() || selectedForumBranch !in availableForumBranches) {
-            selectedForumBranch = availableForumBranches.firstOrNull().orEmpty()
+            val lastBranch = userSp
+                .getString(FORUM_LAST_SELECTED_BRANCH_KEY, "")
+                .orEmpty()
+                .trim()
+
+            selectedForumBranch = lastBranch
+                .takeIf { it.isNotBlank() && it in availableForumBranches }
+                ?: availableForumBranches.firstOrNull().orEmpty()
         }
     }
 
     LaunchedEffect(availableForumGroups) {
         if (selectedForumGroup.isBlank() || selectedForumGroup !in availableForumGroups) {
-            selectedForumGroup = availableForumGroups.firstOrNull().orEmpty()
+            val lastGroup = userSp
+                .getString(FORUM_LAST_SELECTED_GROUP_KEY, "")
+                .orEmpty()
+                .trim()
+
+            selectedForumGroup = lastGroup
+                .takeIf { it.isNotBlank() && it in availableForumGroups }
+                ?: availableForumGroups.firstOrNull().orEmpty()
         }
     }
 
@@ -574,6 +609,8 @@ fun ForumScreen(
     LaunchedEffect(branch, groupKey) {
         if (branch.isNotBlank() && groupKey.isNotBlank()) {
             userSp.edit()
+                .putString(FORUM_LAST_SELECTED_BRANCH_KEY, branch)
+                .putString(FORUM_LAST_SELECTED_GROUP_KEY, groupKey)
                 .putLong(forumLastReadKey(branch, groupKey), System.currentTimeMillis())
                 .apply()
         }
@@ -597,6 +634,9 @@ fun ForumScreen(
 // ✅ החלק העליון יהיה מתקפל כדי להשאיר מקום לפורום
     var isRoomPickerExpanded by rememberSaveable { mutableStateOf(false) }
     var isParticipantsExpanded by rememberSaveable { mutableStateOf(false) }
+
+    // ✅ הפורום נפתח כשהכרטיס העליון סגור כדי לתת יותר שדה ראייה להודעות
+    var isForumControlsCollapsed by rememberSaveable { mutableStateOf(true) }
 
 // הודעה בעריכה (אם יש) + טקסט לעריכה
     var editingMessage by remember { mutableStateOf<ForumUiMessage?>(null) }
@@ -1671,139 +1711,114 @@ fun ForumScreen(
                     return@Column
                 }
 
-                if (availableForumBranches.size > 1 || availableForumGroups.size > 1) {
-                    ForumTopCollapseHeader(
-                        title = forumTr(isEnglish, "בחירת חדר פורום", "Forum room"),
-                        subtitle = forumTr(
+                // ===== כרטיס שליטה עליון מאוחד: חדר פורום + משתתפים =====
+                val participants = participantsByUsers
+
+                if (isForumControlsCollapsed) {
+                    ForumControlsMiniHandle(
+                        isDarkMode = isDarkMode,
+                        isEnglish = isEnglish,
+                        text = forumTr(
+                            isEnglish,
+                            "לחץ לבחירת חדר הפורום ומשתתפים",
+                            "Tap to choose forum room and participants"
+                        ),
+                        onClick = {
+                            isForumControlsCollapsed = false
+                        }
+                    )
+
+                    Spacer(Modifier.height(5.dp))
+                } else {
+                    ForumPremiumControlCard(
+                        branches = availableForumBranches,
+                        groups = availableForumGroups,
+                        selectedBranch = selectedForumBranch,
+                        selectedGroup = selectedForumGroup,
+                        participants = participants,
+                        participantsText = participantsText,
+                        roomTitle = forumTr(isEnglish, "בחירת חדר פורום", "Forum room"),
+                        roomSubtitle = forumTr(
                             isEnglish,
                             "${selectedForumBranch.ifBlank { "—" }} • ${selectedForumGroup.ifBlank { "—" }}",
                             "${selectedForumBranch.ifBlank { "—" }} • ${selectedForumGroup.ifBlank { "—" }}"
                         ),
-                        isExpanded = isRoomPickerExpanded,
+                        participantsTitle = when {
+                            isParticipantsLoading -> forumTr(
+                                isEnglish,
+                                "טוען משתתפים...",
+                                "Loading participants..."
+                            )
+
+                            participants.isNotEmpty() -> forumTr(
+                                isEnglish,
+                                "משתתפים בפורום (${participants.size})",
+                                "Forum participants (${participants.size})"
+                            )
+
+                            else -> forumTr(
+                                isEnglish,
+                                "משתתפים בפורום",
+                                "Forum participants"
+                            )
+                        },
+                        participantsSubtitle = when {
+                            isParticipantsLoading -> forumTr(
+                                isEnglish,
+                                "בודק מי רשום לחדר הזה",
+                                "Checking who belongs to this room"
+                            )
+
+                            participants.isNotEmpty() -> forumTr(
+                                isEnglish,
+                                "לחץ להצגת הרשימה",
+                                "Tap to show the list"
+                            )
+
+                            else -> forumTr(
+                                isEnglish,
+                                "אין משתתפים רשומים בקבוצה הזו עדיין",
+                                "No registered participants in this group yet"
+                            )
+                        },
+                        isRoomExpanded = isRoomPickerExpanded,
+                        isParticipantsExpanded = isParticipantsExpanded,
+                        canOpenRoomPicker = availableForumBranches.size > 1 || availableForumGroups.size > 1,
+                        canOpenParticipants = !isParticipantsLoading && participants.isNotEmpty(),
                         isDarkMode = isDarkMode,
                         isEnglish = isEnglish,
-                        onClick = {
-                            isRoomPickerExpanded = !isRoomPickerExpanded
-                            if (isRoomPickerExpanded) {
-                                isParticipantsExpanded = false
+                        onCollapseAll = {
+                            isRoomPickerExpanded = false
+                            isParticipantsExpanded = false
+                            isForumControlsCollapsed = true
+                        },
+                        onRoomClick = {
+                            if (availableForumBranches.size > 1 || availableForumGroups.size > 1) {
+                                isRoomPickerExpanded = !isRoomPickerExpanded
+                                if (isRoomPickerExpanded) {
+                                    isParticipantsExpanded = false
+                                }
                             }
+                        },
+                        onParticipantsClick = {
+                            if (!isParticipantsLoading && participants.isNotEmpty()) {
+                                isParticipantsExpanded = !isParticipantsExpanded
+                                if (isParticipantsExpanded) {
+                                    isRoomPickerExpanded = false
+                                }
+                            }
+                        },
+                        onBranchSelected = {
+                            selectedForumBranch = it
+                            isRoomPickerExpanded = false
+                        },
+                        onGroupSelected = {
+                            selectedForumGroup = it
+                            isRoomPickerExpanded = false
                         }
                     )
 
-                    if (isRoomPickerExpanded) {
-                        Spacer(Modifier.height(6.dp))
-
-                        ForumRoomPickerCard(
-                            branches = availableForumBranches,
-                            groups = availableForumGroups,
-                            selectedBranch = selectedForumBranch,
-                            selectedGroup = selectedForumGroup,
-                            isDarkMode = isDarkMode,
-                            isEnglish = isEnglish,
-                            onBranchSelected = {
-                                selectedForumBranch = it
-                                isRoomPickerExpanded = false
-                            },
-                            onGroupSelected = {
-                                selectedForumGroup = it
-                                isRoomPickerExpanded = false
-                            }
-                        )
-                    }
-
                     Spacer(Modifier.height(8.dp))
-                }
-
-                // ===== רשימת משתתפים בפורום =====
-// קודם כל – לפי users בסניף; אם אין, נופל לשמות מתוך ההודעות
-                val participants = participantsByUsers
-
-                ForumTopCollapseHeader(
-                    title = when {
-                        isParticipantsLoading -> forumTr(
-                            isEnglish,
-                            "טוען משתתפים...",
-                            "Loading participants..."
-                        )
-
-                        participants.isNotEmpty() -> forumTr(
-                            isEnglish,
-                            "משתתפים בפורום (${participants.size})",
-                            "Forum participants (${participants.size})"
-                        )
-
-                        else -> forumTr(
-                            isEnglish,
-                            "משתתפים בפורום",
-                            "Forum participants"
-                        )
-                    },
-                    subtitle = when {
-                        isParticipantsLoading -> forumTr(
-                            isEnglish,
-                            "בודק מי רשום לחדר הזה",
-                            "Checking who belongs to this room"
-                        )
-
-                        participants.isNotEmpty() -> forumTr(
-                            isEnglish,
-                            "לחץ להצגת הרשימה",
-                            "Tap to show the list"
-                        )
-
-                        else -> forumTr(
-                            isEnglish,
-                            "אין משתתפים רשומים בקבוצה הזו עדיין",
-                            "No registered participants in this group yet"
-                        )
-                    },
-                    isExpanded = isParticipantsExpanded,
-                    isDarkMode = isDarkMode,
-                    isEnglish = isEnglish,
-                    onClick = {
-                        if (!isParticipantsLoading && participants.isNotEmpty()) {
-                            isParticipantsExpanded = !isParticipantsExpanded
-                            if (isParticipantsExpanded) {
-                                isRoomPickerExpanded = false
-                            }
-                        }
-                    }
-                )
-
-                if (isParticipantsExpanded && participants.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        tonalElevation = 0.dp,
-                        shadowElevation = if (isDarkMode) 0.dp else 3.dp,
-                        color = participantsColor,
-                        border = BorderStroke(1.dp, forumHeaderBorder)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            participants.forEach { p ->
-                                Text(
-                                    text = if (p.isMe) {
-                                        forumTr(isEnglish, "${p.name} (אני)", "${p.name} (me)")
-                                    } else {
-                                        p.name
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = participantsText,
-                                    textAlign = screenTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
                 }
 
                 // ================= רשימת הודעות =================
@@ -1871,17 +1886,10 @@ fun ForumScreen(
                                             .ifBlank { forumTr(isEnglish, "משתתף", "Participant") }
 
                                         Text(
-                                            text = if (msg.isMine) {
-                                                forumTr(
-                                                    isEnglish,
-                                                    "$messageAuthorName • אני",
-                                                    "$messageAuthorName • me"
-                                                )
-                                            } else {
-                                                messageAuthorName
-                                            },
-                                            style = MaterialTheme.typography.labelMedium,
+                                            text = messageAuthorName,
                                             color = textColor.copy(alpha = 0.78f),
+                                            fontSize = 12.sp,
+                                            lineHeight = 14.sp,
                                             fontWeight = FontWeight.Black,
                                             textAlign = screenTextAlign,
                                             maxLines = 1,
@@ -1891,8 +1899,10 @@ fun ForumScreen(
                                         if (msg.text.isNotBlank()) {
                                             Text(
                                                 text = msg.text,
-                                                style = MaterialTheme.typography.bodyMedium,
                                                 color = textColor,
+                                                fontSize = 10.sp,
+                                                lineHeight = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
                                                 textAlign = screenTextAlign,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -2523,6 +2533,578 @@ private fun ForumTopCollapseHeader(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForumControlsMiniHandle(
+    isDarkMode: Boolean,
+    isEnglish: Boolean,
+    text: String,
+    onClick: () -> Unit
+) {
+    val accentColor = if (isDarkMode) Color(0xFF93C5FD) else Color(0xFF2563EB)
+    val textColor = if (isDarkMode) Color(0xFFD8E0E7) else Color(0xFF334155)
+
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(32.dp)
+                .clickable { onClick() },
+            shape = RoundedCornerShape(999.dp),
+            color = if (isDarkMode) {
+                Color(0xFF111B24).copy(alpha = 0.94f)
+            } else {
+                Color.White.copy(alpha = 0.96f)
+            },
+            border = BorderStroke(
+                1.dp,
+                accentColor.copy(alpha = if (isDarkMode) 0.42f else 0.24f)
+            ),
+            shadowElevation = if (isDarkMode) 0.dp else 5.dp,
+            tonalElevation = 0.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                accentColor.copy(alpha = if (isDarkMode) 0.15f else 0.08f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (isEnglish) {
+                    Arrangement.Start
+                } else {
+                    Arrangement.End
+                }
+            ) {
+                if (isEnglish) {
+                    ForumHandleLines(accentColor = accentColor)
+                    Spacer(Modifier.width(8.dp))
+                }
+
+                Text(
+                    text = text,
+                    color = textColor,
+                    fontSize = 11.sp,
+                    lineHeight = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = forumTextAlign(isEnglish),
+                    maxLines = 1
+                )
+
+                if (!isEnglish) {
+                    Spacer(Modifier.width(8.dp))
+                    ForumHandleLines(accentColor = accentColor)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForumHandleLines(
+    accentColor: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        repeat(3) {
+            Box(
+                modifier = Modifier
+                    .width(32.dp)
+                    .height(2.dp)
+                    .background(
+                        color = accentColor.copy(alpha = 0.82f),
+                        shape = RoundedCornerShape(999.dp)
+                    )
+            )
+
+            if (it < 2) {
+                Spacer(Modifier.height(2.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForumPremiumControlCard(
+    branches: List<String>,
+    groups: List<String>,
+    selectedBranch: String,
+    selectedGroup: String,
+    participants: List<ForumParticipantUi>,
+    participantsText: Color,
+    roomTitle: String,
+    roomSubtitle: String,
+    participantsTitle: String,
+    participantsSubtitle: String,
+    isRoomExpanded: Boolean,
+    isParticipantsExpanded: Boolean,
+    canOpenRoomPicker: Boolean,
+    canOpenParticipants: Boolean,
+    isDarkMode: Boolean,
+    isEnglish: Boolean,
+    onCollapseAll: () -> Unit,
+    onRoomClick: () -> Unit,
+    onParticipantsClick: () -> Unit,
+    onBranchSelected: (String) -> Unit,
+    onGroupSelected: (String) -> Unit
+) {
+    var branchDropdownExpanded by remember { mutableStateOf(false) }
+    var groupDropdownExpanded by remember { mutableStateOf(false) }
+
+    val titleColor = if (isDarkMode) Color(0xFFF8FAFC) else Color(0xFF102033)
+    val subtitleColor = if (isDarkMode) Color(0xFFD8E0E7) else Color(0xFF5A6D82)
+    val mutedColor = if (isDarkMode) Color(0xFF9CA3AF) else Color(0xFF718096)
+
+    val blueAccent = if (isDarkMode) Color(0xFF60A5FA) else Color(0xFF1677FF)
+    val purpleAccent = if (isDarkMode) Color(0xFFA78BFA) else Color(0xFF7C3AED)
+
+    val cardBrush = if (isDarkMode) {
+        Brush.linearGradient(
+            listOf(
+                Color(0xFF253445),
+                Color(0xFF16232F),
+                Color(0xFF111B24)
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                Color(0xFFFFFFFF),
+                Color(0xFFF7FAFF),
+                Color(0xFFEFF6FF)
+            )
+        )
+    }
+
+    val borderBrush = Brush.linearGradient(
+        listOf(
+            blueAccent.copy(alpha = if (isDarkMode) 0.45f else 0.34f),
+            purpleAccent.copy(alpha = if (isDarkMode) 0.42f else 0.30f)
+        )
+    )
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 7.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, borderBrush),
+        shadowElevation = if (isDarkMode) 0.dp else 8.dp,
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(cardBrush)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            ForumPremiumControlRow(
+                iconText = "⌂",
+                title = roomTitle,
+                subtitle = roomSubtitle,
+                accentColor = blueAccent,
+                titleColor = titleColor,
+                subtitleColor = subtitleColor,
+                mutedColor = mutedColor,
+                isExpanded = isRoomExpanded,
+                enabled = canOpenRoomPicker,
+                isDarkMode = isDarkMode,
+                isEnglish = isEnglish,
+                onClick = onRoomClick
+            )
+
+            if (isRoomExpanded && canOpenRoomPicker) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (branches.size > 1) {
+                        ForumPremiumInlineDropdown(
+                            options = branches,
+                            selectedValue = selectedBranch,
+                            placeholder = if (isEnglish) "Select branch" else "בחר סניף",
+                            expanded = branchDropdownExpanded,
+                            accentColor = blueAccent,
+                            textColor = titleColor,
+                            isDarkMode = isDarkMode,
+                            isEnglish = isEnglish,
+                            onExpandedChange = { branchDropdownExpanded = it },
+                            onSelected = {
+                                branchDropdownExpanded = false
+                                onBranchSelected(it)
+                            }
+                        )
+                    }
+
+                    if (groups.size > 1) {
+                        ForumPremiumInlineDropdown(
+                            options = groups,
+                            selectedValue = selectedGroup,
+                            placeholder = if (isEnglish) "Select group" else "בחר קבוצה",
+                            expanded = groupDropdownExpanded,
+                            accentColor = blueAccent,
+                            textColor = titleColor,
+                            isDarkMode = isDarkMode,
+                            isEnglish = isEnglish,
+                            onExpandedChange = { groupDropdownExpanded = it },
+                            onSelected = {
+                                groupDropdownExpanded = false
+                                onGroupSelected(it)
+                            }
+                        )
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Transparent,
+                                if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFD8E7F8),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+
+            ForumPremiumControlRow(
+                iconText = "👥",
+                title = participantsTitle,
+                subtitle = participantsSubtitle,
+                accentColor = purpleAccent,
+                titleColor = titleColor,
+                subtitleColor = subtitleColor,
+                mutedColor = mutedColor,
+                isExpanded = isParticipantsExpanded,
+                enabled = canOpenParticipants,
+                isDarkMode = isDarkMode,
+                isEnglish = isEnglish,
+                onClick = onParticipantsClick
+            )
+
+            if (isParticipantsExpanded && participants.isNotEmpty()) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, bottom = 3.dp),
+                    shape = RoundedCornerShape(17.dp),
+                    color = if (isDarkMode) {
+                        Color(0xFF101B24).copy(alpha = 0.82f)
+                    } else {
+                        Color.White.copy(alpha = 0.72f)
+                    },
+                    border = BorderStroke(
+                        1.dp,
+                        purpleAccent.copy(alpha = if (isDarkMode) 0.28f else 0.18f)
+                    ),
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 11.dp, vertical = 7.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        participants.forEach { p ->
+                            Text(
+                                text = if (p.isMe) {
+                                    if (isEnglish) "${p.name} (me)" else "${p.name} (אני)"
+                                } else {
+                                    p.name
+                                },
+                                color = participantsText,
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = forumTextAlign(isEnglish),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .size(width = 86.dp, height = 22.dp)
+                        .clickable { onCollapseAll() },
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (isDarkMode) {
+                        Color.White.copy(alpha = 0.07f)
+                    } else {
+                        Color.White.copy(alpha = 0.62f)
+                    },
+                    border = BorderStroke(
+                        1.dp,
+                        if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD6E4F4)
+                    ),
+                    shadowElevation = if (isDarkMode) 0.dp else 1.dp,
+                    tonalElevation = 0.dp
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        repeat(3) {
+                            Box(
+                                modifier = Modifier
+                                    .width(36.dp)
+                                    .height(2.dp)
+                                    .background(
+                                        color = if (isDarkMode) {
+                                            Color(0xFF93C5FD).copy(alpha = 0.82f)
+                                        } else {
+                                            Color(0xFF2563EB).copy(alpha = 0.72f)
+                                        },
+                                        shape = RoundedCornerShape(999.dp)
+                                    )
+                            )
+
+                            if (it < 2) {
+                                Spacer(Modifier.height(2.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForumPremiumControlRow(
+    iconText: String,
+    title: String,
+    subtitle: String,
+    accentColor: Color,
+    titleColor: Color,
+    subtitleColor: Color,
+    mutedColor: Color,
+    isExpanded: Boolean,
+    enabled: Boolean,
+    isDarkMode: Boolean,
+    isEnglish: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 2.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp)
+    ) {
+        Surface(
+            modifier = Modifier.size(34.dp),
+            shape = RoundedCornerShape(14.dp),
+            color = accentColor.copy(alpha = if (isDarkMode) 0.18f else 0.11f),
+            border = BorderStroke(
+                1.dp,
+                accentColor.copy(alpha = if (isDarkMode) 0.38f else 0.26f)
+            )
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = iconText,
+                    color = accentColor,
+                    fontSize = 15.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+        ) {
+            Text(
+                text = title,
+                color = titleColor,
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = forumTextAlign(isEnglish),
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 1
+            )
+
+            Spacer(Modifier.height(2.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = if (isEnglish) {
+                    Arrangement.Absolute.Left
+                } else {
+                    Arrangement.Absolute.Right
+                }
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = accentColor.copy(alpha = if (isDarkMode) 0.15f else 0.09f),
+                    border = BorderStroke(
+                        1.dp,
+                        accentColor.copy(alpha = if (isDarkMode) 0.28f else 0.18f)
+                    )
+                ) {
+                    Text(
+                        text = subtitle,
+                        color = if (enabled) subtitleColor else mutedColor,
+                        fontSize = 9.sp,
+                        lineHeight = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = forumTextAlign(isEnglish),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+
+        Surface(
+            modifier = Modifier.size(30.dp),
+            shape = RoundedCornerShape(13.dp),
+            color = if (enabled) {
+                accentColor.copy(alpha = if (isDarkMode) 0.18f else 0.10f)
+            } else {
+                if (isDarkMode) Color.White.copy(alpha = 0.05f) else Color(0xFFF1F5F9)
+            },
+            border = BorderStroke(
+                1.dp,
+                if (enabled) {
+                    accentColor.copy(alpha = if (isDarkMode) 0.34f else 0.22f)
+                } else {
+                    if (isDarkMode) Color.White.copy(alpha = 0.07f) else Color(0xFFE2E8F0)
+                }
+            )
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isExpanded) "⌃" else "⌄",
+                    color = if (enabled) accentColor else mutedColor,
+                    fontSize = 14.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = FontWeight.Black
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForumPremiumInlineDropdown(
+    options: List<String>,
+    selectedValue: String,
+    placeholder: String,
+    expanded: Boolean,
+    accentColor: Color,
+    textColor: Color,
+    isDarkMode: Boolean,
+    isEnglish: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelected: (String) -> Unit
+) {
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = onExpandedChange
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(),
+            shape = RoundedCornerShape(15.dp),
+            color = if (isDarkMode) {
+                Color(0xFF111B24).copy(alpha = 0.92f)
+            } else {
+                Color.White.copy(alpha = 0.74f)
+            },
+            border = BorderStroke(
+                1.dp,
+                accentColor.copy(alpha = if (isDarkMode) 0.32f else 0.20f)
+            ),
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(18.dp)
+                )
+
+                Text(
+                    text = selectedValue.ifBlank { placeholder },
+                    color = textColor,
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = forumTextAlign(isEnglish),
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1
+                )
+            }
+        }
+
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) }
+        ) {
+            options.forEach { item ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = item,
+                            fontSize = 12.sp,
+                            lineHeight = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = forumTextAlign(isEnglish),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    onClick = { onSelected(item) }
+                )
             }
         }
     }

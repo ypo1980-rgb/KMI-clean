@@ -338,8 +338,8 @@ fun AttendanceScreen(
                 modifier = Modifier
                     .padding(p)
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 120.dp) // ✅ מקום ל-FAB + כפתור שמירה
             ) {
                 item {
@@ -1165,15 +1165,242 @@ private fun AttendanceSelectionCard(
 
     val dateText = remember(selectedDate, isEnglish) {
         val locale = if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
-        selectedDate.format(DateTimeFormatter.ofPattern("EEEE · d.M.yyyy", locale))
+        selectedDate.format(DateTimeFormatter.ofPattern("d.M.yy", locale))
+    }
+
+    fun compactChoiceText(raw: String, maxChars: Int = 12): String {
+        val clean = raw
+            .trim()
+            .replace(Regex("\\s+"), " ")
+
+        if (clean.isBlank()) return "—"
+
+        return if (clean.length <= maxChars) {
+            clean
+        } else {
+            clean.take(maxChars).trimEnd() + "…"
+        }
+    }
+
+    @Composable
+    fun CompactReadonlyRow(
+        label: String,
+        value: String,
+        onClick: () -> Unit
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 38.dp)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 38.dp)
+                    .padding(end = 10.dp)
+                    .clickable { onClick() },
+                shape = RoundedCornerShape(15.dp),
+                color = Color.White.copy(alpha = 0.74f),
+                border = BorderStroke(1.dp, Color(0xFFC7D7EE)),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = label,
+                        color = Color(0xFF64748B),
+                        fontSize = 10.sp,
+                        lineHeight = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = value.ifBlank { "—" },
+                        color = Color(0xFF1E2A3D),
+                        fontSize = 8.sp,
+                        lineHeight = 9.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            Surface(
+                modifier = Modifier
+                    .size(20.dp)
+                    .align(Alignment.CenterEnd)
+                    .clickable { onClick() },
+                shape = CircleShape,
+                color = Color(0xFFEAF2FF),
+                border = BorderStroke(1.dp, Color(0xFFC7D7EE)),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "▼",
+                        color = Color(0xFF64748B),
+                        fontSize = 9.sp,
+                        lineHeight = 9.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun CompactDropdownRow(
+        label: String,
+        selected: String,
+        options: List<String>,
+        onSelected: (String) -> Unit
+    ) {
+        var expanded by rememberSaveable { mutableStateOf(false) }
+
+        val cleanOptions = remember(options, selected) {
+            (options + selected)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = {
+                if (cleanOptions.size > 1) expanded = !expanded
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 38.dp)
+                    .menuAnchor()
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 38.dp)
+                        .padding(end = 10.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    color = Color.White.copy(alpha = 0.74f),
+                    border = BorderStroke(1.dp, Color(0xFFC7D7EE)),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 5.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = label,
+                            color = Color(0xFF64748B),
+                            fontSize = 10.sp,
+                            lineHeight = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Text(
+                            text = compactChoiceText(selected),
+                            color = Color(0xFF1E2A3D),
+                            fontSize = 8.sp,
+                            lineHeight = 9.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .align(Alignment.CenterEnd),
+                    shape = CircleShape,
+                    color = Color(0xFFEAF2FF),
+                    border = BorderStroke(1.dp, Color(0xFFC7D7EE)),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "▼",
+                            color = Color(0xFF64748B),
+                            fontSize = 9.sp,
+                            lineHeight = 9.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+            }
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.widthIn(min = 260.dp, max = 320.dp)
+            ) {
+                cleanOptions.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = option,
+                                fontSize = 12.sp,
+                                lineHeight = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = align,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        onClick = {
+                            expanded = false
+                            onSelected(option)
+                        }
+                    )
+                }
+            }
+        }
     }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = Color(0xFFEAF2FF),
-        border = BorderStroke(1.dp, Color(0xFFD8E3F5)),
-        tonalElevation = 0.dp
+        shape = RoundedCornerShape(22.dp),
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, Color(0xFFC7D7EE)),
+        tonalElevation = 0.dp,
+        shadowElevation = 4.dp
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
             Column(
@@ -1182,63 +1409,76 @@ private fun AttendanceSelectionCard(
                     .background(
                         Brush.linearGradient(
                             listOf(
-                                Color(0xFFF4F8FF),
-                                Color(0xFFDCEBFF)
+                                Color(0xFFF8FBFF),
+                                Color(0xFFE8F2FF),
+                                Color(0xFFD7E9FF)
                             )
                         )
                     )
-                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
                 horizontalAlignment = horizontal,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = tr("בחירת אימון לנוכחות", "Select attendance class"),
                     color = Color(0xFF1E2A3D),
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleSmall.merge(
-                        TextStyle(textDirection = textDirection)
-                    ),
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.sp,
+                    lineHeight = 16.sp,
                     textAlign = align,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                AttendanceReadonlyPickerField(
-                    label = tr("תאריך אימון", "Training date"),
-                    value = dateText,
-                    isEnglish = isEnglish,
-                    onClick = onDateClick
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        CompactReadonlyRow(
+                            label = tr("תאריך", "Date"),
+                            value = dateText,
+                            onClick = onDateClick
+                        )
+                    }
 
-                AttendanceDropdownField(
-                    label = tr("סניף", "Branch"),
-                    selected = selectedBranch,
-                    options = availableBranches.ifEmpty {
-                        listOfNotNull(selectedBranch.takeIf { it.isNotBlank() })
-                    },
-                    isEnglish = isEnglish,
-                    onSelected = onBranchSelected
-                )
+                    Box(modifier = Modifier.weight(1f)) {
+                        CompactDropdownRow(
+                            label = tr("סניף", "Branch"),
+                            selected = selectedBranch,
+                            options = availableBranches.ifEmpty {
+                                listOfNotNull(selectedBranch.takeIf { it.isNotBlank() })
+                            },
+                            onSelected = onBranchSelected
+                        )
+                    }
 
-                AttendanceDropdownField(
-                    label = tr("קבוצה", "Group"),
-                    selected = selectedGroup,
-                    options = availableGroups.ifEmpty {
-                        listOfNotNull(selectedGroup.takeIf { it.isNotBlank() })
-                    },
-                    isEnglish = isEnglish,
-                    onSelected = onGroupSelected
-                )
+                    Box(modifier = Modifier.weight(1f)) {
+                        CompactDropdownRow(
+                            label = tr("קבוצה", "Group"),
+                            selected = selectedGroup,
+                            options = availableGroups.ifEmpty {
+                                listOfNotNull(selectedGroup.takeIf { it.isNotBlank() })
+                            },
+                            onSelected = onGroupSelected
+                        )
+                    }
+                }
 
                 Text(
                     text = tr(
-                        "הרשימה למטה תיטען לפי תאריך + סניף + קבוצה.",
-                        "The list below loads by date + branch + group."
+                        "הרשימה תיטען לפי תאריך, סניף וקבוצה",
+                        "The list loads by date, branch and group"
                     ),
-                    color = Color(0xFF5E6C80),
-                    style = MaterialTheme.typography.labelSmall.merge(
-                        TextStyle(textDirection = textDirection)
-                    ),
+                    color = Color(0xFF64748B),
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = align,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
