@@ -31,6 +31,7 @@ import il.kmi.app.screens.CoachMessageGateScreen
 import il.kmi.app.screens.IntroScreen
 import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.ui.KmiTtsManager
+import il.kmi.app.reminders.TrainingReminderScheduler
 import il.yuval.ui.theme.AppTheme
 
 // 👇 חדש: מיגרציית העדפות ל-KMP (חוצה-פלטפורמות)
@@ -94,9 +95,14 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         val remindersOn = kmiPrefs.remindersOn
         val lead = kmiPrefs.leadMinutes.takeIf { it > 0 } ?: 60
         if (remindersOn) {
-            il.kmi.shared.Platform.scheduleWeeklyTrainingAlarms(lead)
+            TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
+                context = applicationContext,
+                leadMinutes = lead
+            )
         } else {
-            il.kmi.shared.Platform.cancelWeeklyTrainingAlarms()
+            TrainingReminderScheduler.cancelWeeklyTrainingAlarms(
+                context = applicationContext
+            )
         }
 
         // DataStore / ViewModel – בשלב הזה נשארים באנדרואיד
@@ -909,6 +915,64 @@ private fun AndroidAppRoot(
         )
     }
 
+    fun firstNonBlankProfileValue(vararg values: String?): String {
+        return values
+            .map { it.orEmpty().trim() }
+            .firstOrNull { it.isNotBlank() }
+            .orEmpty()
+    }
+
+    val firebaseUserAtEntry = FirebaseAuth.getInstance().currentUser
+
+    val shouldSkipIntroForKnownUser = run {
+        val firebaseUser = firebaseUserAtEntry ?: return@run false
+
+        if (firebaseUser.isAnonymous) {
+            return@run false
+        }
+
+        val uid = firebaseUser.uid.trim()
+
+        if (uid.isBlank()) {
+            return@run false
+        }
+
+        val completedUid = firstNonBlankProfileValue(
+            sp.getString("profile_completed_uid", null),
+            userSp.getString("profile_completed_uid", null)
+        )
+
+        val uidMatches = completedUid.isBlank() || completedUid == uid
+
+        val email = firstNonBlankProfileValue(
+            kmiPrefs.email,
+            sp.getString("email", null),
+            sp.getString("user_email", null),
+            userSp.getString("email", null),
+            userSp.getString("user_email", null),
+            firebaseUser.email
+        )
+
+        val phone = firstNonBlankProfileValue(
+            kmiPrefs.phone,
+            sp.getString("phone", null),
+            sp.getString("phone_number", null),
+            userSp.getString("phone", null),
+            userSp.getString("phone_number", null)
+        ).filter { it.isDigit() }
+
+        val localProfileCompleted =
+            sp.getBoolean("profile_completed", false) ||
+                    sp.getBoolean("registration_complete", false) ||
+                    userSp.getBoolean("profile_completed", false) ||
+                    userSp.getBoolean("registration_complete", false)
+
+        uidMatches &&
+                localProfileCompleted &&
+                email.isNotBlank() &&
+                phone.length >= 9
+    }
+
 // מסלול פתיחה חד-פעמי ל־MainApp
     var startRoute by remember {
         mutableStateOf<String?>(
@@ -925,6 +989,9 @@ private fun AndroidAppRoot(
                 // ✅ לחיצה על התראת פורום / הודעת מאמן צריכה להכניס ל-MainApp
                 hasPendingForumPush || hasPendingCoachBroadcastPush -> "main"
 
+                // ✅ משתמש מוכר שכבר התחבר בעבר לא צריך ללחוץ שוב על Google / כניסה רגילה.
+                shouldSkipIntroForKnownUser -> "startup_loading_after_intro"
+
                 else -> "intro"
             }
         )
@@ -934,6 +1001,7 @@ private fun AndroidAppRoot(
         hasPendingForumPush,
         hasPendingCoachBroadcastPush,
         initialLanguageSelected,
+        shouldSkipIntroForKnownUser,
         currentScreen
     ) {
         if (
@@ -943,6 +1011,17 @@ private fun AndroidAppRoot(
         ) {
             startRoute = Route.Home.route
             currentScreen = "main"
+            return@LaunchedEffect
+        }
+
+        if (
+            shouldSkipIntroForKnownUser &&
+            initialLanguageSelected &&
+            currentScreen == "intro"
+        ) {
+            startRoute = Route.Home.route
+            currentScreen = "startup_loading_after_intro"
+            return@LaunchedEffect
         }
     }
 

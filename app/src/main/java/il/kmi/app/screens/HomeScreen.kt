@@ -1679,9 +1679,65 @@ fun HomeScreen(
 
                         val set = mutableSetOf<java.time.LocalDate>()
 
+                        fun isTrainingBlockingHoliday(obj: org.json.JSONObject): Boolean {
+                            val title = listOf(
+                                obj.optString("title", ""),
+                                obj.optString("title_he", ""),
+                                obj.optString("hebrew", ""),
+                                obj.optString("name", ""),
+                                obj.optString("category", ""),
+                                obj.optString("subcat", "")
+                            )
+                                .joinToString(" ")
+                                .trim()
+
+                            if (title.isBlank()) return false
+
+                            val clean = title.lowercase(java.util.Locale("he", "IL"))
+
+                            val blockingKeywords = listOf(
+                                "ראש השנה",
+                                "יום כיפור",
+                                "כיפור",
+                                "סוכות",
+                                "שמחת תורה",
+                                "פסח",
+                                "חול המועד פסח",
+                                "שבועות",
+                                "תשעה באב"
+                            )
+
+                            val nonBlockingKeywords = listOf(
+                                "ראש חודש",
+                                "ספירת העומר",
+                                "לג בעומר",
+                                "ט״ו בשבט",
+                                "טו בשבט",
+                                "יום העצמאות",
+                                "יום הזיכרון",
+                                "יום השואה",
+                                "פורים קטן",
+                                "שושן פורים",
+                                "חנוכה",
+                                "צום",
+                                "תענית",
+                                "ערב"
+                            )
+
+                            if (nonBlockingKeywords.any { clean.contains(it) }) {
+                                return false
+                            }
+
+                            return blockingKeywords.any { clean.contains(it) }
+                        }
+
                         for (i in 0 until arr.length()) {
                             val obj = arr.getJSONObject(i)
-                            if (obj.has("date_iso")) {
+
+                            if (
+                                obj.has("date_iso") &&
+                                isTrainingBlockingHoliday(obj)
+                            ) {
                                 val date = java.time.LocalDate.parse(obj.getString("date_iso"))
                                 set.add(date)
                             }

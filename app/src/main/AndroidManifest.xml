@@ -87,6 +87,12 @@
             </intent-filter>
         </receiver>
 
+        <!-- ===== Receiver חדש לתזכורות שבועיות לפי כל הסניפים והקבוצות של המשתמש =====
+             מופעל רק ע"י PendingIntent פנימי של האפליקציה -->
+        <receiver
+            android:name=".reminders.TrainingReminderReceiver"
+            android:exported="false" />
+
         <!-- ===== Receiver לתזכורות אימונים חופשיים =====
              לא מקבל שידורי מערכת, מופעל רק ע"י PendingIntent שלנו -->
         <receiver

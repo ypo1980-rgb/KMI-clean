@@ -2635,7 +2635,13 @@ private fun VerticalQuickActionItem(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    val itemAlpha = if (enabled) 1f else 0.38f
+    val itemAlpha = if (enabled) 1f else 0.58f
+    val iconShadow = if (enabled) 2.dp else 2.dp
+    val iconBackground = if (enabled) {
+        background
+    } else {
+        background.copy(alpha = 0.34f)
+    }
 
     Column(
         modifier = Modifier
@@ -2650,12 +2656,12 @@ private fun VerticalQuickActionItem(
             modifier = Modifier
                 .size(34.dp)
                 .shadow(
-                    elevation = if (enabled) 2.dp else 0.dp,
+                    elevation = iconShadow,
                     shape = CircleShape,
                     clip = false
                 )
                 .clip(CircleShape)
-                .background(background.copy(alpha = background.alpha * itemAlpha)),
+                .background(iconBackground),
             contentAlignment = Alignment.Center
         ) {
             Box(
