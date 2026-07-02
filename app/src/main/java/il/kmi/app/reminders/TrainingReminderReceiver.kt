@@ -50,7 +50,7 @@ class TrainingReminderReceiver : BroadcastReceiver() {
             ""
         }
 
-        val title = "תזכורת לאימון"
+        val title = "תזכורת אימון"
         val body = buildString {
             if (timeText.isNotBlank()) {
                 append("האימון מתחיל בשעה ")

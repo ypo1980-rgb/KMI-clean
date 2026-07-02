@@ -22,6 +22,20 @@ private class AndroidFreeSessionsRepository(
     private val db: FirebaseFirestore
 ) : FreeSessionsRepository {
 
+    private fun safePathSegment(raw: String): String {
+        return raw.trim()
+            .replace(Regex("\\s+"), " ")
+            .map { ch ->
+                when (ch) {
+                    '/', '\\', '#', '?', '[', ']', '*', '~' -> '_'
+                    else -> ch
+                }
+            }
+            .joinToString("")
+            .trim()
+            .ifBlank { "general" }
+    }
+
     private suspend fun resolveUserName(uid: String): String? {
         return runCatching {
             val snap = db.collection("users").document(uid).get().await()
@@ -44,7 +58,10 @@ private class AndroidFreeSessionsRepository(
         createdByUid: String,
         createdByName: String
     ): String {
-        val colPath = FreeSessionsPaths.freeSessionsCol(branch, groupKey)
+        val safeBranch = safePathSegment(branch)
+        val safeGroupKey = safePathSegment(groupKey)
+
+        val colPath = FreeSessionsPaths.freeSessionsCol(safeBranch, safeGroupKey)
         val col = db.collection(colPath)
 
         val now = System.currentTimeMillis()
@@ -82,8 +99,8 @@ private class AndroidFreeSessionsRepository(
 
         // יוצר האימון נסמן כברירת מחדל כ-GOING (אפשר לשנות אם לא רוצים)
         setParticipantState(
-            branch = branch,
-            groupKey = groupKey,
+            branch = safeBranch,
+            groupKey = safeGroupKey,
             sessionId = doc.id,
             uid = createdByUid,
             name = safeName,
@@ -98,7 +115,10 @@ private class AndroidFreeSessionsRepository(
         groupKey: String,
         nowMillis: Long
     ): Flow<List<FreeSession>> = callbackFlow {
-        val colPath = FreeSessionsPaths.freeSessionsCol(branch, groupKey)
+        val colPath = FreeSessionsPaths.freeSessionsCol(
+            safePathSegment(branch),
+            safePathSegment(groupKey)
+        )
 
         // ⚠️ חשוב:
         // השאילתה עם status + startsAt + orderBy דורשת לפעמים אינדקס קומפוזיט.
@@ -162,7 +182,10 @@ private class AndroidFreeSessionsRepository(
         groupKey: String,
         sessionId: String
     ): Flow<List<FreeSessionPart>> = callbackFlow {
-        val colPath = FreeSessionsPaths.freeSessionsCol(branch, groupKey)
+        val colPath = FreeSessionsPaths.freeSessionsCol(
+            safePathSegment(branch),
+            safePathSegment(groupKey)
+        )
         val partsCol = db.collection(colPath)
             .document(sessionId)
             .collection(FreeSessionsPaths.COL_PARTICIPANTS)
@@ -200,7 +223,10 @@ private class AndroidFreeSessionsRepository(
         name: String,
         state: ParticipantState
     ) {
-        val colPath = FreeSessionsPaths.freeSessionsCol(branch, groupKey)
+        val colPath = FreeSessionsPaths.freeSessionsCol(
+            safePathSegment(branch),
+            safePathSegment(groupKey)
+        )
         val sessionDoc = db.collection(colPath).document(sessionId)
         val partDoc = sessionDoc.collection(FreeSessionsPaths.COL_PARTICIPANTS).document(uid)
 
@@ -253,7 +279,10 @@ private class AndroidFreeSessionsRepository(
         groupKey: String,
         sessionId: String
     ) {
-        val colPath = FreeSessionsPaths.freeSessionsCol(branch, groupKey)
+        val colPath = FreeSessionsPaths.freeSessionsCol(
+            safePathSegment(branch),
+            safePathSegment(groupKey)
+        )
         db.collection(colPath)
             .document(sessionId)
             .update(
@@ -271,7 +300,10 @@ private class AndroidFreeSessionsRepository(
         groupKey: String,
         sessionId: String
     ) {
-        val colPath = FreeSessionsPaths.freeSessionsCol(branch, groupKey)
+        val colPath = FreeSessionsPaths.freeSessionsCol(
+            safePathSegment(branch),
+            safePathSegment(groupKey)
+        )
         val sessionDoc = db.collection(colPath).document(sessionId)
         val partsCol = sessionDoc.collection(FreeSessionsPaths.COL_PARTICIPANTS)
 

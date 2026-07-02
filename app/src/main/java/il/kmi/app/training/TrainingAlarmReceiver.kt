@@ -96,6 +96,17 @@ class TrainingAlarmReceiver : BroadcastReceiver() {
             return (if (normalized.isEmpty()) listOf("בוגרים") else normalized).distinct()
         }
 
+        private fun leadText(leadMin: Int): String {
+            val h = leadMin / 60
+            val m = leadMin % 60
+
+            return when {
+                h > 0 && m > 0 -> "עוד $h שעות ו־$m דקות"
+                h > 0 -> "עוד $h שעות"
+                else -> "עוד $m דקות"
+            }
+        }
+
         private fun reqCodeFor(
             branch: String,
             group: String,
@@ -127,6 +138,9 @@ class TrainingAlarmReceiver : BroadcastReceiver() {
          * תומך Multi-branch + Multi-group.
          */
         fun scheduleWeeklyAlarms(ctx: Context, leadMinutes: Int = 60) {
+            cancelWeeklyAlarms(ctx)
+            return
+
             ensureChannel(ctx)
             val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val spUser = ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
@@ -140,8 +154,9 @@ class TrainingAlarmReceiver : BroadcastReceiver() {
             cancelWeeklyAlarms(ctx)
 
             val scheduledReqs = mutableListOf<Int>()
+            val scheduledEventKeys = mutableSetOf<String>()
 
-            // לכל שילוב סניף×קבוצה
+// לכל שילוב סניף×קבוצה
             for (branch in branches) {
                 for (group in groups) {
                     val trainings = TrainingCatalog.trainingsFor(branch, group)
@@ -156,9 +171,15 @@ class TrainingAlarmReceiver : BroadcastReceiver() {
                         val minute = cal0.get(Calendar.MINUTE)
 
                         val timeText = "%02d:%02d".format(hour, minute)
-                        val title = "עוד $leadMinutes דק׳ אימון ב־$timeText ב$place\n$branch • $group"
 
-                        val req = reqCodeFor(branch, group, day, hour, minute, leadMinutes)
+                        val eventKey = "$branch|$day|$hour|$minute|$place"
+                        if (!scheduledEventKeys.add(eventKey)) {
+                            return@forEach
+                        }
+
+                        val title = "${leadText(leadMinutes)} האימון מתחיל בשעה $timeText\n$place • $branch"
+
+                        val req = reqCodeFor(branch, "single", day, hour, minute, leadMinutes)
 
                         val eventCal = Calendar.getInstance().apply {
                             set(Calendar.SECOND, 0)
@@ -263,7 +284,7 @@ class TrainingAlarmReceiver : BroadcastReceiver() {
                 if (enabled) scheduleWeeklyAlarms(context, leadMin)
             }
 
-            ACTION_BOOT -> scheduleWeeklyAlarms(context) // ברירת מחדל 60 דק׳ (תמיכה לאחור/בדיקות)
+            ACTION_BOOT -> cancelWeeklyAlarms(context) // מנגנון ישן מנוטרל כדי למנוע כפילויות
 
             ACTION_SNOOZE -> {
                 // דחייה לפי דקות (ברירת־מחדל 10)

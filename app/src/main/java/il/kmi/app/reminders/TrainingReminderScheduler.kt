@@ -33,6 +33,7 @@ object TrainingReminderScheduler {
 
         val safeLeadMinutes = leadMinutes.takeIf { it > 0 } ?: 60
         val scheduledRequestCodes = linkedSetOf<Int>()
+        val scheduledTrainingKeys = linkedSetOf<String>()
 
         branches.forEach { branch ->
             val groupsForBranch = groups.ifEmpty { listOf("") }
@@ -60,9 +61,26 @@ object TrainingReminderScheduler {
                         }
                     }.timeInMillis
 
+                    val realBranch = training.branch.ifBlank { branch }
+                    val realPlace = training.place.trim()
+                    val realCoach = training.coach.trim()
+
+                    val trainingKey = listOf(
+                        realBranch,
+                        realPlace,
+                        realCoach,
+                        startCal.get(Calendar.DAY_OF_WEEK).toString(),
+                        startCal.get(Calendar.HOUR_OF_DAY).toString(),
+                        startCal.get(Calendar.MINUTE).toString()
+                    ).joinToString("|")
+
+                    if (!scheduledTrainingKeys.add(trainingKey)) {
+                        return@forEach
+                    }
+
                     val requestCode = stableRequestCode(
-                        branch = training.branch.ifBlank { branch },
-                        group = group,
+                        branch = realBranch,
+                        group = "single",
                         dayOfWeek = startCal.get(Calendar.DAY_OF_WEEK),
                         hour = startCal.get(Calendar.HOUR_OF_DAY),
                         minute = startCal.get(Calendar.MINUTE)
@@ -72,10 +90,10 @@ object TrainingReminderScheduler {
                         context = appContext,
                         requestCode = requestCode,
                         triggerAtMillis = triggerAtMillis,
-                        branch = training.branch.ifBlank { branch },
+                        branch = realBranch,
                         group = group,
-                        place = training.place,
-                        coach = training.coach,
+                        place = realPlace,
+                        coach = realCoach,
                         startMillis = startCal.timeInMillis,
                         leadMinutes = safeLeadMinutes
                     )

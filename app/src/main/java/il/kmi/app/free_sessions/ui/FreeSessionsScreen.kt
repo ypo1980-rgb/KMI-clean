@@ -210,6 +210,24 @@ private fun normalizeFreeSessionText(raw: String): String {
         .lowercase(Locale("he", "IL"))
 }
 
+private fun freeSessionFirestoreKey(raw: String): String {
+    val clean = raw.trim()
+        .replace(Regex("\\s+"), " ")
+
+    if (clean.isBlank()) return "general"
+
+    return clean
+        .map { ch ->
+            when (ch) {
+                '/', '\\', '#', '?', '[', ']', '*', '~' -> '_'
+                else -> ch
+            }
+        }
+        .joinToString("")
+        .trim()
+        .ifBlank { "general" }
+}
+
 private fun fallbackGroupsForFreeSessionBranch(
     allGroups: List<String>
 ): List<String> {
@@ -839,10 +857,20 @@ fun FreeSessionsScreen(
         }
     }
 
+    val firestoreBranchKey = remember(selectedBranch) {
+        freeSessionFirestoreKey(selectedBranch)
+    }
+
+    val firestoreGroupKey = remember(selectedGroupKey, selectedBranch) {
+        freeSessionFirestoreKey(
+            selectedGroupKey.ifBlank { selectedBranch.ifBlank { "general" } }
+        )
+    }
+
     LaunchedEffect(selectedBranch, selectedGroupKey, currentUid, currentName) {
         vm.setContext(
-            branch = selectedBranch,
-            groupKey = selectedGroupKey,
+            branch = firestoreBranchKey,
+            groupKey = firestoreGroupKey,
             myUid = currentUid,
             myName = currentName
         )
@@ -1337,8 +1365,8 @@ fun FreeSessionsScreen(
                                         scope.launch {
                                             val res = runCatching {
                                                 repo.deleteFreeSession(
-                                                    branch = selectedBranch,
-                                                    groupKey = selectedGroupKey,
+                                                    branch = firestoreBranchKey,
+                                                    groupKey = firestoreGroupKey,
                                                     sessionId = sid
                                                 )
                                             }
@@ -1525,8 +1553,14 @@ fun FreeSessionsScreen(
                                         selectedPlace = null
                                     },
                                     onPlaceSelected = { place ->
-                                        selectedPlace = place
-                                        locationQuery = place.name.ifBlank { place.address }
+                                        val fullLocation = place.address.ifBlank { place.name }.trim()
+
+                                        selectedPlace = place.copy(
+                                            name = fullLocation,
+                                            address = fullLocation
+                                        )
+
+                                        locationQuery = fullLocation
                                     }
                                 )
 
@@ -1584,8 +1618,8 @@ fun FreeSessionsScreen(
                                                 scope.launch {
                                                     val result = runCatching {
                                                         repo.createFreeSession(
-                                                            branch = selectedBranch,
-                                                            groupKey = selectedGroupKey,
+                                                            branch = firestoreBranchKey,
+                                                            groupKey = firestoreGroupKey,
                                                             title = cleanTitle,
                                                             locationName = (
                                                                     selectedPlace?.name
@@ -1690,8 +1724,8 @@ fun FreeSessionsScreen(
                 repo = repo,
                 isEnglish = isEnglish,
                 session = session,
-                branch = selectedBranch,
-                groupKey = selectedGroupKey,
+                branch = firestoreBranchKey,
+                groupKey = firestoreGroupKey,
                 currentUid = currentUid,
                 currentName = currentName,
                 onClose = { selected = null }
@@ -2135,14 +2169,14 @@ private fun WazeStyleLocationSearchField(
             }
         }
 
-        if (clean.length < 2 || selectedPlace != null) {
+        if (clean.length < 1 || selectedPlace != null) {
             suggestions = emptyList()
             searching = false
             return@LaunchedEffect
         }
 
         searching = true
-        delay(280)
+        delay(90)
 
         val localSuggestions = buildList {
             existingPlaces
@@ -2181,13 +2215,7 @@ private fun WazeStyleLocationSearchField(
         val placesSuggestions = runCatching {
             val token = AutocompleteSessionToken.newInstance()
 
-            val searchText = buildString {
-                append(clean)
-                if (branchClean.isNotBlank()) {
-                    append(" ")
-                    append(branchClean)
-                }
-            }.trim()
+            val searchText = clean
 
             val request = FindAutocompletePredictionsRequest.builder()
                 .setSessionToken(token)
@@ -2235,7 +2263,7 @@ private fun WazeStyleLocationSearchField(
                 .distinctBy {
                     "${normalizeFreeSessionText(it.name)}|${normalizeFreeSessionText(it.address)}|${it.placeId.orEmpty()}"
                 }
-                .take(6)
+                .take(10)
         }.getOrElse { error ->
             Log.e(
                 FREE_SESSIONS_DEBUG,
@@ -2312,7 +2340,7 @@ private fun WazeStyleLocationSearchField(
                         .distinctBy {
                             "${normalizeFreeSessionText(it.name)}|${normalizeFreeSessionText(it.address)}"
                         }
-                        .take(6)
+                        .take(10)
                 }.getOrDefault(emptyList())
             }
         } else {

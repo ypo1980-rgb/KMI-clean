@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">KAMI</string>
+    <string name="app_name">ק.מ.י - K.A.M.I</string>
     <string name="default_web_client_id">1088383217233-h4krbps75uqlk4a4vdiscejfunhvvqi9.apps.googleusercontent.com</string>
-    <string name="google_maps_key">המפתח_שיצרת_ב_Google_Cloud</string>
+    <string name="google_maps_key">AIzaSyChkt3RG9I7G8s8FBJdas_9L8pffu_g7Fo</string>
 </resources>
