@@ -3,7 +3,6 @@ package il.kmi.app.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -861,39 +860,93 @@ fun MaterialsScreen(
         itemStates.putAll(nextStates)
     }
 
-    val currentCanonicalIds = itemList
-        .map { canonicalFor(it) }
-        .distinct()
-
-    val summaryTotalCount = itemList.size
-
-    val summaryMasteredCount = itemList
-        .mapIndexed { index, item ->
-            val statusId = statusIdFor(index, item)
-            itemStates[statusId] ?: when {
-                masteredSet.contains(statusId) -> true
-                unknowns.contains(statusId) -> false
-                else -> null
-            }
-        }
-        .count { it == true }
-
-    val summaryUnknownCount = itemList
-        .mapIndexed { index, item ->
-            val statusId = statusIdFor(index, item)
-            itemStates[statusId] ?: when {
-                masteredSet.contains(statusId) -> true
-                unknowns.contains(statusId) -> false
-                else -> null
-            }
-        }
-        .count { it == false }
-
-    val summaryFavoritesCount = itemList.count { item ->
-        isFavoriteByAliases(materialRootTopic, item)
+    val currentCanonicalIds = remember(
+        itemList,
+        belt.id,
+        topicUi
+    ) {
+        itemList
+            .map { item -> canonicalFor(item) }
+            .distinct()
     }
-    val summaryExcludedCount = currentCanonicalIds.count { excludedItems.contains(it) }
-    val summaryNotesCount = currentCanonicalIds.count { loadNote(it).isNotBlank() }
+
+    val summaryTotalCount = remember(itemList) {
+        itemList.size
+    }
+
+    val summaryMasteredCount = remember(
+        itemList,
+        itemStates.toMap(),
+        masteredSet,
+        unknowns,
+        belt.id,
+        topicKey
+    ) {
+        itemList
+            .mapIndexed { index, item ->
+                val statusId = statusIdFor(index, item)
+
+                itemStates[statusId] ?: when {
+                    masteredSet.contains(statusId) -> true
+                    unknowns.contains(statusId) -> false
+                    else -> null
+                }
+            }
+            .count { it == true }
+    }
+
+    val summaryUnknownCount = remember(
+        itemList,
+        itemStates.toMap(),
+        masteredSet,
+        unknowns,
+        belt.id,
+        topicKey
+    ) {
+        itemList
+            .mapIndexed { index, item ->
+                val statusId = statusIdFor(index, item)
+
+                itemStates[statusId] ?: when {
+                    masteredSet.contains(statusId) -> true
+                    unknowns.contains(statusId) -> false
+                    else -> null
+                }
+            }
+            .count { it == false }
+    }
+
+    val summaryFavoritesCount = remember(
+        itemList,
+        favorites,
+        materialRootTopic,
+        belt.id,
+        topicKey
+    ) {
+        itemList.count { item ->
+            isFavoriteByAliases(materialRootTopic, item)
+        }
+    }
+
+    val summaryExcludedCount = remember(
+        currentCanonicalIds,
+        excludedItems.toList()
+    ) {
+        currentCanonicalIds.count { id ->
+            excludedItems.contains(id)
+        }
+    }
+
+    val summaryNotesCount = remember(
+        currentCanonicalIds,
+        notesRefreshKey,
+        belt.id,
+        excludedKeySuffix
+    ) {
+        currentCanonicalIds.count { id ->
+            loadNote(id).isNotBlank()
+        }
+    }
 
     Scaffold(
         topBar = {

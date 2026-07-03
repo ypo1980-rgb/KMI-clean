@@ -50,7 +50,6 @@ import il.kmi.app.ui.rememberClickSound
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.shared.prefs.KmiPrefs
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -464,14 +463,8 @@ internal fun BeltPangoLayout(
 
     var accessRefreshTick by remember { mutableIntStateOf(0) }
 
-    // מרענן מצב גישה גם בלי שינוי ב-SharedPreferences,
-    // כדי שמנוי שפג יחזיר מנעולים גם כשהמשתמש נשאר במסך.
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(30_000L)
-            accessRefreshTick++
-        }
-    }
+    // מצב הגישה מתרענן דרך SharedPreferences listener.
+    // אין צורך בלולאת רענון קבועה בזמן שהמסך פתוח.
 
     DisposableEffect(userSp, subsSp) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
@@ -1880,23 +1873,8 @@ private fun BeltArcPicker(
                         )
                     }
 
-                    // בתוך BeltArcPicker(...) באזור של ה-Box שמצייר את העיגול
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // ✅ רק לעיגול המרכזי: טבעת צבעונית מסתובבת מסביב
-                        if (isCenter) {
-                            RotatingOrbitRing(
-                                modifier = Modifier.fillMaxSize(),
-                                base = circleColor
-                            )
-                        }
-
-                        // ✅ כדי שהטבעת לא “תכוסה” ע״י העיגול, מכניסים את העיגול פנימה קצת רק במרכז
-                        val ringPad = if (isCenter) 8.dp else 0.dp
+                    // ✅ כדי שהטבעת לא “תכוסה” ע״י העיגול, מכניסים את העיגול פנימה קצת רק במרכז
+                    val ringPad = if (isCenter) 8.dp else 0.dp
 
                         Box(
                             modifier = Modifier
@@ -1928,12 +1906,12 @@ private fun BeltArcPicker(
                                 )
                             }
                         }
-                    }
                 }
             }
         }
     }
 }
+
 
 @Composable
 private fun RotatingOrbitRing(

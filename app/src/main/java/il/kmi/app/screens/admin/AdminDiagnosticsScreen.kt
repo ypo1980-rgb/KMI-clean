@@ -2,6 +2,12 @@
 
 package il.kmi.app.screens.admin
 
+import android.content.Context
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,7 +32,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -45,8 +50,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,6 +67,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+
+
+//=======================================================================
 
 private data class AdminDiagnosticLog(
     val id: String = "",
@@ -112,6 +122,51 @@ fun AdminDiagnosticsScreen(
 ) {
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
+    val ctx = LocalContext.current
+    val resetSp = remember(ctx) {
+        ctx.getSharedPreferences("kmi_admin_diagnostics_reset", Context.MODE_PRIVATE)
+    }
+
+    var resetVersion by rememberSaveable {
+        mutableStateOf(0)
+    }
+
+    fun resetKeyForGroup(groupKey: String): String =
+        "reset_after_$groupKey"
+
+    fun resetGroup(groupKey: String) {
+        resetSp.edit()
+            .putLong(resetKeyForGroup(groupKey), System.currentTimeMillis())
+            .apply()
+
+        resetVersion++
+    }
+
+    fun loadTopScreensBaseline(): Map<String, Int> {
+        val raw = resetSp.getString("top_screens_baseline", "{}").orEmpty()
+
+        return runCatching {
+            val obj = org.json.JSONObject(raw)
+            obj.keys().asSequence().associateWith { key ->
+                obj.optInt(key, 0)
+            }
+        }.getOrDefault(emptyMap())
+    }
+
+    fun resetTopScreensBaseline(currentScreens: List<AdminTopScreen>) {
+        val obj = org.json.JSONObject()
+
+        currentScreens.forEach { screen ->
+            obj.put(screen.screenName, screen.count)
+        }
+
+        resetSp.edit()
+            .putString("top_screens_baseline", obj.toString())
+            .apply()
+
+        resetVersion++
+    }
+
     var adminLogs by remember { mutableStateOf<List<AdminDiagnosticLog>>(emptyList()) }
     var googleAuthLogs by remember { mutableStateOf<List<AdminDiagnosticLog>>(emptyList()) }
     var topScreens by remember { mutableStateOf<List<AdminTopScreen>>(emptyList()) }
@@ -137,7 +192,7 @@ fun AdminDiagnosticsScreen(
         val adminRegistration = Firebase.firestore
             .collection("adminLogs")
             .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(300)
+            .limit(120)
             .addSnapshotListener { snapshot, error ->
                 loadingAdminLogs = false
 
@@ -167,7 +222,7 @@ fun AdminDiagnosticsScreen(
         val googleRegistration = Firebase.firestore
             .collection("google_auth_diagnostics")
             .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(300)
+            .limit(120)
             .addSnapshotListener { snapshot, error ->
                 loadingGoogleLogs = false
 
@@ -295,7 +350,7 @@ fun AdminDiagnosticsScreen(
         val screensRegistration = Firebase.firestore
             .collection("screen_views")
             .orderBy("updatedAt", Query.Direction.DESCENDING)
-            .limit(200)
+            .limit(80)
             .addSnapshotListener { snapshot, error ->
                 loadingScreens = false
 
@@ -352,6 +407,17 @@ fun AdminDiagnosticsScreen(
         }
     }
 
+    val resetCutoffsByGroup = remember(resetVersion) {
+        mapOf(
+            "errors" to resetSp.getLong(resetKeyForGroup("errors"), 0L),
+            "google_auth" to resetSp.getLong(resetKeyForGroup("google_auth"), 0L),
+            "login" to resetSp.getLong(resetKeyForGroup("login"), 0L),
+            "search" to resetSp.getLong(resetKeyForGroup("search"), 0L),
+            "screen_views" to resetSp.getLong(resetKeyForGroup("screen_views"), 0L),
+            "other" to resetSp.getLong(resetKeyForGroup("other"), 0L)
+        )
+    }
+
     fun logGroupKey(log: AdminDiagnosticLog): String {
         return when {
             log.severity.equals("error", ignoreCase = true) ||
@@ -401,7 +467,17 @@ fun AdminDiagnosticsScreen(
         }
     }
 
-    val groupedLogs = remember(filteredLogs) {
+    val visibleLogs = remember(filteredLogs, resetCutoffsByGroup) {
+        filteredLogs.filter { log ->
+            val groupKey = logGroupKey(log)
+            val resetAfter = resetCutoffsByGroup[groupKey] ?: 0L
+            val createdMillis = log.createdAt?.toDate()?.time ?: 0L
+
+            createdMillis >= resetAfter
+        }
+    }
+
+    val groupedLogs = remember(visibleLogs) {
         val order = listOf(
             "errors",
             "google_auth",
@@ -411,7 +487,7 @@ fun AdminDiagnosticsScreen(
             "other"
         )
 
-        filteredLogs
+        visibleLogs
             .groupBy { logGroupKey(it) }
             .toList()
             .sortedBy { pair ->
@@ -420,7 +496,7 @@ fun AdminDiagnosticsScreen(
             }
     }
 
-    val errorCount = filteredLogs.count {
+    val errorCount = visibleLogs.count {
         it.severity.equals("error", ignoreCase = true) ||
                 it.type.contains("error", ignoreCase = true) ||
                 it.type.contains("failed", ignoreCase = true) ||
@@ -430,13 +506,13 @@ fun AdminDiagnosticsScreen(
                 it.message.contains("apiStatusCode=", ignoreCase = true)
     }
 
-    val loginCount = filteredLogs.count {
+    val loginCount = visibleLogs.count {
         it.type.contains("login", ignoreCase = true) ||
                 it.type.contains("google_auth", ignoreCase = true) ||
                 it.area.equals("google_auth", ignoreCase = true)
     }
 
-    val searchNoResultsCount = filteredLogs.count {
+    val searchNoResultsCount = visibleLogs.count {
         it.type.contains("search_no_results", ignoreCase = true) ||
                 (
                         it.type.contains("search", ignoreCase = true) &&
@@ -444,12 +520,32 @@ fun AdminDiagnosticsScreen(
                         )
     }
 
-    val successCount = filteredLogs.count {
+    val successCount = visibleLogs.count {
         it.severity.equals("success", ignoreCase = true) ||
                 it.type.contains("success", ignoreCase = true) ||
                 it.type.contains("saved", ignoreCase = true) ||
                 it.message.contains("firebase_success", ignoreCase = true) ||
                 it.message.contains("result_user_ready", ignoreCase = true)
+    }
+
+    val topScreensBaseline = remember(resetVersion) {
+        loadTopScreensBaseline()
+    }
+
+    val visibleTopScreens = remember(topScreens, topScreensBaseline) {
+        topScreens
+            .mapNotNull { screen ->
+                val baseline = topScreensBaseline[screen.screenName] ?: 0
+                val diff = (screen.count - baseline).coerceAtLeast(0)
+
+                if (diff > 0) {
+                    screen.copy(count = diff)
+                } else {
+                    null
+                }
+            }
+            .sortedByDescending { it.count }
+            .take(10)
     }
 
     Scaffold(
@@ -526,7 +622,7 @@ fun AdminDiagnosticsScreen(
                     ) {
                         AdminSummaryCard(
                             title = tr("אירועים", "Events"),
-                            value = filteredLogs.size.toString(),
+                            value = visibleLogs.size.toString(),
                             color = Color(0xFF0284C7),
                             modifier = Modifier.weight(1f)
                         )
@@ -572,7 +668,10 @@ fun AdminDiagnosticsScreen(
                 item {
                     TopScreensCard(
                         isEnglish = isEnglish,
-                        screens = topScreens
+                        screens = visibleTopScreens,
+                        onReset = {
+                            resetTopScreensBaseline(topScreens)
+                        }
                     )
                 }
 
@@ -589,14 +688,12 @@ fun AdminDiagnosticsScreen(
                 when {
                     loading -> {
                         item {
-                            Box(
+                            PremiumAdminDiagnosticsLoading(
+                                isEnglish = isEnglish,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(top = 28.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(color = Color.White)
-                            }
+                                    .padding(top = 28.dp)
+                            )
                         }
                     }
 
@@ -610,7 +707,7 @@ fun AdminDiagnosticsScreen(
                         }
                     }
 
-                    filteredLogs.isEmpty() -> {
+                    visibleLogs.isEmpty() -> {
                         item {
                             AdminStateCard(
                                 icon = Icons.Filled.Assessment,
@@ -632,6 +729,12 @@ fun AdminDiagnosticsScreen(
                                     color = logGroupColor(groupKey),
                                     expanded = expandedLogGroupKey == groupKey,
                                     isEnglish = isEnglish,
+                                    onReset = {
+                                        resetGroup(groupKey)
+                                        if (expandedLogGroupKey == groupKey) {
+                                            expandedLogGroupKey = null
+                                        }
+                                    },
                                     onClick = {
                                         expandedLogGroupKey =
                                             if (expandedLogGroupKey == groupKey) null else groupKey
@@ -654,6 +757,170 @@ fun AdminDiagnosticsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PremiumAdminDiagnosticsLoading(
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(
+        label = "premiumAdminDiagnosticsLoading"
+    )
+
+    val outerRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1350,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumAdminDiagnosticsOuterRotation"
+    )
+
+    val innerRotation by infiniteTransition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1850,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumAdminDiagnosticsInnerRotation"
+    )
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(26.dp),
+        color = Color.White.copy(alpha = 0.16f),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color.White.copy(alpha = 0.24f)
+        ),
+        shadowElevation = 8.dp,
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier.size(86.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(78.dp)
+                        .graphicsLayer {
+                            rotationZ = outerRotation
+                        }
+                        .background(
+                            brush = Brush.sweepGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color(0xFF7C3AED),
+                                    Color(0xFF38BDF8),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                )
+
+                Surface(
+                    modifier = Modifier.size(66.dp),
+                    shape = CircleShape,
+                    color = Color(0xFFEFFBFF),
+                    shadowElevation = 0.dp
+                ) {}
+
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .graphicsLayer {
+                            rotationZ = innerRotation
+                        }
+                        .background(
+                            brush = Brush.sweepGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color(0xFFF59E0B),
+                                    Color(0xFF22C55E),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                )
+
+                Surface(
+                    modifier = Modifier.size(43.dp),
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.96f),
+                    shadowElevation = 7.dp,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = Color(0xFFBAE6FD)
+                    )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color.White,
+                                        Color(0xFFE0F2FE),
+                                        Color(0xFFEDE9FE)
+                                    )
+                                ),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Assessment,
+                            contentDescription = null,
+                            tint = Color(0xFF0284C7),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = if (isEnglish) {
+                    "Loading diagnostics..."
+                } else {
+                    "טוען נתוני בקרה ולוגים..."
+                },
+                color = Color.White,
+                fontWeight = FontWeight.Black,
+                fontSize = 18.sp,
+                lineHeight = 22.sp,
+                textAlign = TextAlign.Center
+            )
+
+            Text(
+                text = if (isEnglish) {
+                    "Collecting logs, Google events and screen views"
+                } else {
+                    "מסדר לוגים, אירועי Google וצפיות במסכים"
+                },
+                color = Color.White.copy(alpha = 0.78f),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.5.sp,
+                lineHeight = 15.sp,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -856,6 +1123,7 @@ private fun AdminLogGroupHeader(
     color: Color,
     expanded: Boolean,
     isEnglish: Boolean,
+    onReset: () -> Unit,
     onClick: () -> Unit
 ) {
     Surface(
@@ -910,6 +1178,31 @@ private fun AdminLogGroupHeader(
             }
 
             Spacer(Modifier.width(10.dp))
+
+            Surface(
+                modifier = Modifier
+                    .clickable {
+                        onReset()
+                    },
+                shape = RoundedCornerShape(999.dp),
+                color = Color(0xFFFFF7ED),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = Color(0xFFF97316).copy(alpha = 0.45f)
+                )
+            ) {
+                Text(
+                    text = if (isEnglish) "Reset" else "איפוס",
+                    color = Color(0xFF9A3412),
+                    fontSize = 10.5.sp,
+                    lineHeight = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                    maxLines = 1
+                )
+            }
+
+            Spacer(Modifier.width(8.dp))
 
             Surface(
                 shape = CircleShape,
@@ -1091,7 +1384,8 @@ private fun AdminStateCard(
 @Composable
 private fun TopScreensCard(
     isEnglish: Boolean,
-    screens: List<AdminTopScreen>
+    screens: List<AdminTopScreen>,
+    onReset: () -> Unit
 ) {
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
@@ -1104,7 +1398,9 @@ private fun TopScreensCard(
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Assessment,
                     contentDescription = null,
@@ -1120,8 +1416,34 @@ private fun TopScreensCard(
                     fontWeight = FontWeight.Black,
                     fontSize = 14.sp,
                     textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+
+                Spacer(Modifier.width(8.dp))
+
+                Surface(
+                    modifier = Modifier.clickable {
+                        onReset()
+                    },
+                    shape = RoundedCornerShape(999.dp),
+                    color = Color(0xFFFFF7ED),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = Color(0xFFF97316).copy(alpha = 0.45f)
+                    )
+                ) {
+                    Text(
+                        text = tr("איפוס", "Reset"),
+                        color = Color(0xFF9A3412),
+                        fontSize = 10.5.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        maxLines = 1
+                    )
+                }
             }
 
             Spacer(Modifier.height(10.dp))

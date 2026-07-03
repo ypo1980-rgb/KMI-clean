@@ -43,9 +43,6 @@ import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.app.Activity
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.ui.unit.sp
@@ -58,7 +55,6 @@ import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.progress.UserProgressComparison
 import il.kmi.app.progress.UserProgressRepository
-import kotlinx.coroutines.delay
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
@@ -156,19 +152,45 @@ private fun findCanonicalItem(b: Belt, t: String, displayItem: String): String? 
     val wanted = norm(displayItem)
 
     // 1) פריטים ישירים של נושא
-    val direct = SharedContentRepo.getAllItemsFor(b, t, subTopicTitle = null)
-    direct.firstOrNull { raw ->
-        val disp = ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim()
-        norm(disp) == wanted || norm(raw) == wanted
-    }?.let { return it }
+    val direct: List<String> = SharedContentRepo.getAllItemsFor(
+        belt = b,
+        topicTitle = t,
+        subTopicTitle = null
+    )
+        .map { raw: String -> raw.trim() }
+        .filter { raw: String -> raw.isNotBlank() }
+
+    for (raw: String in direct) {
+        val formatted: String = ExerciseTitleFormatter.displayName(raw)
+            .orEmpty()
+            .trim()
+
+        val disp = formatted.ifBlank { raw }.trim()
+
+        if (norm(disp) == wanted || norm(raw) == wanted) {
+            return raw
+        }
+    }
 
     // 2) פריטים מתוך תתי-נושאים
-    val subs = SharedContentRepo.getSubTopicsFor(b, t)
-    subs.forEach { st ->
-        st.items.firstOrNull { raw ->
-            val disp = ExerciseTitleFormatter.displayName(raw).ifBlank { raw }.trim()
-            norm(disp) == wanted || norm(raw) == wanted
-        }?.let { return it }
+    val subs: List<SharedContentRepo.SubTopic> = SharedContentRepo.getSubTopicsFor(b, t)
+
+    for (st: SharedContentRepo.SubTopic in subs) {
+        val subItems: List<String> = st.items
+            .map { raw: String -> raw.trim() }
+            .filter { raw: String -> raw.isNotBlank() }
+
+        for (raw: String in subItems) {
+            val formatted: String = ExerciseTitleFormatter.displayName(raw)
+                .orEmpty()
+                .trim()
+
+            val disp = formatted.ifBlank { raw }.trim()
+
+            if (norm(disp) == wanted || norm(raw) == wanted) {
+                return raw
+            }
+        }
     }
 
     return null
@@ -179,7 +201,11 @@ private fun canonicalFor(belt: Belt, topicTitle: String, displayItem: String): S
     return findCanonicalItem(belt, topicTitle, cleaned) ?: cleaned
 }
 
-private fun resolveCanonicalIdForExplanation(belt: Belt, topicTitle: String, rawItemFromRepo: String): String {
+private fun resolveCanonicalIdForExplanation(
+    belt: Belt,
+    topicTitle: String,
+    rawItemFromRepo: String
+): String {
     val displayKey = cleanItem(topicTitle, rawItemFromRepo)
     return findCanonicalItem(belt, topicTitle, displayKey) ?: displayKey
 }
@@ -200,16 +226,27 @@ private fun canonicalFromRepo(topicTitle: String, rawItemFromRepo: String): Stri
 
 private fun uiDisplayName(topicTitle: String, rawItem: String): String {
     val cleaned = cleanItem(topicTitle, rawItem)
-    return ExerciseTitleFormatter.displayName(cleaned)
-        .ifBlank { cleaned }
+
+    val formatted: String = ExerciseTitleFormatter.displayName(cleaned)
+        .orEmpty()
         .trim()
+
+    return formatted.ifBlank { cleaned }.trim()
 }
 
 private fun topicDisplayName(topicTitle: String, isEnglish: Boolean): String {
     val clean = topicTitle.trim()
     if (!isEnglish) return clean
 
-    return ExerciseTitlesEn.get(clean)?.takeIf { it.isNotBlank() } ?: when (clean) {
+    val translated: String = ExerciseTitlesEn.get(clean)
+        .orEmpty()
+        .trim()
+
+    if (translated.isNotBlank()) {
+        return translated
+    }
+
+    return when (clean) {
         "כללי" -> "General"
         "עבודת ידיים" -> "Hand Strikes"
         "בעיטות" -> "Kicks"
@@ -236,10 +273,18 @@ private fun subTopicDisplayName(
 
     if (!isEnglish) return clean
 
-    return ExerciseTitlesEn.get(clean)?.takeIf { it.isNotBlank() } ?: clean
+    val translated: String = ExerciseTitlesEn.get(clean)
+        .orEmpty()
+        .trim()
+
+    return translated.ifBlank { clean }
 }
 
-private fun exerciseDisplayNameForUi(topicTitle: String, rawItem: String, isEnglish: Boolean): String {
+private fun exerciseDisplayNameForUi(
+    topicTitle: String,
+    rawItem: String,
+    isEnglish: Boolean
+): String {
     val topicTrim = topicTitle.trim()
 
     fun normalizeForLookup(s: String): String =
@@ -268,13 +313,15 @@ private fun exerciseDisplayNameForUi(topicTitle: String, rawItem: String, isEngl
         append(s)
     }
 
-    val base = ExerciseTitleFormatter.displayName(cleaned)
-        .ifBlank { cleaned }
+    val formatted: String = ExerciseTitleFormatter.displayName(cleaned)
+        .orEmpty()
         .trim()
+
+    val base = formatted.ifBlank { cleaned }.trim()
 
     if (!isEnglish) return base
 
-    val candidates = listOf(
+    val candidates: List<String> = listOf(
         base,
         normalizeForLookup(base),
         cleaned,
@@ -283,13 +330,22 @@ private fun exerciseDisplayNameForUi(topicTitle: String, rawItem: String, isEngl
         normalizeForLookup(rawItem.trim()),
         rawItem.substringAfter("::", rawItem).trim(),
         normalizeForLookup(rawItem.substringAfter("::", rawItem).trim())
-    ).distinct()
+    )
+        .map { candidate: String -> candidate.trim() }
+        .filter { candidate: String -> candidate.isNotBlank() }
+        .distinct()
 
-    val translated = candidates.firstNotNullOfOrNull { candidate ->
-        ExerciseTitlesEn.get(candidate)?.takeIf { it.isNotBlank() }
+    for (candidate: String in candidates) {
+        val translated: String = ExerciseTitlesEn.get(candidate)
+            .orEmpty()
+            .trim()
+
+        if (translated.isNotBlank()) {
+            return translated
+        }
     }
 
-    return translated ?: base
+    return base
 }
 
 /* ------------------------------ ProgressMeter ------------------------------ */
@@ -318,25 +374,49 @@ fun ProgressMeter(
     LaunchedEffect(belt, topic, marksVer) {
         val beltContent = beltContentFor(belt)
 
+        val beltTopics: List<SharedContentRepo.Topic> =
+            beltContent?.topics.orEmpty()
+
         val titles: List<String> =
-            if (topic.isNullOrBlank()) beltContent?.topics?.map { it.title }.orEmpty()
-            else listOf(topic)
+            if (topic.isNullOrBlank()) {
+                beltTopics.map { topicObj: SharedContentRepo.Topic ->
+                    topicObj.title
+                }
+            } else {
+                listOf(topic)
+            }
 
         var t = 0
         var yes = 0
         var no = 0
         var none = 0
 
-        titles.forEach { tp ->
-            val tpObj = beltContent?.topics?.firstOrNull { norm(it.title) == norm(tp) }
-            val items = if (tpObj == null) emptyList()
-            else (tpObj.items + tpObj.subTopics.flatMap { it.items }).distinct()
+        titles.forEach { tp: String ->
+            val tpObj: SharedContentRepo.Topic? =
+                beltTopics.firstOrNull { topicObj: SharedContentRepo.Topic ->
+                    norm(topicObj.title) == norm(tp)
+                }
+
+            val items: List<String> =
+                if (tpObj == null) {
+                    emptyList()
+                } else {
+                    (
+                            tpObj.items +
+                                    tpObj.subTopics.flatMap { subTopic: SharedContentRepo.SubTopic ->
+                                        subTopic.items
+                                    }
+                            )
+                        .map { raw: String -> raw.trim() }
+                        .filter { raw: String -> raw.isNotBlank() }
+                        .distinct()
+                }
 
             t += items.size
 
             val topicSnap = vm.getTopicStatusSnapshot(belt, tp)
 
-            items.forEachIndexed { index, raw ->
+            items.forEachIndexed { index: Int, raw: String ->
                 val statusId = summaryExerciseIdentityIdFor(
                     belt = belt,
                     topicKey = tp.trim(),
@@ -1042,7 +1122,7 @@ fun SummaryScreen(
 
     LaunchedEffect(belt, topic, subTopicFilter) {
         val beltContent = beltContentFor(belt)
-        val topics = beltContent?.topics.orEmpty()
+        val topics: List<SharedContentRepo.Topic> = beltContent?.topics.orEmpty()
 
         val out = LinkedHashMap<String, List<SummaryExerciseRow>>()
 
@@ -1050,8 +1130,10 @@ fun SummaryScreen(
             topicTitle: String,
             requestedSubTopicTitle: String? = null
         ): List<SummaryExerciseRow> {
-            val topicObj = topics.firstOrNull { norm(it.title) == norm(topicTitle) }
-                ?: return emptyList()
+            val topicObj: SharedContentRepo.Topic =
+                topics.firstOrNull { candidate: SharedContentRepo.Topic ->
+                    norm(candidate.title) == norm(topicTitle)
+                } ?: return emptyList()
 
             val rows = mutableListOf<SummaryExerciseRow>()
 
@@ -1059,12 +1141,12 @@ fun SummaryScreen(
                 list: List<SharedContentRepo.SubTopic>,
                 wantedTitle: String
             ): SharedContentRepo.SubTopic? {
-                list.forEach { subTopic ->
+                list.forEach { subTopic: SharedContentRepo.SubTopic ->
                     if (norm(subTopic.title) == norm(wantedTitle)) {
                         return subTopic
                     }
 
-                    val nested = findSubTopicDeep(
+                    val nested: SharedContentRepo.SubTopic? = findSubTopicDeep(
                         list = subTopic.subTopics,
                         wantedTitle = wantedTitle
                     )
@@ -1082,51 +1164,53 @@ fun SummaryScreen(
             ) {
                 val cleanSubTopicTitle = subTopic.title.trim()
 
-                subTopic.items
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
+                val subItems: List<String> = subTopic.items
+                    .map { itemRaw: String -> itemRaw.trim() }
+                    .filter { itemRaw: String -> itemRaw.isNotBlank() }
                     .distinct()
-                    .forEachIndexed { index, itemRaw ->
-                        rows += SummaryExerciseRow(
-                            displayTopicTitle = topicObj.title,
-                            sourceTopicTitle = topicObj.title,
-                            subTopicTitle = cleanSubTopicTitle,
-                            statusTopicKey = "${topicObj.title.trim()}__${cleanSubTopicTitle}",
-                            itemRaw = itemRaw,
-                            indexInStatusGroup = index
-                        )
-                    }
+
+                subItems.forEachIndexed { index: Int, itemRaw: String ->
+                    rows += SummaryExerciseRow(
+                        displayTopicTitle = topicObj.title,
+                        sourceTopicTitle = topicObj.title,
+                        subTopicTitle = cleanSubTopicTitle,
+                        statusTopicKey = "${topicObj.title.trim()}__${cleanSubTopicTitle}",
+                        itemRaw = itemRaw,
+                        indexInStatusGroup = index
+                    )
+                }
 
                 // ✅ חשוב: אוסף גם תתי־נושאים פנימיים,
                 // למשל הגנות -> הגנות נגד בעיטות -> בעיטות צד / בעיטות מעגליות וכו׳
-                subTopic.subTopics.forEach { nestedSubTopic ->
+                subTopic.subTopics.forEach { nestedSubTopic: SharedContentRepo.SubTopic ->
                     addRowsFromSubTopicDeep(nestedSubTopic)
                 }
             }
 
             if (requestedSubTopicTitle.isNullOrBlank()) {
-                topicObj.items
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
+                val directItems: List<String> = topicObj.items
+                    .map { itemRaw: String -> itemRaw.trim() }
+                    .filter { itemRaw: String -> itemRaw.isNotBlank() }
                     .distinct()
-                    .forEachIndexed { index, itemRaw ->
-                        rows += SummaryExerciseRow(
-                            displayTopicTitle = topicObj.title,
-                            sourceTopicTitle = topicObj.title,
-                            subTopicTitle = null,
-                            statusTopicKey = topicObj.title.trim(),
-                            itemRaw = itemRaw,
-                            indexInStatusGroup = index
-                        )
-                    }
 
-                topicObj.subTopics.forEach { subTopic ->
+                directItems.forEachIndexed { index: Int, itemRaw: String ->
+                    rows += SummaryExerciseRow(
+                        displayTopicTitle = topicObj.title,
+                        sourceTopicTitle = topicObj.title,
+                        subTopicTitle = null,
+                        statusTopicKey = topicObj.title.trim(),
+                        itemRaw = itemRaw,
+                        indexInStatusGroup = index
+                    )
+                }
+
+                topicObj.subTopics.forEach { subTopic: SharedContentRepo.SubTopic ->
                     addRowsFromSubTopicDeep(subTopic)
                 }
             } else {
                 val requested = requestedSubTopicTitle.trim()
 
-                val selectedSubTopic = findSubTopicDeep(
+                val selectedSubTopic: SharedContentRepo.SubTopic? = findSubTopicDeep(
                     list = topicObj.subTopics,
                     wantedTitle = requested
                 )
@@ -1151,16 +1235,25 @@ fun SummaryScreen(
             return@LaunchedEffect
         }
 
-        val allTitles = topics.map { it.title }
+        val allTitles: List<String> = topics.map { topicObj: SharedContentRepo.Topic ->
+            topicObj.title
+        }
+
         val orderedTitles: List<String> =
             if (topic.isNotBlank()) {
-                listOf(topic) + allTitles.filterNot { norm(it) == norm(topic) }
+                listOf(topic) + allTitles.filterNot { title: String ->
+                    norm(title) == norm(topic)
+                }
             } else {
                 allTitles
             }
 
-        orderedTitles.forEach { title ->
-            val topicObj = topics.firstOrNull { norm(it.title) == norm(title) }
+        orderedTitles.forEach { title: String ->
+            val topicObj: SharedContentRepo.Topic? =
+                topics.firstOrNull { candidate: SharedContentRepo.Topic ->
+                    norm(candidate.title) == norm(title)
+                }
+
             if (topicObj != null) {
                 out[topicObj.title] = rowsForTopic(topicObj.title)
             }
@@ -1295,17 +1388,14 @@ fun SummaryScreen(
     val overallTotal = topicStats.values.sumOf { it.second }
     val overallPct = if (overallTotal <= 0) 0 else ((overallDone * 100f) / overallTotal).toInt()
 
-    // ✅ שלב א׳ בפיצ׳ר ההשוואה:
-    // שמירת סיכום אישי של המשתמש לפי חגורה.
-    // עדיין לא מחשבים דירוג מול משתמשים אחרים ולא מציגים UI חדש.
+    // ✅ שומרים את התקדמות המשתמש ברקע, אבל לא טוענים השוואה אוטומטית.
+    // ההשוואה נטענת רק כשהמשתמש פותח את כרטיס "השוואה".
     LaunchedEffect(
         belt.id,
         overallDone,
         overallTotal,
         overallPct
     ) {
-        userProgressComparisonLoaded = false
-
         if (overallTotal > 0) {
             runCatching {
                 UserProgressRepository.saveUserProgress(
@@ -1314,63 +1404,67 @@ fun SummaryScreen(
                     knownCount = overallDone,
                     totalCount = overallTotal
                 )
-
-                val comparisons = mutableListOf<UserProgressComparison>()
-
-                // ✅ מנסים כמה פעמים כי לפעמים Cloud Function / Firestore עדיין לא הספיקו להתעדכן.
-                for (attempt in 0 until 4) {
-                    if (attempt > 0) {
-                        delay(700)
-                    } else {
-                        delay(350)
-                    }
-
-                    val beltStatsComparison = runCatching {
-                        UserProgressRepository.loadBeltComparison(
-                            beltId = belt.id,
-                            userKnownPercent = overallPct
-                        )
-                    }.getOrNull()
-
-                    if (beltStatsComparison != null && beltStatsComparison.usersCount > 0) {
-                        comparisons += beltStatsComparison
-                    }
-
-                    val fallbackComparison = runCatching {
-                        loadBeltComparisonFallbackFromUserProgress(
-                            beltId = belt.id,
-                            userKnownPercent = overallPct
-                        )
-                    }.getOrNull()
-
-                    if (fallbackComparison != null && fallbackComparison.usersCount > 0) {
-                        comparisons += fallbackComparison
-                    }
-
-                    // ✅ אם כבר מצאנו השוואה עם לפחות שני מתאמנים — אין צורך לחכות לעוד סבבים.
-                    if (comparisons.any { it.usersCount >= 2 }) {
-                        break
-                    }
-                }
-
-                userProgressComparison = comparisons
-                    .sortedWith(
-                        compareBy<UserProgressComparison> { comparison ->
-                            if (comparison.usersCount >= 2) 1 else 0
-                        }.thenBy { comparison ->
-                            comparison.usersCount
-                        }.thenBy { comparison ->
-                            if (comparison.hasEnoughData) 1 else 0
-                        }
-                    )
-                    .lastOrNull()
-
-                userProgressComparisonLoaded = true
-            }.onFailure {
-                userProgressComparison = null
-                userProgressComparisonLoaded = true
             }
-        } else {
+        }
+    }
+
+    LaunchedEffect(
+        showComparison,
+        belt.id,
+        overallPct,
+        overallTotal
+    ) {
+        if (!showComparison) {
+            return@LaunchedEffect
+        }
+
+        userProgressComparisonLoaded = false
+        userProgressComparison = null
+
+        if (overallTotal <= 0) {
+            userProgressComparisonLoaded = true
+            return@LaunchedEffect
+        }
+
+        runCatching {
+            val comparisons = mutableListOf<UserProgressComparison>()
+
+            val beltStatsComparison = runCatching {
+                UserProgressRepository.loadBeltComparison(
+                    beltId = belt.id,
+                    userKnownPercent = overallPct
+                )
+            }.getOrNull()
+
+            if (beltStatsComparison != null && beltStatsComparison.usersCount > 0) {
+                comparisons += beltStatsComparison
+            }
+
+            val fallbackComparison = runCatching {
+                loadBeltComparisonFallbackFromUserProgress(
+                    beltId = belt.id,
+                    userKnownPercent = overallPct
+                )
+            }.getOrNull()
+
+            if (fallbackComparison != null && fallbackComparison.usersCount > 0) {
+                comparisons += fallbackComparison
+            }
+
+            userProgressComparison = comparisons
+                .sortedWith(
+                    compareBy<UserProgressComparison> { comparison ->
+                        if (comparison.usersCount >= 2) 1 else 0
+                    }.thenBy { comparison ->
+                        comparison.usersCount
+                    }.thenBy { comparison ->
+                        if (comparison.hasEnoughData) 1 else 0
+                    }
+                )
+                .lastOrNull()
+
+            userProgressComparisonLoaded = true
+        }.onFailure {
             userProgressComparison = null
             userProgressComparisonLoaded = true
         }
@@ -1517,16 +1611,6 @@ fun SummaryScreen(
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            val shineAnim = rememberInfiniteTransition(label = "summaryButtonShine")
-            val shineOffset by shineAnim.animateFloat(
-                initialValue = -140f,
-                targetValue = 900f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(3200)
-                ),
-                label = "summaryButtonShineOffset"
-            )
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1575,17 +1659,15 @@ fun SummaryScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .offset(x = shineOffset.dp)
-                                    .width(52.dp)
-                                    .fillMaxHeight(0.70f)
                                     .align(Alignment.CenterStart)
+                                    .width(72.dp)
+                                    .fillMaxHeight(0.70f)
                                     .background(
                                         brush = Brush.linearGradient(
                                             colors = listOf(
                                                 Color.Transparent,
-                                                Color.White.copy(alpha = 0.14f),
-                                                Color.White.copy(alpha = 0.30f),
-                                                Color.White.copy(alpha = 0.14f),
+                                                Color.White.copy(alpha = 0.10f),
+                                                Color.White.copy(alpha = 0.18f),
                                                 Color.Transparent
                                             )
                                         ),

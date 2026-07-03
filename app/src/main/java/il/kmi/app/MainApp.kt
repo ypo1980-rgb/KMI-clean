@@ -61,13 +61,28 @@ fun MainApp(
     startRoute: String? = null,
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs
 ) {
-    // ----- theme / font scale -----
-    val fontPref = kmiPrefs.fontSize.ifBlank {
-        sp.getString("font_size", "medium") ?: "medium"
+    fun cleanPrefString(value: Any?): String {
+        val text = value
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+
+        return text.takeIf { it.isNotBlank() && it != "null" }.orEmpty()
     }
-    val rawThemePrefInitial = kmiPrefs.themeMode
-        .ifBlank { sp.getString("theme_mode", "") ?: "" }
-        .ifBlank { "light" }
+
+    // ----- theme / font scale -----
+    val fontPref = cleanPrefString(kmiPrefs.fontSize)
+        .ifBlank {
+            sp.getString("font_size", "medium") ?: "medium"
+        }
+
+    val rawThemePrefInitial = cleanPrefString(kmiPrefs.themeMode)
+        .ifBlank {
+            sp.getString("theme_mode", "") ?: ""
+        }
+        .ifBlank {
+            "light"
+        }
 
     val themePrefInitial = when (rawThemePrefInitial) {
         "dark" -> "dark"
@@ -306,6 +321,11 @@ fun MainApp(
                                 launchSingleTop = true
                                 restoreState = true
                             }
+                        },
+                        onOpenProgress = {
+                            nav.navigate(Route.Progress.route) {
+                                launchSingleTop = true
+                            }
                         }
                     )
                 }
@@ -355,6 +375,11 @@ fun MainApp(
                                 }
                                 launchSingleTop = true
                                 restoreState = true
+                            }
+                        },
+                        onOpenProgress = {
+                            nav.navigate(Route.Progress.route) {
+                                launchSingleTop = true
                             }
                         }
                     )

@@ -72,13 +72,13 @@ import il.kmi.app.domain.Explanations
 import il.kmi.app.domain.color
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.shared.domain.Belt
-import il.kmi.shared.domain.content.English.ExerciseTitlesEnAliases
-import il.kmi.shared.domain.content.English.ExerciseTitlesEnItems
-import il.kmi.shared.domain.content.English.ExerciseTitlesEnTopics
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.shared.domain.content.HardSectionsResolver
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.LocalizationRuntime
+
+
+//=========================================================================
 
 private val subjectScreenGradientTop = Color(0xFFF2F0FA)
 private val subjectScreenGradientMid = Color(0xFFF7F8FC)
@@ -314,7 +314,8 @@ private fun flattenNestedSectionsToBeltGroups(
             }
 
             is HardSectionsResolver.NodeResult.Sections -> {
-                resolved.entries.forEach { nestedEntry ->
+                val nestedEntries: List<HardSectionsResolver.SectionEntry> = resolved.entries
+                nestedEntries.forEach { nestedEntry: HardSectionsResolver.SectionEntry ->
                     collect(nestedEntry)
                 }
             }
@@ -471,6 +472,14 @@ private data class SelectedHardExercise(
     val displayItem: String
 )
 
+private fun hardItemsForGroup(
+    group: HardSectionsResolver.BeltItems
+): List<String> {
+    return group.items
+        .map { rawItem: String -> rawItem.trim() }
+        .filter { rawItem: String -> rawItem.isNotBlank() }
+}
+
 @Composable
 private fun HardTopStatChip(
     value: String,
@@ -583,26 +592,14 @@ private fun BeltGroupsContent(
         topic: String,
         rawItem: String
     ): List<String> {
-        val statusId = hardStatusIdFor(
-            belt = belt,
-            topic = topic,
-            rawItem = rawItem
-        )
-
-        val identityKeys = ExerciseIdentityRegistry
-            .allKnown()
-            .firstOrNull { it.id == statusId && it.belt == belt }
-            ?.topicKeys
-            .orEmpty()
-
-        return (
-                identityKeys +
-                        topic +
-                        "כללי"
-                )
-            .map { normalizeStatusPart(it) }
-            .filter { it.isNotBlank() }
+        return listOf(topic, "כללי")
+            .map { value -> normalizeStatusPart(value) }
+            .filter { value -> value.isNotBlank() }
             .distinct()
+    }
+
+    fun hardItemsOf(group: HardSectionsResolver.BeltItems): List<String> {
+        return hardItemsForGroup(group)
     }
 
     fun setHardLocalStatus(
@@ -651,8 +648,9 @@ private fun BeltGroupsContent(
     }
 
     LaunchedEffect(groups, marksVersion) {
-        groups.forEach { group ->
-            group.items.forEach { rawItem ->
+        groups.forEach { group: HardSectionsResolver.BeltItems ->
+            val rawItems: List<String> = hardItemsOf(group)
+            rawItems.forEach { rawItem: String ->
                 val statusId = hardStatusIdFor(
                     belt = group.belt,
                     topic = title,
@@ -662,23 +660,27 @@ private fun BeltGroupsContent(
                 var valueFromVm: Boolean? = null
 
                 for (key in hardStatusKeysFor(group.belt, title, rawItem)) {
-                    val fromKey: Boolean? =
-                        runCatching {
-                            vm.getItemStatusNullable(
+                    val directStatus: Boolean? = try {
+                        vm.getItemStatusNullable(
+                            belt = group.belt,
+                            topic = key,
+                            item = statusId
+                        )
+                    } catch (_: Exception) {
+                        null
+                    }
+
+                    val fromKey: Boolean? = directStatus ?: try {
+                        if (
+                            vm.isMastered(
                                 belt = group.belt,
                                 topic = key,
                                 item = statusId
                             )
-                        }.getOrNull()
-                            ?: runCatching {
-                                if (
-                                    vm.isMastered(
-                                        belt = group.belt,
-                                        topic = key,
-                                        item = statusId
-                                    )
-                                ) true else null
-                            }.getOrNull()
+                        ) true else null
+                    } catch (_: Exception) {
+                        null
+                    }
 
                     if (fromKey != null) {
                         valueFromVm = fromKey
@@ -736,9 +738,9 @@ private fun BeltGroupsContent(
         )
     }
 
-    val allHardItems = remember(groups, title) {
-        groups.flatMap { group ->
-            group.items.map { rawItem ->
+    val allHardItems: List<Triple<Belt, String, String>> = remember(groups, title) {
+        groups.flatMap { group: HardSectionsResolver.BeltItems ->
+            hardItemsOf(group).map { rawItem: String ->
                 Triple(group.belt, title, rawItem)
             }
         }
@@ -772,9 +774,9 @@ private fun BeltGroupsContent(
                 title.trim() == "Defenses against kicks" ||
                 title.trim() == "Defenses Against Kicks"
 
-    val flatRows = remember(groups, title) {
-        groups.flatMap { group ->
-            group.items.mapIndexed { index, rawItem ->
+    val flatRows: List<Triple<Belt, Int, String>> = remember(groups, title) {
+        groups.flatMap { group: HardSectionsResolver.BeltItems ->
+            hardItemsOf(group).mapIndexed { index: Int, rawItem: String ->
                 Triple(group.belt, index, rawItem)
             }
         }
@@ -793,7 +795,8 @@ private fun BeltGroupsContent(
     }
 
     val currentStickyGroup = groups.firstOrNull { it.belt == currentStickyBelt }
-    val currentStickyItems = currentStickyGroup?.items.orEmpty()
+    val currentStickyItems: List<String> =
+        currentStickyGroup?.let { hardItemsOf(it) }.orEmpty()
 
     val currentGroupTotalCount = currentStickyItems.size
 
@@ -1158,6 +1161,8 @@ private fun BeltSectionCard(
     onStatusClick: (belt: Belt, topic: String, rawItem: String) -> Unit,
     onInfoClick: (belt: Belt, topic: String, rawItem: String, displayItem: String) -> Unit
 ) {
+    val rawItems: List<String> = hardItemsForGroup(group)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -1192,9 +1197,9 @@ private fun BeltSectionCard(
 
                     Text(
                         text = if (isEnglish) {
-                            if (group.items.size == 1) "1 exercise" else "${group.items.size} exercises"
+                            if (rawItems.size == 1) "1 exercise" else "${rawItems.size} exercises"
                         } else {
-                            "${group.items.size} תרגילים"
+                            "${rawItems.size} תרגילים"
                         },
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
@@ -1205,21 +1210,21 @@ private fun BeltSectionCard(
 
             Spacer(Modifier.height(8.dp))
 
-            val groupTotalCount = group.items.size
+            val groupTotalCount = rawItems.size
 
-            val groupKnownCount = group.items.count { rawItem ->
+            val groupKnownCount = rawItems.count { rawItem: String ->
                 hardItemStates[statusIdFor(group.belt, title, rawItem)] == true
             }
 
-            val groupUnknownCount = group.items.count { rawItem ->
+            val groupUnknownCount = rawItems.count { rawItem: String ->
                 hardItemStates[statusIdFor(group.belt, title, rawItem)] == false
             }
 
-            val groupFavoriteCount = group.items.count { rawItem ->
+            val groupFavoriteCount = rawItems.count { rawItem: String ->
                 favoriteIdFor(group.belt, title, rawItem) in favoriteIds
             }
 
-            val groupUnmarkedCount = group.items.count { rawItem ->
+            val groupUnmarkedCount = rawItems.count { rawItem: String ->
                 hardItemStates[statusIdFor(group.belt, title, rawItem)] == null
             }
 
@@ -1264,7 +1269,7 @@ private fun BeltSectionCard(
 
             var lastSectionTitle: String? = null
 
-            group.items.forEachIndexed { index, rawItem ->
+            rawItems.forEachIndexed { index: Int, rawItem: String ->
                 val statusId = statusIdFor(group.belt, title, rawItem)
                 val favoriteId = favoriteIdFor(group.belt, title, rawItem)
                 val mastered = hardItemStates[statusId]
@@ -1308,7 +1313,7 @@ private fun BeltSectionCard(
                     }
                 )
 
-                if (index != group.items.lastIndex) {
+                if (index != rawItems.lastIndex) {
                     Spacer(Modifier.height(6.dp))
                 }
             }
@@ -1544,38 +1549,21 @@ private fun beltTitle(belt: Belt, isEnglish: Boolean): String =
     }
 
 private fun translateHardExerciseTitle(raw: String): String {
-    val clean = normalizeHardTitle(raw)
-
-    ExerciseTitlesEnItems.map[clean]?.let { return it }
-    ExerciseTitlesEnAliases.map[clean]?.let { return it }
-
-    val normalizedItemsMap = ExerciseTitlesEnItems.map.entries.associateBy { normalizeHardTitle(it.key) }
-    normalizedItemsMap[clean]?.value?.let { return it }
-
-    val normalizedAliasesMap = ExerciseTitlesEnAliases.map.entries.associateBy { normalizeHardTitle(it.key) }
-    normalizedAliasesMap[clean]?.value?.let { return it }
-
     return raw
 }
 
 private fun translateHardTopicTitle(raw: String): String {
-    val clean = normalizeHardTitle(raw)
-
-    ExerciseTitlesEnTopics.map[clean]?.let { return it }
-
-    val normalizedTopicsMap = ExerciseTitlesEnTopics.map.entries.associateBy { normalizeHardTitle(it.key) }
-    normalizedTopicsMap[clean]?.value?.let { return it }
-
     return raw
 }
 
 private fun normalizeHardTitle(raw: String): String {
     return raw
         .trim()
-        .replace("\u200F", "")
-        .replace("\u200E", "")
-        .replace("\u00A0", " ")
-        .replace("–", "-")
-        .replace("—", "-")
+        .replace('\u200F', ' ')
+        .replace('\u200E', ' ')
+        .replace('\u00A0', ' ')
+        .replace('–', '-')
+        .replace('—', '-')
         .replace(Regex("\\s+"), " ")
+        .trim()
 }

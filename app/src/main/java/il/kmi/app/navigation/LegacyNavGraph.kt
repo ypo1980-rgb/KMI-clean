@@ -24,6 +24,7 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.attendance.ui.AttendanceScreen
 import il.kmi.app.attendance.ui.AttendanceViewModel
+import il.kmi.app.navigation.settingsNavGraph
 import il.kmi.app.screens.ExercisesTabsScreen
 import il.kmi.app.screens.IntroScreen
 import il.kmi.app.screens.MaterialsScreen
@@ -110,9 +111,10 @@ fun NavGraphBuilder.legacyNavGraph(
 
     settingsNavGraph(
         nav = nav,
+        vm = vm,
         sp = sp,
         kmiPrefs = kmiPrefs,
-        themeMode = kmiPrefs.themeMode.ifBlank { "system" },
+        themeMode = "system",
         onThemeChange = { /* legacy path */ }
     )
 

@@ -11,17 +11,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,12 +37,11 @@ import il.kmi.shared.domain.Belt
 import android.content.SharedPreferences
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextAlign
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import il.kmi.app.auth.GoogleAuthManager
 import il.kmi.app.auth.UserProfileCompletion
 import com.google.firebase.auth.FirebaseAuth
@@ -55,6 +49,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import il.kmi.app.FcmTokenManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+
+
+//=======================================================================
 
 private fun overshootEasing(tension: Float = 2f): Easing =
     Easing { t -> OvershootInterpolator(tension).getInterpolation(t) }
@@ -406,6 +403,91 @@ private fun BeltBadge(
 }
 
 @Composable
+private fun PremiumIntroButtonLoading() {
+    val infiniteTransition = rememberInfiniteTransition(
+        label = "premiumIntroButtonLoading"
+    )
+
+    val outerRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1200,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumIntroButtonOuterRotation"
+    )
+
+    val innerRotation by infiniteTransition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1650,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumIntroButtonInnerRotation"
+    )
+
+    Box(
+        modifier = Modifier.size(30.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .size(28.dp)
+                .graphicsLayer {
+                    rotationZ = outerRotation
+                },
+            shape = CircleShape,
+            color = Color.Transparent,
+            border = BorderStroke(
+                width = 3.dp,
+                brush = Brush.sweepGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.White,
+                        Color(0xFFBFE7FF),
+                        Color.Transparent
+                    )
+                )
+            )
+        ) {}
+
+        Surface(
+            modifier = Modifier
+                .size(19.dp)
+                .graphicsLayer {
+                    rotationZ = innerRotation
+                },
+            shape = CircleShape,
+            color = Color.Transparent,
+            border = BorderStroke(
+                width = 2.dp,
+                brush = Brush.sweepGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color(0xFFFFD166),
+                        Color.White,
+                        Color.Transparent
+                    )
+                )
+            )
+        ) {}
+
+        Surface(
+            modifier = Modifier.size(8.dp),
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.96f),
+            shadowElevation = 4.dp
+        ) {}
+    }
+}
+
+@Composable
 private fun IntroWelcomeImageScreen(
     isEnglish: Boolean,
     greeting: String,
@@ -581,11 +663,7 @@ private fun IntroWelcomeImageScreen(
                 contentAlignment = Alignment.Center
             ) {
                 if (isGoogleLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
-                        strokeWidth = 2.2.dp
-                    )
+                    PremiumIntroButtonLoading()
                 } else {
                     Text(
                         text = if (isEnglish) {

@@ -14,7 +14,10 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
-    // XCFramework (ייכנס לפעולה כשתהיה סביבת Mac)
+    // ✅ מחבר נכון commonMain -> iosMain -> ios targets
+    applyDefaultHierarchyTemplate()
+
+    // XCFramework — ייכנס לפעולה כשתהיה סביבת Mac
     val xcf = XCFramework("Shared")
     targets.withType(KotlinNativeTarget::class.java).configureEach {
         binaries.framework {
@@ -27,6 +30,9 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
+                // ✅ חשוב: פותר מצב שבו String/Long/Double/List לא מזוהים ב-commonMain
+                implementation(kotlin("stdlib"))
+
                 implementation("com.russhwolf:multiplatform-settings:1.1.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
@@ -51,35 +57,28 @@ kotlin {
             }
         }
 
-        /* ---------- iOS (נוצר ידנית – תואם ל-AGP/Kotlin אצלך) ---------- */
-
-        val iosMain by creating {
-            dependsOn(commonMain)
+        // ✅ לא יוצרים iosMain ידנית כאן.
+        // applyDefaultHierarchyTemplate יוצר ומחבר אותו אוטומטית.
+        val iosMain by getting {
             dependencies {
                 // בעתיד: Ktor Darwin / native libs
             }
         }
 
-        val iosTest by creating {
-            dependsOn(commonTest)
+        val iosTest by getting {
+            dependencies {
+                // בעתיד בדיקות iOS
+            }
         }
-
-        val iosX64Main by getting { dependsOn(iosMain) }
-        val iosArm64Main by getting { dependsOn(iosMain) }
-        val iosSimulatorArm64Main by getting { dependsOn(iosMain) }
-
-        val iosX64Test by getting { dependsOn(iosTest) }
-        val iosArm64Test by getting { dependsOn(iosTest) }
-        val iosSimulatorArm64Test by getting { dependsOn(iosTest) }
     }
 
     jvmToolchain(17)
 }
 
-// --- iOS helper tasks (Windows-friendly; run on macOS later) ---
+// --- iOS helper tasks — Windows-friendly; run on macOS later ---
 tasks.register("buildIosFramework") {
     group = "kmi"
-    description = "Build the Shared XCFramework (run on macOS)."
+    description = "Build the Shared XCFramework. Run on macOS."
     dependsOn("assembleSharedXCFramework")
 }
 

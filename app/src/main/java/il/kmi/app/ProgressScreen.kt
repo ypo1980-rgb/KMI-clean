@@ -1,12 +1,16 @@
 package il.kmi.app.screens
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,25 +31,25 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,8 +61,11 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import java.io.File
 import java.io.FileOutputStream
 
@@ -65,11 +73,10 @@ import java.io.FileOutputStream
 @Composable
 fun ProgressScreen(
     vm: KmiViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onHome: () -> Unit = onBack,
+    onOpenCarousel: (() -> Unit)? = null
 ) {
-    // נשאר לצורך שימושים אחרים (PDF/סטטוסים). לא חייבים להשתמש בו כאן.
-    val progress by vm.progress
-
     val context = LocalContext.current
 
     // === SP של ההחרגות בדיוק כמו במסך ההגדרות ===
@@ -110,49 +117,382 @@ fun ProgressScreen(
     fun canonicalKeyFor(rawItem: String): String =
         ExerciseTitleFormatter.displayName(rawItem).trim().normHeb()
 
-    fun displayName(rawItem: String): String =
-        ExerciseTitleFormatter.displayName(rawItem).trim().ifBlank { rawItem.trim() }
+    fun normalizeStatusPart(s: String): String =
+        s.replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    fun cleanItemForSummary(topic: String, item: String): String {
+        var s = item.trim()
+
+        if (topic.isNotBlank() && s.startsWith("$topic::")) {
+            s = s.removePrefix("$topic::").trim()
+        }
+
+        return s.replace(Regex("\\s+"), " ").trim()
+    }
+
+    fun identityStatusIdFor(
+        belt: Belt,
+        topicKey: String,
+        topicTitle: String,
+        index: Int,
+        rawItem: String
+    ): String {
+        val cleanOriginal = cleanItemForSummary(topicTitle, rawItem).trim()
+
+        val resolved = ExerciseIdentityRegistry.resolve(
+            belt = belt,
+            hebrewTitle = cleanOriginal,
+            topicKey = topicKey
+        )
+
+        return if (resolved.isKnown) {
+            resolved.id
+        } else {
+            "${resolved.id}_row_$index"
+        }
+    }
+
+    fun displayName(rawItem: String): String {
+        val formatted = ExerciseTitleFormatter
+            .displayName(rawItem)
+            .toString()
+            .trim()
+
+        return if (formatted.isNotBlank() && formatted != "null") {
+            formatted
+        } else {
+            rawItem.trim()
+        }
+    }
 
     data class BeltRow(val belt: Belt, val percent: Int, val done: Int, val total: Int)
 
-    val beltsToShow = remember { Belt.values().filter { it != Belt.WHITE } }
-    val sharedBelts = remember { il.kmi.shared.catalog.KmiCatalogFacade.listBelts() }
+    data class ProgressExerciseRow(
+        val sourceTopicTitle: String,
+        val statusTopicKey: String,
+        val rawItem: String,
+        val indexInStatusGroup: Int
+    )
 
-    // ⬇️ חישוב אמיתי של התקדמות מתוך shared ProgressFacade
-    // בלי remember בתוך produceState, ובלי produceState מקונן.
+    val beltsToShow: List<Belt> = remember {
+        il.kmi.app.domain.ContentRepo
+            .listBeltsInOrder()
+            .filter { belt: Belt -> belt != Belt.WHITE }
+    }
+
+// ContentRepo הוא מקור האמת לרשימות התרגילים במסכים.
+    val marksVersion by vm.marksVersion.collectAsState()
+
     val beltsData: List<BeltRow> by produceState(
         initialValue = emptyList(),
-        key1 = Unit
+        key1 = marksVersion
     ) {
-        val rows = il.kmi.shared.progress.ProgressFacade.computeBeltsProgress(
-            beltsToScan = sharedBelts,
-            excludedProvider = il.kmi.shared.progress.ProgressFacade.ExcludedProvider { beltId, topicTitle, rawItem, disp ->
-                val excluded =
-                    spSettings.getStringSet("excluded_${beltId}_${topicTitle}", emptySet()) ?: emptySet()
-                (rawItem in excluded) || (disp in excluded)
-            },
-            statusProvider = il.kmi.shared.progress.ProgressFacade.StatusProvider { beltId, topicTitle, canonicalItemKey ->
-                val appBelt = Belt.fromId(beltId) ?: return@StatusProvider null
+        value = withContext(Dispatchers.Default) {
+            il.kmi.app.domain.ContentRepo.initIfNeeded()
 
-                // ❗️פתרון קומפילציה: getItemStatusNullable היא suspend אצלך
-                // ולכן אנחנו קוראים לה דרך runBlocking כדי להתאים ל-StatusProvider (לא-suspend).
-                // אם תרצה, נשדרג אחר כך ל-cache אסינכרוני כדי לא לחסום.
-                runBlocking {
-                    vm.getItemStatusNullable(appBelt, topicTitle, canonicalItemKey)
+            val rows = mutableListOf<BeltRow>()
+
+        suspend fun countKnownLikeSummaryScreen(belt: Belt): Int {
+            val knownIds = mutableSetOf<String>()
+
+            suspend fun checkKnown(
+                topicKey: String,
+                topicTitle: String,
+                index: Int,
+                rawItem: String
+            ) {
+                val statusId = identityStatusIdFor(
+                    belt = belt,
+                    topicKey = topicKey,
+                    topicTitle = topicTitle,
+                    index = index,
+                    rawItem = rawItem
+                )
+
+                val legacyStatusId =
+                    "status_${belt.id}_${topicKey}_${index}_${normalizeStatusPart(rawItem)}"
+
+                val topicSnap = vm.getTopicStatusSnapshot(
+                    belt = belt,
+                    topic = topicKey
+                )
+
+                val value =
+                    topicSnap[statusId]
+                        ?: topicSnap[legacyStatusId]
+                        ?: vm.getItemStatusNullable(
+                            belt = belt,
+                            topic = topicKey,
+                            item = statusId
+                        )
+                        ?: vm.getItemStatusNullable(
+                            belt = belt,
+                            topic = topicKey,
+                            item = legacyStatusId
+                        )
+
+                if (value == true) {
+                    knownIds += "$topicKey::$statusId"
                 }
-            },
-            canonicalKeyFor = { rawItem -> canonicalKeyFor(rawItem) },
-            displayNameFor = { rawItem -> displayName(rawItem) }
-        )
+            }
 
-        value = rows.mapNotNull { r ->
-            val appBelt = Belt.fromId(r.beltId) ?: return@mapNotNull null
-            BeltRow(
-                belt = appBelt,
-                percent = r.percent,
-                done = r.done,
-                total = r.total
+            val topicTitles: List<String> = il.kmi.app.domain.ContentRepo
+                .listTopicTitles(belt)
+                .map { topicTitle: String -> topicTitle.trim() }
+                .filter { topicTitle: String -> topicTitle.isNotBlank() }
+
+            for (topicTitle: String in topicTitles) {
+                val directItems: List<String> = SharedContentRepo.getAllItemsFor(
+                    belt = belt,
+                    topicTitle = topicTitle,
+                    subTopicTitle = null
+                )
+                    .map { rawItem: String -> rawItem.trim() }
+                    .filter { rawItem: String -> rawItem.isNotBlank() }
+                    .distinct()
+
+                directItems.forEachIndexed { index: Int, rawItem: String ->
+                    checkKnown(
+                        topicKey = topicTitle,
+                        topicTitle = topicTitle,
+                        index = index,
+                        rawItem = rawItem
+                    )
+                }
+
+                suspend fun addSubTopicLikeSummary(
+                    subTopic: SharedContentRepo.SubTopic
+                ) {
+                    val cleanSubTopicTitle = subTopic.title.trim()
+                    val statusTopicKey = "${topicTitle}__${cleanSubTopicTitle}"
+
+                    val subItems: List<String> = subTopic.items
+                        .map { rawItem: String -> rawItem.trim() }
+                        .filter { rawItem: String -> rawItem.isNotBlank() }
+                        .distinct()
+
+                    subItems.forEachIndexed { index: Int, rawItem: String ->
+                        checkKnown(
+                            topicKey = statusTopicKey,
+                            topicTitle = topicTitle,
+                            index = index,
+                            rawItem = rawItem
+                        )
+                    }
+
+                    subTopic.subTopics.forEach { nestedSubTopic: SharedContentRepo.SubTopic ->
+                        addSubTopicLikeSummary(nestedSubTopic)
+                    }
+                }
+
+                val subTopics: List<SharedContentRepo.SubTopic> =
+                    SharedContentRepo.getSubTopicsFor(
+                        belt = belt,
+                        topicTitle = topicTitle
+                    )
+
+                subTopics.forEach { subTopic: SharedContentRepo.SubTopic ->
+                    addSubTopicLikeSummary(subTopic)
+                }
+            }
+
+            return knownIds.size
+        }
+
+        for (belt in beltsToShow) {
+            var done = 0
+            var total = 0
+
+            val countedStatusIds = mutableSetOf<String>()
+
+            val topicTitles: List<String> = il.kmi.app.domain.ContentRepo
+                .listTopicTitles(belt)
+                .map { topicTitle: String -> topicTitle.trim() }
+                .filter { topicTitle: String -> topicTitle.isNotBlank() }
+
+            for (topicTitle in topicTitles) {
+                val progressRows = mutableListOf<ProgressExerciseRow>()
+
+                val directItems: List<String> = il.kmi.app.domain.ContentRepo.listItemTitles(
+                    belt = belt,
+                    topicTitle = topicTitle,
+                    subTopicTitle = null
+                )
+                    .map { rawItem: String -> rawItem.trim() }
+                    .filter { rawItem: String -> rawItem.isNotBlank() }
+                    .distinct()
+
+                directItems.forEachIndexed { index: Int, rawItem: String ->
+                    progressRows += ProgressExerciseRow(
+                        sourceTopicTitle = topicTitle,
+                        statusTopicKey = topicTitle,
+                        rawItem = rawItem,
+                        indexInStatusGroup = index
+                    )
+                }
+
+                val subTopicTitles: List<String> = il.kmi.app.domain.ContentRepo
+                    .listSubTopicTitles(
+                        belt = belt,
+                        topicTitle = topicTitle
+                    )
+                    .map { subTopicTitle: String -> subTopicTitle.trim() }
+                    .filter { subTopicTitle: String -> subTopicTitle.isNotBlank() }
+
+                for (subTopicTitle in subTopicTitles) {
+                    val subItems: List<String> = il.kmi.app.domain.ContentRepo.listItemTitles(
+                        belt = belt,
+                        topicTitle = topicTitle,
+                        subTopicTitle = subTopicTitle
+                    )
+                        .map { rawItem: String -> rawItem.trim() }
+                        .filter { rawItem: String -> rawItem.isNotBlank() }
+                        .distinct()
+
+                    subItems.forEachIndexed { index: Int, rawItem: String ->
+                        progressRows += ProgressExerciseRow(
+                            sourceTopicTitle = topicTitle,
+                            statusTopicKey = "${topicTitle}__${subTopicTitle}",
+                            rawItem = rawItem,
+                            indexInStatusGroup = index
+                        )
+                    }
+                }
+
+                val uniqueProgressRows: List<ProgressExerciseRow> =
+                    progressRows.distinctBy { row: ProgressExerciseRow ->
+                        row.rawItem
+                            .replace("\u200F", "")
+                            .replace("\u200E", "")
+                            .replace("\u00A0", " ")
+                            .replace(Regex("\\s+"), " ")
+                            .trim()
+                    }
+
+                val snapshotsByStatusTopicKey: Map<String, Map<String, Boolean?>> =
+                    uniqueProgressRows
+                        .map { row: ProgressExerciseRow -> row.statusTopicKey }
+                        .distinct()
+                        .associateWith { statusTopicKey: String ->
+                            vm.getTopicStatusSnapshot(belt, statusTopicKey)
+                        }
+
+                for (row in uniqueProgressRows) {
+                    val rawItem = row.rawItem
+                    val display = displayName(rawItem)
+
+                    val excluded = spSettings.getStringSet(
+                        "excluded_${belt.id}_${row.statusTopicKey}",
+                        emptySet()
+                    ) ?: emptySet()
+
+                    if (rawItem in excluded || display in excluded) {
+                        continue
+                    }
+
+                    val identityStatusId = identityStatusIdFor(
+                        belt = belt,
+                        topicKey = row.statusTopicKey,
+                        topicTitle = row.sourceTopicTitle,
+                        index = row.indexInStatusGroup,
+                        rawItem = rawItem
+                    )
+
+                    if (!countedStatusIds.add("${row.statusTopicKey}::$identityStatusId")) {
+                        continue
+                    }
+
+                    total++
+
+                    val legacyStatusId =
+                        "status_${belt.id}_${row.statusTopicKey}_${row.indexInStatusGroup}_${normalizeStatusPart(rawItem)}"
+
+                    val canonicalId = il.kmi.app.domain.CanonicalIds.canonicalFor(
+                        belt = belt,
+                        topicTitle = row.sourceTopicTitle,
+                        displayItem = rawItem
+                    )
+
+                    val canonicalDisplayKey = canonicalKeyFor(rawItem)
+
+                    val statusKeys = listOf(
+                        identityStatusId,
+                        legacyStatusId,
+                        canonicalId,
+                        rawItem,
+                        display,
+                        canonicalDisplayKey
+                    )
+                        .map { key: String -> key.trim() }
+                        .filter { key: String -> key.isNotBlank() }
+                        .distinct()
+
+                    val topicSnap: Map<String, Boolean?> =
+                        snapshotsByStatusTopicKey[row.statusTopicKey].orEmpty()
+
+                    val summaryTopicSnap: Map<String, Boolean?> =
+                        vm.getTopicStatusSnapshot(
+                            belt = belt,
+                            topic = row.statusTopicKey
+                        )
+
+                    val summaryStatusId = identityStatusIdFor(
+                        belt = belt,
+                        topicKey = row.statusTopicKey,
+                        topicTitle = row.sourceTopicTitle,
+                        index = row.indexInStatusGroup,
+                        rawItem = row.rawItem
+                    )
+
+                    val summaryLegacyStatusId =
+                        "status_${belt.id}_${row.statusTopicKey}_${row.indexInStatusGroup}_${normalizeStatusPart(row.rawItem)}"
+
+                    var summaryValue: Boolean? =
+                        summaryTopicSnap[summaryStatusId] ?: summaryTopicSnap[summaryLegacyStatusId]
+
+                    if (summaryValue == null) {
+                        summaryValue = vm.getItemStatusNullable(
+                            belt = belt,
+                            topic = row.statusTopicKey,
+                            item = summaryStatusId
+                        ) ?: vm.getItemStatusNullable(
+                            belt = belt,
+                            topic = row.statusTopicKey,
+                            item = summaryLegacyStatusId
+                        )
+                    }
+
+                    if (summaryValue == true) {
+                        done++
+                    }
+                }
+            }
+
+            // ✅ לא נוגעים ב-total.
+            // את "יודע" מחשבים באותו מנגנון של מסך הסיכום.
+            done = countKnownLikeSummaryScreen(belt).coerceIn(0, total)
+
+            val percent = if (total > 0) {
+                ((done * 100f) / total).toInt().coerceIn(0, 100)
+            } else {
+                0
+            }
+
+            rows.add(
+                BeltRow(
+                    belt = belt,
+                    percent = percent,
+                    done = done,
+                    total = total
+                )
             )
+        }
+
+            rows
         }
     }
 
@@ -160,42 +500,39 @@ fun ProgressScreen(
         topBar = {
             il.kmi.app.ui.KmiTopBar(
                 title = "מד התקדמות",
-                onBack = onBack,
-                extraActions = {
-                    IconButton(onClick = {
-                        val items = beltsData.map { row ->
-                            il.kmi.shared.report.BeltProgress(
-                                title = beltTitle(row.belt),
-                                percent = row.percent,
-                                colorHex = String.format("#%06X", 0xFFFFFF and row.belt.color.toArgb()),
-                                lightColorHex = String.format("#%06X", 0xFFFFFF and row.belt.lightColor.toArgb())
-                            )
-                        }
-
-                        val html = il.kmi.shared.report.ProgressReport.buildHtml(items)
-                        val pf = il.kmi.shared.Platform.saveTextAsFile(
-                            filename = "progress_report.html",
-                            mimeType = "text/html",
-                            contents = html
-                        )
-
-                        val file = File(pf.path)
-                        val uri = androidx.core.content.FileProvider.getUriForFile(
-                            context,
-                            context.packageName + ".fileprovider",
-                            file
-                        )
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = pf.mimeType
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(Intent.createChooser(shareIntent, "שתף מד התקדמות (HTML)"))
-                    }) {
-                        Icon(Icons.Filled.Share, contentDescription = "שיתוף")
-                    }
-                },
+                onBack = null,
+                onHome = onHome,
+                showTopHome = false,
             )
+        },
+        bottomBar = {
+            if (onOpenCarousel != null) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.Transparent,
+                    shadowElevation = 0.dp
+                ) {
+                    Button(
+                        onClick = onOpenCarousel,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 18.dp, vertical = 10.dp)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1F2937),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(
+                            text = "מעבר למסך התרגילים",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 17.sp
+                        )
+                    }
+                }
+            }
         }
     ) { padding ->
         Surface(
@@ -209,7 +546,30 @@ fun ProgressScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("אין עדיין נתוני התקדמות", fontWeight = FontWeight.SemiBold)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        PremiumProgressLoading()
+
+                        Text(
+                            text = "טוען נתוני התקדמות...",
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF3F3A4A),
+                            textAlign = TextAlign.Center,
+                            fontSize = 19.sp,
+                            lineHeight = 23.sp
+                        )
+
+                        Text(
+                            text = "מסדר את נתוני החגורות שלך",
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF7A7288),
+                            textAlign = TextAlign.Center,
+                            fontSize = 13.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
@@ -234,6 +594,108 @@ fun ProgressScreen(
 }
 
 @Composable
+private fun PremiumProgressLoading() {
+    val infiniteTransition = rememberInfiniteTransition(
+        label = "premiumProgressLoading"
+    )
+
+    val outerRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1350,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumProgressOuterRotation"
+    )
+
+    val innerRotation by infiniteTransition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1850,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumProgressInnerRotation"
+    )
+
+    Box(
+        modifier = Modifier.size(96.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(88.dp)
+                .graphicsLayer {
+                    rotationZ = outerRotation
+                }
+                .border(
+                    width = 5.dp,
+                    brush = Brush.sweepGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xFF7C3AED),
+                            Color(0xFF38BDF8),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = CircleShape
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .size(62.dp)
+                .graphicsLayer {
+                    rotationZ = innerRotation
+                }
+                .border(
+                    width = 4.dp,
+                    brush = Brush.sweepGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xFFF59E0B),
+                            Color(0xFF22C55E),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = CircleShape
+                )
+        )
+
+        Surface(
+            modifier = Modifier.size(26.dp),
+            shape = CircleShape,
+            color = Color.White,
+            shadowElevation = 8.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = Color(0xFFE9D5FF)
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFFFFFFFF),
+                                Color(0xFFF3E8FF),
+                                Color(0xFFE0F2FE)
+                            )
+                        ),
+                        shape = CircleShape
+                    )
+            )
+        }
+    }
+}
+
+@Composable
 private fun ProgressCard(
     belt: Belt,
     percent: Int,
@@ -245,11 +707,22 @@ private fun ProgressCard(
         label = "progressAnim"
     )
 
+    val readableBeltColor = when (belt) {
+        Belt.WHITE -> MaterialTheme.colorScheme.onSurface
+        Belt.BLACK -> MaterialTheme.colorScheme.onSurface
+        else -> belt.color
+    }
+
+    val percentBubbleColor = when (belt) {
+        Belt.WHITE -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f)
+        else -> belt.color.copy(alpha = 0.9f)
+    }
+
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .border(
-                BorderStroke(2.dp, belt.color.copy(alpha = 0.75f)),
+                BorderStroke(2.dp, readableBeltColor.copy(alpha = 0.75f)),
                 shape = RoundedCornerShape(16.dp)
             )
             .clip(RoundedCornerShape(16.dp)),
@@ -267,31 +740,36 @@ private fun ProgressCard(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = belt.color.copy(alpha = 0.9f),
+                    color = percentBubbleColor,
                     contentColor = Color.White,
                     tonalElevation = 2.dp
                 ) {
                     Text(
                         text = "$percent%",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
                     )
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(10.dp))
 
                 Text(
-                    text = "חגורה: ${belt.heb}",
-                    fontWeight = FontWeight.Bold,
-                    color = belt.color
+                    text = "חגורה: ${belt.heb.removePrefix("חגורה").trim()}",
+                    fontWeight = FontWeight.ExtraBold,
+                    color = readableBeltColor,
+                    fontSize = 18.sp,
+                    lineHeight = 21.sp,
+                    textAlign = TextAlign.Right,
+                    modifier = Modifier.weight(1f)
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Box(
                     modifier = Modifier
-                        .size(14.dp)
-                        .background(color = belt.color, shape = CircleShape)
+                        .size(13.dp)
+                        .background(color = readableBeltColor, shape = CircleShape)
                 )
             }
 
@@ -309,14 +787,14 @@ private fun ProgressCard(
                         .fillMaxWidth(progressAnim)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(999.dp))
-                        .background(belt.color)
+                        .background(readableBeltColor)
                 )
             }
 
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = "${percent}% ($done מתוך $total)",
+                text = "($done מתוך $total)",
                 textAlign = TextAlign.Right,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),

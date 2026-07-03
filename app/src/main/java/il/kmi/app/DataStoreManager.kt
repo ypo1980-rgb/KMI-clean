@@ -68,6 +68,9 @@ class DataStoreManager(private val context: Context) {
     // ---------- item key ----------
     private fun normalizeForKey(s: String): String =
         s.lowercase(Locale.ROOT)
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
             .replace(Regex("\\s+"), "_")
             .replace(Regex("[^a-z0-9_.-]"), "_")
 
@@ -75,6 +78,61 @@ class DataStoreManager(private val context: Context) {
         booleanPreferencesKey(
             "itm_${normalizeForKey(belt)}_${normalizeForKey(topic)}_${normalizeForKey(item)}"
         )
+
+    private fun topicAliases(topic: String): List<String> {
+        val clean = topic
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .trim()
+
+        return buildList {
+            add(clean)
+
+            if (clean.isBlank() || clean.equals("כללי", ignoreCase = true)) {
+                add("")
+                add("כללי")
+            }
+        }
+            .map { it.trim() }
+            .distinct()
+    }
+
+    private fun itemAliases(item: String): List<String> {
+        val clean = item
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .trim()
+
+        val afterDoubleColon = if ("::" in clean) {
+            clean.substringAfterLast("::").trim()
+        } else {
+            clean
+        }
+
+        return listOf(
+            clean,
+            afterDoubleColon
+        )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    private fun keysForItem(
+        belt: String,
+        topic: String,
+        item: String
+    ) = topicAliases(topic).flatMap { topicAlias ->
+        itemAliases(item).map { itemAlias ->
+            keyForItem(
+                belt = belt,
+                topic = topicAlias,
+                item = itemAlias
+            )
+        }
+    }.distinct()
 
     // ---------- selected belt ----------
     suspend fun saveSelectedBelt(belt: Belt) {
@@ -90,19 +148,34 @@ class DataStoreManager(private val context: Context) {
 
     // ---------- item mastery API ----------
     suspend fun setItemMastered(belt: Belt, topic: String, item: String, mastered: Boolean) {
-        context.kmiDataStore.edit { it[keyForItem(belt.id, topic, item)] = mastered }
+        context.kmiDataStore.edit { prefs ->
+            keysForItem(belt.id, topic, item).forEach { key ->
+                prefs[key] = mastered
+            }
+        }
     }
 
     suspend fun isItemMastered(belt: Belt, topic: String, item: String): Boolean {
-        return context.kmiDataStore.data.first()[keyForItem(belt.id, topic, item)] ?: false
+        val prefs = context.kmiDataStore.data.first()
+
+        return keysForItem(belt.id, topic, item).any { key ->
+            prefs[key] == true
+        }
     }
 
     suspend fun readItemStatus(belt: Belt, topic: String, item: String): Boolean? {
-        return context.kmiDataStore.data.first()[keyForItem(belt.id, topic, item)]
+        val prefs = context.kmiDataStore.data.first()
+
+        return keysForItem(belt.id, topic, item)
+            .firstNotNullOfOrNull { key -> prefs[key] }
     }
 
     suspend fun clearItemStatus(belt: Belt, topic: String, item: String) {
-        context.kmiDataStore.edit { it.remove(keyForItem(belt.id, topic, item)) }
+        context.kmiDataStore.edit { prefs ->
+            keysForItem(belt.id, topic, item).forEach { key ->
+                prefs.remove(key)
+            }
+        }
     }
 
     // ---------- SMS ----------

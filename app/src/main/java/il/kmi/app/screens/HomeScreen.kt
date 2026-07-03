@@ -35,7 +35,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -72,7 +71,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -89,7 +87,6 @@ import androidx.compose.ui.unit.sp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.database.KmiDatabaseProvider
-import kotlinx.coroutines.delay
 import il.kmi.app.domain.ExerciseExplanationResolver
 
 //=================================================================================
@@ -375,14 +372,8 @@ fun HomeScreen(
 
             var homeAccessRefreshTick by remember { mutableIntStateOf(0) }
 
-            // מרענן את מצב הגישה גם בלי שינוי ב-SharedPreferences,
-            // כדי שכשה-sub_access_until עובר — המנעולים יחזרו לבד.
-            LaunchedEffect(Unit) {
-                while (true) {
-                    delay(30_000L)
-                    homeAccessRefreshTick++
-                }
-            }
+            // מצב הגישה מתרענן דרך SharedPreferences listener.
+            // אין צורך בלולאת רענון קבועה במסך הבית.
 
             DisposableEffect(userSp, subsSp, legacySp) {
                 val listener =
@@ -2359,19 +2350,22 @@ fun HomeScreen(
 
                 Spacer(Modifier.height(1.dp))
 
-                var bubbleOffset by remember { mutableStateOf(0f) }
+                val bubbleTransition = rememberInfiniteTransition(
+                    label = "homeBottomButtonBubbleTransition"
+                )
 
-                LaunchedEffect(Unit) {
-                    while (true) {
-                        animate(
-                            initialValue = -120f,
-                            targetValue = 320f,
-                            animationSpec = tween(2600)
-                        ) { value, _ ->
-                            bubbleOffset = value
-                        }
-                    }
-                }
+                val bubbleOffset by bubbleTransition.animateFloat(
+                    initialValue = -120f,
+                    targetValue = 320f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(
+                            durationMillis = 2600,
+                            easing = LinearEasing
+                        ),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "homeBottomButtonBubbleOffset"
+                )
 
                 Box(
                     modifier = Modifier

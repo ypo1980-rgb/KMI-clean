@@ -720,9 +720,10 @@ fun AdminUsersScreen(
             unlikeQuestions = AdminUsersPreloadCache.unlikeQuestionsSnapshot
             errorMsg = AdminUsersPreloadCache.errorMessageSnapshot
             loading = false
-        } else {
-            loading = true
+            return@LaunchedEffect
         }
+
+        loading = true
 
         val result = AdminUsersPreloadCache.refresh(isEnglish)
 

@@ -183,19 +183,7 @@ fun SettingsScreenModern(
     onOpenProgress: () -> Unit = {},
     onOpenCoachBroadcast: () -> Unit = {},
     onOpenRegistration: () -> Unit = {},         // 👈 כמו שהיה
-    vm: StatsVm = object : StatsVm {
-        override fun getItemStatusNullable(
-            belt: Belt,
-            topic: String,
-            item: String
-        ): Boolean? = null
-
-        override fun isMastered(
-            belt: Belt,
-            topic: String,
-            item: String
-        ): Boolean = false
-    }
+    vm: StatsVm
 ) {
 
     val discardAndExit: () -> Unit = { onBack() }
@@ -2078,46 +2066,6 @@ fun SettingsScreenModern(
             }
 
             // =========================
-            // סטטיסטיקות במסך הגדרות
-            // =========================
-
-            SettingsCard(
-                title = tr("סטטיסטיקות", "Statistics"),
-                subtitle = tr("התקדמות לפי חגורות ונושאים", "Progress by belts and topics"),
-                icon = Icons.Filled.BarChart,
-                iconTint = sectionIconTint
-            ) {
-                // ▼ הצגת הדרגה הנוכחית לפי החגורה מהרישום (קורא גם מ-sp וגם מ-kmi_user)
-                val ctxForBelt = LocalContext.current
-                val currentBelt = remember { readRegisteredBelt(ctxForBelt, sp) }
-
-// ✅ חשוב: קוראים ל-MaterialTheme מחוץ ל-remember
-                val onSurfaceColor = MaterialTheme.colorScheme.onSurface
-
-                val beltTextColor = remember(currentBelt, onSurfaceColor) {
-                    when (currentBelt) {
-                        Belt.WHITE -> onSurfaceColor
-                        Belt.BLACK -> onSurfaceColor
-                        else -> currentBelt.color
-                    }
-                }
-
-                Text(
-                    text = if (isEnglish)
-                        "My current rank: ${currentBelt.id.replaceFirstChar { it.uppercase() }} belt"
-                    else
-                        "דרגתי הנוכחית: חגורה ${currentBelt.heb.removePrefix("חגורה").trim()}",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
-                    color = beltTextColor,
-                    textAlign = textAlignPrimary,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(6.dp))
-                BeltsProgressBars(vm = vm)
-            }
-
-            // =========================
             // ניהול נתונים
             // =========================
 
@@ -2400,121 +2348,11 @@ fun BeltsProgressBars(
     vm: StatsVm,
     modifier: Modifier = Modifier
 ) {
-    val ctx = LocalContext.current
-    val sp  = remember { ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE) }
-    val languageManager = remember { AppLanguageManager(ctx) }
-    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
-    val progressTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-
-    val belts = listOf(Belt.YELLOW, Belt.ORANGE, Belt.GREEN, Belt.BLUE, Belt.BROWN, Belt.BLACK)
-
-    data class Row(val title: String, val pct: Int, val color: Color)
-
-    val rows by produceState(initialValue = emptyList<Row>()) {
-        val out = mutableListOf<Row>()
-        belts.forEach { belt ->
-            val topics = runCatching { il.kmi.app.search.KmiSearchBridge.topicTitlesFor(belt) }
-                .getOrDefault(emptyList())
-
-            var done = 0
-            var total = 0
-
-            topics.forEach { topic ->
-                val items = runCatching { il.kmi.app.search.KmiSearchBridge.itemsFor(belt, topic) }
-                    .getOrDefault(emptyList())
-
-                val excluded = sp.getStringSet("excluded_${belt.id}_${topic}", emptySet()) ?: emptySet()
-
-                items.forEach { item ->
-                    if (item !in excluded) {
-                        total++
-                        val mastered: Boolean? =
-                            runCatching { vm.getItemStatusNullable(belt, topic, item) }.getOrNull()
-                                ?: runCatching { if (vm.isMastered(belt, topic, item)) true else null }.getOrNull()
-                        if (mastered == true) done++
-                    }
-                }
-            }
-
-            val pct = if (total > 0) ((done * 100f) / total).toInt().coerceIn(0, 100) else 0
-            val title = when (belt) {
-                Belt.YELLOW -> if (isEnglish) "Yellow belt" else "חגורה: צהובה"
-                Belt.ORANGE -> if (isEnglish) "Orange belt" else "חגורה: כתומה"
-                Belt.GREEN  -> if (isEnglish) "Green belt" else "חגורה: ירוקה"
-                Belt.BLUE   -> if (isEnglish) "Blue belt" else "חגורה: כחולה"
-                Belt.BROWN  -> if (isEnglish) "Brown belt" else "חגורה: חומה"
-                Belt.BLACK  -> if (isEnglish) "Black belt" else "חגורה: שחורה"
-                else        -> if (isEnglish) "Belt" else "חגורה"
-            }
-            out += Row(title, pct, belt.color)
-        }
-        value = out
-    }
-
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        rows.forEach { row ->
-            // צבע טקסט מיוחד לחגורה שחורה – לפי Theme
-            val textColor =
-                if (row.title.contains("שחורה") || row.title.contains("Black"))
-                    MaterialTheme.colorScheme.onSurface
-                else
-                    row.color
-
-            Column(Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isEnglish) {
-                        Text(
-                            text = row.title,
-                            color = textColor,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = progressTextAlign,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Text(
-                            text = "${row.pct}%",
-                            color = textColor,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Right
-                        )
-                    } else {
-                        Text(
-                            text = "${row.pct}%",
-                            color = textColor,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Left
-                        )
-
-                        Text(
-                            text = row.title,
-                            color = textColor,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = progressTextAlign,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(12.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color.Black.copy(alpha = 0.08f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(row.pct / 100f)
-                            .background(row.color, RoundedCornerShape(999.dp))
-                    )
-                }
-            }
-        }
-    }
+    // סטטיסטיקות הוסרו ממסך ההגדרות.
+    // המסך יעבור למסך ייעודי דרך אייקון בסרגל הגלובלי.
+    vm
+    modifier
+    return
 }
 
 @Composable
@@ -2639,9 +2477,21 @@ private fun registeredRankId(
         spSettings.getString("current_belt", null),
         spSettings.getString("belt_current", null),
         spSettings.getString("belt", null),
+        spSettings.getString("belt_id", null),
+        spSettings.getString("beltColor", null),
+        spSettings.getString("belt_color", null),
+        spSettings.getString("rank", null),
+        spSettings.getString("rank_id", null),
+        spSettings.getString("current_rank", null),
         spUser.getString("current_belt", null),
         spUser.getString("belt_current", null),
-        spUser.getString("belt", null)
+        spUser.getString("belt", null),
+        spUser.getString("belt_id", null),
+        spUser.getString("beltColor", null),
+        spUser.getString("belt_color", null),
+        spUser.getString("rank", null),
+        spUser.getString("rank_id", null),
+        spUser.getString("current_rank", null)
     ).firstOrNull { !it.isNullOrBlank() }
         ?.trim()
         .orEmpty()
@@ -2651,9 +2501,34 @@ private fun readRegisteredBelt(ctx: android.content.Context, spSettings: SharedP
     val spUser = ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
 
     // 1) מזהה חגורה שנשמר בטופס הרישום (למתאמן): "current_belt" ב-sp או "belt_current" ב-kmi_user
-    val idFromSettings = spSettings.getString("current_belt", null)?.trim().orEmpty()
-    val idFromUser     = spUser.getString("belt_current", null)?.trim().orEmpty()
+    val idFromSettings = listOf(
+        "current_belt",
+        "belt_current",
+        "belt",
+        "belt_id",
+        "beltColor",
+        "belt_color",
+        "rank",
+        "rank_id",
+        "current_rank"
+    ).firstNotNullOfOrNull { key ->
+        spSettings.getString(key, null)?.trim()?.takeIf { it.isNotBlank() }
+    }.orEmpty()
 
+    val idFromUser = listOf(
+        "current_belt",
+        "belt_current",
+        "belt",
+        "belt_id",
+        "beltColor",
+        "belt_color",
+        "rank",
+        "rank_id",
+        "current_rank"
+    ).firstNotNullOfOrNull { key ->
+        spUser.getString(key, null)?.trim()?.takeIf { it.isNotBlank() }
+    }.orEmpty()
+    
     // 2) שדות טקסטואליים נפוצים (עברית/אנגלית) – אם מישהו שמר את שם החגורה ולא מזהה
     val rawText = listOf(
         "belt", "belt_id", "beltColor", "belt_color",

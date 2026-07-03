@@ -97,8 +97,93 @@ object ContentRepo {
 
     fun listBeltsInOrder(): List<Belt> = Belt.order
 
-    fun listTopicTitles(belt: Belt): List<String> =
-        SharedContentRepo.data[belt]?.topics?.map { it.title }.orEmpty()
+    fun listTopicTitles(belt: Belt): List<String> {
+        initIfNeeded()
+
+        val cls = SharedContentRepo::class.java
+
+        val directResult = runCatching {
+            val method = cls.methods.firstOrNull { method ->
+                method.name in listOf(
+                    "listTopicTitles",
+                    "getTopicTitles",
+                    "topicTitlesFor",
+                    "topicsForBelt"
+                ) && method.parameterTypes.size == 1
+            } ?: return@runCatching emptyList<String>()
+
+            val result = method.invoke(SharedContentRepo, belt)
+
+            when (result) {
+                is Iterable<*> -> result.mapNotNull { item ->
+                    item?.toString()?.trim()?.takeIf { it.isNotBlank() }
+                }
+
+                is Array<*> -> result.mapNotNull { item ->
+                    item?.toString()?.trim()?.takeIf { it.isNotBlank() }
+                }
+
+                else -> emptyList()
+            }
+        }.getOrElse {
+            emptyList()
+        }
+
+        if (directResult.isNotEmpty()) {
+            return directResult.distinct()
+        }
+
+        val dataValue = runCatching {
+            cls.methods.firstOrNull { method ->
+                method.name == "getData" && method.parameterTypes.isEmpty()
+            }?.invoke(SharedContentRepo)
+        }.getOrNull()
+
+        val beltData = when (dataValue) {
+            is Map<*, *> -> dataValue[belt] ?: dataValue[belt.id] ?: dataValue[belt.name]
+            else -> null
+        } ?: return emptyList()
+
+        val topicsValue = runCatching {
+            beltData.javaClass.methods.firstOrNull { method ->
+                method.name in listOf("getTopics", "topics") && method.parameterTypes.isEmpty()
+            }?.invoke(beltData)
+        }.getOrNull()
+
+        return when (topicsValue) {
+            is Iterable<*> -> topicsValue.mapNotNull { topic ->
+                runCatching {
+                    topic
+                        ?.javaClass
+                        ?.methods
+                        ?.firstOrNull { method ->
+                            method.name in listOf("getTitle", "title") && method.parameterTypes.isEmpty()
+                        }
+                        ?.invoke(topic)
+                        ?.toString()
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                }.getOrNull()
+            }
+
+            is Array<*> -> topicsValue.mapNotNull { topic ->
+                runCatching {
+                    topic
+                        ?.javaClass
+                        ?.methods
+                        ?.firstOrNull { method ->
+                            method.name in listOf("getTitle", "title") && method.parameterTypes.isEmpty()
+                        }
+                        ?.invoke(topic)
+                        ?.toString()
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                }.getOrNull()
+            }
+
+            else -> emptyList()
+        }.distinct()
+    }
 
     fun listSubTopicTitles(belt: Belt, topicTitle: String): List<String> =
         SharedContentRepo.getSubTopicTitles(belt, topicTitle)
@@ -120,12 +205,63 @@ object ContentRepo {
     ): String? =
         SharedContentRepo.findSubTopicTitleForItem(belt, topicTitle, itemTitle)
 
-    fun searchExercises(query: String): List<SearchHit> =
-        SharedContentRepo.searchExercises(query).map {
-            SearchHit(
-                id = it.id,
-                title = it.title,
-                subtitle = it.subtitle
-            )
+    private fun readStringProperty(
+        target: Any?,
+        names: List<String>
+    ): String {
+        if (target == null) return ""
+
+        return names.firstNotNullOfOrNull { name ->
+            runCatching {
+                target
+                    .javaClass
+                    .methods
+                    .firstOrNull { method ->
+                        method.name == name && method.parameterTypes.isEmpty()
+                    }
+                    ?.invoke(target)
+                    ?.toString()
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+            }.getOrNull()
+        }.orEmpty()
+    }
+
+    fun searchExercises(query: String): List<SearchHit> {
+        initIfNeeded()
+
+        val rawResults: Any? = runCatching<Any?> {
+            SharedContentRepo.searchExercises(query)
+        }.getOrNull()
+
+        val items: List<Any?> = when (rawResults) {
+            is Iterable<*> -> rawResults.toList()
+            is Array<*> -> rawResults.toList()
+            null -> emptyList()
+            else -> listOf(rawResults)
         }
+
+        return items.mapNotNull { item ->
+            val title = readStringProperty(
+                target = item,
+                names = listOf("getTitle", "title")
+            )
+
+            if (title.isBlank()) {
+                null
+            } else {
+                SearchHit(
+                    id = readStringProperty(
+                        target = item,
+                        names = listOf("getId", "id")
+                    ).ifBlank { null },
+                    title = title,
+                    subtitle = readStringProperty(
+                        target = item,
+                        names = listOf("getSubtitle", "subtitle")
+                    ).ifBlank { null }
+                )
+            }
+        }
+    }
 }

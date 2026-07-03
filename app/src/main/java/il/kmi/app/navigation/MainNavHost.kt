@@ -233,31 +233,9 @@ fun MainNavHost(
     // מונע שני ניווטים רצופים אל אותו מסך כניסה בגלל recomposition / Activity recreation
     var entryNavigationLocked by remember { mutableStateOf(false) }
 
-// ✅ PRELOAD רשימת מתאמנים כבר בהפעלת האפליקציה
-    LaunchedEffect(Unit) {
-        try {
-            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-
-            val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                ?: return@LaunchedEffect
-
-            // ✅ לא מריצים preload עבור משתמש אנונימי.
-            // זה מונע קריאות Firestore וניווטים עקיפים לפני התחברות אמיתית.
-            if (authUser.isAnonymous) {
-                return@LaunchedEffect
-            }
-
-            val uid = authUser.uid
-
-            // טוען מראש את המתאמנים של המאמן
-            db.collection("users")
-                .whereEqualTo("coachUid", uid)
-                .limit(200)
-                .get()
-        } catch (_: Exception) {
-            // preload בלבד – לא מפריע אם נכשל
-        }
-    }
+// ✅ לא מבצעים preload גלובלי בעליית האפליקציה.
+// רשימת המתאמנים נטענת רק בכניסה למסך CoachTraineesScreen,
+// כדי לא להעמיס על כל המסכים ועל תגובת הלחיצות.
 
     // ✅ Training Summary VM + exercises list (מחשבים Role מ־SharedPreferences כדי לא להיות תלויים ב־Flow)
     val isCoach = remember {
@@ -869,6 +847,7 @@ fun MainNavHost(
             // --- NEW: Settings graph ---
             settingsNavGraph(
                 nav = nav,
+                vm = vm,
                 sp = sp,
                 kmiPrefs = kmiPrefs,
                 themeMode = themeMode,

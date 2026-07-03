@@ -17,7 +17,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -88,9 +88,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Density
 import il.kmi.app.ui.assistant.ui.AiAssistantDialog
-import il.kmi.shared.domain.content.English.ExerciseTitlesEnAliases
-import il.kmi.shared.domain.content.English.ExerciseTitlesEnItems
-import il.kmi.shared.domain.content.English.ExerciseTitlesEnTopics
 
 //===============================================================================
 
@@ -150,6 +147,7 @@ fun KmiTopBar(
     onHome: (() -> Unit)? = null,
     onSearch: (() -> Unit)? = null,
     onSettings: (() -> Unit)? = null,
+    onOpenProgress: (() -> Unit)? = null,
     onToggleLanguage: (() -> Unit)? = null,
     currentLang: String = "he",
     showMenu: Boolean = true,
@@ -434,7 +432,7 @@ fun KmiTopBar(
 
     // ✅ טור האייקונים נפתח כ-overlay מעל המסך,
     // לכן ה-TopBar עצמו נשאר בגובה הכותרת בלבד.
-    val quickActionsWidth = 58.dp
+    val quickActionsWidth = 68.dp
 
     // Back בטוח
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
@@ -662,12 +660,7 @@ fun KmiTopBar(
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 color = Color(0xFF111827),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .basicMarquee(
-                        iterations = Int.MAX_VALUE,
-                        velocity = 30.dp
-                    )
+                modifier = Modifier.fillMaxWidth()
             )
         }
 
@@ -883,32 +876,50 @@ fun KmiTopBar(
                                     }
                                 )
 
-                                VerticalQuickActionItem(
-                                    icon = Icons.Filled.Settings,
-                                    label = if (isEnglish) "Settings" else "הגדרות",
-                                    tint = Color(0xFFF59E0B),
-                                    background = Color(0x1AF59E0B),
-                                    enabled = showSettingsAllowed,
-                                    onClick = {
-                                        quickActionsExpanded = false
-                                        focusManager.clearFocus(force = true)
-                                        DrawerBridge.openSettings()
-                                    }
-                                )
-
-                                VerticalQuickActionItem(
-                                    icon = Icons.Filled.Lightbulb,
-                                    label = if (isEnglish) "AI" else "עוזר",
-                                    tint = Color(0xFF8B5CF6),
-                                    background = Color(0x1A8B5CF6),
-                                    enabled = !isInsideAssistant,
-                                    onClick = {
-                                        if (!isInsideAssistant) {
+                                    VerticalQuickActionItem(
+                                        icon = Icons.Filled.Settings,
+                                        label = if (isEnglish) "Settings" else "הגדרות",
+                                        tint = Color(0xFFF59E0B),
+                                        background = Color(0x1AF59E0B),
+                                        enabled = showSettingsAllowed,
+                                        onClick = {
                                             quickActionsExpanded = false
-                                            showAiDialog = true
+                                            focusManager.clearFocus(force = true)
+                                            DrawerBridge.openSettings()
                                         }
-                                    }
-                                )
+                                    )
+
+                                    VerticalQuickActionItem(
+                                        icon = Icons.Filled.BarChart,
+                                        label = if (isEnglish) "Stats" else "סטטיסטיקה",
+                                        tint = Color(0xFF0EA5E9),
+                                        background = Color(0x1A0EA5E9),
+                                        enabled = true,
+                                        onClick = {
+                                            quickActionsExpanded = false
+                                            focusManager.clearFocus(force = true)
+
+                                            if (onOpenProgress != null) {
+                                                onOpenProgress()
+                                            } else {
+                                                DrawerBridge.openProgress()
+                                            }
+                                        }
+                                    )
+
+                                    VerticalQuickActionItem(
+                                        icon = Icons.Filled.Lightbulb,
+                                        label = if (isEnglish) "AI" else "עוזר",
+                                        tint = Color(0xFF8B5CF6),
+                                        background = Color(0x1A8B5CF6),
+                                        enabled = !isInsideAssistant,
+                                        onClick = {
+                                            if (!isInsideAssistant) {
+                                                quickActionsExpanded = false
+                                                showAiDialog = true
+                                            }
+                                        }
+                                    )
 
                                 VerticalQuickActionItem(
                                     icon = Icons.Filled.Share,
@@ -1079,24 +1090,6 @@ fun KmiTopBar(
                 fun addEnglishHebrewVariants() {
                     if (!isEnglish) return
 
-                    fun addIfMatch(hebrew: String, english: String) {
-                        if (englishWordsMatch(english)) {
-                            add(hebrew)
-                        }
-                    }
-
-                    ExerciseTitlesEnItems.map.forEach { (hebrew, english) ->
-                        addIfMatch(hebrew, english)
-                    }
-
-                    ExerciseTitlesEnAliases.map.forEach { (hebrew, english) ->
-                        addIfMatch(hebrew, english)
-                    }
-
-                    ExerciseTitlesEnTopics.map.forEach { (hebrew, english) ->
-                        addIfMatch(hebrew, english)
-                    }
-
                     val qLower = cleanForMatch(q)
 
                     when {
@@ -1217,33 +1210,6 @@ fun KmiTopBar(
             }
 
             fun translatedTitleForSearchUi(rawTitle: String): String {
-                if (!isEnglish) return rawTitle
-
-                val clean = normalizeForGlobalSearch(rawTitle)
-
-                ExerciseTitlesEnItems.map[clean]?.let { return it }
-                ExerciseTitlesEnAliases.map[clean]?.let { return it }
-                ExerciseTitlesEnTopics.map[clean]?.let { return it }
-
-                val normalizedItems =
-                    ExerciseTitlesEnItems.map.entries.associateBy {
-                        normalizeForGlobalSearch(it.key)
-                    }
-
-                val normalizedAliases =
-                    ExerciseTitlesEnAliases.map.entries.associateBy {
-                        normalizeForGlobalSearch(it.key)
-                    }
-
-                val normalizedTopics =
-                    ExerciseTitlesEnTopics.map.entries.associateBy {
-                        normalizeForGlobalSearch(it.key)
-                    }
-
-                normalizedItems[clean]?.value?.let { return it }
-                normalizedAliases[clean]?.value?.let { return it }
-                normalizedTopics[clean]?.value?.let { return it }
-
                 return rawTitle
             }
 
@@ -1409,17 +1375,32 @@ fun KmiTopBar(
                     }
                 }
 
+                fun hardItemsForSearchGroup(
+                    group: il.kmi.shared.domain.content.HardSectionsResolver.BeltItems
+                ): List<String> {
+                    val rawItems: Any? = group.items
+
+                    return when (rawItems) {
+                        is Iterable<*> -> rawItems
+                            .mapNotNull { item: Any? -> item?.toString()?.trim() }
+
+                        is Array<*> -> rawItems
+                            .mapNotNull { item: Any? -> item?.toString()?.trim() }
+
+                        else -> listOfNotNull(rawItems?.toString()?.trim())
+                    }
+                        .filter { item: String -> item.isNotBlank() }
+                        .distinct()
+                }
+
                 fun resultFromGroup(
                     group: il.kmi.shared.domain.content.HardSectionsResolver.BeltItems
                 ): List<UiSearchResult> {
                     val beltLabel = beltLabelForHardResult(group.belt)
                     val topicLabel = if (isEnglish) "Knife defenses" else "הגנות מסכין"
 
-                    return group.items
-                        .asSequence()
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                        .filter { itemTitle ->
+                    return hardItemsForSearchGroup(group)
+                        .filter { itemTitle: String ->
                             matchesGlobalSearchTitle(
                                 title = itemTitle,
                                 variants = variants
@@ -1429,15 +1410,13 @@ fun KmiTopBar(
                                     normalizeForGlobalSearch(itemTitle)
                                         .contains("knife", ignoreCase = true)
                         }
-                        .distinct()
-                        .map { itemTitle ->
+                        .map { itemTitle: String ->
                             UiSearchResult(
                                 id = "${group.belt.id}::הגנות מסכין::$itemTitle",
                                 title = translatedTitleForSearchUi(itemTitle),
                                 subtitle = "$beltLabel • $topicLabel"
                             )
                         }
-                        .toList()
                 }
 
                 fun flattenSections(
@@ -1454,7 +1433,9 @@ fun KmiTopBar(
                             }.getOrNull()
                         ) {
                             is il.kmi.shared.domain.content.HardSectionsResolver.NodeResult.BeltGroups -> {
-                                nested.groups.flatMap { group -> resultFromGroup(group) }
+                                nested.groups.flatMap { group: il.kmi.shared.domain.content.HardSectionsResolver.BeltItems ->
+                                    resultFromGroup(group)
+                                }
                             }
 
                             is il.kmi.shared.domain.content.HardSectionsResolver.NodeResult.Sections -> {
@@ -1468,7 +1449,9 @@ fun KmiTopBar(
 
                 return when (resolved) {
                     is il.kmi.shared.domain.content.HardSectionsResolver.NodeResult.BeltGroups -> {
-                        resolved.groups.flatMap { group -> resultFromGroup(group) }
+                        resolved.groups.flatMap { group: il.kmi.shared.domain.content.HardSectionsResolver.BeltItems ->
+                            resultFromGroup(group)
+                        }
                     }
 
                     is il.kmi.shared.domain.content.HardSectionsResolver.NodeResult.Sections -> {
@@ -1532,47 +1515,25 @@ fun KmiTopBar(
                 }
             }
 
-            val explanationSearchRows = remember {
-                il.kmi.app.domain.Explanations.auditKnownExerciseExplanations()
-            }
-
-            val results = remember(globalSearchQuery, explanationSearchRows, isEnglish) {
+            val results: List<UiSearchResult> = remember(globalSearchQuery, isEnglish) {
                 val query = globalSearchQuery.trim()
 
                 if (query.length < 2) {
                     emptyList()
                 } else {
-                    val variants = normalizedSearchVariants(query)
+                    val variants: List<String> = normalizedSearchVariants(query)
 
-                    val directExplanationResults =
+                    val directExplanationResults: List<UiSearchResult> =
                         directExplanationSideKickDefenseResults(query)
 
-                    val explanationResults = explanationSearchRows
-                        .filter { row ->
-                            matchesGlobalSearchTitle(
-                                title = row.title,
-                                variants = variants
-                            )
-                        }
-                        .map { row ->
-                            UiSearchResult(
-                                id = row.exerciseId,
-                                title = translatedTitleForSearchUi(row.title),
-                                subtitle = searchSubtitleFromResolvedKey(
-                                    rawKey = row.exerciseId,
-                                    fallbackBeltName = row.belt.name
-                                )
-                            )
-                        }
-
-                    val hardSectionResults =
+                    val hardSectionResults: List<UiSearchResult> =
                         hardSectionSearchResultsForQuery(
                             query = query,
                             variants = variants
                         )
 
-                    val bridgeResults = variants
-                        .flatMap { variant ->
+                    val bridgeResults: List<UiSearchResult> = variants
+                        .flatMap { variant: String ->
                             runCatching {
                                 KmiSearchBridge.searchExercises(variant)
                             }.getOrElse {
@@ -1596,10 +1557,9 @@ fun KmiTopBar(
                     (
                             directExplanationResults +
                                     hardSectionResults +
-                                    explanationResults +
                                     bridgeResults
                             )
-                        .distinctBy { hit ->
+                        .distinctBy { hit: UiSearchResult ->
                             normalizeForGlobalSearch(hit.title)
                         }
                 }
@@ -1895,24 +1855,18 @@ fun KmiTopBar(
                                                     val resolved =
                                                         il.kmi.app.domain.ContentRepo.resolveItemKey(rawKey)
 
-                                                    val auditRow = explanationSearchRows.firstOrNull { row ->
-                                                        row.exerciseId == rawKey || row.title == cleanTitle
-                                                    }
-
                                                     val dialogBelt =
                                                         resolved?.belt
-                                                            ?: auditRow?.belt
                                                             ?: il.kmi.shared.domain.Belt.GREEN
 
                                                     val dialogTitle =
                                                         resolved?.itemTitle
-                                                            ?: auditRow?.title
                                                             ?: cleanTitle.ifBlank { rawKey }
 
                                                     val explanation = il.kmi.app.domain.Explanations.get(
                                                         belt = dialogBelt,
                                                         item = dialogTitle,
-                                                        exerciseId = auditRow?.exerciseId
+                                                        exerciseId = rawKey
                                                     )
 
                                                     val stableKey = if (resolved != null) {
@@ -2565,7 +2519,7 @@ private fun IconsRailAttachedHandle(
 
     Surface(
         modifier = Modifier
-            .size(width = 40.dp, height = 28.dp)
+            .size(width = 48.dp, height = 28.dp)
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale

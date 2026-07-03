@@ -5,6 +5,7 @@ package il.kmi.app.screens.coach
 import android.app.Application
 import android.content.Context
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -990,6 +991,115 @@ private fun PremiumCoachDatePickerDialog(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PremiumCoachLoading() {
+    val infiniteTransition = rememberInfiniteTransition(
+        label = "premiumCoachLoading"
+    )
+
+    val outerRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1350,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumCoachOuterRotation"
+    )
+
+    val innerRotation by infiniteTransition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1850,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumCoachInnerRotation"
+    )
+
+    Box(
+        modifier = Modifier.size(82.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(76.dp)
+                .graphicsLayer {
+                    rotationZ = outerRotation
+                }
+                .border(
+                    width = 5.dp,
+                    brush = Brush.sweepGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xFFA78BFA),
+                            Color(0xFF38BDF8),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = CircleShape
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .graphicsLayer {
+                    rotationZ = innerRotation
+                }
+                .border(
+                    width = 4.dp,
+                    brush = Brush.sweepGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xFFF59E0B),
+                            Color(0xFF22C55E),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = CircleShape
+                )
+        )
+
+        Surface(
+            modifier = Modifier.size(25.dp),
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.96f),
+            shadowElevation = 8.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.42f)
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.White,
+                                Color(0xFFEDE9FE),
+                                Color(0xFFE0F2FE)
+                            )
+                        ),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "👥",
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }
@@ -2359,19 +2469,22 @@ fun CoachTraineesScreen(
         },
         bottomBar = {
             if (!showStatsSheet && !isKeyboardVisible) {
-                var statsBubbleOffset by remember { mutableStateOf(0f) }
+                val statsBubbleTransition = rememberInfiniteTransition(
+                    label = "coachStatsBubbleTransition"
+                )
 
-                LaunchedEffect(Unit) {
-                    while (true) {
-                        androidx.compose.animation.core.animate(
-                            initialValue = -120f,
-                            targetValue = 320f,
-                            animationSpec = androidx.compose.animation.core.tween(2600)
-                        ) { value, _ ->
-                            statsBubbleOffset = value
-                        }
-                    }
-                }
+                val statsBubbleOffset by statsBubbleTransition.animateFloat(
+                    initialValue = -120f,
+                    targetValue = 320f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(
+                            durationMillis = 2600,
+                            easing = FastOutSlowInEasing
+                        ),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "coachStatsBubbleOffset"
+                )
 
                 Box(
                     modifier = Modifier
@@ -2707,13 +2820,13 @@ fun CoachTraineesScreen(
 
                                     isProfilesLoading || isInitialServerSyncRunning || !didFinishInitialProfilesLoad -> {
                                         Column(
-                                            modifier = Modifier.fillMaxWidth(),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 8.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
-                                            LinearProgressIndicator(
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                            PremiumCoachLoading()
 
                                             Text(
                                                 text = coachTr(
@@ -2721,9 +2834,28 @@ fun CoachTraineesScreen(
                                                     "טוען מתאמנים מהשרת...",
                                                     "Loading trainees from the server..."
                                                 ),
-                                                color = Color.White.copy(alpha = 0.82f),
+                                                color = Color.White.copy(alpha = 0.88f),
                                                 textAlign = TextAlign.Center,
-                                                style = MaterialTheme.typography.bodySmall
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    fontSize = 15.sp,
+                                                    lineHeight = 18.sp
+                                                ),
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
+
+                                            Text(
+                                                text = coachTr(
+                                                    isEnglish,
+                                                    "מסדר את נתוני הסניף והקבוצה",
+                                                    "Preparing branch and group data"
+                                                ),
+                                                color = Color.White.copy(alpha = 0.60f),
+                                                textAlign = TextAlign.Center,
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    fontSize = 11.sp,
+                                                    lineHeight = 13.sp
+                                                ),
+                                                fontWeight = FontWeight.SemiBold
                                             )
                                         }
                                     }

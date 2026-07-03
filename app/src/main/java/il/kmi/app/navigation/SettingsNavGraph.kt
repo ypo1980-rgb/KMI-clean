@@ -12,10 +12,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.navigation.compose.composable
 import il.kmi.app.Route
-import il.kmi.app.DataStoreManager
-import il.kmi.app.StatsVm
 import il.kmi.app.screens.SettingsScreenModern
-import kotlinx.coroutines.runBlocking
 
 /**
  * גרף למסכי ההגדרות.
@@ -23,6 +20,7 @@ import kotlinx.coroutines.runBlocking
  */
 fun NavGraphBuilder.settingsNavGraph(
     nav: NavHostController,
+    vm: il.kmi.app.KmiViewModel,
     sp: SharedPreferences,
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs,
     themeMode: String,
@@ -62,36 +60,6 @@ fun NavGraphBuilder.settingsNavGraph(
             ctx.getSharedPreferences("kmi_training_summary", android.content.Context.MODE_PRIVATE)
         }
 
-        // ✅ VM הראשי שלך (מה שאתה כבר משתמש בו בשאר האפליקציה)
-        val kmiVm: il.kmi.app.KmiViewModel = viewModel(
-            factory = il.kmi.app.KmiViewModelFactory(
-                dataStoreManager = DataStoreManager(context = ctx),
-                spTrainingSummary = spTrainingSummary
-            )
-        )
-
-        // ✅ Adapter: KmiViewModel -> StatsVm (מה ש-SettingsScreenModern מצפה לו)
-        val statsVm: StatsVm = remember(kmiVm) {
-            object : StatsVm {
-
-                override fun getItemStatusNullable(
-                    belt: il.kmi.shared.domain.Belt,
-                    topic: String,
-                    item: String
-                ): Boolean? = runBlocking {
-                    runCatching { kmiVm.getItemStatusNullable(belt, topic, item) }.getOrNull()
-                }
-
-                override fun isMastered(
-                    belt: il.kmi.shared.domain.Belt,
-                    topic: String,
-                    item: String
-                ): Boolean = runBlocking {
-                    runCatching { kmiVm.isMastered(belt, topic, item) }.getOrDefault(false)
-                }
-            }
-        }
-
         SettingsScreenModern(
             sp = sp,
             kmiPrefs = kmiPrefs,
@@ -111,7 +79,7 @@ fun NavGraphBuilder.settingsNavGraph(
             onOpenProgress = { nav.navigate(Route.Progress.route) },
             onOpenCoachBroadcast = { nav.navigate(Route.CoachBroadcast.route) },
 
-            vm = statsVm
+            vm = vm
         )
     }
 }

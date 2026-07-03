@@ -18,7 +18,22 @@ fun NavGraphBuilder.progressNavGraph(
     composable(Route.Progress.route) {
         ProgressScreen(
             vm = vm,
-            onBack = { nav.popBackStack() }
+            onBack = { nav.popBackStack() },
+            onHome = {
+                nav.navigate(Route.Home.route) {
+                    launchSingleTop = true
+                    restoreState = false
+                    popUpTo(nav.graph.startDestinationId) {
+                        inclusive = false
+                    }
+                }
+            },
+            onOpenCarousel = {
+                nav.navigate(Route.BeltQ.route) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
         )
     }
 }

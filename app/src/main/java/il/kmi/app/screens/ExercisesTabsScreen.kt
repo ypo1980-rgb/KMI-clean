@@ -236,6 +236,17 @@ fun ExercisesTabsScreen(
             .replace(Regex("\\s+"), " ")
             .trim()
 
+    fun formattedExerciseTitle(raw: String): String {
+        val formatted = ExerciseTitleFormatter
+            .displayName(raw)
+            .toString()
+            .trim()
+
+        return formatted
+            .takeIf { value: String -> value.isNotBlank() && value != "null" }
+            ?: raw.trim()
+    }
+
     fun noteKeyFor(raw: String): String = "note_${belt.id}_${normalizeItemId(raw)}"
 
     fun loadNote(raw: String): String =
@@ -314,9 +325,7 @@ fun ExercisesTabsScreen(
     fun unknownCandidateIdsFor(raw: String): Set<String> {
         val tp = topicForRawItem(raw)
         val cleanId = normalizeItemId(raw)
-        val displayName = ExerciseTitleFormatter.displayName(raw)
-            .ifBlank { raw.trim() }
-            .trim()
+        val displayName = formattedExerciseTitle(raw)
 
         val canonicalFromRaw = CanonicalIds.canonicalFor(belt, tp, raw)
         val canonicalFromClean = CanonicalIds.canonicalFor(belt, tp, cleanId)
@@ -336,7 +345,7 @@ fun ExercisesTabsScreen(
         val candidates = unknownCandidateIdsFor(raw)
         val cleanRaw = normalizeStatusPart(raw)
         val cleanDisplay = normalizeStatusPart(
-            ExerciseTitleFormatter.displayName(raw).ifBlank { raw.trim() }
+            formattedExerciseTitle(raw)
         )
 
         return unknowns.any { storedRaw ->
@@ -378,7 +387,7 @@ fun ExercisesTabsScreen(
           ) {
               val cleanRaw = normalizeStatusPart(raw)
               val cleanDisplay = normalizeStatusPart(
-                  ExerciseTitleFormatter.displayName(raw).ifBlank { raw.trim() }
+                  formattedExerciseTitle(raw)
               )
 
               setToClean.remove(cleanId)
@@ -690,9 +699,9 @@ fun ExercisesTabsScreen(
             }
 
 // ✅ מפת “raw -> display” אחת, שמשמשת לכל ה-UI
-            val displayByRaw = remember(filtered) {
-                filtered.associateWith { raw ->
-                    ExerciseTitleFormatter.displayName(raw).ifBlank { raw.trim() }
+            val displayByRaw: Map<String, String> = remember(filtered) {
+                filtered.associateWith { raw: String ->
+                    formattedExerciseTitle(raw)
                 }
             }
 
@@ -791,8 +800,7 @@ fun ExercisesTabsScreen(
         // ===== דיאלוג הסבר (לחיצה על שורה או אייקון info ברשימה) =====
         explainFromSearch?.let { item ->
 
-            val displayName = ExerciseTitleFormatter.displayName(item)
-                .ifBlank { item.trim() }
+            val displayName = formattedExerciseTitle(item)
 
             LaunchedEffect(item) {
                 KmiTtsManager.init(ctx)

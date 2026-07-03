@@ -430,13 +430,8 @@ fun BeltQuestionsByTopicScreen(
         }
     }
 
-    // מרענן מצב גישה גם בלי שינוי ב-SharedPreferences.
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(30_000L)
-            accessRefreshTick++
-        }
-    }
+    // מצב הגישה מתרענן דרך SharedPreferences listener
+    // וגם דרך ON_RESUME כשחוזרים ממסך רכישה / מנוי.
 
     DisposableEffect(userSp, subsSp, legacySp) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->

@@ -35,14 +35,14 @@ fun search(query: String, belt: Belt? = null): List<AppSearchHit> {
 
 /** ממשק מינימלי שמסך ההגדרות החדש משתמש בו לסטטיסטיקות */
 interface StatsVm {
-    fun getItemStatusNullable(belt: Belt, topic: String, item: String): Boolean?
-    fun isMastered(belt: Belt, topic: String, item: String): Boolean
+    suspend fun getItemStatusNullable(belt: Belt, topic: String, item: String): Boolean?
+    suspend fun isMastered(belt: Belt, topic: String, item: String): Boolean
 }
 
 class KmiViewModel(
     private val ds: DataStoreManager,
     private val trainingSummaryLocalRepo: TrainingSummaryLocalRepo, // ✅ NEW
-) : ViewModel() {
+) : ViewModel(), StatsVm {
 
     private val _selectedBelt = MutableStateFlow<Belt?>(null)
     val selectedBelt: StateFlow<Belt?> = _selectedBelt.asStateFlow()
@@ -134,7 +134,7 @@ class KmiViewModel(
     }
 
     /** קבלת מצב של פריט (Nullable: true/false/null) */
-    suspend fun getItemStatusNullable(belt: Belt, topic: String, item: String): Boolean? {
+    override suspend fun getItemStatusNullable(belt: Belt, topic: String, item: String): Boolean? {
         val t = canonicalTopicKey(topic)
 
         // cache
@@ -152,7 +152,7 @@ class KmiViewModel(
     }
 
     /** בדיקה אם פריט נלמד (ברירת מחדל = false) */
-    suspend fun isMastered(belt: Belt, topic: String, item: String): Boolean {
+    override suspend fun isMastered(belt: Belt, topic: String, item: String): Boolean {
         val t = canonicalTopicKey(topic)
         return ds.isItemMastered(belt, t, item)
     }
@@ -251,45 +251,98 @@ class KmiViewModel(
     private fun getCatalogEntriesForBelt(belt: Belt): List<CatalogEntry> {
         val out = mutableListOf<CatalogEntry>()
 
-        val topicTitles = CatalogRepo.listTopicTitles(belt)
+        val topicTitles: List<String> = runCatching<List<String>> {
+            il.kmi.app.domain.ContentRepo
+                .listTopicTitles(belt)
+                .map { topicTitle: String -> topicTitle.trim() }
+                .filter { topicTitle: String -> topicTitle.isNotBlank() }
+        }.getOrElse {
+            emptyList()
+        }
+
         if (topicTitles.isEmpty()) return emptyList()
 
-        for (topicTitle in topicTitles) {
-            val topic = CatalogRepo.findTopic(belt, topicTitle) ?: continue
-            val subs = topic.subTopics
+        for (topicTitle: String in topicTitles) {
+            val directItems: List<String> = runCatching<List<String>> {
+                il.kmi.app.domain.ContentRepo.listItemTitles(
+                    belt = belt,
+                    topicTitle = topicTitle,
+                    subTopicTitle = null
+                )
+            }.getOrElse {
+                emptyList()
+            }
 
-            if (subs.isNotEmpty()) {
-                for (st in subs) {
-                    val subTitle = st.title
-                    for (raw in st.items) {
-                        out += CatalogEntry(
-                            topicTitle = topicTitle,
-                            subTopicTitle = subTitle,
-                            rawItem = raw,
-                            displayItem = normalizeCatalogItem(raw)
-                        )
-                    }
-                }
-            } else {
-                for (raw in topic.items) {
+            directItems
+                .map { rawItem: String -> rawItem.trim() }
+                .filter { rawItem: String -> rawItem.isNotBlank() }
+                .distinct()
+                .forEach { rawItem: String ->
                     out += CatalogEntry(
                         topicTitle = topicTitle,
                         subTopicTitle = null,
-                        rawItem = raw,
-                        displayItem = normalizeCatalogItem(raw)
+                        rawItem = rawItem,
+                        displayItem = normalizeCatalogItem(rawItem)
                     )
                 }
+
+            val subTopicTitles: List<String> = runCatching<List<String>> {
+                il.kmi.app.domain.ContentRepo
+                    .listSubTopicTitles(
+                        belt = belt,
+                        topicTitle = topicTitle
+                    )
+                    .map { subTopicTitle: String -> subTopicTitle.trim() }
+                    .filter { subTopicTitle: String -> subTopicTitle.isNotBlank() }
+            }.getOrElse {
+                emptyList()
+            }
+
+            for (subTopicTitle: String in subTopicTitles) {
+                val subItems: List<String> = runCatching<List<String>> {
+                    il.kmi.app.domain.ContentRepo.listItemTitles(
+                        belt = belt,
+                        topicTitle = topicTitle,
+                        subTopicTitle = subTopicTitle
+                    )
+                }.getOrElse {
+                    emptyList()
+                }
+
+                subItems
+                    .map { rawItem: String -> rawItem.trim() }
+                    .filter { rawItem: String -> rawItem.isNotBlank() }
+                    .distinct()
+                    .forEach { rawItem: String ->
+                        out += CatalogEntry(
+                            topicTitle = topicTitle,
+                            subTopicTitle = subTopicTitle,
+                            rawItem = rawItem,
+                            displayItem = normalizeCatalogItem(rawItem)
+                        )
+                    }
             }
         }
 
-        return out
+        return out.distinctBy { entry: CatalogEntry ->
+            "${entry.topicTitle}::${entry.subTopicTitle.orEmpty()}::${entry.rawItem}"
+        }
     }
 
     private fun recalcProgress() {
         val newProgress = mutableMapOf<Belt, Int>()
 
+        val beltsInOrder: List<Belt> = listOf(
+            Belt.YELLOW,
+            Belt.ORANGE,
+            Belt.GREEN,
+            Belt.BLUE,
+            Belt.BROWN,
+            Belt.BLACK
+        )
+
         // נחשב לפי סדר החגורות שלך
-        for (belt in Belt.order) {
+        for (belt: Belt in beltsInOrder) {
             val entries = getCatalogEntriesForBelt(belt)
             val total = entries.size
             if (total == 0) {
@@ -301,10 +354,34 @@ class KmiViewModel(
                 masteredItems[belt.id]
                     ?.values
                     ?.flatMap { topicMap -> topicMap.filterValues { it == true }.keys }
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotBlank() }
                     ?.toSet()
                     ?: emptySet()
 
-            val masteredCount = entries.count { it.displayItem in learned }
+            val masteredCount = entries.count { entry ->
+                val canonicalFromRaw = il.kmi.app.domain.CanonicalIds.canonicalFor(
+                    belt = belt,
+                    topicTitle = entry.topicTitle,
+                    displayItem = entry.rawItem
+                )
+
+                val canonicalFromDisplay = il.kmi.app.domain.CanonicalIds.canonicalFor(
+                    belt = belt,
+                    topicTitle = entry.topicTitle,
+                    displayItem = entry.displayItem
+                )
+
+                val candidates = setOf(
+                    entry.rawItem.trim(),
+                    entry.displayItem.trim(),
+                    canonicalFromRaw.trim(),
+                    canonicalFromDisplay.trim()
+                ).filter { it.isNotBlank() }
+
+                candidates.any { candidate -> candidate in learned }
+            }
+
             val percent = (masteredCount * 100) / total
             newProgress[belt] = percent
         }

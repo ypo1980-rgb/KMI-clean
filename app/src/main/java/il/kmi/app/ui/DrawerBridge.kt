@@ -39,21 +39,25 @@ object DrawerBridge {
     private var openDrawer:   (() -> Unit)? = null
     private var openSettings: (() -> Unit)? = null
     private var openHome:     (() -> Unit)? = null
+    private var openProgress: (() -> Unit)? = null
 
     fun register(
         onOpenDrawer: () -> Unit,
         onOpenSettings: () -> Unit,
-        onOpenHome: () -> Unit
+        onOpenHome: () -> Unit,
+        onOpenProgress: (() -> Unit)? = null
     ) {
         openDrawer   = onOpenDrawer
         openSettings = onOpenSettings
         openHome     = onOpenHome
+        openProgress = onOpenProgress
     }
 
     fun clear() {
         openDrawer   = null
         openSettings = null
         openHome     = null
+        openProgress = null
     }
 
     fun open() {
@@ -66,5 +70,9 @@ object DrawerBridge {
 
     fun openHome() {
         openHome?.invoke()
+    }
+
+    fun openProgress() {
+        openProgress?.invoke()
     }
 }
