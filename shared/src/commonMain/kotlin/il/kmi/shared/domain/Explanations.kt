@@ -1,4 +1,4 @@
-package il.kmi.app.domain
+package il.kmi.shared.domain
 
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
