@@ -45,6 +45,9 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.ui.color
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
+import il.kmi.shared.domain.Explanations
+
+//========================================================================
 
 @Composable
 fun LegacyGroupedExercisesScreen(
@@ -255,7 +258,7 @@ fun LegacyGroupedExercisesScreen(
     if (!treatAsMenuCards) {
         explainFor.value?.let { (belt, clickedTitle) ->
             val full = explanationText?.invoke(belt, clickedTitle)
-                ?: il.kmi.app.domain.Explanations.get(belt, explanationKeyForDefenses(clickedTitle))
+                ?: Explanations.get(belt, explanationKeyForDefenses(clickedTitle))
 
             AlertDialog(
                 onDismissRequest = { explainFor.value = null },

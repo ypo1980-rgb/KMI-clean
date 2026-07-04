@@ -3,6 +3,9 @@ package il.kmi.app.domain
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.English.ExerciseExplanationsEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
+import il.kmi.shared.domain.Explanations
+
+//=======================================================================
 
 object ExerciseExplanationResolver {
 

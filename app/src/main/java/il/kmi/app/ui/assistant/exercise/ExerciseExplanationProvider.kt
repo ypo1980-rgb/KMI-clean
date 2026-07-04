@@ -1,6 +1,6 @@
 package il.kmi.app.ui.assistant.exercise
 
-import il.kmi.app.domain.Explanations
+import il.kmi.shared.domain.Explanations
 import il.kmi.shared.domain.Belt
 
 object ExerciseExplanationProvider {

@@ -76,7 +76,7 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
 import il.kmi.shared.domain.Belt
-import il.kmi.app.domain.Explanations
+import il.kmi.shared.domain.Explanations
 import il.kmi.app.subscription.KmiAccess   // 👈 חדש – בדיקת גישת מנוי/ניסיון
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.localization.rememberIsEnglish

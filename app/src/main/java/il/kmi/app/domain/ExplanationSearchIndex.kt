@@ -1,6 +1,7 @@
 package il.kmi.app.domain
 
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.Explanations
 
 /** Auto-generated search index for Explanations.kt titles. */
 object ExplanationSearchIndex {

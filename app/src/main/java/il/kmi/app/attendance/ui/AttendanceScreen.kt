@@ -44,7 +44,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.runtime.saveable.rememberSaveable
 import il.kmi.shared.domain.Belt
-import il.kmi.app.domain.Explanations
+import il.kmi.shared.domain.Explanations
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.screens.parseSearchKey
 import android.app.Activity

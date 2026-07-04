@@ -77,6 +77,8 @@ import android.net.Uri
 import androidx.compose.foundation.layout.heightIn
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import il.kmi.shared.domain.Explanations
+
 
 /* ------------------------------
    עזר: זיהוי משתמש מחובר (מרוכך)
@@ -1124,9 +1126,9 @@ fun SubscriptionScreen(
                     }
 
                     val explanation = remember(b, itemRaw) {
-                        il.kmi.app.domain.Explanations.get(b, itemRaw).ifBlank {
+                        Explanations.get(b, itemRaw).ifBlank {
                             val alt = itemRaw.substringAfter(":", itemRaw).trim()
-                            il.kmi.app.domain.Explanations.get(b, alt)
+                            Explanations.get(b, alt)
                         }
                     }.ifBlank { "לא נמצא הסבר עבור \"$itemRaw\"." }
 

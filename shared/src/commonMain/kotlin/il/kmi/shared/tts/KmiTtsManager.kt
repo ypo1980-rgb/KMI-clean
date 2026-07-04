@@ -28,8 +28,8 @@ object KmiTtsManager {
     private var lastSpeakAtMs: Long = 0L
 
     // state
-    @Volatile private var isInited = false
-    @Volatile private var isSpeaking = false
+    @kotlin.concurrent.Volatile private var isInited = false
+    @kotlin.concurrent.Volatile private var isSpeaking = false
 
     private var audio: PlatformAudioPlayer? = null
 

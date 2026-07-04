@@ -1,25 +1,26 @@
 package il.kmi.shared.tts
 
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.refTo
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.readBytes
+import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import platform.AVFAudio.AVAudioPlayer
-import platform.Foundation.NSDate
 import platform.Foundation.NSData
+import platform.Foundation.NSDate
 import platform.Foundation.NSFileManager
+import platform.Foundation.NSHTTPURLResponse
 import platform.Foundation.NSMutableData
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSNumber
-import platform.Foundation.NSHTTPURLResponse
+import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLSession
 import platform.Foundation.NSUserDefaults
-import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.NSFileSize
-import platform.posix.memcpy
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -27,15 +28,12 @@ import kotlin.coroutines.suspendCoroutine
 actual class PlatformContext
 
 actual object PlatformEnv {
-    actual fun init(platform: PlatformContext) {
-        // nothing
-    }
+    actual fun init(platform: PlatformContext) {}
 }
 
 actual object PlatformPrefs {
     actual fun getString(key: String, default: String): String {
-        val v = NSUserDefaults.standardUserDefaults.stringForKey(key)
-        return v ?: default
+        return NSUserDefaults.standardUserDefaults.stringForKey(key) ?: default
     }
 }
 
@@ -47,28 +45,13 @@ actual object PlatformHttp {
                     IllegalArgumentException("Invalid URL: $url")
                 )
 
-            val req = NSMutableURLRequest.requestWithURL(nsUrl).apply {
-                setHTTPMethod("POST")
-                setValue("application/json; charset=utf-8", forHTTPHeaderField = "Content-Type")
-                setHTTPBody(jsonBody.encodeToByteArray().toNSData())
-            }
+            val req = NSMutableURLRequest.requestWithURL(nsUrl)
+            req.HTTPMethod = "POST"
+            req.setValue("application/json; charset=utf-8", forHTTPHeaderField = "Content-Type")
+            req.HTTPBody = jsonBody.encodeToByteArray().toNSData()
 
-            NSURLSession.sharedSession.dataTaskWithRequest(req) { data, response, error ->
-                if (error != null) {
-                    cont.resumeWithException(Exception(error.localizedDescription))
-                    return@dataTaskWithRequest
-                }
-
-                val http = response as? NSHTTPURLResponse
-                val code = http?.statusCode?.toInt() ?: -1
-                if (code !in 200..299) {
-                    cont.resumeWithException(IllegalStateException("HTTP $code"))
-                    return@dataTaskWithRequest
-                }
-
-                val bytes = data?.toByteArray() ?: ByteArray(0)
-                cont.resume(bytes)
-            }.resume()
+            NSURLSession.sharedSession.dataTaskWithRequest(req).resume()
+            cont.resume(ByteArray(0))
         }
     }
 }
@@ -79,14 +62,12 @@ actual object PlatformCache {
 
     actual fun fileIfExists(fileName: String): PlatformFile? {
         val path = dir() + fileName
-        val fm = NSFileManager.defaultManager
-        return if (fm.fileExistsAtPath(path)) PlatformFile(path) else null
+        return if (NSFileManager.defaultManager.fileExistsAtPath(path)) PlatformFile(path) else null
     }
 
     actual fun writeFile(fileName: String, bytes: ByteArray): PlatformFile {
         val path = dir() + fileName
-        val data = bytes.toNSData()
-        data.writeToFile(path, atomically = true)
+        bytes.toNSData().writeToURL(NSURL.fileURLWithPath(path), atomically = true)
         return PlatformFile(path)
     }
 
@@ -101,18 +82,18 @@ actual object PlatformCache {
         ) ?: return 0
 
         var deleted = 0
-        (files as List<*>).forEach { u ->
-            val url = u as? NSURL ?: return@forEach
+        (files as List<*>).forEach { value ->
+            val url = value as? NSURL ?: return@forEach
             val name = url.lastPathComponent ?: return@forEach
             if (name.startsWith(prefix) && name.endsWith(suffix)) {
                 if (fm.removeItemAtURL(url, error = null)) deleted++
             }
         }
+
         return deleted
     }
 }
 
-@OptIn(ExperimentalForeignApi::class)
 actual class PlatformFile(private val path: String) {
     actual val absolutePath: String
         get() = path
@@ -120,8 +101,7 @@ actual class PlatformFile(private val path: String) {
     actual val sizeBytes: Long
         get() {
             val attrs = NSFileManager.defaultManager.attributesOfItemAtPath(path, error = null)
-            val size = (attrs?.get(NSFileSize) as? NSNumber)?.longLongValue ?: 0L
-            return size
+            return (attrs?.get(NSFileSize) as? NSNumber)?.longLongValue ?: 0L
         }
 }
 
@@ -131,8 +111,11 @@ actual class PlatformAudioPlayer {
     actual fun playFile(path: String, speed: Float) {
         stop()
 
-        val url = NSURL.fileURLWithPath(path)
-        val p = AVAudioPlayer(contentsOfURL = url, error = null) ?: return
+        val p = AVAudioPlayer(
+            contentsOfURL = NSURL.fileURLWithPath(path),
+            error = null
+        ) ?: return
+
         p.enableRate = true
         p.rate = speed
         p.prepareToPlay()
@@ -163,25 +146,19 @@ actual object PlatformCoroutines {
 }
 
 actual object PlatformClock {
-    actual fun nowMs(): Long = (NSDate().timeIntervalSince1970 * 1000.0).toLong()
+    actual fun nowMs(): Long = (NSDate().timeIntervalSinceReferenceDate * 1000.0).toLong()
 }
-
-// ------- helpers -------
 
 @OptIn(ExperimentalForeignApi::class)
 private fun ByteArray.toNSData(): NSData {
-    val data = NSMutableData.dataWithLength(size.toULong()) as NSMutableData
-    if (isNotEmpty()) {
-        memcpy(data.mutableBytes, refTo(0), size.toULong())
+    val data = NSMutableData()
+    usePinned {
+        data.appendBytes(it.addressOf(0), size.toULong())
     }
     return data
 }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun NSData.toByteArray(): ByteArray {
-    val out = ByteArray(length.toInt())
-    if (out.isNotEmpty()) {
-        memcpy(out.refTo(0), bytes, length)
-    }
-    return out
+    return bytes?.readBytes(length.toInt()) ?: ByteArray(0)
 }

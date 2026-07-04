@@ -1,15 +1,14 @@
 package il.kmi.shared
 
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.refTo
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import platform.Foundation.NSData
 import platform.Foundation.NSMutableData
 import platform.Foundation.NSString
 import platform.Foundation.NSTemporaryDirectory
 import platform.Foundation.create
 import platform.Foundation.stringByAppendingPathComponent
-import platform.Foundation.writeToFile
-import platform.posix.memcpy
 
 actual object Platform {
 
@@ -22,11 +21,11 @@ actual object Platform {
     actual val appContextOrNull: Any?
         get() = appObj
 
-    actual fun setClickSoundsEnabled(enabled: Boolean) { /* no-op */ }
-    actual fun setHapticsEnabled(enabled: Boolean) { /* no-op */ }
+    actual fun setClickSoundsEnabled(enabled: Boolean) {}
+    actual fun setHapticsEnabled(enabled: Boolean) {}
 
-    actual fun scheduleWeeklyTrainingAlarms(leadMinutes: Int) { /* TODO */ }
-    actual fun cancelWeeklyTrainingAlarms() { /* TODO */ }
+    actual fun scheduleWeeklyTrainingAlarms(leadMinutes: Int) {}
+    actual fun cancelWeeklyTrainingAlarms() {}
 
     actual fun saveTextAsFile(
         filename: String,
@@ -38,8 +37,12 @@ actual object Platform {
         val tmpDir: String = NSTemporaryDirectory()
         val path: String = NSString.create(string = tmpDir).stringByAppendingPathComponent(safeName)
 
-        val data: NSData = contents.encodeToByteArray().toNSData()
-        data.writeToFile(path, true)
+        contents.encodeToByteArray()
+            .toNSData()
+            .writeToURL(
+                url = platform.Foundation.NSURL.fileURLWithPath(path),
+                atomically = true
+            )
 
         val mt = if (mimeType.isNotBlank()) mimeType else "text/html"
         return PlatformFile(path = path, mimeType = mt)
@@ -48,9 +51,11 @@ actual object Platform {
 
 @OptIn(ExperimentalForeignApi::class)
 private fun ByteArray.toNSData(): NSData {
-    val data = NSMutableData.dataWithLength(size.toULong()) as NSMutableData
+    val data = NSMutableData()
     if (isNotEmpty()) {
-        memcpy(data.mutableBytes, refTo(0), size.toULong())
+        usePinned {
+            data.appendBytes(it.addressOf(0), length = size.toULong())
+        }
     }
     return data
 }

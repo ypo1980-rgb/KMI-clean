@@ -68,7 +68,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import il.kmi.app.KmiViewModel
-import il.kmi.app.domain.Explanations
+import il.kmi.shared.domain.Explanations
 import il.kmi.app.domain.color
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.shared.domain.Belt

@@ -1,7 +1,7 @@
 package il.kmi.app.ui.assistant.search
 
 import il.kmi.app.domain.ContentRepo
-import il.kmi.app.domain.Explanations
+import il.kmi.shared.domain.Explanations
 import il.kmi.app.search.asSharedRepo
 import il.kmi.app.search.toShared
 import il.kmi.shared.domain.Belt

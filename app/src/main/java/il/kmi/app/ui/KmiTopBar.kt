@@ -88,6 +88,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Density
 import il.kmi.app.ui.assistant.ui.AiAssistantDialog
+import il.kmi.shared.domain.Explanations
 
 //===============================================================================
 
@@ -1487,7 +1488,7 @@ fun KmiTopBar(
                 )
 
                 return directTitles.mapNotNull { title ->
-                    val explanation = il.kmi.app.domain.Explanations
+                    val explanation = Explanations
                         .get(
                             belt = greenBelt,
                             item = title,
@@ -1863,7 +1864,7 @@ fun KmiTopBar(
                                                         resolved?.itemTitle
                                                             ?: cleanTitle.ifBlank { rawKey }
 
-                                                    val explanation = il.kmi.app.domain.Explanations.get(
+                                                    val explanation = Explanations.get(
                                                         belt = dialogBelt,
                                                         item = dialogTitle,
                                                         exerciseId = rawKey
