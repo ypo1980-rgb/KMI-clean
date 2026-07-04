@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import android.content.SharedPreferences
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
@@ -46,9 +47,10 @@ import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
 import android.widget.TextView
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material.icons.filled.AlarmOn
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Lock
@@ -61,9 +63,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.pm.PackageInfoCompat
-import il.kmi.app.ui.ext.color
 import il.kmi.app.reminders.ReminderPrefs
 import il.kmi.app.reminders.DailyReminderScheduler
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Language
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -110,9 +113,19 @@ private fun openEmailFeedback(
 
 private fun openStorePage(ctx: android.content.Context) {
     val pkg = ctx.packageName
-    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    val web    = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    try { ctx.startActivity(market) } catch (_: ActivityNotFoundException) { ctx.startActivity(web) }
+    val market = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("market://details?id=$pkg")
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val web = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("https://play.google.com/store/apps/details?id=$pkg")
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        ctx.startActivity(market)
+    } catch (_: ActivityNotFoundException) {
+        ctx.startActivity(web)
+    }
 }
 
 private fun shareApp(
@@ -224,10 +237,10 @@ fun SettingsScreenModern(
                 ?: tr("שם מלא לא מוגדר", "Full name not set")
         )
     }
-    val phone    by remember { mutableStateOf(sp.getString("phone", "") ?: "") }
-    val email    by remember { mutableStateOf(sp.getString("email", "") ?: "") }
-    val region   by remember { mutableStateOf(sp.getString("region", "") ?: "") }
-    val branch   by remember { mutableStateOf(sp.getString("branch", "") ?: "") }
+    val phone by remember { mutableStateOf(sp.getString("phone", "") ?: "") }
+    val email by remember { mutableStateOf(sp.getString("email", "") ?: "") }
+    val region by remember { mutableStateOf(sp.getString("region", "") ?: "") }
+    val branch by remember { mutableStateOf(sp.getString("branch", "") ?: "") }
 
     val rankDisplayName by remember(currentLanguage) {
         mutableStateOf(
@@ -242,11 +255,18 @@ fun SettingsScreenModern(
     var isCoach by rememberSaveable { mutableStateOf(isCoachInit) }
 // === כלים גלובליים למסך: Haptics + Toast + Overlay טעינה ===
     val haptic = rememberHaptics()
-    val toast  = rememberToaster()
+    val toast = rememberToaster()
     var isBusy by rememberSaveable { mutableStateOf(false) }
 
     // סטייטים להגדרות (נשמרים ב־SP כדי להשאיר עקביות)
-    var remindersEnabled by rememberSaveable { mutableStateOf(sp.getBoolean("training_reminders_enabled", true)) }
+    var remindersEnabled by rememberSaveable {
+        mutableStateOf(
+            sp.getBoolean(
+                "training_reminders_enabled",
+                true
+            )
+        )
+    }
     var reminderMinutes by rememberSaveable {
         mutableStateOf(
             sp.getInt(
@@ -280,7 +300,8 @@ fun SettingsScreenModern(
 
     // --- תרגיל יומי ---
     val appCtx = LocalContext.current
-    val reminderPrefsSp = remember { appCtx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
+    val reminderPrefsSp =
+        remember { appCtx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
     val reminderPrefs = remember { ReminderPrefs(reminderPrefsSp) }
 
     var dailyReminderEnabled by rememberSaveable(isCoach) {
@@ -395,7 +416,7 @@ fun SettingsScreenModern(
         }
     ) { padding ->
 
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
@@ -409,892 +430,1088 @@ fun SettingsScreenModern(
                         )
                     )
                 )
-                .verticalScroll(rememberScrollState())
                 .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-
-            // --- שפה מועדפת ---
-            SettingsCard(
-                title = tr("שפה", "Language"),
-                subtitle = tr("בחר שפת ממשק האפליקציה", "Choose the app interface language"),
-                icon = Icons.Filled.Language,
-                iconTint = sectionIconTint
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .padding(bottom = 124.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
 
-                val selectedIndex = if (currentLanguage == AppLanguage.HEBREW) 0 else 1
-
-                fun applyLanguage(newLanguage: AppLanguage) {
-                    if (currentLanguage == newLanguage) return
-
-                    languageManager.setLanguage(newLanguage)
-                    currentLanguage = newLanguage
-
-                    android.widget.Toast.makeText(
-                        appCtxLang,
-                        if (newLanguage == AppLanguage.ENGLISH) {
-                            "Language changed to English"
-                        } else {
-                            "השפה שונתה לעברית"
-                        },
-                        android.widget.Toast.LENGTH_SHORT
-                    ).show()
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                // --- פיילוט עיצוב פרימיום: כללי + תזכורות ---
+                SettingsListSection(
+                    title = tr("כללי ותזכורות", "General and reminders"),
+                    subtitle = tr(
+                        "שפה, תזכורות אימון והגדרות שימוש יומי",
+                        "Language, training reminders and daily usage settings"
+                    ),
+                    icon = Icons.Filled.Tune,
+                    iconTint = sectionIconTint
                 ) {
+                    SettingsListItem(
+                        title = tr("שפה", "Language"),
+                        value = if (currentLanguage == AppLanguage.ENGLISH) "English" else "עברית",
+                        icon = Icons.Filled.Language,
+                        iconTint = Color(0xFF2A78E4),
+                        topRounded = true
+                    ) {
+                        val selectedIndex = if (currentLanguage == AppLanguage.HEBREW) 0 else 1
 
-                    Text(
-                        text = tr("בחר שפת ממשק", "Choose interface language"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = textAlignPrimary,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                        fun applyLanguage(newLanguage: AppLanguage) {
+                            if (currentLanguage == newLanguage) return
 
-                    TabRow(selectedTabIndex = selectedIndex) {
+                            languageManager.setLanguage(newLanguage)
+                            currentLanguage = newLanguage
 
-                        Tab(
-                            selected = selectedIndex == 0,
-                            onClick = {
-                                applyLanguage(AppLanguage.HEBREW)
-                            },
-                            text = {
-                                Text(
-                                    text = "עברית",
-                                    style = MaterialTheme.typography.labelMedium
+                            android.widget.Toast.makeText(
+                                appCtxLang,
+                                if (newLanguage == AppLanguage.ENGLISH) {
+                                    "Language changed to English"
+                                } else {
+                                    "השפה שונתה לעברית"
+                                },
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = tr("בחר שפת ממשק", "Choose interface language"),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 10.8.sp,
+                                    lineHeight = 13.5.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = textAlignPrimary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            TabRow(selectedTabIndex = selectedIndex) {
+                                Tab(
+                                    selected = selectedIndex == 0,
+                                    onClick = {
+                                        applyLanguage(AppLanguage.HEBREW)
+                                    },
+                                    text = {
+                                        Text(
+                                            text = "עברית",
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                    }
+                                )
+
+                                Tab(
+                                    selected = selectedIndex == 1,
+                                    onClick = {
+                                        applyLanguage(AppLanguage.ENGLISH)
+                                    },
+                                    text = {
+                                        Text(
+                                            text = "English",
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                    }
                                 )
                             }
-                        )
-
-                        Tab(
-                            selected = selectedIndex == 1,
-                            onClick = {
-                                applyLanguage(AppLanguage.ENGLISH)
-                            },
-                            text = {
-                                Text(
-                                    text = "English",
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-
-// --- תזכורות אימון ---
-            SettingsCard(
-                title = tr("תזכורות אימון", "Training reminders"),
-                subtitle = tr("קבל התראה לפני תחילת אימון", "Get a reminder before training starts"),
-                icon = Icons.Filled.AlarmOn,
-                iconTint = sectionIconTint
-            ) {
-                val ctx = LocalContext.current
-
-                val notifPermissionLauncher =
-                    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                        if (granted) {
-                            val lead = reminderMinutes.takeIf { it > 0 } ?: 60
-
-                            sp.edit()
-                                .putBoolean("training_reminders_enabled", true)
-                                .putInt("training_reminder_minutes", lead)
-                                .putInt("lead_minutes", lead)
-                                .apply()
-
-                            kmiPrefs.remindersOn = true
-                            kmiPrefs.leadMinutes = lead
-
-                            TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
-                                context = ctx.applicationContext,
-                                leadMinutes = lead
-                            )
-                        } else {
-                            remindersEnabled = false
-
-                            sp.edit()
-                                .putBoolean("training_reminders_enabled", false)
-                                .apply()
-
-                            kmiPrefs.remindersOn = false
-
-                            TrainingReminderScheduler.cancelWeeklyTrainingAlarms(
-                                context = ctx.applicationContext
-                            )
                         }
                     }
 
-                fun scheduleTrainingReminders(leadMinutes: Int) {
-                    val lead = leadMinutes.takeIf { it > 0 } ?: 60
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
 
-                    reminderMinutes = lead
-
-                    sp.edit()
-                        .putBoolean("training_reminders_enabled", remindersEnabled)
-                        .putInt("training_reminder_minutes", lead)
-                        .putInt("lead_minutes", lead)
-                        .apply()
-
-                    kmiPrefs.remindersOn = remindersEnabled
-                    kmiPrefs.leadMinutes = lead
-
-                    if (remindersEnabled) {
-                        TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
-                            context = ctx.applicationContext,
-                            leadMinutes = lead
-                        )
-                    } else {
-                        TrainingReminderScheduler.cancelWeeklyTrainingAlarms(
-                            context = ctx.applicationContext
-                        )
-                    }
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    SettingsListItem(
+                        title = tr("תזכורות אימון", "Training reminders"),
+                        value = if (remindersEnabled) {
+                            formatLeadTime(reminderMinutes)
+                        } else {
+                            tr("כבוי", "Off")
+                        },
+                        icon = Icons.Filled.AlarmOn,
+                        iconTint = Color(0xFF7B61D9),
+                        bottomRounded = true
                     ) {
-                        Text(
-                            text = if (remindersEnabled) {
-                                tr(
-                                    "בחר כמה זמן לפני האימון לקבל התראה",
-                                    "Choose exactly how long before training to receive a reminder"
-                                )
-                            } else {
-                                tr(
-                                    "הפעל תזכורות לפני אימונים",
-                                    "Enable reminders before training sessions"
-                                )
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                            textAlign = textAlignPrimary
-                        )
+                        val ctx = LocalContext.current
 
-                        Switch(
-                            checked = remindersEnabled,
-                            onCheckedChange = { enabled ->
-                                remindersEnabled = enabled
+                        val notifPermissionLauncher =
+                            rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                                if (granted) {
+                                    val lead = reminderMinutes.takeIf { it > 0 } ?: 60
 
-                                val lead = reminderMinutes.takeIf { it > 0 } ?: 60
+                                    sp.edit()
+                                        .putBoolean("training_reminders_enabled", true)
+                                        .putInt("training_reminder_minutes", lead)
+                                        .putInt("lead_minutes", lead)
+                                        .apply()
 
-                                sp.edit()
-                                    .putBoolean("training_reminders_enabled", enabled)
-                                    .putInt("training_reminder_minutes", lead)
-                                    .putInt("lead_minutes", lead)
-                                    .apply()
+                                    kmiPrefs.remindersOn = true
+                                    kmiPrefs.leadMinutes = lead
 
-                                kmiPrefs.remindersOn = enabled
-                                kmiPrefs.leadMinutes = lead
-
-                                if (enabled) {
-                                    if (Build.VERSION.SDK_INT >= 33) {
-                                        val alreadyGranted =
-                                            androidx.core.content.ContextCompat.checkSelfPermission(
-                                                ctx,
-                                                Manifest.permission.POST_NOTIFICATIONS
-                                            ) == PackageManager.PERMISSION_GRANTED
-
-                                        if (alreadyGranted) {
-                                            TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
-                                                context = ctx.applicationContext,
-                                                leadMinutes = lead
-                                            )
-                                        } else {
-                                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                        }
-                                    } else {
-                                        TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
-                                            context = ctx.applicationContext,
-                                            leadMinutes = lead
-                                        )
-                                    }
+                                    TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
+                                        context = ctx.applicationContext,
+                                        leadMinutes = lead
+                                    )
                                 } else {
+                                    remindersEnabled = false
+
+                                    sp.edit()
+                                        .putBoolean("training_reminders_enabled", false)
+                                        .apply()
+
+                                    kmiPrefs.remindersOn = false
+
                                     TrainingReminderScheduler.cancelWeeklyTrainingAlarms(
                                         context = ctx.applicationContext
                                     )
                                 }
                             }
-                        )
-                    }
 
-                    if (remindersEnabled) {
-                        Surface(
-                            shape = RoundedCornerShape(18.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                            tonalElevation = 0.dp,
-                            modifier = Modifier.fillMaxWidth()
+                        fun scheduleTrainingReminders(leadMinutes: Int) {
+                            val lead = leadMinutes.takeIf { it > 0 } ?: 60
+
+                            reminderMinutes = lead
+
+                            sp.edit()
+                                .putBoolean("training_reminders_enabled", remindersEnabled)
+                                .putInt("training_reminder_minutes", lead)
+                                .putInt("lead_minutes", lead)
+                                .apply()
+
+                            kmiPrefs.remindersOn = remindersEnabled
+                            kmiPrefs.leadMinutes = lead
+
+                            if (remindersEnabled) {
+                                TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
+                                    context = ctx.applicationContext,
+                                    leadMinutes = lead
+                                )
+                            } else {
+                                TrainingReminderScheduler.cancelWeeklyTrainingAlarms(
+                                    context = ctx.applicationContext
+                                )
+                            }
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                                horizontalAlignment = horizontalEnd
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = formatLeadTime(reminderMinutes),
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.ExtraBold
+                                    text = if (remindersEnabled) {
+                                        tr(
+                                            "בחר כמה זמן לפני האימון לקבל התראה",
+                                            "Choose exactly how long before training to receive a reminder"
+                                        )
+                                    } else {
+                                        tr(
+                                            "הפעל תזכורות לפני אימונים",
+                                            "Enable reminders before training sessions"
+                                        )
+                                    },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 10.8.sp,
+                                        lineHeight = 13.5.sp
                                     ),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    textAlign = textAlignPrimary,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Text(
-                                    text = tr(
-                                        "ברירת המחדל היא 60 דקות אם לא נבחר זמן אחר.",
-                                        "Default is 60 minutes if no other time is selected."
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = textAlignPrimary,
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.weight(1f),
+                                    textAlign = textAlignPrimary
                                 )
 
+                                Switch(
+                                    checked = remindersEnabled,
+                                    onCheckedChange = { enabled ->
+                                        remindersEnabled = enabled
+
+                                        val lead = reminderMinutes.takeIf { it > 0 } ?: 60
+
+                                        sp.edit()
+                                            .putBoolean("training_reminders_enabled", enabled)
+                                            .putInt("training_reminder_minutes", lead)
+                                            .putInt("lead_minutes", lead)
+                                            .apply()
+
+                                        kmiPrefs.remindersOn = enabled
+                                        kmiPrefs.leadMinutes = lead
+
+                                        if (enabled) {
+                                            if (Build.VERSION.SDK_INT >= 33) {
+                                                val alreadyGranted =
+                                                    androidx.core.content.ContextCompat.checkSelfPermission(
+                                                        ctx,
+                                                        Manifest.permission.POST_NOTIFICATIONS
+                                                    ) == PackageManager.PERMISSION_GRANTED
+
+                                                if (alreadyGranted) {
+                                                    TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
+                                                        context = ctx.applicationContext,
+                                                        leadMinutes = lead
+                                                    )
+                                                } else {
+                                                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                                }
+                                            } else {
+                                                TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
+                                                    context = ctx.applicationContext,
+                                                    leadMinutes = lead
+                                                )
+                                            }
+                                        } else {
+                                            TrainingReminderScheduler.cancelWeeklyTrainingAlarms(
+                                                context = ctx.applicationContext
+                                            )
+                                        }
+                                    }
+                                )
+                            }
+
+                            if (remindersEnabled) {
+                                Surface(
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                    tonalElevation = 0.dp,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 13.dp, vertical = 11.dp),
+                                        verticalArrangement = Arrangement.spacedBy(9.dp),
+                                        horizontalAlignment = horizontalEnd
+                                    ) {
+                                        Text(
+                                            text = formatLeadTime(reminderMinutes),
+                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                fontSize = 14.sp,
+                                                lineHeight = 17.sp,
+                                                fontWeight = FontWeight.ExtraBold
+                                            ),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            textAlign = textAlignPrimary,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        Text(
+                                            text = tr(
+                                                "ברירת המחדל היא 60 דקות אם לא נבחר זמן אחר.",
+                                                "Default is 60 minutes if no other time is selected."
+                                            ),
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontSize = 10.5.sp,
+                                                lineHeight = 13.sp
+                                            ),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = textAlignPrimary,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        OutlinedButton(
+                                            onClick = {
+                                                showTrainingReminderTimePicker = true
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = tr("בחר זמן מדויק", "Choose exact time")
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (showTrainingReminderTimePicker) {
+                            val initialLead = reminderMinutes.takeIf { it > 0 } ?: 60
+                            var selectedHours by rememberSaveable {
+                                mutableIntStateOf(initialLead / 60)
+                            }
+                            var selectedMinutes by rememberSaveable {
+                                mutableIntStateOf(initialLead % 60)
+                            }
+                            val pickerTextColor = MaterialTheme.colorScheme.onSurface.toArgb()
+
+                            Dialog(
+                                onDismissRequest = {
+                                    showTrainingReminderTimePicker = false
+                                }
+                            ) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp),
+                                    shape = RoundedCornerShape(30.dp),
+                                    color = Color(0xFFF6F1FB),
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 16.dp
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 18.dp, vertical = 18.dp),
+                                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(24.dp))
+                                                .background(
+                                                    Brush.horizontalGradient(
+                                                        colors = listOf(
+                                                            Color(0xFF062B4A),
+                                                            Color(0xFF0F5E9C),
+                                                            Color(0xFF5B35D5)
+                                                        )
+                                                    )
+                                                )
+                                                .padding(horizontal = 18.dp, vertical = 16.dp)
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalAlignment = horizontalEnd
+                                            ) {
+                                                Text(
+                                                    text = tr(
+                                                        "בחירת זמן לפני האימון",
+                                                        "Choose reminder time before training"
+                                                    ),
+                                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                                        fontWeight = FontWeight.ExtraBold
+                                                    ),
+                                                    color = Color.White,
+                                                    textAlign = textAlignPrimary,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+
+                                                Spacer(modifier = Modifier.height(6.dp))
+
+                                                Text(
+                                                    text = tr(
+                                                        "בחר שעות ודקות. לדוגמה: שעה ו־18 דקות.",
+                                                        "Choose hours and minutes. For example: 1 hour and 18 minutes."
+                                                    ),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = Color.White.copy(alpha = 0.92f),
+                                                    textAlign = textAlignPrimary,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+
+                                                Spacer(modifier = Modifier.height(10.dp))
+
+                                                Surface(
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    color = Color.White.copy(alpha = 0.14f),
+                                                    tonalElevation = 0.dp
+                                                ) {
+                                                    Text(
+                                                        text = formatLeadTime(
+                                                            selectedHours.coerceIn(0, 6) * 60 +
+                                                                    selectedMinutes.coerceIn(0, 59)
+                                                        ),
+                                                        modifier = Modifier.padding(
+                                                            horizontal = 14.dp,
+                                                            vertical = 10.dp
+                                                        ),
+                                                        style = MaterialTheme.typography.titleMedium.copy(
+                                                            fontWeight = FontWeight.ExtraBold
+                                                        ),
+                                                        color = Color.White,
+                                                        textAlign = TextAlign.Center
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            if (isEnglish) {
+                                                Surface(
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(22.dp),
+                                                    color = Color.White,
+                                                    tonalElevation = 0.dp,
+                                                    shadowElevation = 4.dp
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                        horizontalAlignment = Alignment.CenterHorizontally
+                                                    ) {
+                                                        Text(
+                                                            text = tr("Hours", "Hours"),
+                                                            style = MaterialTheme.typography.titleSmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+
+                                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                                        AndroidView(
+                                                            factory = { viewContext ->
+                                                                NumberPicker(viewContext).apply {
+                                                                    minValue = 0
+                                                                    maxValue = 6
+                                                                    value = selectedHours.coerceIn(0, 6)
+                                                                    wrapSelectorWheel = false
+                                                                    setOnValueChangedListener { _, _, newValue ->
+                                                                        selectedHours = newValue
+                                                                    }
+                                                                    styleKmiNumberPicker(
+                                                                        this,
+                                                                        pickerTextColor
+                                                                    )
+                                                                }
+                                                            },
+                                                            update = { picker ->
+                                                                picker.value = selectedHours.coerceIn(0, 6)
+                                                                styleKmiNumberPicker(
+                                                                    picker,
+                                                                    pickerTextColor
+                                                                )
+                                                            },
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(170.dp)
+                                                        )
+                                                    }
+                                                }
+
+                                                Surface(
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(22.dp),
+                                                    color = Color.White,
+                                                    tonalElevation = 0.dp,
+                                                    shadowElevation = 4.dp
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                        horizontalAlignment = Alignment.CenterHorizontally
+                                                    ) {
+                                                        Text(
+                                                            text = tr("Minutes", "Minutes"),
+                                                            style = MaterialTheme.typography.titleSmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+
+                                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                                        AndroidView(
+                                                            factory = { viewContext ->
+                                                                NumberPicker(viewContext).apply {
+                                                                    minValue = 0
+                                                                    maxValue = 59
+                                                                    value = selectedMinutes.coerceIn(0, 59)
+                                                                    wrapSelectorWheel = true
+                                                                    setOnValueChangedListener { _, _, newValue ->
+                                                                        selectedMinutes = newValue
+                                                                    }
+                                                                    styleKmiNumberPicker(
+                                                                        this,
+                                                                        pickerTextColor
+                                                                    )
+                                                                }
+                                                            },
+                                                            update = { picker ->
+                                                                picker.value =
+                                                                    selectedMinutes.coerceIn(0, 59)
+                                                                styleKmiNumberPicker(
+                                                                    picker,
+                                                                    pickerTextColor
+                                                                )
+                                                            },
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(170.dp)
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                Surface(
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(22.dp),
+                                                    color = Color.White,
+                                                    tonalElevation = 0.dp,
+                                                    shadowElevation = 4.dp
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                        horizontalAlignment = Alignment.CenterHorizontally
+                                                    ) {
+                                                        Text(
+                                                            text = tr("דקות", "Minutes"),
+                                                            style = MaterialTheme.typography.titleSmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+
+                                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                                        AndroidView(
+                                                            factory = { viewContext ->
+                                                                NumberPicker(viewContext).apply {
+                                                                    minValue = 0
+                                                                    maxValue = 59
+                                                                    value = selectedMinutes.coerceIn(0, 59)
+                                                                    wrapSelectorWheel = true
+                                                                    setOnValueChangedListener { _, _, newValue ->
+                                                                        selectedMinutes = newValue
+                                                                    }
+                                                                    styleKmiNumberPicker(
+                                                                        this,
+                                                                        pickerTextColor
+                                                                    )
+                                                                }
+                                                            },
+                                                            update = { picker ->
+                                                                picker.value =
+                                                                    selectedMinutes.coerceIn(0, 59)
+                                                                styleKmiNumberPicker(
+                                                                    picker,
+                                                                    pickerTextColor
+                                                                )
+                                                            },
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(170.dp)
+                                                        )
+                                                    }
+                                                }
+
+                                                Surface(
+                                                    modifier = Modifier.weight(1f),
+                                                    shape = RoundedCornerShape(22.dp),
+                                                    color = Color.White,
+                                                    tonalElevation = 0.dp,
+                                                    shadowElevation = 4.dp
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                        horizontalAlignment = Alignment.CenterHorizontally
+                                                    ) {
+                                                        Text(
+                                                            text = tr("שעות", "Hours"),
+                                                            style = MaterialTheme.typography.titleSmall,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+
+                                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                                        AndroidView(
+                                                            factory = { viewContext ->
+                                                                NumberPicker(viewContext).apply {
+                                                                    minValue = 0
+                                                                    maxValue = 6
+                                                                    value = selectedHours.coerceIn(0, 6)
+                                                                    wrapSelectorWheel = false
+                                                                    setOnValueChangedListener { _, _, newValue ->
+                                                                        selectedHours = newValue
+                                                                    }
+                                                                    styleKmiNumberPicker(
+                                                                        this,
+                                                                        pickerTextColor
+                                                                    )
+                                                                }
+                                                            },
+                                                            update = { picker ->
+                                                                picker.value = selectedHours.coerceIn(0, 6)
+                                                                styleKmiNumberPicker(
+                                                                    picker,
+                                                                    pickerTextColor
+                                                                )
+                                                            },
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(170.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    showTrainingReminderTimePicker = false
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                                shape = RoundedCornerShape(18.dp)
+                                            ) {
+                                                Text(
+                                                    text = tr("ביטול", "Cancel"),
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    val totalMinutes =
+                                                        selectedHours.coerceIn(0, 6) * 60 +
+                                                                selectedMinutes.coerceIn(0, 59)
+
+                                                    val lead = totalMinutes.takeIf { it > 0 } ?: 60
+
+                                                    scheduleTrainingReminders(lead)
+                                                    showTrainingReminderTimePicker = false
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                                shape = RoundedCornerShape(18.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = Color(0xFF5B35D5),
+                                                    contentColor = Color.White
+                                                )
+                                            ) {
+                                                Text(
+                                                    text = tr("שמירה", "Save"),
+                                                    fontWeight = FontWeight.ExtraBold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                SettingsListSection(
+                    title = tr("התראות וסנכרון", "Notifications and sync"),
+                    subtitle = tr(
+                        "תרגיל יומי, אימונים חופשיים וסנכרון ליומן",
+                        "Daily exercise, free training reminders and calendar sync"
+                    ),
+                    icon = Icons.Filled.NotificationsActive,
+                    iconTint = sectionIconTint
+                ) {
+                    SettingsListItem(
+                        title = tr("תרגיל יומי", "Daily exercise"),
+                        value = if (dailyReminderEnabled) {
+                            String.format("%02d:%02d", dailyReminderHour, dailyReminderMinute)
+                        } else {
+                            tr("כבוי", "Off")
+                        },
+                        icon = Icons.Filled.NotificationsActive,
+                        iconTint = Color(0xFF2A78E4),
+                        topRounded = true
+                    ) {
+                        val ctx = LocalContext.current
+
+                        val notifPermissionLauncher =
+                            rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                                if (granted) {
+                                    applyDailyReminderSettings(
+                                        enabled = true,
+                                        hour = dailyReminderHour,
+                                        minute = dailyReminderMinute
+                                    )
+                                } else {
+                                    applyDailyReminderSettings(enabled = false)
+
+                                    android.widget.Toast.makeText(
+                                        ctx,
+                                        tr(
+                                            "לא ניתן להפעיל תרגיל יומי בלי הרשאת התראות",
+                                            "Daily exercise reminder requires notification permission"
+                                        ),
+                                        android.widget.Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+
+                        val formattedDailyTime = remember(dailyReminderHour, dailyReminderMinute) {
+                            String.format("%02d:%02d", dailyReminderHour, dailyReminderMinute)
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = if (isCoach) {
+                                        tr(
+                                            "המאמן יכול לכבות או להפעיל תרגיל יומי לעצמו",
+                                            "The coach can enable or disable a daily exercise for themselves"
+                                        )
+                                    } else {
+                                        tr(
+                                            "שלח לי בכל יום תרגיל מהחגורה הבאה",
+                                            "Send me a daily exercise from the next belt"
+                                        )
+                                    },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 10.8.sp,
+                                        lineHeight = 13.5.sp
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f),
+                                    textAlign = textAlignPrimary
+                                )
+
+                                Switch(
+                                    checked = dailyReminderEnabled,
+                                    onCheckedChange = { enabled ->
+                                        if (enabled) {
+                                            if (Build.VERSION.SDK_INT >= 33) {
+                                                val alreadyGranted =
+                                                    androidx.core.content.ContextCompat.checkSelfPermission(
+                                                        ctx,
+                                                        Manifest.permission.POST_NOTIFICATIONS
+                                                    ) == PackageManager.PERMISSION_GRANTED
+
+                                                if (alreadyGranted) {
+                                                    applyDailyReminderSettings(
+                                                        enabled = true,
+                                                        hour = dailyReminderHour,
+                                                        minute = dailyReminderMinute
+                                                    )
+                                                } else {
+                                                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                                }
+                                            } else {
+                                                applyDailyReminderSettings(
+                                                    enabled = true,
+                                                    hour = dailyReminderHour,
+                                                    minute = dailyReminderMinute
+                                                )
+                                            }
+                                        } else {
+                                            applyDailyReminderSettings(enabled = false)
+                                        }
+                                    }
+                                )
+                            }
+
+                            if (dailyReminderEnabled) {
                                 OutlinedButton(
                                     onClick = {
-                                        showTrainingReminderTimePicker = true
+                                        TimePickerDialog(
+                                            ctx,
+                                            { _, hourOfDay, minute ->
+                                                dailyReminderHour = hourOfDay
+                                                dailyReminderMinute = minute
+
+                                                reminderPrefs.setHour(hourOfDay)
+                                                reminderPrefs.setMinute(minute)
+                                                reminderPrefs.setEnabledForRole(isCoach, true)
+                                                dailyReminderEnabled = true
+
+                                                if (Build.VERSION.SDK_INT >= 33 && !hasNotificationPermissionForDailyReminder()) {
+                                                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                                } else {
+                                                    applyDailyReminderSettings(
+                                                        enabled = true,
+                                                        hour = hourOfDay,
+                                                        minute = minute
+                                                    )
+                                                }
+                                            },
+                                            dailyReminderHour,
+                                            dailyReminderMinute,
+                                            true
+                                        ).show()
                                     },
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(
-                                        text = tr("בחר זמן מדויק", "Choose exact time")
+                                        tr(
+                                            "שעת התזכורת: $formattedDailyTime",
+                                            "Reminder time: $formattedDailyTime"
+                                        )
                                     )
                                 }
-                            }
-                        }
-                    }
-                }
 
-                if (showTrainingReminderTimePicker) {
-                    val initialLead = reminderMinutes.takeIf { it > 0 } ?: 60
-                    var selectedHours by rememberSaveable {
-                        mutableIntStateOf(initialLead / 60)
-                    }
-                    var selectedMinutes by rememberSaveable {
-                        mutableIntStateOf(initialLead % 60)
-                    }
-                    val pickerTextColor = MaterialTheme.colorScheme.onSurface.toArgb()
-
-                    Dialog(
-                        onDismissRequest = {
-                            showTrainingReminderTimePicker = false
-                        }
-                    ) {
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp),
-                            shape = RoundedCornerShape(30.dp),
-                            color = Color(0xFFF6F1FB),
-                            tonalElevation = 0.dp,
-                            shadowElevation = 16.dp
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 18.dp, vertical = 18.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(24.dp))
-                                        .background(
-                                            Brush.horizontalGradient(
-                                                colors = listOf(
-                                                    Color(0xFF062B4A),
-                                                    Color(0xFF0F5E9C),
-                                                    Color(0xFF5B35D5)
-                                                )
-                                            )
-                                        )
-                                        .padding(horizontal = 18.dp, vertical = 16.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalAlignment = horizontalEnd
-                                    ) {
-                                        Text(
-                                            text = tr(
-                                                "בחירת זמן לפני האימון",
-                                                "Choose reminder time before training"
-                                            ),
-                                            style = MaterialTheme.typography.headlineSmall.copy(
-                                                fontWeight = FontWeight.ExtraBold
-                                            ),
-                                            color = Color.White,
-                                            textAlign = textAlignPrimary,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        Spacer(modifier = Modifier.height(6.dp))
-
-                                        Text(
-                                            text = tr(
-                                                "בחר שעות ודקות. לדוגמה: שעה ו־18 דקות.",
-                                                "Choose hours and minutes. For example: 1 hour and 18 minutes."
-                                            ),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Color.White.copy(alpha = 0.92f),
-                                            textAlign = textAlignPrimary,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        Spacer(modifier = Modifier.height(10.dp))
-
-                                        Surface(
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = Color.White.copy(alpha = 0.14f),
-                                            tonalElevation = 0.dp
-                                        ) {
-                                            Text(
-                                                text = formatLeadTime(
-                                                    selectedHours.coerceIn(0, 6) * 60 +
-                                                            selectedMinutes.coerceIn(0, 59)
-                                                ),
-                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                                style = MaterialTheme.typography.titleMedium.copy(
-                                                    fontWeight = FontWeight.ExtraBold
-                                                ),
-                                                color = Color.White,
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    if (isEnglish) {
-                                        Surface(
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(22.dp),
-                                            color = Color.White,
-                                            tonalElevation = 0.dp,
-                                            shadowElevation = 4.dp
-                                        ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally
-                                            ) {
-                                                Text(
-                                                    text = tr("Hours", "Hours"),
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-
-                                                Spacer(modifier = Modifier.height(8.dp))
-
-                                                AndroidView(
-                                                    factory = { viewContext ->
-                                                        NumberPicker(viewContext).apply {
-                                                            minValue = 0
-                                                            maxValue = 6
-                                                            value = selectedHours.coerceIn(0, 6)
-                                                            wrapSelectorWheel = false
-                                                            setOnValueChangedListener { _, _, newValue ->
-                                                                selectedHours = newValue
-                                                            }
-                                                            styleKmiNumberPicker(this, pickerTextColor)
-                                                        }
-                                                    },
-                                                    update = { picker ->
-                                                        picker.value = selectedHours.coerceIn(0, 6)
-                                                        styleKmiNumberPicker(picker, pickerTextColor)
-                                                    },
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(170.dp)
-                                                )
-                                            }
-                                        }
-
-                                        Surface(
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(22.dp),
-                                            color = Color.White,
-                                            tonalElevation = 0.dp,
-                                            shadowElevation = 4.dp
-                                        ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally
-                                            ) {
-                                                Text(
-                                                    text = tr("Minutes", "Minutes"),
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-
-                                                Spacer(modifier = Modifier.height(8.dp))
-
-                                                AndroidView(
-                                                    factory = { viewContext ->
-                                                        NumberPicker(viewContext).apply {
-                                                            minValue = 0
-                                                            maxValue = 59
-                                                            value = selectedMinutes.coerceIn(0, 59)
-                                                            wrapSelectorWheel = true
-                                                            setOnValueChangedListener { _, _, newValue ->
-                                                                selectedMinutes = newValue
-                                                            }
-                                                            styleKmiNumberPicker(this, pickerTextColor)
-                                                        }
-                                                    },
-                                                    update = { picker ->
-                                                        picker.value = selectedMinutes.coerceIn(0, 59)
-                                                        styleKmiNumberPicker(picker, pickerTextColor)
-                                                    },
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(170.dp)
-                                                )
-                                            }
-                                        }
-                                    } else {
-                                        Surface(
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(22.dp),
-                                            color = Color.White,
-                                            tonalElevation = 0.dp,
-                                            shadowElevation = 4.dp
-                                        ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally
-                                            ) {
-                                                Text(
-                                                    text = tr("דקות", "Minutes"),
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-
-                                                Spacer(modifier = Modifier.height(8.dp))
-
-                                                AndroidView(
-                                                    factory = { viewContext ->
-                                                        NumberPicker(viewContext).apply {
-                                                            minValue = 0
-                                                            maxValue = 59
-                                                            value = selectedMinutes.coerceIn(0, 59)
-                                                            wrapSelectorWheel = true
-                                                            setOnValueChangedListener { _, _, newValue ->
-                                                                selectedMinutes = newValue
-                                                            }
-                                                            styleKmiNumberPicker(this, pickerTextColor)
-                                                        }
-                                                    },
-                                                    update = { picker ->
-                                                        picker.value = selectedMinutes.coerceIn(0, 59)
-                                                        styleKmiNumberPicker(picker, pickerTextColor)
-                                                    },
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(170.dp)
-                                                )
-                                            }
-                                        }
-
-                                        Surface(
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(22.dp),
-                                            color = Color.White,
-                                            tonalElevation = 0.dp,
-                                            shadowElevation = 4.dp
-                                        ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally
-                                            ) {
-                                                Text(
-                                                    text = tr("שעות", "Hours"),
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-
-                                                Spacer(modifier = Modifier.height(8.dp))
-
-                                                AndroidView(
-                                                    factory = { viewContext ->
-                                                        NumberPicker(viewContext).apply {
-                                                            minValue = 0
-                                                            maxValue = 6
-                                                            value = selectedHours.coerceIn(0, 6)
-                                                            wrapSelectorWheel = false
-                                                            setOnValueChangedListener { _, _, newValue ->
-                                                                selectedHours = newValue
-                                                            }
-                                                            styleKmiNumberPicker(this, pickerTextColor)
-                                                        }
-                                                    },
-                                                    update = { picker ->
-                                                        picker.value = selectedHours.coerceIn(0, 6)
-                                                        styleKmiNumberPicker(picker, pickerTextColor)
-                                                    },
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(170.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            showTrainingReminderTimePicker = false
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(18.dp)
-                                    ) {
-                                        Text(
-                                            text = tr("ביטול", "Cancel"),
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            val totalMinutes =
-                                                selectedHours.coerceIn(0, 6) * 60 +
-                                                        selectedMinutes.coerceIn(0, 59)
-
-                                            val lead = totalMinutes.takeIf { it > 0 } ?: 60
-
-                                            scheduleTrainingReminders(lead)
-                                            showTrainingReminderTimePicker = false
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(18.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFF5B35D5),
-                                            contentColor = Color.White
-                                        )
-                                    ) {
-                                        Text(
-                                            text = tr("שמירה", "Save"),
-                                            fontWeight = FontWeight.ExtraBold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } // ← סוף כרטיס תזכורות אימון
-
-            // --- תרגיל יומי ---
-            SettingsCard(
-                title = tr("תרגיל יומי", "Daily exercise"),
-                subtitle = tr(
-                    "קבל כל יום תרגיל מהחגורה הבאה בשעה שתבחר",
-                    "Get a daily exercise from the next belt at the time you choose"
-                ),
-                icon = Icons.Filled.NotificationsActive,
-                iconTint = sectionIconTint
-            ) {
-                val ctx = LocalContext.current
-
-                val notifPermissionLauncher =
-                    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                        if (granted) {
-                            applyDailyReminderSettings(
-                                enabled = true,
-                                hour = dailyReminderHour,
-                                minute = dailyReminderMinute
-                            )
-                        } else {
-                            applyDailyReminderSettings(enabled = false)
-
-                            android.widget.Toast.makeText(
-                                ctx,
-                                tr(
-                                    "לא ניתן להפעיל תרגיל יומי בלי הרשאת התראות",
-                                    "Daily exercise reminder requires notification permission"
-                                ),
-                                android.widget.Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
-
-                val formattedDailyTime = remember(dailyReminderHour, dailyReminderMinute) {
-                    String.format("%02d:%02d", dailyReminderHour, dailyReminderMinute)
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = if (isCoach)
-                                tr(
-                                    "המאמן יכול לכבות או להפעיל תרגיל יומי לעצמו",
-                                    "The coach can enable or disable a daily exercise for themselves"
+                                Text(
+                                    text = tr(
+                                        "תקבל התראה יומית עם אפשרות לפתוח כרטיס תרגיל, לשמור למועדפים ולקבל תרגיל נוסף.",
+                                        "You will receive a daily reminder with options to open the exercise card, save it to favorites, and get another exercise."
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 10.5.sp,
+                                        lineHeight = 13.sp
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = textAlignPrimary,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
-                            else
-                                tr(
-                                    "שלח לי בכל יום תרגיל מהחגורה הבאה",
-                                    "Send me a daily exercise from the next belt"
-                                ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                            textAlign = textAlignPrimary
-                        )
+                            }
+                        }
+                    }
 
-                        Switch(
-                            checked = dailyReminderEnabled,
-                            onCheckedChange = { enabled ->
-                                if (enabled) {
-                                    if (Build.VERSION.SDK_INT >= 33) {
-                                        val alreadyGranted =
-                                            androidx.core.content.ContextCompat.checkSelfPermission(
-                                                ctx,
-                                                Manifest.permission.POST_NOTIFICATIONS
-                                            ) == PackageManager.PERMISSION_GRANTED
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
 
-                                        if (alreadyGranted) {
-                                            applyDailyReminderSettings(
-                                                enabled = true,
-                                                hour = dailyReminderHour,
-                                                minute = dailyReminderMinute
-                                            )
-                                        } else {
-                                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                        }
-                                    } else {
-                                        applyDailyReminderSettings(
-                                            enabled = true,
-                                            hour = dailyReminderHour,
-                                            minute = dailyReminderMinute
-                                        )
-                                    }
-                                } else {
-                                    applyDailyReminderSettings(enabled = false)
+                    SettingsListItem(
+                        title = tr("תזכורות אימונים חופשיים", "Free training reminders"),
+                        value = if (sp.getBoolean("free_sessions_reminders_enabled", false)) {
+                            tr("פעיל", "On")
+                        } else {
+                            tr("כבוי", "Off")
+                        },
+                        icon = Icons.Filled.NotificationsActive,
+                        iconTint = Color(0xFF16A34A)
+                    ) {
+                        val ctx = LocalContext.current
+
+                        var freeRemindersEnabled by rememberSaveable {
+                            mutableStateOf(sp.getBoolean("free_sessions_reminders_enabled", false))
+                        }
+
+                        val notifPermissionLauncher =
+                            rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                                if (!granted) {
+                                    freeRemindersEnabled = false
+                                    sp.edit().putBoolean("free_sessions_reminders_enabled", false).apply()
                                 }
                             }
-                        )
-                    }
 
-                    if (dailyReminderEnabled) {
-                        OutlinedButton(
-                            onClick = {
-                                TimePickerDialog(
-                                    ctx,
-                                    { _, hourOfDay, minute ->
-
-                                        dailyReminderHour = hourOfDay
-                                        dailyReminderMinute = minute
-
-                                        reminderPrefs.setHour(hourOfDay)
-                                        reminderPrefs.setMinute(minute)
-                                        reminderPrefs.setEnabledForRole(isCoach, true)
-                                        dailyReminderEnabled = true
-
-                                        if (Build.VERSION.SDK_INT >= 33 && !hasNotificationPermissionForDailyReminder()) {
-                                            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                        } else {
-                                            applyDailyReminderSettings(
-                                                enabled = true,
-                                                hour = hourOfDay,
-                                                minute = minute
-                                            )
-                                        }
-                                    },
-                                    dailyReminderHour,
-                                    dailyReminderMinute,
-                                    true
-                                ).show()
-                            },
-                            modifier = Modifier.fillMaxWidth()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(tr("שעת התזכורת: $formattedDailyTime", "Reminder time: $formattedDailyTime"))
-                        }
+                            Text(
+                                text = tr(
+                                    "התראות 30 ו-10 דקות לפני אימון חופשי שסימנת \"אני מגיע\"",
+                                    "Notifications 30 and 10 minutes before a free training session marked as \"I'm coming\""
+                                ),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 10.8.sp,
+                                    lineHeight = 13.5.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                                textAlign = textAlignPrimary
+                            )
 
-                        Text(
-                            text = tr(
-                                "תקבל התראה יומית עם אפשרות לפתוח כרטיס תרגיל, לשמור למועדפים ולקבל תרגיל נוסף.",
-                                "You will receive a daily reminder with options to open the exercise card, save it to favorites, and get another exercise."
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = textAlignPrimary,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
+                            Switch(
+                                checked = freeRemindersEnabled,
+                                onCheckedChange = { enabled ->
+                                    freeRemindersEnabled = enabled
+                                    sp.edit()
+                                        .putBoolean("free_sessions_reminders_enabled", enabled)
+                                        .apply()
 
-            // --- תזכורות אימונים חופשיים ---
-            SettingsCard(
-                title = tr("תזכורות אימונים חופשיים", "Free training reminders"),
-                subtitle = tr(
-                    "קבל התראה לפני אימון חופשי שאישרת הגעה",
-                    "Get a reminder before a free training session you confirmed"
-                ),
-                icon = Icons.Filled.NotificationsActive,
-                iconTint = sectionIconTint
-            ) {
-                val ctx = LocalContext.current
-
-                var freeRemindersEnabled by rememberSaveable {
-                    mutableStateOf(sp.getBoolean("free_sessions_reminders_enabled", false))
-                }
-
-                // הרשאת POST_NOTIFICATIONS (אנדרואיד 13+)
-                val notifPermissionLauncher =
-                    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                        if (!granted) {
-                            freeRemindersEnabled = false
-                            sp.edit().putBoolean("free_sessions_reminders_enabled", false).apply()
-                        }
-                    }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = tr(
-                                "התראות 30 ו-10 דקות לפני אימון חופשי שסימנת \"אני מגיע\"",
-                                "Notifications 30 and 10 minutes before a free training session marked as \"I'm coming\""
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                            textAlign = textAlignPrimary
-                        )
-
-                        Switch(
-                            checked = freeRemindersEnabled,
-                            onCheckedChange = { enabled ->
-                                freeRemindersEnabled = enabled
-                                sp.edit().putBoolean("free_sessions_reminders_enabled", enabled).apply()
-
-                                if (enabled) {
-                                    if (Build.VERSION.SDK_INT >= 33) {
+                                    if (enabled && Build.VERSION.SDK_INT >= 33) {
                                         notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    } else {
-                                        // אין מה לתזמן כאן: התזכורות נקבעות כשמאשרים "אני מגיע"
-                                        // והערוץ נוצר אוטומטית בזמן שליחת ההתראה בתוך ה-Receiver
                                     }
+                                }
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    SettingsListItem(
+                        title = tr("סנכרון ליומן במכשיר", "Device calendar sync"),
+                        value = if (sp.getBoolean("calendar_sync_selected_enabled", false)) {
+                            val selectedCalendarDisplayCollapsed =
+                                sp.getString("calendar_sync_selected_calendar_display", "").orEmpty()
+
+                            if (selectedCalendarDisplayCollapsed.isNotBlank()) {
+                                tr(
+                                    "מסוכרן: $selectedCalendarDisplayCollapsed",
+                                    "Synced: $selectedCalendarDisplayCollapsed"
+                                )
+                            } else {
+                                tr("מסוכרן", "Synced")
+                            }
+                        } else {
+                            tr("לא מסוכרן", "Not synced")
+                        },
+                        icon = Icons.Filled.Event,
+                        iconTint = Color(0xFF0284C7),
+                        bottomRounded = true
+                    ) {
+                        val appCtx = LocalContext.current
+                        var selectedSyncEnabled by rememberSaveable {
+                            mutableStateOf(sp.getBoolean("calendar_sync_selected_enabled", false))
+                        }
+                        var selectedCalendarId by rememberSaveable {
+                            mutableLongStateOf(sp.getLong("calendar_sync_selected_calendar_id", -1L))
+                        }
+                        var selectedCalendarDisplay by rememberSaveable {
+                            mutableStateOf(
+                                sp.getString("calendar_sync_selected_calendar_display", "") ?: ""
+                            )
+                        }
+                        var showCalendarPicker by rememberSaveable { mutableStateOf(false) }
+                        var pendingEnableAfterPermission by rememberSaveable { mutableStateOf(false) }
+
+                        val writableCalendars = remember(showCalendarPicker) {
+                            if (showCalendarPicker) KmiCalendarSync.listWritableCalendars(appCtx) else emptyList()
+                        }
+
+                        val calendarPermissionLauncherSelected = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.RequestMultiplePermissions()
+                        ) { result ->
+                            val granted =
+                                result[Manifest.permission.READ_CALENDAR] == true &&
+                                        result[Manifest.permission.WRITE_CALENDAR] == true
+
+                            if (!granted) {
+                                selectedSyncEnabled = false
+                                sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
+                                pendingEnableAfterPermission = false
+                                haptic(true)
+                                toast(
+                                    tr(
+                                        "אין הרשאה ליומן – לא בוצע סנכרון",
+                                        "No calendar permission - sync was not performed"
+                                    )
+                                )
+                                return@rememberLauncherForActivityResult
+                            }
+
+                            if (pendingEnableAfterPermission) {
+                                pendingEnableAfterPermission = false
+                                if (selectedCalendarId <= 0L) {
+                                    selectedSyncEnabled = false
+                                    showCalendarPicker = true
+                                    haptic(true)
+                                    toast(
+                                        tr(
+                                            "יש לבחור יומן לפני הפעלת הסנכרון",
+                                            "Please choose a calendar before enabling sync"
+                                        )
+                                    )
                                 } else {
-                                    // אופציונלי בעתיד: cancelAll(ctx) אם תוסיף פונקציה כזאת
+                                    try {
+                                        isBusy = true
+                                        val ok = KmiCalendarSync.upsertAllToSelectedCalendar(
+                                            appCtx,
+                                            selectedCalendarId
+                                        )
+                                        if (ok) {
+                                            selectedSyncEnabled = true
+                                            sp.edit()
+                                                .putBoolean("calendar_sync_selected_enabled", true)
+                                                .apply()
+                                            haptic(true)
+                                            toast(
+                                                tr(
+                                                    "האימונים סונכרנו ליומן שבחרת",
+                                                    "Trainings were synced to the selected calendar"
+                                                )
+                                            )
+                                        } else {
+                                            selectedSyncEnabled = false
+                                            sp.edit()
+                                                .putBoolean("calendar_sync_selected_enabled", false)
+                                                .apply()
+                                            haptic(true)
+                                            toast(
+                                                tr(
+                                                    "שגיאה בסנכרון ליומן שנבחר",
+                                                    "Error syncing to selected calendar"
+                                                )
+                                            )
+                                        }
+                                    } catch (_: Throwable) {
+                                        selectedSyncEnabled = false
+                                        sp.edit()
+                                            .putBoolean("calendar_sync_selected_enabled", false)
+                                            .apply()
+                                        haptic(true)
+                                        toast(
+                                            tr(
+                                                "שגיאה בסנכרון ליומן שנבחר",
+                                                "Error syncing to selected calendar"
+                                            )
+                                        )
+                                    } finally {
+                                        isBusy = false
+                                    }
                                 }
                             }
-                        )
-                    }
-                }
-            } // ← סוף כרטיס תזכורות אימונים חופשיים
+                        }
 
-            // --- סנכרון ליומן חיצוני / יומן במכשיר ---
-            SettingsCard(
-                title = tr("סנכרון ליומן במכשיר", "Device calendar sync"),
-                subtitle = tr(
-                    "בחר יומן חיצוני לסנכרון האימונים",
-                    "Choose an external/device calendar for training sync"
-                ),
-                icon = Icons.Filled.Event,
-                iconTint = sectionIconTint
-            ) {
-                val appCtx = LocalContext.current
-                var selectedSyncEnabled by rememberSaveable {
-                    mutableStateOf(sp.getBoolean("calendar_sync_selected_enabled", false))
-                }
-                var selectedCalendarId by rememberSaveable {
-                    mutableLongStateOf(sp.getLong("calendar_sync_selected_calendar_id", -1L))
-                }
-                var selectedCalendarDisplay by rememberSaveable {
-                    mutableStateOf(sp.getString("calendar_sync_selected_calendar_display", "") ?: "")
-                }
-                var showCalendarPicker by rememberSaveable { mutableStateOf(false) }
-                var pendingEnableAfterPermission by rememberSaveable { mutableStateOf(false) }
-
-                val writableCalendars = remember(showCalendarPicker) {
-                    if (showCalendarPicker) KmiCalendarSync.listWritableCalendars(appCtx) else emptyList()
-                }
-
-                val calendarPermissionLauncherSelected = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.RequestMultiplePermissions()
-                ) { result ->
-                    val granted =
-                        result[Manifest.permission.READ_CALENDAR] == true &&
-                                result[Manifest.permission.WRITE_CALENDAR] == true
-
-                    if (!granted) {
-                        selectedSyncEnabled = false
-                        sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
-                        pendingEnableAfterPermission = false
-                        haptic(true)
-                        toast(
-                            tr(
-                                "אין הרשאה ליומן – לא בוצע סנכרון",
-                                "No calendar permission - sync was not performed"
-                            )
-                        )
-                        return@rememberLauncherForActivityResult
-                    }
-
-                    if (pendingEnableAfterPermission) {
-                        pendingEnableAfterPermission = false
-                        if (selectedCalendarId <= 0L) {
-                            selectedSyncEnabled = false
-                            showCalendarPicker = true
-                            haptic(true)
-                            toast(
-                                tr(
-                                    "יש לבחור יומן לפני הפעלת הסנכרון",
-                                    "Please choose a calendar before enabling sync"
+                        fun persistCalendarSelection(cal: KmiCalendarSync.DeviceCalendar) {
+                            selectedCalendarId = cal.id
+                            selectedCalendarDisplay = "${cal.displayName} (${cal.accountName})"
+                            sp.edit()
+                                .putLong("calendar_sync_selected_calendar_id", cal.id)
+                                .putString(
+                                    "calendar_sync_selected_calendar_display",
+                                    selectedCalendarDisplay
                                 )
-                            )
-                        } else {
+                                .apply()
+                        }
+
+                        fun enableSelectedCalendarSync() {
+                            if (!hasCalendarPermission(appCtx)) {
+                                pendingEnableAfterPermission = true
+                                calendarPermissionLauncherSelected.launch(
+                                    arrayOf(
+                                        Manifest.permission.READ_CALENDAR,
+                                        Manifest.permission.WRITE_CALENDAR
+                                    )
+                                )
+                                return
+                            }
+
+                            if (selectedCalendarId <= 0L) {
+                                selectedSyncEnabled = false
+                                showCalendarPicker = true
+                                haptic(true)
+                                toast(
+                                    tr(
+                                        "יש לבחור יומן לפני הפעלת הסנכרון",
+                                        "Please choose a calendar before enabling sync"
+                                    )
+                                )
+                                return
+                            }
+
                             try {
                                 isBusy = true
-                                val ok = KmiCalendarSync.upsertAllToSelectedCalendar(appCtx, selectedCalendarId)
+                                val ok = KmiCalendarSync.upsertAllToSelectedCalendar(
+                                    appCtx,
+                                    selectedCalendarId
+                                )
                                 if (ok) {
                                     selectedSyncEnabled = true
-                                    sp.edit().putBoolean("calendar_sync_selected_enabled", true).apply()
+                                    sp.edit()
+                                        .putBoolean("calendar_sync_selected_enabled", true)
+                                        .apply()
                                     haptic(true)
                                     toast(
                                         tr(
@@ -1304,7 +1521,9 @@ fun SettingsScreenModern(
                                     )
                                 } else {
                                     selectedSyncEnabled = false
-                                    sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
+                                    sp.edit()
+                                        .putBoolean("calendar_sync_selected_enabled", false)
+                                        .apply()
                                     haptic(true)
                                     toast(
                                         tr(
@@ -1315,7 +1534,9 @@ fun SettingsScreenModern(
                                 }
                             } catch (_: Throwable) {
                                 selectedSyncEnabled = false
-                                sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
+                                sp.edit()
+                                    .putBoolean("calendar_sync_selected_enabled", false)
+                                    .apply()
                                 haptic(true)
                                 toast(
                                     tr(
@@ -1327,996 +1548,952 @@ fun SettingsScreenModern(
                                 isBusy = false
                             }
                         }
-                    }
-                }
 
-                fun persistCalendarSelection(cal: KmiCalendarSync.DeviceCalendar) {
-                    selectedCalendarId = cal.id
-                    selectedCalendarDisplay = "${cal.displayName} (${cal.accountName})"
-                    sp.edit()
-                        .putLong("calendar_sync_selected_calendar_id", cal.id)
-                        .putString("calendar_sync_selected_calendar_display", selectedCalendarDisplay)
-                        .apply()
-                }
-
-                fun enableSelectedCalendarSync() {
-                    if (!hasCalendarPermission(appCtx)) {
-                        pendingEnableAfterPermission = true
-                        calendarPermissionLauncherSelected.launch(
-                            arrayOf(
-                                Manifest.permission.READ_CALENDAR,
-                                Manifest.permission.WRITE_CALENDAR
-                            )
-                        )
-                        return
-                    }
-
-                    if (selectedCalendarId <= 0L) {
-                        selectedSyncEnabled = false
-                        showCalendarPicker = true
-                        haptic(true)
-                        toast(
-                            tr(
-                                "יש לבחור יומן לפני הפעלת הסנכרון",
-                                "Please choose a calendar before enabling sync"
-                            )
-                        )
-                        return
-                    }
-
-                    try {
-                        isBusy = true
-                        val ok = KmiCalendarSync.upsertAllToSelectedCalendar(appCtx, selectedCalendarId)
-                        if (ok) {
-                            selectedSyncEnabled = true
-                            sp.edit().putBoolean("calendar_sync_selected_enabled", true).apply()
-                            haptic(true)
-                            toast(
-                                tr(
-                                    "האימונים סונכרנו ליומן שבחרת",
-                                    "Trainings were synced to the selected calendar"
-                                )
-                            )
-                        } else {
-                            selectedSyncEnabled = false
-                            sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
-                            haptic(true)
-                            toast(
-                                tr(
-                                    "שגיאה בסנכרון ליומן שנבחר",
-                                    "Error syncing to selected calendar"
-                                )
-                            )
-                        }
-                    } catch (_: Throwable) {
-                        selectedSyncEnabled = false
-                        sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
-                        haptic(true)
-                        toast(
-                            tr(
-                                "שגיאה בסנכרון ליומן שנבחר",
-                                "Error syncing to selected calendar"
-                            )
-                        )
-                    } finally {
-                        isBusy = false
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        tr("סנכרן ליומן חיצוני", "Sync to external calendar"),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = textAlignPrimary,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Spacer(Modifier.width(12.dp))
-
-                    Switch(
-                        checked = selectedSyncEnabled,
-                        onCheckedChange = { checked ->
-                            if (checked) {
-                                enableSelectedCalendarSync()
-                            } else {
-                                selectedSyncEnabled = false
-                                sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
-                                try {
-                                    isBusy = true
-                                    KmiCalendarSync.removeSelectedCalendarEvents(appCtx)
-                                    haptic(true)
-                                    toast(
-                                        tr(
-                                            "הסנכרון ליומן שבחרת בוטל",
-                                            "Selected calendar sync was disabled"
-                                        )
-                                    )
-                                } catch (_: Throwable) {
-                                    haptic(true)
-                                    toast(
-                                        tr(
-                                            "שגיאה בביטול הסנכרון",
-                                            "Error disabling calendar sync"
-                                        )
-                                    )
-                                } finally {
-                                    isBusy = false
-                                }
-                            }
-                        }
-                    )
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                Text(
-                    text = if (selectedCalendarId > 0L && selectedCalendarDisplay.isNotBlank()) {
-                        tr("יומן שנבחר: $selectedCalendarDisplay", "Selected calendar: $selectedCalendarDisplay")
-                    } else {
-                        tr("עדיין לא נבחר יומן יעד", "No target calendar selected yet")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = textAlignPrimary,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        if (!hasCalendarPermission(appCtx)) {
-                            calendarPermissionLauncherSelected.launch(
-                                arrayOf(
-                                    Manifest.permission.READ_CALENDAR,
-                                    Manifest.permission.WRITE_CALENDAR
-                                )
-                            )
-                        } else {
-                            showCalendarPicker = true
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                ) {
-                    Text(tr("בחר יומן יעד", "Choose target calendar"))
-                }
-
-                if (showCalendarPicker) {
-                    var tempSelectedId by remember(selectedCalendarId, writableCalendars) {
-                        mutableLongStateOf(
-                            if (writableCalendars.any { it.id == selectedCalendarId }) selectedCalendarId
-                            else writableCalendars.firstOrNull()?.id ?: -1L
-                        )
-                    }
-
-                    AlertDialog(
-                        onDismissRequest = { showCalendarPicker = false },
-                        title = {
-                            Text(
-                                text = tr("בחר יומן לסנכרון", "Choose calendar for sync"),
-                                textAlign = textAlignPrimary,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        },
-                        text = {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 360.dp)
-                                    .verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (writableCalendars.isEmpty()) {
-                                    Text(
-                                        text = tr(
-                                            "לא נמצאו יומנים זמינים לכתיבה במכשיר.",
-                                            "No writable calendars were found on this device."
-                                        ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        textAlign = textAlignPrimary,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                } else {
-                                    writableCalendars.forEach { cal ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable { tempSelectedId = cal.id }
-                                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            RadioButton(
-                                                selected = tempSelectedId == cal.id,
-                                                onClick = { tempSelectedId = cal.id }
-                                            )
-                                            Spacer(Modifier.width(8.dp))
-                                            Column(
-                                                modifier = Modifier.weight(1f),
-                                                horizontalAlignment = horizontalEnd
-                                            ) {
-                                                Text(
-                                                    cal.displayName.ifBlank { tr("יומן ללא שם", "Unnamed calendar") },
-                                                    textAlign = textAlignPrimary
-                                                )
-                                                Text(
-                                                    cal.accountName.ifBlank { cal.accountType.ifBlank { "-" } },
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    textAlign = textAlignPrimary
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    val selected = writableCalendars.firstOrNull { it.id == tempSelectedId }
-                                    if (selected == null) {
-                                        haptic(true)
-                                        toast(tr("יש לבחור יומן תקין", "Please choose a valid calendar"))
-                                        return@TextButton
-                                    }
-                                    persistCalendarSelection(selected)
-                                    showCalendarPicker = false
-                                    if (selectedSyncEnabled) {
-                                        enableSelectedCalendarSync()
-                                    }
-                                }
-                            ) {
-                                Text(tr("שמירה", "Save"))
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showCalendarPicker = false }) {
-                                Text(tr("ביטול", "Cancel"))
-                            }
-                        }
-                    )
-                }
-
-                LoadingOverlay(show = isBusy, modifier = Modifier.fillMaxWidth().height(80.dp))
-            }
-
-            // --- חוויית משתמש ---
-            SettingsCard(
-                title = tr("חוויית משתמש", "User experience"),
-                subtitle = tr("צלילים, רטט ושיפור חוויית האינטראקציה", "Sounds, haptics, and improved interaction experience"),
-                icon = Icons.Filled.Tune,
-                iconTint = sectionIconTint
-            ) {
-                // מצב נוכחי מתוך SP (תומך גם במפתחות הישנים tap_sound / short_haptic)
-                var clickSounds by rememberSaveable {
-                    mutableStateOf(
-                        sp.getBoolean(
-                            "click_sounds",
-                            sp.getBoolean("tap_sound", false)
-                        )
-                    )
-                }
-                var hapticsOn by rememberSaveable {
-                    mutableStateOf(
-                        sp.getBoolean(
-                            "haptics_on",
-                            sp.getBoolean("short_haptic", false)
-                        )
-                    )
-                }
-
-                // קריאות בטוחות למודול המשותף (אם קיים)
-                fun setClickSoundsEnabledSafe(enabled: Boolean) {
-                    runCatching { il.kmi.shared.Platform.setClickSoundsEnabled(enabled) }
-                }
-                fun setHapticsEnabledSafe(enabled: Boolean) {
-                    runCatching { il.kmi.shared.Platform.setHapticsEnabled(enabled) }
-                }
-
-                // כדי לבצע צליל/רטט מיידי במסך ההגדרות
-                val view = LocalView.current
-
-                fun playFeedbackIfEnabled() {
-                    // צליל הקשה
-                    if (clickSounds) {
-                        view.playSoundEffect(SoundEffectConstants.CLICK)
-                    }
-                    // רטט קצר
-                    if (hapticsOn) {
-                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    }
-                }
-
-                // שורה 1: צליל הקשה בכפתורים
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        tr("צליל הקשה בכפתורים", "Button tap sound"),
-                        textAlign = textAlignPrimary,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = clickSounds,
-                        onCheckedChange = { enabled ->
-                            clickSounds = enabled
-                            // שומרים גם במפתחות הישנים וגם בחדשים
-                            sp.edit()
-                                .putBoolean("click_sounds", enabled)
-                                .putBoolean("tap_sound", enabled)
-                                .apply()
-                            setClickSoundsEnabledSafe(enabled)
-
-                            // משוב מיידי – רק כשהמצב לאחר הלחיצה הוא פעיל
-                            if (clickSounds) {
-                                playFeedbackIfEnabled()
-                            }
-                        }
-                    )
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                // שורה 2: רטט קצר בעת סימון ✓/✗
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        tr("רטט קצר בעת סימון ✓/✗", "Short haptic on ✓/✗ marking"),
-                        textAlign = textAlignPrimary,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = hapticsOn,
-                        onCheckedChange = { enabled ->
-                            hapticsOn = enabled
-                            sp.edit()
-                                .putBoolean("haptics_on", enabled)
-                                .putBoolean("short_haptic", enabled)
-                                .apply()
-                            setHapticsEnabledSafe(enabled)
-
-                            // משוב מיידי – רק כשהמצב לאחר הלחיצה הוא פעיל
-                            if (hapticsOn) {
-                                playFeedbackIfEnabled()
-                            }
-                        }
-                    )
-                }
-            }
-
-            // --- הגדרות קול (ענן) ---
-            SettingsCard(
-                title = tr("הגדרות קול", "Voice settings"),
-                subtitle = tr("בחירת קול גבר/אישה (אחיד לכל האפליקציה)", "Choose male/female voice for the entire app"),
-                icon = Icons.Filled.SupportAgent,
-                iconTint = sectionIconTint
-            ) {
-            val ctx = LocalContext.current
-
-                val voicePrefs = remember {
-                    ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-                }
-
-                // ✅ זה ה-SP שה-TTS המקומי באמת קורא ממנו
-                val userSp = remember {
-                    ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-                }
-
-                var cloudVoice by rememberSaveable {
-                    mutableStateOf(voicePrefs.getString("voice", "male") ?: "male") // "male" / "female"
-                }
-
-                fun setCloudVoice(v: String) {
-                    cloudVoice = v
-
-                    voicePrefs.edit()
-                        .putString("voice", v)
-                        .apply()
-
-                    ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                        .edit()
-                        .putString("kmi_tts_voice", v)
-                        .apply()
-                }
-
-                val selectedIndex = if (cloudVoice == "male") 0 else 1
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = tr("בחר קול להשמעה:", "Choose voice playback:"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = textAlignPrimary,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // ✅ במקום TabRow (שנוטה “להעלים” טקסט) – SegmentedButton יציב
-                    SingleChoiceSegmentedButtonRow(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        SegmentedButton(
-                            selected = selectedIndex == 0,
-                            onClick = { setCloudVoice("male") },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                            label = { Text(tr("קול גבר", "Male voice"), maxLines = 1) }
-                        )
-                        SegmentedButton(
-                            selected = selectedIndex == 1,
-                            onClick = { setCloudVoice("female") },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                            label = { Text(tr("קול אישה", "Female voice"), maxLines = 1) }
-                        )
-                    }
-
-                    Text(
-                        text = tr(
-                            "הבחירה נשמרת למכשיר ותשפיע על הדיבור בעוזר הקולי.",
-                            "The selection is saved on the device and affects speech in the voice assistant."
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = textAlignPrimary,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-
-            // --- נראות אפליקציה (לפי מכשיר / מצב בהיר / מצב כהה) ---
-            SettingsCard(
-                title = tr("נראות אפליקציה", "App appearance"),
-                subtitle = tr(
-                    "ברירת המחדל היא מצב בהיר",
-                    "Default is light mode"
-                ),
-                icon = Icons.Filled.Palette,
-                iconTint = sectionIconTint
-            ) {
-                val systemIsDark = isSystemInDarkTheme()
-
-                fun effectiveModeLabel(): String {
-                    return when (themeModeLocal) {
-                        "light" -> tr("מצב פעיל: בהיר", "Active mode: Light")
-                        "dark" -> tr("מצב פעיל: כהה", "Active mode: Dark")
-                        else -> {
-                            if (systemIsDark) {
-                                tr("מצב פעיל: לפי המכשיר — כהה", "Active mode: Device default — Dark")
-                            } else {
-                                tr("מצב פעיל: לפי המכשיר — בהיר", "Active mode: Device default — Light")
-                            }
-                        }
-                    }
-                }
-
-                fun applyAppearanceMode(mode: String) {
-                    themeModeLocal = mode
-                    onThemeChange(mode)
-                    kmiPrefs.themeMode = mode
-                    sp.edit().putString("theme_mode", mode).apply()
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = tr("בחר מצב תצוגה:", "Choose display mode:"),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = textAlignPrimary,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    val themeIndex = when (themeModeLocal) {
-                        "system" -> 0
-                        "light" -> 1
-                        "dark" -> 2
-                        else -> 1
-                    }
-
-                    TabRow(selectedTabIndex = themeIndex) {
-
-                        Tab(
-                            selected = themeModeLocal == "system",
-                            onClick = { applyAppearanceMode("system") },
-                            text = {
-                                Text(
-                                    text = tr("לפי\nהמכשיר", "Device\ndefault"),
-                                    minLines = 2,
-                                    maxLines = 2,
-                                    softWrap = true,
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = if (themeModeLocal == "system") {
-                                            FontWeight.Bold
-                                        } else {
-                                            FontWeight.SemiBold
-                                        }
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 52.dp)
-                                        .wrapContentHeight(Alignment.CenterVertically)
-                                )
-                            }
-                        )
-
-                        Tab(
-                            selected = themeModeLocal == "light",
-                            onClick = { applyAppearanceMode("light") },
-                            text = {
-                                Text(
-                                    text = tr("מצב\nבהיר", "Light\nmode"),
-                                    minLines = 2,
-                                    maxLines = 2,
-                                    softWrap = true,
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = if (themeModeLocal == "light") {
-                                            FontWeight.Bold
-                                        } else {
-                                            FontWeight.SemiBold
-                                        }
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 52.dp)
-                                        .wrapContentHeight(Alignment.CenterVertically)
-                                )
-                            }
-                        )
-
-                        Tab(
-                            selected = themeModeLocal == "dark",
-                            onClick = { applyAppearanceMode("dark") },
-                            text = {
-                                Text(
-                                    text = tr("מצב\nכהה", "Dark\nmode"),
-                                    minLines = 2,
-                                    maxLines = 2,
-                                    softWrap = true,
-                                    textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = if (themeModeLocal == "dark") {
-                                            FontWeight.Bold
-                                        } else {
-                                            FontWeight.SemiBold
-                                        }
-                                    ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 52.dp)
-                                        .wrapContentHeight(Alignment.CenterVertically)
-                                )
-                            }
-                        )
-                    }
-
-                    Text(
-                        text = effectiveModeLabel(),
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = MaterialTheme.colorScheme.primary,
-                        textAlign = textAlignPrimary,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = tr(
-                            "במצב לפי המכשיר, האפליקציה תעבור אוטומטית בין מצב כהה ובהיר לפי ההגדרה של Android.",
-                            "In device default mode, the app automatically follows Android light/dark appearance."
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = textAlignPrimary,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-
-            // --- נעילת אפליקציה (ללא נעילה / אצבע) ---
-            SettingsCard(
-                title = tr("נעילת אפליקציה", "App lock"),
-                subtitle = tr("בחר שיטת נעילה להגנה על האפליקציה", "Choose a lock method to protect the app"),
-                icon = Icons.Filled.Lock,
-                iconTint = sectionIconTint
-            ) {
-                var lockMode by rememberSaveable {
-                    mutableStateOf(
-                        when (sp.getString("app_lock_mode", "none") ?: "none") {
-                            "biometric" -> "biometric"
-                            else -> "none"
-                        }
-                    )
-                }
-
-                val ctx = LocalContext.current
-                val act = ctx as? androidx.fragment.app.FragmentActivity
-
-                fun applyLock(mode: String) {
-                    sp.edit().putString("app_lock_mode", mode).apply()
-                    when (mode) {
-                        "none" -> {
-                            il.kmi.app.security.AppLockStore.setMethod(
-                                ctx,
-                                il.kmi.app.security.AppLockMethod.NONE
-                            )
-                            android.widget.Toast.makeText(
-                                ctx,
-                                tr("נעילת האפליקציה בוטלה", "App lock disabled"),
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
-
-                        "biometric" -> {
-                            val canBio = androidx.biometric.BiometricManager.from(ctx)
-                                .canAuthenticate(
-                                    androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
-                                ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
-
-                            if (!canBio) {
-                                android.widget.Toast.makeText(
-                                    ctx,
-                                    tr("ביומטרי לא זמין במכשיר", "Biometric authentication is not available on this device"),
-                                    android.widget.Toast.LENGTH_LONG
-                                ).show()
-                                lockMode = sp.getString("app_lock_mode", "none") ?: "none"
-                                return
-                            }
-
-                            il.kmi.app.security.AppLockStore.setMethod(
-                                ctx,
-                                il.kmi.app.security.AppLockMethod.BIOMETRIC
-                            )
-                            act?.let { il.kmi.app.security.AppLock.requireIfNeeded(it, true) }
-                            android.widget.Toast.makeText(
-                                ctx,
-                                tr("זיהוי ביומטרי הופעל", "Biometric lock enabled"),
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-                }
-
-                val lockIndex = when (lockMode) {
-                    "none" -> 0
-                    "biometric" -> 1
-                    else -> 0
-                }
-
-                TabRow(selectedTabIndex = lockIndex) {
-                    Tab(
-                        selected = lockMode == "none",
-                        onClick = {
-                            lockMode = "none"
-                            applyLock("none")
-                        },
-                        text = {
-                            Text(
-                                text = tr("ללא\nנעילה", "No\nlock"),
-                                minLines = 2,
-                                maxLines = 2,
-                                softWrap = true,
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 48.dp)
-                                    .wrapContentHeight(Alignment.CenterVertically)
-                            )
-                        }
-                    )
-
-                    Tab(
-                        selected = lockMode == "biometric",
-                        onClick = {
-                            lockMode = "biometric"
-                            applyLock("biometric")
-                        },
-                        text = {
-                            Text(
-                                text = tr("נעילה\nבאצבע", "Biometric\nlock"),
-                                minLines = 2,
-                                maxLines = 2,
-                                softWrap = true,
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 48.dp)
-                                    .wrapContentHeight(Alignment.CenterVertically)
-                            )
-                        }
-                    )
-                }
-            }
-
-// הודעת מידע אם ביומטרי לא זמין במכשיר
-            val ctxBio = LocalContext.current
-            val bioAvailable = remember(ctxBio) {
-                androidx.biometric.BiometricManager.from(ctxBio)
-                    .canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-                        androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
-            }
-            if (!bioAvailable) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    tr("ביומטרי לא זמין במכשיר או לא הוגדר למשתמש.", "Biometric authentication is not available or not configured for this user."),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = textAlignPrimary,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            // =========================
-            // ניהול נתונים
-            // =========================
-
-            // כרטיס: ניהול נתונים (היסטוריית שידורים + מטמון)
-            SettingsCard(
-                title = tr("ניהול נתונים", "Data management"),
-                subtitle = tr("ניקוי נתונים מקומיים במכשיר", "Clear local data on the device"),
-                icon = Icons.Filled.Storage,
-                iconTint = sectionIconTint
-            ) {
-                val ctx = LocalContext.current
-                val spUser = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
-                val PREF_RECENTS_KEY = "coach_broadcast_recents_json"
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // ניקוי היסטוריית שידורים (10 אחרונות שהוספנו קודם)
-                    Button(
-                        onClick = {
-                            spUser.edit().remove(PREF_RECENTS_KEY).apply()
-                            toast(tr("היסטוריית השידורים נוקתה", "Broadcast history cleared")); haptic(true)
-                        },
-                        modifier = Modifier.fillMaxWidth().height(44.dp)
-                    ) { Text(tr("נקה היסטוריית שידורים", "Clear broadcast history")) }
-
-                    // ניקוי מטמון קבצים (תמונות/ייצוא זמני וכד׳)
-                    OutlinedButton(
-                        onClick = {
-                            isBusy = true
-                            val ok = clearAppCache(ctx)
-                            isBusy = false
-                            if (ok) { toast(tr("נוקו קבצי המטמון", "Cache files cleared")); haptic(true) } else { toast(tr("ניקוי נכשל", "Clear failed")); haptic(false) }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(44.dp)
-                    ) { Text(tr("נקה מטמון אפליקציה", "Clear app cache")) }
-                }
-            }
-
-            // כרטיס: משפטי (פרימיום) — 3 מסמכים
-            SettingsCard(
-                title = tr("מידע משפטי", "Legal information"),
-                subtitle = tr("מסמכים רשמיים ומידע חשוב", "Official documents and important information"),
-                icon = Icons.Filled.Gavel,
-                iconTint = sectionIconTint
-            ) {
-
-                @Composable
-                fun LegalTile(
-                    title: String,
-                    subtitle: String,
-                    icon: ImageVector,
-                    onClick: () -> Unit,
-                    modifier: Modifier = Modifier
-                ) {
-                    Surface(
-                        onClick = onClick,
-                        shape = RoundedCornerShape(16.dp),
-                        tonalElevation = 2.dp,
-                        shadowElevation = 1.dp,
-                        color = MaterialTheme.colorScheme.surface,
-                        modifier = modifier
-                            .heightIn(min = 92.dp) // ⬅️ היה 76.dp (קטן מדי לשתי שורות)
-                    ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-
-                            // אייקון קטן “יוקרתי”
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = icon,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
+                            Text(
+                                tr("סנכרן ליומן חיצוני", "Sync to external calendar"),
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = 12.6.sp,
+                                    lineHeight = 16.sp
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = textAlignPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
 
                             Spacer(Modifier.width(12.dp))
 
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                horizontalAlignment = horizontalEnd
-                            ) {
-                                Text(
-                                    text = title,
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    textAlign = textAlignPrimary,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth()
+                            Switch(
+                                checked = selectedSyncEnabled,
+                                onCheckedChange = { checked ->
+                                    if (checked) {
+                                        enableSelectedCalendarSync()
+                                    } else {
+                                        selectedSyncEnabled = false
+                                        sp.edit()
+                                            .putBoolean("calendar_sync_selected_enabled", false)
+                                            .apply()
+                                        try {
+                                            isBusy = true
+                                            KmiCalendarSync.removeSelectedCalendarEvents(appCtx)
+                                            haptic(true)
+                                            toast(
+                                                tr(
+                                                    "הסנכרון ליומן שבחרת בוטל",
+                                                    "Selected calendar sync was disabled"
+                                                )
+                                            )
+                                        } catch (_: Throwable) {
+                                            haptic(true)
+                                            toast(
+                                                tr(
+                                                    "שגיאה בביטול הסנכרון",
+                                                    "Error disabling calendar sync"
+                                                )
+                                            )
+                                        } finally {
+                                            isBusy = false
+                                        }
+                                    }
+                                }
+                            )
+                        }
+
+                        Text(
+                            text = if (selectedCalendarId > 0L && selectedCalendarDisplay.isNotBlank()) {
+                                tr(
+                                    "יומן שנבחר: $selectedCalendarDisplay",
+                                    "Selected calendar: $selectedCalendarDisplay"
                                 )
-                                Text(
-                                    text = subtitle,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = textAlignPrimary,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth()
+                            } else {
+                                tr("עדיין לא נבחר יומן יעד", "No target calendar selected yet")
+                            },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 10.5.sp,
+                                lineHeight = 13.sp
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = textAlignPrimary,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedButton(
+                            onClick = {
+                                if (!hasCalendarPermission(appCtx)) {
+                                    calendarPermissionLauncherSelected.launch(
+                                        arrayOf(
+                                            Manifest.permission.READ_CALENDAR,
+                                            Manifest.permission.WRITE_CALENDAR
+                                        )
+                                    )
+                                } else {
+                                    showCalendarPicker = true
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                        ) {
+                            Text(tr("בחר יומן יעד", "Choose target calendar"))
+                        }
+
+                        if (showCalendarPicker) {
+                            var tempSelectedId by remember(selectedCalendarId, writableCalendars) {
+                                mutableLongStateOf(
+                                    if (writableCalendars.any { it.id == selectedCalendarId }) selectedCalendarId
+                                    else writableCalendars.firstOrNull()?.id ?: -1L
                                 )
                             }
+
+                            AlertDialog(
+                                onDismissRequest = { showCalendarPicker = false },
+                                title = {
+                                    Text(
+                                        text = tr("בחר יומן לסנכרון", "Choose calendar for sync"),
+                                        textAlign = textAlignPrimary,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                },
+                                text = {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 360.dp)
+                                            .verticalScroll(rememberScrollState()),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        if (writableCalendars.isEmpty()) {
+                                            Text(
+                                                text = tr(
+                                                    "לא נמצאו יומנים זמינים לכתיבה במכשיר.",
+                                                    "No writable calendars were found on this device."
+                                                ),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                textAlign = textAlignPrimary,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        } else {
+                                            writableCalendars.forEach { cal ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .clickable { tempSelectedId = cal.id }
+                                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    RadioButton(
+                                                        selected = tempSelectedId == cal.id,
+                                                        onClick = { tempSelectedId = cal.id }
+                                                    )
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Column(
+                                                        modifier = Modifier.weight(1f),
+                                                        horizontalAlignment = horizontalEnd
+                                                    ) {
+                                                        Text(
+                                                            cal.displayName.ifBlank {
+                                                                tr(
+                                                                    "יומן ללא שם",
+                                                                    "Unnamed calendar"
+                                                                )
+                                                            },
+                                                            textAlign = textAlignPrimary
+                                                        )
+                                                        Text(
+                                                            cal.accountName.ifBlank { cal.accountType.ifBlank { "-" } },
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            textAlign = textAlignPrimary
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(
+                                        onClick = {
+                                            val selected =
+                                                writableCalendars.firstOrNull { it.id == tempSelectedId }
+                                            if (selected == null) {
+                                                haptic(true)
+                                                toast(
+                                                    tr(
+                                                        "יש לבחור יומן תקין",
+                                                        "Please choose a valid calendar"
+                                                    )
+                                                )
+                                                return@TextButton
+                                            }
+                                            persistCalendarSelection(selected)
+                                            showCalendarPicker = false
+                                            if (selectedSyncEnabled) {
+                                                enableSelectedCalendarSync()
+                                            }
+                                        }
+                                    ) {
+                                        Text(tr("שמירה", "Save"))
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showCalendarPicker = false }) {
+                                        Text(tr("ביטול", "Cancel"))
+                                    }
+                                }
+                            )
+                        }
+
+                        LoadingOverlay(
+                            show = isBusy,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp)
+                        )
+                    }
+                }
+
+                SettingsListSection(
+                    title = tr("ממשק, קול ואבטחה", "Interface, voice and security"),
+                    subtitle = tr(
+                        "חוויית משתמש, קול, נראות ונעילת אפליקציה",
+                        "User experience, voice, appearance and app lock"
+                    ),
+                    icon = Icons.Filled.Palette,
+                    iconTint = sectionIconTint
+                ) {
+                    SettingsListItem(
+                        title = tr("חוויית משתמש", "User experience"),
+                        value = tr("צלילים ורטט", "Sounds and haptics"),
+                        icon = Icons.Filled.Tune,
+                        iconTint = Color(0xFF7C3AED),
+                        topRounded = true
+                    ) {
+                        var clickSounds by rememberSaveable {
+                            mutableStateOf(
+                                sp.getBoolean(
+                                    "click_sounds",
+                                    sp.getBoolean("tap_sound", false)
+                                )
+                            )
+                        }
+                        var hapticsOn by rememberSaveable {
+                            mutableStateOf(
+                                sp.getBoolean(
+                                    "haptics_on",
+                                    sp.getBoolean("short_haptic", false)
+                                )
+                            )
+                        }
+
+                        fun setClickSoundsEnabledSafe(enabled: Boolean) {
+                            runCatching { il.kmi.shared.Platform.setClickSoundsEnabled(enabled) }
+                        }
+
+                        fun setHapticsEnabledSafe(enabled: Boolean) {
+                            runCatching { il.kmi.shared.Platform.setHapticsEnabled(enabled) }
+                        }
+
+                        val view = LocalView.current
+
+                        fun playFeedbackIfEnabled() {
+                            if (clickSounds) {
+                                view.playSoundEffect(SoundEffectConstants.CLICK)
+                            }
+                            if (hapticsOn) {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                tr("צליל הקשה בכפתורים", "Button tap sound"),
+                                textAlign = textAlignPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(
+                                checked = clickSounds,
+                                onCheckedChange = { enabled ->
+                                    clickSounds = enabled
+                                    sp.edit()
+                                        .putBoolean("click_sounds", enabled)
+                                        .putBoolean("tap_sound", enabled)
+                                        .apply()
+                                    setClickSoundsEnabledSafe(enabled)
+
+                                    if (clickSounds) {
+                                        playFeedbackIfEnabled()
+                                    }
+                                }
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                tr("רטט קצר בעת סימון ✓/✗", "Short haptic on ✓/✗ marking"),
+                                textAlign = textAlignPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(
+                                checked = hapticsOn,
+                                onCheckedChange = { enabled ->
+                                    hapticsOn = enabled
+                                    sp.edit()
+                                        .putBoolean("haptics_on", enabled)
+                                        .putBoolean("short_haptic", enabled)
+                                        .apply()
+                                    setHapticsEnabledSafe(enabled)
+
+                                    if (hapticsOn) {
+                                        playFeedbackIfEnabled()
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    SettingsListItem(
+                        title = tr("הגדרות קול", "Voice settings"),
+                        value = tr("קול גבר / קול אישה", "Male / female voice"),
+                        icon = Icons.Filled.SupportAgent,
+                        iconTint = Color(0xFF0284C7)
+                    ) {
+                        val ctx = LocalContext.current
+
+                        val voicePrefs = remember {
+                            ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+                        }
+
+                        var cloudVoice by rememberSaveable {
+                            mutableStateOf(
+                                voicePrefs.getString("voice", "male") ?: "male"
+                            )
+                        }
+
+                        fun setCloudVoice(v: String) {
+                            cloudVoice = v
+
+                            voicePrefs.edit()
+                                .putString("voice", v)
+                                .apply()
+
+                            ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("kmi_tts_voice", v)
+                                .apply()
+                        }
+
+                        val selectedIndex = if (cloudVoice == "male") 0 else 1
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = tr("בחר קול להשמעה:", "Choose voice playback:"),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 10.8.sp,
+                                    lineHeight = 13.5.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = textAlignPrimary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            SingleChoiceSegmentedButtonRow(
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                SegmentedButton(
+                                    selected = selectedIndex == 0,
+                                    onClick = { setCloudVoice("male") },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                    label = { Text(tr("קול גבר", "Male voice"), maxLines = 1) }
+                                )
+                                SegmentedButton(
+                                    selected = selectedIndex == 1,
+                                    onClick = { setCloudVoice("female") },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                    label = { Text(tr("קול אישה", "Female voice"), maxLines = 1) }
+                                )
+                            }
+
+                            Text(
+                                text = tr(
+                                    "הבחירה נשמרת למכשיר ותשפיע על הדיבור בעוזר הקולי.",
+                                    "The selection is saved on the device and affects speech in the voice assistant."
+                                ),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 10.5.sp,
+                                    lineHeight = 13.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = textAlignPrimary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    SettingsListItem(
+                        title = tr("נראות אפליקציה", "App appearance"),
+                        value = when (themeModeLocal) {
+                            "dark" -> tr("מצב כהה", "Dark mode")
+                            "system" -> tr("לפי המכשיר", "Device default")
+                            else -> tr("מצב בהיר", "Light mode")
+                        },
+                        icon = Icons.Filled.Palette,
+                        iconTint = Color(0xFFD97706)
+                    ) {
+                        val systemIsDark = isSystemInDarkTheme()
+
+                        fun effectiveModeLabel(): String {
+                            return when (themeModeLocal) {
+                                "light" -> tr("מצב פעיל: בהיר", "Active mode: Light")
+                                "dark" -> tr("מצב פעיל: כהה", "Active mode: Dark")
+                                else -> {
+                                    if (systemIsDark) {
+                                        tr(
+                                            "מצב פעיל: לפי המכשיר — כהה",
+                                            "Active mode: Device default — Dark"
+                                        )
+                                    } else {
+                                        tr(
+                                            "מצב פעיל: לפי המכשיר — בהיר",
+                                            "Active mode: Device default — Light"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        fun applyAppearanceMode(mode: String) {
+                            themeModeLocal = mode
+                            onThemeChange(mode)
+                            kmiPrefs.themeMode = mode
+                            sp.edit().putString("theme_mode", mode).apply()
+                        }
+
+                        val themeIndex = when (themeModeLocal) {
+                            "system" -> 0
+                            "light" -> 1
+                            "dark" -> 2
+                            else -> 1
+                        }
+
+                        TabRow(selectedTabIndex = themeIndex) {
+                            Tab(
+                                selected = themeModeLocal == "system",
+                                onClick = { applyAppearanceMode("system") },
+                                text = {
+                                    Text(
+                                        text = tr("לפי\nהמכשיר", "Device\ndefault"),
+                                        minLines = 2,
+                                        maxLines = 2,
+                                        softWrap = true,
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                            )
+
+                            Tab(
+                                selected = themeModeLocal == "light",
+                                onClick = { applyAppearanceMode("light") },
+                                text = {
+                                    Text(
+                                        text = tr("מצב\nבהיר", "Light\nmode"),
+                                        minLines = 2,
+                                        maxLines = 2,
+                                        softWrap = true,
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                            )
+
+                            Tab(
+                                selected = themeModeLocal == "dark",
+                                onClick = { applyAppearanceMode("dark") },
+                                text = {
+                                    Text(
+                                        text = tr("מצב\nכהה", "Dark\nmode"),
+                                        minLines = 2,
+                                        maxLines = 2,
+                                        softWrap = true,
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                            )
+                        }
+
+                        Text(
+                            text = effectiveModeLabel(),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 10.8.sp,
+                                lineHeight = 13.5.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = textAlignPrimary,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    SettingsListItem(
+                        title = tr("נעילת אפליקציה", "App lock"),
+                        value = when (sp.getString("app_lock_mode", "none") ?: "none") {
+                            "biometric" -> tr("נעילה באצבע", "Biometric lock")
+                            else -> tr("ללא נעילה", "No lock")
+                        },
+                        icon = Icons.Filled.Lock,
+                        iconTint = Color(0xFFE11D48),
+                        bottomRounded = true
+                    ) {
+                        var lockMode by rememberSaveable {
+                            mutableStateOf(
+                                when (sp.getString("app_lock_mode", "none") ?: "none") {
+                                    "biometric" -> "biometric"
+                                    else -> "none"
+                                }
+                            )
+                        }
+
+                        val ctx = LocalContext.current
+                        val act = ctx as? androidx.fragment.app.FragmentActivity
+
+                        fun applyLock(mode: String) {
+                            sp.edit().putString("app_lock_mode", mode).apply()
+                            when (mode) {
+                                "none" -> {
+                                    il.kmi.app.security.AppLockStore.setMethod(
+                                        ctx,
+                                        il.kmi.app.security.AppLockMethod.NONE
+                                    )
+                                    android.widget.Toast.makeText(
+                                        ctx,
+                                        tr("נעילת האפליקציה בוטלה", "App lock disabled"),
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+
+                                "biometric" -> {
+                                    val canBio = androidx.biometric.BiometricManager.from(ctx)
+                                        .canAuthenticate(
+                                            androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
+                                        ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+
+                                    if (!canBio) {
+                                        android.widget.Toast.makeText(
+                                            ctx,
+                                            tr(
+                                                "ביומטרי לא זמין במכשיר",
+                                                "Biometric authentication is not available on this device"
+                                            ),
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                        lockMode = sp.getString("app_lock_mode", "none") ?: "none"
+                                        return
+                                    }
+
+                                    il.kmi.app.security.AppLockStore.setMethod(
+                                        ctx,
+                                        il.kmi.app.security.AppLockMethod.BIOMETRIC
+                                    )
+                                    act?.let { il.kmi.app.security.AppLock.requireIfNeeded(it, true) }
+                                    android.widget.Toast.makeText(
+                                        ctx,
+                                        tr("זיהוי ביומטרי הופעל", "Biometric lock enabled"),
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+
+                        val lockIndex = when (lockMode) {
+                            "none" -> 0
+                            "biometric" -> 1
+                            else -> 0
+                        }
+
+                        TabRow(selectedTabIndex = lockIndex) {
+                            Tab(
+                                selected = lockMode == "none",
+                                onClick = {
+                                    lockMode = "none"
+                                    applyLock("none")
+                                },
+                                text = {
+                                    Text(
+                                        text = tr("ללא\nנעילה", "No\nlock"),
+                                        minLines = 2,
+                                        maxLines = 2,
+                                        softWrap = true,
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                            )
+
+                            Tab(
+                                selected = lockMode == "biometric",
+                                onClick = {
+                                    lockMode = "biometric"
+                                    applyLock("biometric")
+                                },
+                                text = {
+                                    Text(
+                                        text = tr("נעילה\nבאצבע", "Biometric\nlock"),
+                                        minLines = 2,
+                                        maxLines = 2,
+                                        softWrap = true,
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                            )
+                        }
+
+                        val ctxBio = LocalContext.current
+                        val bioAvailable = remember(ctxBio) {
+                            androidx.biometric.BiometricManager.from(ctxBio)
+                                .canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+                                    androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+                        }
+
+                        if (!bioAvailable) {
+                            Text(
+                                tr(
+                                    "ביומטרי לא זמין במכשיר או לא הוגדר למשתמש.",
+                                    "Biometric authentication is not available or not configured for this user."
+                                ),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 10.5.sp,
+                                    lineHeight = 13.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = textAlignPrimary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 }
 
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                SettingsListSection(
+                    title = tr("מידע וניהול", "Info and management"),
+                    subtitle = tr(
+                        "נתונים, מסמכים משפטיים, גרסה ותמיכה",
+                        "Data, legal documents, version and support"
+                    ),
+                    icon = Icons.Filled.Storage,
+                    iconTint = sectionIconTint
                 ) {
+                    SettingsListItem(
+                        title = tr("ניהול נתונים", "Data management"),
+                        value = tr("מטמון והיסטוריית שידורים", "Cache and broadcast history"),
+                        icon = Icons.Filled.Storage,
+                        iconTint = Color(0xFF0F766E),
+                        topRounded = true
+                    ) {
+                        val ctx = LocalContext.current
+                        val spUser = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
+                        val PREF_RECENTS_KEY = "coach_broadcast_recents_json"
 
-                    LegalTile(
-                        title = tr("מדיניות פרטיות", "Privacy policy"),
-                        subtitle = tr("איך אנחנו שומרים על הנתונים שלך", "How we protect your data"),
-                        icon = Icons.Filled.Lock,
-                        onClick = onOpenPrivacy,
-                        modifier = Modifier.fillMaxWidth()
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    spUser.edit().remove(PREF_RECENTS_KEY).apply()
+                                    toast(
+                                        tr(
+                                            "היסטוריית השידורים נוקתה",
+                                            "Broadcast history cleared"
+                                        )
+                                    )
+                                    haptic(true)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                            ) {
+                                Text(tr("נקה היסטוריית שידורים", "Clear broadcast history"))
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    isBusy = true
+                                    val ok = clearAppCache(ctx)
+                                    isBusy = false
+                                    if (ok) {
+                                        toast(tr("נוקו קבצי המטמון", "Cache files cleared"))
+                                        haptic(true)
+                                    } else {
+                                        toast(tr("ניקוי נכשל", "Clear failed"))
+                                        haptic(false)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                            ) {
+                                Text(tr("נקה מטמון אפליקציה", "Clear app cache"))
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
                     )
 
-                    LegalTile(
-                        title = tr("תנאי שימוש", "Terms of use"),
-                        subtitle = tr("כללי שימוש והתחייבויות המשתמש", "Usage rules and user responsibilities"),
+                    SettingsListItem(
+                        title = tr("מידע משפטי", "Legal information"),
+                        value = tr("פרטיות, תנאים ונגישות", "Privacy, terms and accessibility"),
                         icon = Icons.Filled.Gavel,
-                        onClick = onOpenTerms,
-                        modifier = Modifier.fillMaxWidth()
+                        iconTint = Color(0xFF7C3AED)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onOpenPrivacy,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(tr("מדיניות פרטיות", "Privacy policy"))
+                            }
+
+                            OutlinedButton(
+                                onClick = onOpenTerms,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(tr("תנאי שימוש", "Terms of use"))
+                            }
+
+                            OutlinedButton(
+                                onClick = onOpenAccessibility,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(tr("הצהרת נגישות", "Accessibility statement"))
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
                     )
 
-                    LegalTile(
-                        title = tr("הצהרת נגישות", "Accessibility statement"),
-                        subtitle = tr("מידע על התאמות ונגישות באפליקציה", "Information about accessibility and adaptations in the app"),
-                        icon = Icons.Filled.AccessibilityNew,
-                        onClick = onOpenAccessibility,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    SettingsListItem(
+                        title = tr("אודות ותמיכה", "About and support"),
+                        value = tr("גרסה, משוב ושיתוף", "Version, feedback and sharing"),
+                        icon = Icons.Filled.SupportAgent,
+                        iconTint = Color(0xFF0284C7),
+                        bottomRounded = true
+                    ) {
+                        val ctx = LocalContext.current
+                        val h = rememberHaptics()
+
+                        val pkgVer = remember {
+                            runCatching {
+                                val pm = ctx.packageManager
+                                val pInfo = if (Build.VERSION.SDK_INT >= 33) {
+                                    pm.getPackageInfo(
+                                        ctx.packageName,
+                                        PackageManager.PackageInfoFlags.of(0)
+                                    )
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    pm.getPackageInfo(ctx.packageName, 0)
+                                }
+                                val longCode = PackageInfoCompat.getLongVersionCode(pInfo)
+                                tr(
+                                    "גרסה ${pInfo.versionName} ($longCode)",
+                                    "Version ${pInfo.versionName} ($longCode)"
+                                )
+                            }.getOrDefault(tr("גרסה לא ידועה", "Unknown version"))
+                        }
+
+                        Text(
+                            text = pkgVer,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = textAlignPrimary,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    val body = buildString {
+                                        appendLine("")
+                                        appendLine("---")
+                                        appendLine(
+                                            tr(
+                                                "פרטי מערכת (לעזרה באיתור תקלות):",
+                                                "System details (for troubleshooting):"
+                                            )
+                                        )
+                                        appendLine(
+                                            tr(
+                                                "חבילה: ${ctx.packageName}",
+                                                "Package: ${ctx.packageName}"
+                                            )
+                                        )
+                                        appendLine(pkgVer)
+                                        appendLine(
+                                            tr(
+                                                "מכשיר: ${Build.MANUFACTURER} ${Build.MODEL}",
+                                                "Device: ${Build.MANUFACTURER} ${Build.MODEL}"
+                                            )
+                                        )
+                                        appendLine(
+                                            tr(
+                                                "אנדרואיד: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
+                                                "Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})"
+                                            )
+                                        )
+                                    }
+                                    openEmailFeedback(
+                                        ctx = ctx,
+                                        to = "ypo1980@gmail.com",
+                                        subject = tr("משוב על האפליקציה", "App feedback"),
+                                        body = body,
+                                        isEnglish = isEnglish
+                                    )
+                                    h(true)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                            ) {
+                                Text(tr("שלח משוב", "Send feedback"))
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    openStorePage(ctx)
+                                    h(true)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                            ) {
+                                Text(tr("דרג בחנות", "Rate in store"))
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                shareApp(ctx, isEnglish = isEnglish)
+                                h(true)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                        ) {
+                            Text(tr("שתף את האפליקציה", "Share the app"))
+                        }
+                    }
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // כרטיס: אודות ותמיכה
-            SettingsCard(
-                title = tr("אודות ותמיכה", "About and support"),
-                subtitle = tr("ספרו לנו איך אפשר לשפר", "Tell us how we can improve"),
-                icon = Icons.Filled.SupportAgent,
-                iconTint = sectionIconTint
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                color = Color(0xFFF4EFFB).copy(alpha = 0.97f),
+                tonalElevation = 10.dp,
+                shadowElevation = 18.dp
             ) {
-                val ctx = LocalContext.current
-                val h   = rememberHaptics()
-
-                val pkgVer = remember {
-                    runCatching {
-                        val pm = ctx.packageManager
-                        val pInfo = if (Build.VERSION.SDK_INT >= 33) {
-                            pm.getPackageInfo(
-                                ctx.packageName,
-                                PackageManager.PackageInfoFlags.of(0)
-                            )
-                        } else {
-                            @Suppress("DEPRECATION")
-                            pm.getPackageInfo(ctx.packageName, 0)
-                        }
-                        val longCode = PackageInfoCompat.getLongVersionCode(pInfo)
-                        tr("גרסה ${pInfo.versionName} ($longCode)", "Version ${pInfo.versionName} ($longCode)")
-                    }.getOrDefault(tr("גרסה לא ידועה", "Unknown version"))
-                }
-
-                Text(
-                    text = pkgVer,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = textAlignPrimary,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(8.dp))
-
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    OutlinedButton(
+                        onClick = { discardAndExit() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(22.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.White.copy(alpha = 0.80f),
+                            contentColor = Color(0xFF5B35D5)
+                        )
+                    ) {
+                        Text(
+                            text = tr("ביטול", "Cancel"),
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
+                    }
+
                     Button(
                         onClick = {
-                            val body = buildString {
-                                appendLine("")
-                                appendLine("---")
-                                appendLine(tr("פרטי מערכת (לעזרה באיתור תקלות):", "System details (for troubleshooting):"))
-                                appendLine(tr("חבילה: ${ctx.packageName}", "Package: ${ctx.packageName}"))
-                                appendLine(pkgVer)
-                                appendLine(tr("מכשיר: ${Build.MANUFACTURER} ${Build.MODEL}", "Device: ${Build.MANUFACTURER} ${Build.MODEL}"))
-                                appendLine(tr("אנדרואיד: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})", "Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})"))
-                            }
-                            openEmailFeedback(
-                                ctx = ctx,
-                                to = "ypo1980@gmail.com",
-                                subject = tr("משוב על האפליקציה", "App feedback"),
-                                body = body,
-                                isEnglish = isEnglish
-                            )
-                            h(true)
+                            saveAllAndApply()
+                            onBack()
                         },
-                        modifier = Modifier.weight(1f).height(44.dp)
-                    ) { Text(tr("שלח משוב", "Send feedback")) }
-
-                    OutlinedButton(
-                        onClick = { openStorePage(ctx); h(true) },
-                        modifier = Modifier.weight(1f).height(44.dp)
-                    ) { Text(tr("דרג בחנות", "Rate in store")) }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        shareApp(ctx, isEnglish = isEnglish)
-                        h(true)
-                    },
-                    modifier = Modifier.fillMaxWidth().height(44.dp)
-                ) {
-                    Text(tr("שתף את האפליקציה", "Share the app"))
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(22.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF7B61D9),
+                            contentColor = Color.White
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 0.dp
+                        )
+                    ) {
+                        Text(
+                            text = tr("אישור", "Confirm"),
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        )
+                    }
                 }
             }
-
-            // --- מרווח לפני כפתורי פעולה ---
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { discardAndExit() },
-                    modifier = Modifier.weight(1f)
-                ) { Text(tr("ביטול", "Cancel")) }
-
-                Button(
-                    onClick = {
-                        saveAllAndApply()
-                        onBack()
-                    },
-                    modifier = Modifier.weight(1f)
-                ) { Text(tr("אישור", "Confirm")) }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
+
 // --- עזר לכפתורי מידע משפטי: גובה אחיד, ישור למרכז, משקל שווה ---
 @Composable
 private fun RowScope.LegalLink(
@@ -2356,7 +2533,7 @@ fun BeltsProgressBars(
 }
 
 @Composable
-fun SettingsCard(
+fun SettingsListSection(
     title: String,
     subtitle: String? = null,
     icon: ImageVector? = null,
@@ -2370,27 +2547,183 @@ fun SettingsCard(
     val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
 
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        shadowElevation = 2.dp,
-        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(
+            1.dp,
+            Color.White.copy(alpha = 0.22f)
+        ),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            Modifier
+            modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFFF6F1FA).copy(alpha = 0.98f),
+                            Color(0xFFEAF5FB).copy(alpha = 0.96f),
+                            Color(0xFFF8F4EC).copy(alpha = 0.94f)
+                        )
+                    )
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
-            // ✅ כותרת עם אייקון (RTL)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (icon != null && isEnglish) {
+                    Surface(
+                        shape = RoundedCornerShape(13.dp),
+                        color = (iconTint ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.12f),
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = iconTint ?: MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.width(10.dp))
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = horizontalEnd
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 13.2.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        textAlign = textAlignPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 10.6.sp,
+                                lineHeight = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = textAlignPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                if (icon != null && !isEnglish) {
+                    Spacer(Modifier.width(10.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(13.dp),
+                        color = (iconTint ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.12f),
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = iconTint ?: MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsListItem(
+    title: String,
+    value: String,
+    icon: ImageVector? = null,
+    iconTint: Color? = null,
+    topRounded: Boolean = false,
+    bottomRounded: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val context = LocalContext.current
+    val languageManager = remember { AppLanguageManager(context) }
+    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
+    val accentColor = iconTint ?: MaterialTheme.colorScheme.primary
+    var expanded by rememberSaveable(title) { mutableStateOf(false) }
+    val rowInteraction = remember { MutableInteractionSource() }
+
+    val rowShape = RoundedCornerShape(
+        topStart = if (topRounded) 18.dp else 0.dp,
+        topEnd = if (topRounded) 18.dp else 0.dp,
+        bottomStart = if (!expanded && bottomRounded) 18.dp else 0.dp,
+        bottomEnd = if (!expanded && bottomRounded) 18.dp else 0.dp
+    )
+
+    val expandedContentShape = RoundedCornerShape(
+        topStart = 0.dp,
+        topEnd = 0.dp,
+        bottomStart = if (bottomRounded) 18.dp else 0.dp,
+        bottomEnd = if (bottomRounded) 18.dp else 0.dp
+    )
+
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(rowShape)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = 0.08f),
+                            Color.White.copy(alpha = 0.10f),
+                            accentColor.copy(alpha = 0.04f)
+                        )
+                    )
+                )
+                .clickable(
+                    interactionSource = rowInteraction,
+                    indication = null
+                ) { expanded = !expanded }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isEnglish) {
                 if (icon != null) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = (iconTint ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.12f),
+                        color = (iconTint ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.10f),
+                        shadowElevation = 0.dp,
+                        tonalElevation = 0.dp,
                         modifier = Modifier.size(34.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -2402,6 +2735,68 @@ fun SettingsCard(
                             )
                         }
                     }
+
+                    Spacer(Modifier.width(10.dp))
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 12.0.sp,
+                            lineHeight = 14.6.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        textAlign = TextAlign.Left,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 9.8.sp,
+                            lineHeight = 12.2.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Left,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(18.dp)
+                )
+            } else {
+                if (icon != null) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = accentColor.copy(alpha = 0.12f),
+                        shadowElevation = 0.dp,
+                        tonalElevation = 0.dp,
+                        modifier = Modifier.size(29.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+
                     Spacer(Modifier.width(10.dp))
                 }
 
@@ -2411,28 +2806,301 @@ fun SettingsCard(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 12.4.sp,
+                            lineHeight = 15.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        textAlign = textAlignPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 9.8.sp,
+                            lineHeight = 12.2.sp,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = textAlignPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    if (!subtitle.isNullOrBlank()) {
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            }
+
+        if (expanded) {
+            HorizontalDivider(
+                color = accentColor.copy(alpha = 0.14f),
+                modifier = Modifier.padding(horizontal = 18.dp)
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(expandedContentShape)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.22f),
+                                accentColor.copy(alpha = 0.045f)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                ProvideTextStyle(
+                    value = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 12.6.sp,
+                        lineHeight = 16.sp
+                    )
+                ) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsCard(
+    title: String,
+    subtitle: String? = null,
+    collapsedValue: String? = null,
+    icon: ImageVector? = null,
+    iconTint: Color? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val context = LocalContext.current
+    val languageManager = remember { AppLanguageManager(context) }
+    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
+    val accentColor = iconTint ?: MaterialTheme.colorScheme.primary
+    var expanded by rememberSaveable(title) { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        HorizontalDivider(
+            color = accentColor.copy(alpha = 0.13f),
+            modifier = Modifier.padding(horizontal = 18.dp)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFFF7F2FA).copy(alpha = 0.72f),
+                            Color(0xFFEAF6FB).copy(alpha = 0.64f),
+                            Color(0xFFF8F4EC).copy(alpha = 0.58f)
+                        )
+                    )
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(0.dp))
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isEnglish) {
+                    if (icon != null) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = accentColor.copy(alpha = 0.11f),
+                            shadowElevation = 0.dp,
+                            tonalElevation = 0.dp,
+                            modifier = Modifier.size(29.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = accentColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(10.dp))
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.Start
+                    ) {
                         Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = textAlignPrimary,
-                            maxLines = 2,
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 11.6.sp,
+                                lineHeight = 14.2.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            textAlign = TextAlign.Left,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()
                         )
+
+                        val secondaryText = if (expanded) {
+                            subtitle.orEmpty()
+                        } else {
+                            collapsedValue?.takeIf { it.isNotBlank() }
+                                ?: subtitle.orEmpty()
+                        }
+
+                        if (secondaryText.isNotBlank()) {
+                            Text(
+                                text = secondaryText,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 9.4.sp,
+                                    lineHeight = 11.8.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Left,
+                                maxLines = if (expanded) 2 else 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
+
+                    Icon(
+                        imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                } else {
+                    if (icon != null) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = accentColor.copy(alpha = 0.11f),
+                            shadowElevation = 0.dp,
+                            tonalElevation = 0.dp,
+                            modifier = Modifier.size(29.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = accentColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(10.dp))
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = horizontalEnd
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 12.0.sp,
+                                lineHeight = 14.6.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            textAlign = textAlignPrimary,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        val secondaryText = if (expanded) {
+                            subtitle.orEmpty()
+                        } else {
+                            collapsedValue?.takeIf { it.isNotBlank() }
+                                ?: subtitle.orEmpty()
+                        }
+
+                        if (secondaryText.isNotBlank()) {
+                            Text(
+                                text = secondaryText,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 9.8.sp,
+                                    lineHeight = 12.2.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = textAlignPrimary,
+                                maxLines = if (expanded) 2 else 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.width(10.dp))
+
+                    Icon(
+                        imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
 
-            content()
+            if (expanded) {
+                HorizontalDivider(
+                    color = accentColor.copy(alpha = 0.14f),
+                    modifier = Modifier.padding(horizontal = 18.dp)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.10f),
+                                    accentColor.copy(alpha = 0.025f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 12.dp, vertical = 11.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    ProvideTextStyle(
+                        value = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 12.6.sp,
+                            lineHeight = 16.sp
+                        )
+                    ) {
+                        content()
+                    }
+                }
+            }
         }
     }
 }
@@ -2528,7 +3196,7 @@ private fun readRegisteredBelt(ctx: android.content.Context, spSettings: SharedP
     ).firstNotNullOfOrNull { key ->
         spUser.getString(key, null)?.trim()?.takeIf { it.isNotBlank() }
     }.orEmpty()
-    
+
     // 2) שדות טקסטואליים נפוצים (עברית/אנגלית) – אם מישהו שמר את שם החגורה ולא מזהה
     val rawText = listOf(
         "belt", "belt_id", "beltColor", "belt_color",
@@ -2542,13 +3210,13 @@ private fun readRegisteredBelt(ctx: android.content.Context, spSettings: SharedP
         val v = s.trim().lowercase()
         return when (v) {
             "", "—" -> null
-            "white",  "לבן",  "לבנה"   -> Belt.WHITE
-            "yellow", "צהוב", "צהובה"  -> Belt.YELLOW
-            "orange", "כתום", "כתומה"  -> Belt.ORANGE
-            "green",  "ירוק", "ירוקה"  -> Belt.GREEN
-            "blue",   "כחול", "כחולה"  -> Belt.BLUE
-            "brown",  "חום",  "חומה"   -> Belt.BROWN
-            "black",  "שחור", "שחורה"  -> Belt.BLACK
+            "white", "לבן", "לבנה" -> Belt.WHITE
+            "yellow", "צהוב", "צהובה" -> Belt.YELLOW
+            "orange", "כתום", "כתומה" -> Belt.ORANGE
+            "green", "ירוק", "ירוקה" -> Belt.GREEN
+            "blue", "כחול", "כחולה" -> Belt.BLUE
+            "brown", "חום", "חומה" -> Belt.BROWN
+            "black", "שחור", "שחורה" -> Belt.BLACK
             else -> Belt.values().firstOrNull { it.id.equals(v, true) || it.heb.contains(s, true) }
         }
     }

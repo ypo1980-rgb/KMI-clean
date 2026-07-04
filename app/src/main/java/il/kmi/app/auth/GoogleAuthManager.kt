@@ -283,6 +283,8 @@ object GoogleAuthManager {
         return try {
             logStage(context, "credential_manager_start")
 
+            clearAnonymousFirebaseSessionBeforeGoogleAuth(context)
+
             val credentialManager = CredentialManager.create(context)
             val serverClientId = context.getString(R.string.default_web_client_id).trim()
 
@@ -377,6 +379,20 @@ object GoogleAuthManager {
                 error = e
             )
             Result.failure(e)
+        }
+    }
+
+    private fun clearAnonymousFirebaseSessionBeforeGoogleAuth(context: Context) {
+        val currentUser = FirebaseAuth.getInstance().currentUser
+
+        if (currentUser?.isAnonymous == true) {
+            logStage(
+                context = context,
+                stage = "google_auth_clear_anonymous_before_start",
+                message = "anonymousUid=${currentUser.uid}"
+            )
+
+            FirebaseAuth.getInstance().signOut()
         }
     }
 
@@ -550,6 +566,8 @@ object GoogleAuthManager {
     }
 
     fun classicGoogleSignInIntent(context: Context): Intent {
+        clearAnonymousFirebaseSessionBeforeGoogleAuth(context)
+
         logStage(context, "classic_intent_build_start")
 
         val serverClientId = context.getString(R.string.default_web_client_id).trim()
@@ -563,6 +581,7 @@ object GoogleAuthManager {
         val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestIdToken(serverClientId)
             .requestEmail()
+            .requestProfile()
             .build()
 
         return GoogleSignIn.getClient(context, options).signInIntent.also {
@@ -580,6 +599,16 @@ object GoogleAuthManager {
                 stage = "classic_result_start",
                 message = "intentDataNull=${data == null}"
             )
+
+            if (data == null) {
+                val error = IllegalStateException("GOOGLE_CLASSIC_RESULT_INTENT_NULL")
+                logStage(
+                    context = context,
+                    stage = "classic_result_intent_null",
+                    error = error
+                )
+                return Result.failure(error)
+            }
 
             val account = GoogleSignIn.getSignedInAccountFromIntent(data)
                 .getResult(ApiException::class.java)

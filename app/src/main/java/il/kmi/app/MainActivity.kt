@@ -118,10 +118,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         )
 
 
-        // Firebase אנונימי + סנכרון branchId (אנדרואיד-נטו כרגע)
-        ensureAnonymousAuthAndSyncBranch(userSp)
-
-        // ✅ שמירת FCM Token למשתמש האמיתי של האפליקציה כדי ש-Cloud Function תוכל לשלוח Push
+        // ✅ לא מבצעים Firebase Anonymous Auth בפתיחת האפליקציה.
+        // התחברות Google צריכה להתחיל ממצב נקי, ורק לאחר התחברות אמיתית
+        // נסנכרן FCM ופרטי משתמש.
         setupFcmTokenSync(userSp)
 
         // -------------------- UI --------------------
@@ -729,35 +728,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     }
 
     /**
-     * התחברות אנונימית לפיירבייס, וסנכרון branchId אם קיים ב־SharedPreferences.
-     * (יישאר אנדרואיד-ספציפי עד שנוסיף שכבת Platform ל־iOS)
+     * אין לבצע Anonymous Auth לפני התחברות Google.
+     * פורום / Push / Firestore צריכים לעבוד מול משתמש אמיתי בלבד.
      */
-    private fun ensureAnonymousAuthAndSyncBranch(userSp: android.content.SharedPreferences) {
-        val auth = FirebaseAuth.getInstance()
-        if (auth.currentUser == null) {
-            auth.signInAnonymously()
-                .addOnSuccessListener {
-                    // תמיכה בשני מפתחות: branch_id (ישן) ו-branchId (חדש)
-                    val branchId = userSp.getString("branch_id", null)
-                        ?: userSp.getString("branchId", null)
-                        ?: return@addOnSuccessListener
-                    val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@addOnSuccessListener
-                    FirebaseFirestore.getInstance()
-                        .collection("users")
-                        .document(uid)
-                        .set(hashMapOf("branchId" to branchId), SetOptions.merge())
-                }
-        } else {
-            val branchId = userSp.getString("branch_id", null)
-                ?: userSp.getString("branchId", null)
-                ?: return
-            val uid = auth.currentUser?.uid ?: return
-            FirebaseFirestore.getInstance()
-                .collection("users")
-                .document(uid)
-                .set(hashMapOf("branchId" to branchId), SetOptions.merge())
-        }
-    }
 
     companion object {
 

@@ -294,9 +294,9 @@ fun AdminDiagnosticsScreen(
                         }
 
                         else -> if (isEnglish) {
-                            "Google sign-in event"
+                            "Google diagnostic event"
                         } else {
-                            "אירוע כניסה עם Google"
+                            "אירוע אבחון Google"
                         }
                     }
 
@@ -326,7 +326,7 @@ fun AdminDiagnosticsScreen(
                         title = title,
                         message = fullMessage.ifBlank {
                             if (isEnglish) "Google authentication diagnostic event"
-                            else "אירוע אבחון של התחברות Google"
+                            else "אירוע אבחון Google"
                         },
                         area = "google_auth",
                         severity = when {
@@ -448,7 +448,7 @@ fun AdminDiagnosticsScreen(
     fun logGroupTitle(key: String): String {
         return when (key) {
             "screen_views" -> tr("צפיות במסכים", "Screen views")
-            "google_auth" -> tr("אירועי כניסה עם Google", "Google sign-in events")
+            "google_auth" -> tr("אירועי אבחון Google", "Google diagnostics")
             "login" -> tr("אירועי כניסה", "Login events")
             "errors" -> tr("שגיאות ותקלות", "Errors and issues")
             "search" -> tr("אירועי חיפוש", "Search events")
@@ -506,10 +506,14 @@ fun AdminDiagnosticsScreen(
                 it.message.contains("apiStatusCode=", ignoreCase = true)
     }
 
-    val loginCount = visibleLogs.count {
-        it.type.contains("login", ignoreCase = true) ||
-                it.type.contains("google_auth", ignoreCase = true) ||
-                it.area.equals("google_auth", ignoreCase = true)
+    val loginCount = visibleLogs.count { log ->
+        val text = "${log.type}\n${log.area}\n${log.message}"
+
+        text.contains("intro_call_on_profile_complete", ignoreCase = true) ||
+                text.contains("intro_call_on_profile_missing_basic_details", ignoreCase = true) ||
+                text.contains("firebase_result_user_ready", ignoreCase = true) ||
+                text.contains("classic_firebase_success", ignoreCase = true) ||
+                text.contains("credential_manager_firebase_success", ignoreCase = true)
     }
 
     val searchNoResultsCount = visibleLogs.count {
@@ -973,7 +977,7 @@ private fun AdminInsightsCard(
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
     val insights = buildList {
-        add(tr("נמצאו $loginCount אירועי כניסה בטווח שנבחר.", "$loginCount login events found."))
+        add(tr("נמצאו $loginCount כניסות אמיתיות בטווח שנבחר.", "$loginCount completed logins found."))
         add(tr("נמצאו $errorCount שגיאות או כשלונות.", "$errorCount errors or failures found."))
         add(
             tr(
@@ -1305,7 +1309,7 @@ private fun AdminLogCard(
                     fontWeight = FontWeight.Medium,
                     textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                     modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3,
+                    maxLines = 12,
                     overflow = TextOverflow.Ellipsis
                 )
             }

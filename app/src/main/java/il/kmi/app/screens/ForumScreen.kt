@@ -1718,13 +1718,19 @@ fun ForumScreen(
                     ForumControlsMiniHandle(
                         isDarkMode = isDarkMode,
                         isEnglish = isEnglish,
-                        text = forumTr(
-                            isEnglish,
-                            "לחץ לבחירת חדר הפורום ומשתתפים",
-                            "Tap to choose forum room and participants"
-                        ),
+                        text = if (selectedForumBranch.isNotBlank() || selectedForumGroup.isNotBlank()) {
+                            "${selectedForumBranch.ifBlank { "—" }} • ${selectedForumGroup.ifBlank { "—" }}"
+                        } else {
+                            forumTr(
+                                isEnglish,
+                                "לחץ לבחירת חדר הפורום ומשתתפים",
+                                "Tap to choose forum room and participants"
+                            )
+                        },
                         onClick = {
                             isForumControlsCollapsed = false
+                            isRoomPickerExpanded = true
+                            isParticipantsExpanded = false
                         }
                     )
 
@@ -1769,11 +1775,7 @@ fun ForumScreen(
                                 "Checking who belongs to this room"
                             )
 
-                            participants.isNotEmpty() -> forumTr(
-                                isEnglish,
-                                "לחץ להצגת הרשימה",
-                                "Tap to show the list"
-                            )
+                            participants.isNotEmpty() -> ""
 
                             else -> forumTr(
                                 isEnglish,
@@ -1794,10 +1796,8 @@ fun ForumScreen(
                         },
                         onRoomClick = {
                             if (availableForumBranches.size > 1 || availableForumGroups.size > 1) {
-                                isRoomPickerExpanded = !isRoomPickerExpanded
-                                if (isRoomPickerExpanded) {
-                                    isParticipantsExpanded = false
-                                }
+                                isRoomPickerExpanded = true
+                                isParticipantsExpanded = false
                             }
                         },
                         onParticipantsClick = {
@@ -2665,6 +2665,31 @@ private fun ForumPremiumControlCard(
 ) {
     var branchDropdownExpanded by remember { mutableStateOf(false) }
     var groupDropdownExpanded by remember { mutableStateOf(false) }
+    var didAutoOpenRoomDropdown by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isRoomExpanded, branches, groups) {
+        if (isRoomExpanded && !didAutoOpenRoomDropdown) {
+            didAutoOpenRoomDropdown = true
+
+            when {
+                branches.size > 1 -> {
+                    branchDropdownExpanded = true
+                    groupDropdownExpanded = false
+                }
+
+                groups.size > 1 -> {
+                    groupDropdownExpanded = true
+                    branchDropdownExpanded = false
+                }
+            }
+        }
+
+        if (!isRoomExpanded) {
+            didAutoOpenRoomDropdown = false
+            branchDropdownExpanded = false
+            groupDropdownExpanded = false
+        }
+    }
 
     val titleColor = if (isDarkMode) Color(0xFFF8FAFC) else Color(0xFF102033)
     val subtitleColor = if (isDarkMode) Color(0xFFD8E0E7) else Color(0xFF5A6D82)
@@ -2961,34 +2986,36 @@ private fun ForumPremiumControlRow(
                 maxLines = 1
             )
 
-            Spacer(Modifier.height(2.dp))
+            if (subtitle.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = if (isEnglish) {
-                    Arrangement.Absolute.Left
-                } else {
-                    Arrangement.Absolute.Right
-                }
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = accentColor.copy(alpha = if (isDarkMode) 0.15f else 0.09f),
-                    border = BorderStroke(
-                        1.dp,
-                        accentColor.copy(alpha = if (isDarkMode) 0.28f else 0.18f)
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (isEnglish) {
+                        Arrangement.Absolute.Left
+                    } else {
+                        Arrangement.Absolute.Right
+                    }
                 ) {
-                    Text(
-                        text = subtitle,
-                        color = if (enabled) subtitleColor else mutedColor,
-                        fontSize = 9.sp,
-                        lineHeight = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = forumTextAlign(isEnglish),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        maxLines = 1
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = accentColor.copy(alpha = if (isDarkMode) 0.15f else 0.09f),
+                        border = BorderStroke(
+                            1.dp,
+                            accentColor.copy(alpha = if (isDarkMode) 0.28f else 0.18f)
+                        )
+                    ) {
+                        Text(
+                            text = subtitle,
+                            color = if (enabled) subtitleColor else mutedColor,
+                            fontSize = 9.sp,
+                            lineHeight = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = forumTextAlign(isEnglish),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
