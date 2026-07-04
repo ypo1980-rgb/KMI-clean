@@ -10,6 +10,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -273,7 +274,10 @@ private fun readFreeSessionCoachUid(sp: SharedPreferences): String {
         .orEmpty()
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class
+)
 @Composable
 fun FreeSessionsScreen(
     branch: String,
@@ -2006,7 +2010,10 @@ private fun PremiumBranchGroupSelector(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class
+)
 @Composable
 private fun PremiumComboPicker(
     title: String,
@@ -2110,6 +2117,7 @@ private fun PremiumComboPicker(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WazeStyleLocationSearchField(
     query: String,
@@ -2881,7 +2889,10 @@ private fun FreeSessionCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class
+)
 @Composable
 private fun FreeSessionDetailsSheet(
     repo: FreeSessionsRepository,
@@ -3940,7 +3951,10 @@ private fun PremiumFreeSessionDatePickerDialog(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class
+)
 @Composable
 private fun TimeQuickPicker(
     startsAt: Long,

@@ -134,7 +134,7 @@ fun KmiStartupLoadingScreen(
             }
         }
 
-        val totalDuration = 10_000L
+        val totalDuration = 7_000L
         val tick = 100L
         val totalSteps = (totalDuration / tick).toInt()
 
