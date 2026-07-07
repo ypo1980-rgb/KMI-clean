@@ -82,6 +82,7 @@ private data class AdminDiagnosticLog(
     val appVersion: String = "",
     val deviceModel: String = "",
     val language: String = "",
+    val attemptId: String = "",
     val createdAt: Timestamp? = null
 )
 
@@ -237,9 +238,11 @@ fun AdminDiagnosticsScreen(
                     val errorClass = doc.getString("errorClass").orEmpty()
                     val errorMessage = doc.getString("errorMessage").orEmpty()
                     val apiStatusCode = doc.getLong("apiStatusCode")
+                    val attemptId = doc.getString("attemptId")
+                        ?: doc.getString("attempt_id")
+                        ?: ""
 
                     val message = doc.getString("message").orEmpty()
-
                     val isRealUserCancel =
                         errorMessage.contains("User cancelled", ignoreCase = true) ||
                                 errorMessage.contains("Cancelled by user", ignoreCase = true) ||
@@ -342,8 +345,8 @@ fun AdminDiagnosticsScreen(
                             ?: doc.getString("device")
                             ?: "",
                         language = doc.getString("language").orEmpty(),
-                        createdAt = doc.getTimestamp("createdAt")
-                    )
+                        attemptId = attemptId,
+                        createdAt = doc.getTimestamp("createdAt")                    )
                 }
             }
 
@@ -1322,6 +1325,13 @@ private fun AdminLogCard(
                 text = buildString {
                     append(if (isEnglish) "Area: " else "אזור: ")
                     append(log.area.ifBlank { "-" })
+
+                    if (log.attemptId.isNotBlank()) {
+                        append("  |  ")
+                        append(if (isEnglish) "Attempt: " else "ניסיון: ")
+                        append(log.attemptId.takeLast(8))
+                    }
+
                     append("  |  ")
                     append(if (isEnglish) "Role: " else "תפקיד: ")
                     append(log.userRole.ifBlank { "-" })
@@ -1517,19 +1527,16 @@ private fun formatLogTime(
     timestamp: Timestamp?,
     isEnglish: Boolean
 ): String {
-    val date = timestamp?.toDate() ?: return if (isEnglish) "Unknown time" else "זמן לא ידוע"
-    val now = System.currentTimeMillis()
-    val diff = now - date.time
+    val date = timestamp?.toDate()
+        ?: return if (isEnglish) "Unknown time" else "זמן לא ידוע"
 
-    val minutes = TimeUnit.MILLISECONDS.toMinutes(diff)
-    val hours = TimeUnit.MILLISECONDS.toHours(diff)
-    val days = TimeUnit.MILLISECONDS.toDays(diff)
-
-    return when {
-        minutes < 1 -> if (isEnglish) "Now" else "עכשיו"
-        minutes < 60 -> if (isEnglish) "$minutes min ago" else "לפני $minutes דקות"
-        hours < 24 -> if (isEnglish) "$hours hours ago" else "לפני $hours שעות"
-        days < 7 -> if (isEnglish) "$days days ago" else "לפני $days ימים"
-        else -> SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("he", "IL")).format(Date(date.time))
+    val locale = if (isEnglish) Locale.US else Locale("he", "IL")
+    val pattern = if (isEnglish) {
+        "dd/MM/yyyy HH:mm:ss.SSS"
+    } else {
+        "dd.MM.yyyy HH:mm:ss.SSS"
     }
+
+    return SimpleDateFormat(pattern, locale).format(date)
 }
+

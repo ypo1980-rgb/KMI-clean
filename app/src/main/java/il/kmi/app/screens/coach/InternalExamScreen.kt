@@ -701,7 +701,12 @@ private fun buildInternalExamSessionForUi(
                 canvas.drawRoundRect(badgeR, 18f, 18f, badgeBg)
                 canvas.drawRoundRect(badgeR, 18f, 18f, badgeStroke)
 
-                val pillR = RectF(rightMargin - 150f, y + 18f, rightMargin - 18f, y + 60f)
+                val pillR = if (isEnglish) {
+                    RectF(rightMargin - 150f, y + 18f, rightMargin - 18f, y + 60f)
+                } else {
+                    RectF(leftMargin + 18f, y + 18f, leftMargin + 150f, y + 60f)
+                }
+
                 val pillPaint = Paint().apply { isAntiAlias = true; color = c }
                 canvas.drawRoundRect(pillR, 20f, 20f, pillPaint)
 
@@ -754,8 +759,8 @@ private fun buildInternalExamSessionForUi(
 
             fun drawScoreBox(canvas: android.graphics.Canvas, xRight: Float, yTop: Float, score: Int) {
                 val w = 40f
-                val h = 20f
-                val r = RectF(xRight - w, yTop - 14f, xRight, yTop + (h - 14f))
+                val h = 22f
+                val r = RectF(xRight - w, yTop - 16f, xRight, yTop + 6f)
                 canvas.drawRoundRect(r, 7f, 7f, scoreBoxBg)
                 canvas.drawRoundRect(r, 7f, 7f, scoreBoxStroke)
 
@@ -815,7 +820,9 @@ private fun buildInternalExamSessionForUi(
 
             // ✅ הופכים את התרגילים שסומנו לרשימה “שטוחה” לרינדור
             data class PdfRow(
+                val belt: Belt,
                 val topic: String,
+                val subTopic: String,
                 val name: String,
                 val score: Int
             )
@@ -824,13 +831,17 @@ private fun buildInternalExamSessionForUi(
                 session.exercises.mapIndexedNotNull { index, ex ->
                     val score = session.marks.getOrNull(index) ?: return@mapIndexedNotNull null
                     PdfRow(
+                        belt = ex.belt,
                         topic = pdfExerciseTitle(ex.topic),
+                        subTopic = ex.subTopic?.let { pdfExerciseTitle(it) }.orEmpty(),
                         name = pdfExerciseTitle(ex.name),
                         score = clampScore10(score)
                     )
                 }
 
+            var currentBelt: Belt? = null
             var currentTopic: String? = null
+            var currentSubTopic: String? = null
 
             fun newPage() {
                 document.finishPage(page)
@@ -854,7 +865,9 @@ private fun buildInternalExamSessionForUi(
                 y += 16f
                 canvas.drawLine(leftMargin, y, rightMargin, y, divider)
                 y += 16f
+                currentBelt = null
                 currentTopic = null
+                currentSubTopic = null
             }
 
             // ✅ רצועה קבועה לימין עבור תיבת ציון
@@ -862,14 +875,53 @@ private fun buildInternalExamSessionForUi(
             val scoreBoxGap = 10f
             val nameRight = rightMargin - scoreBoxW - scoreBoxGap
 
+            fun beltPdfColor(belt: Belt): Int {
+                return when (belt) {
+                    Belt.YELLOW -> AColor.parseColor("#CA8A04")
+                    Belt.ORANGE -> AColor.parseColor("#EA580C")
+                    Belt.GREEN -> AColor.parseColor("#16A34A")
+                    Belt.BLUE -> AColor.parseColor("#2563EB")
+                    Belt.BROWN -> AColor.parseColor("#7C3F1D")
+                    Belt.BLACK -> AColor.parseColor("#111827")
+                    else -> AColor.parseColor("#7C3AED")
+                }
+            }
+
             rows.forEach { r ->
                 if (y > contentBottom - 24f) {
                     drawFooter(canvas, pageNumber)
                     newPage()
                 }
 
+                if (currentBelt != r.belt) {
+                    currentBelt = r.belt
+                    currentTopic = null
+                    currentSubTopic = null
+
+                    if (y > contentBottom - 44f) {
+                        drawFooter(canvas, pageNumber)
+                        newPage()
+                    }
+
+                    topicTitle.color = beltPdfColor(r.belt)
+
+                    drawStart(
+                        canvas,
+                        pdfTr(
+                            "חגורה: ${pdfBeltName(r.belt)}",
+                            "Belt: ${pdfBeltName(r.belt)}"
+                        ),
+                        y,
+                        topicTitle
+                    )
+
+                    topicTitle.color = AColor.parseColor("#1E293B")
+                    y += 20f
+                }
+
                 if (currentTopic != r.topic) {
                     currentTopic = r.topic
+                    currentSubTopic = null
 
                     if (y > contentBottom - 40f) {
                         drawFooter(canvas, pageNumber)
@@ -879,22 +931,87 @@ private fun buildInternalExamSessionForUi(
                     drawStart(
                         canvas,
                         pdfTr(
-                            "נושא: ${currentTopic}",
-                            "Topic: ${currentTopic}"
+                            "נושא: ${r.topic}",
+                            "Topic: ${r.topic}"
                         ),
                         y,
                         topicTitle
                     )
-                    y += 18f
+                    y += 24f
                 }
 
-                // ✅ שם התרגיל עד nameRight (לא נכנס לתיבת הציון)
-                drawTextWithin(canvas, r.name, nameRight, y, lineText)
+                if (r.subTopic.isNotBlank() && currentSubTopic != r.subTopic) {
+                    currentSubTopic = r.subTopic
 
-                // ✅ תיבת ציון תמיד בקצה ימין
-                drawScoreBox(canvas, xRight = rightMargin, yTop = y, score = r.score)
+                    if (y > contentBottom - 34f) {
+                        drawFooter(canvas, pageNumber)
+                        newPage()
+                    }
 
-                y += 16f
+                    drawStart(
+                        canvas,
+                        pdfTr(
+                            "תת־נושא: ${r.subTopic}",
+                            "Sub-topic: ${r.subTopic}"
+                        ),
+                        y,
+                        lineText
+                    )
+                    y += 16f
+                }
+
+                val rowTop = y - 13f
+                val rowBottom = y + 10f
+
+                val rowBg = Paint().apply {
+                    isAntiAlias = true
+                    color = AColor.parseColor("#F8FAFC")
+                }
+
+                val rowStroke = Paint().apply {
+                    isAntiAlias = true
+                    style = Paint.Style.STROKE
+                    strokeWidth = 0.8f
+                    color = AColor.parseColor("#E2E8F0")
+                }
+
+                canvas.drawRoundRect(
+                    RectF(leftMargin, rowTop, rightMargin, rowBottom),
+                    7f,
+                    7f,
+                    rowBg
+                )
+                canvas.drawRoundRect(
+                    RectF(leftMargin, rowTop, rightMargin, rowBottom),
+                    7f,
+                    7f,
+                    rowStroke
+                )
+
+                if (isEnglish) {
+                    drawScoreBox(canvas, xRight = rightMargin - 8f, yTop = y, score = r.score)
+                    drawTextWithin(canvas, r.name, rightMargin - 58f, y, lineText)
+                } else {
+                    drawScoreBox(canvas, xRight = leftMargin + 48f, yTop = y, score = r.score)
+
+                    val textRight = rightMargin - 10f
+                    val maxTextWidth = rightMargin - leftMargin - 70f
+                    val cleanName = ellipsizePdfText(
+                        text = r.name,
+                        paint = lineText,
+                        maxWidth = maxTextWidth
+                    )
+                    val textWidth = lineText.measureText(cleanName)
+
+                    canvas.drawText(
+                        cleanName,
+                        textRight - textWidth,
+                        y,
+                        lineText
+                    )
+                }
+
+                y += 26f
             }
 
             drawFooter(canvas, pageNumber)
@@ -917,6 +1034,24 @@ private fun buildInternalExamSessionForUi(
             null
         }
     }
+
+     fun ellipsizePdfText(
+         text: String,
+         paint: Paint,
+         maxWidth: Float
+     ): String {
+         var clean = text.trim()
+
+         if (paint.measureText(clean) <= maxWidth) {
+             return clean
+         }
+
+         while (clean.length > 4 && paint.measureText("$clean...") > maxWidth) {
+             clean = clean.dropLast(1)
+         }
+
+         return "$clean..."
+     }
 
      fun sharePdf(
          context: Context,
@@ -1082,7 +1217,8 @@ fun InternalExamScreen(
                 showTopHome = false,
                 showTopSearch = true,
                 showSettings = true,
-                showTopShare = false,
+                showTopShare = true,
+                onShare = onExportPdf,
                 centerTitle = true,
                 onHome = onBack,
                 onPickSearchResult = {}
@@ -4454,85 +4590,44 @@ private fun BottomActionBar(
                 ),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = Color.Transparent,
+                shadowElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = Color.Transparent,
-                    shadowElevation = 8.dp,
+                Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .height(46.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(18.dp))
-                            .clickable(enabled = !isSaving) { onSave() }
-                            .background(
-                                brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFF5B35D5),
-                                        Color(0xFF7C3AED),
-                                        Color(0xFF8B5CF6)
-                                    )
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable(enabled = !isSaving) { onSave() }
+                        .background(
+                            brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFF5B35D5),
+                                    Color(0xFF7C3AED),
+                                    Color(0xFF8B5CF6)
                                 )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (isSaving) {
-                                examTr(isEnglish, "שומר...", "Saving...")
-                            } else if (finishMode) {
-                                examTr(isEnglish, "סיום מבחן", "Finish exam")
-                            } else {
-                                examTr(isEnglish, "שמור", "Save")
-                            },
-                            color = Color.White,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = Color.Transparent,
-                    shadowElevation = 8.dp,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(46.dp)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(18.dp))
-                            .clickable { onExportPdf() }
-                            .background(
-                                brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFF0EA5E9),
-                                        Color(0xFF2563EB),
-                                        Color(0xFF3B82F6)
-                                    )
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = examTr(isEnglish, "שתף", "Share"),
-                            color = Color.White,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Text(
+                        text = if (isSaving) {
+                            examTr(isEnglish, "שומר...", "Saving...")
+                        } else if (finishMode) {
+                            examTr(isEnglish, "סיום מבחן", "Finish exam")
+                        } else {
+                            examTr(isEnglish, "שמור", "Save")
+                        },
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
