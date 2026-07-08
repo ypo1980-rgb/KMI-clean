@@ -48,6 +48,14 @@ import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.highlightItem
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.ui.unit.Dp
@@ -987,6 +995,33 @@ fun MaterialsScreen(
                 centerTitle = true,
                 alignTitleEnd = false,
                 showBottomActions = true,
+                showTopShare = false,
+                onShare = {
+                    shareMaterialsPdf(
+                        context = context,
+                        belt = belt,
+                        topicTitle = headerTitle,
+                        items = itemList.mapIndexed { index, item ->
+                            val statusId = statusIdFor(index, item)
+                            val canonicalId = canonicalFor(item)
+                            val state = itemStates[statusId]
+
+                            MaterialPdfItem(
+                                number = index + 1,
+                                title = itemTitleForUi(topicUi, item, currentLang),
+                                status = when (state) {
+                                    true -> if (isEnglish) "Known" else "יודע"
+                                    false -> if (isEnglish) "Unknown" else "לא יודע"
+                                    null -> if (isEnglish) "Not marked" else "לא סומן"
+                                },
+                                isFavorite = isFavoriteByAliases(materialRootTopic, item),
+                                isExcluded = excludedItems.contains(canonicalId),
+                                hasNote = loadNote(canonicalId).isNotBlank()
+                            )
+                        },
+                        isEnglish = isEnglish
+                    )
+                },
                 onPickSearchResult = { key -> handlePickFromTopBar(key) },
                 currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
                 onToggleLanguage = {
@@ -1848,6 +1883,397 @@ fun MaterialsScreen(
     }
 }
 
+private data class MaterialPdfItem(
+    val number: Int,
+    val title: String,
+    val status: String,
+    val isFavorite: Boolean,
+    val isExcluded: Boolean,
+    val hasNote: Boolean
+)
+
+private fun shareMaterialsPdf(
+    context: Context,
+    belt: Belt,
+    topicTitle: String,
+    items: List<MaterialPdfItem>,
+    isEnglish: Boolean
+) {
+    val pdfFile = createMaterialsPdf(
+        context = context,
+        belt = belt,
+        topicTitle = topicTitle,
+        items = items,
+        isEnglish = isEnglish
+    )
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        pdfFile
+    )
+
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/pdf"
+        putExtra(
+            Intent.EXTRA_SUBJECT,
+            if (isEnglish) "KAMI exercises report" else "תרגילים לפי חגורה - KAMI"
+        )
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    context.startActivity(
+        Intent.createChooser(
+            sendIntent,
+            if (isEnglish) "Share PDF" else "שיתוף PDF"
+        )
+    )
+}
+
+private fun createMaterialsPdf(
+    context: Context,
+    belt: Belt,
+    topicTitle: String,
+    items: List<MaterialPdfItem>,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 24f
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val document = PdfDocument()
+
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val blue = android.graphics.Color.rgb(12, 78, 130)
+    val lightBlue = android.graphics.Color.rgb(234, 246, 255)
+    val softBlue = android.graphics.Color.rgb(244, 250, 255)
+    val borderBlue = android.graphics.Color.rgb(191, 213, 232)
+    val textDark = android.graphics.Color.rgb(15, 23, 42)
+    val textMuted = android.graphics.Color.rgb(80, 100, 120)
+    val red = android.graphics.Color.rgb(220, 38, 38)
+    val green = android.graphics.Color.rgb(22, 163, 74)
+    val orange = android.graphics.Color.rgb(217, 119, 6)
+
+    val regular = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+    val bold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
+    fun paint(
+        size: Float,
+        color: Int = textDark,
+        typeface: Typeface = regular,
+        align: Paint.Align = Paint.Align.RIGHT
+    ) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = size
+        this.color = color
+        this.typeface = typeface
+        textAlign = align
+    }
+
+    val titlePaint = paint(29f, android.graphics.Color.WHITE, bold)
+    val subTitlePaint = paint(14f, android.graphics.Color.WHITE, regular)
+    val sectionPaint = paint(17f, blue, bold)
+    val labelPaint = paint(10.5f, blue, bold)
+    val valuePaint = paint(12.5f, textDark, regular)
+    val boldValuePaint = paint(13f, textDark, bold)
+    val smallPaint = paint(9f, textMuted, regular)
+
+    fun drawRoundRect(
+        canvas: android.graphics.Canvas,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        radius: Float = 12f,
+        stroke: Boolean = false,
+        strokeWidth: Float = 1.2f
+    ) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = if (stroke) Paint.Style.STROKE else Paint.Style.FILL
+            this.strokeWidth = strokeWidth
+        }
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, p)
+    }
+
+    fun drawKmiLogo(canvas: android.graphics.Canvas, cx: Float, cy: Float, radius: Float) {
+        val outer = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
+        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            typeface = bold
+            textSize = radius * 0.62f
+            textAlign = Paint.Align.CENTER
+        }
+
+        canvas.drawCircle(cx, cy, radius, outer)
+        canvas.drawCircle(cx, cy, radius - 4f, inner)
+        canvas.drawText("KAMI", cx, cy + radius * 0.22f, text)
+    }
+
+    fun drawHeader(canvas: android.graphics.Canvas) {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(pageWidth.toFloat(), 0f)
+            lineTo(pageWidth.toFloat(), 122f)
+            lineTo(178f, 122f)
+            lineTo(238f, 0f)
+            close()
+        }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy })
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(208f, 122f)
+            lineTo(224f, 122f)
+            lineTo(284f, 0f)
+            lineTo(268f, 0f)
+            close()
+        }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(36, 103, 158)
+        })
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(230f, 122f)
+            lineTo(238f, 122f)
+            lineTo(298f, 0f)
+            lineTo(290f, 0f)
+            close()
+        }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(128, 183, 220)
+        })
+
+        drawKmiLogo(canvas, 78f, 58f, 42f)
+
+        titlePaint.textAlign = Paint.Align.RIGHT
+        subTitlePaint.textAlign = Paint.Align.RIGHT
+
+        canvas.drawText(tr("תרגילים לפי חגורה", "Belt exercises"), pageWidth - 34f, 52f, titlePaint)
+        canvas.drawText(topicTitle.take(42), pageWidth - 34f, 78f, subTitlePaint)
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            tr("תאריך הפקה:", "Generated:") + " " +
+                    java.text.SimpleDateFormat(
+                        "dd/MM/yyyy",
+                        java.util.Locale.getDefault()
+                    ).format(java.util.Date()),
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+    }
+
+    fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int, totalPages: Int) {
+        val footerY = 804f
+
+        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            strokeWidth = 2f
+        })
+
+        drawKmiLogo(canvas, 38f, footerY + 22f, 13f)
+
+        smallPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
+
+        smallPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            tr("עמוד $pageNumber מתוך $totalPages", "Page $pageNumber of $totalPages"),
+            pageWidth / 2f,
+            footerY + 25f,
+            smallPaint
+        )
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
+        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
+    }
+
+    fun drawSummary(canvas: android.graphics.Canvas, top: Float): Float {
+        val total = items.size
+        val known = items.count { it.status == tr("יודע", "Known") }
+        val unknown = items.count { it.status == tr("לא יודע", "Unknown") }
+        val excluded = items.count { it.isExcluded }
+        val favorites = items.count { it.isFavorite }
+        val notes = items.count { it.hasNote }
+
+        drawRoundRect(canvas, margin, top, pageWidth - margin, top + 120f, lightBlue, 12f)
+        drawRoundRect(canvas, margin, top, pageWidth - margin, top + 120f, borderBlue, 12f, stroke = true)
+
+        sectionPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(tr("סיכום תרגילים", "Exercises summary"), pageWidth - margin - 22f, top + 30f, sectionPaint)
+
+        val stats = listOf(
+            total.toString() to tr("תרגילים", "Exercises"),
+            known.toString() to tr("יודע", "Known"),
+            unknown.toString() to tr("לא יודע", "Unknown"),
+            excluded.toString() to tr("מוחרגים", "Excluded"),
+            favorites.toString() to tr("מועדפים", "Favorites"),
+            notes.toString() to tr("הערות", "Notes")
+        )
+
+        val boxTop = top + 48f
+        val boxW = (pageWidth - margin * 2f - 30f) / 3f
+
+        stats.forEachIndexed { index, pair ->
+            val row = index / 3
+            val col = index % 3
+            val left = margin + 15f + col * boxW
+            val cardTop = boxTop + row * 34f
+            val right = left + boxW - 8f
+
+            drawRoundRect(canvas, left, cardTop, right, cardTop + 28f, softBlue, 10f)
+            drawRoundRect(canvas, left, cardTop, right, cardTop + 28f, borderBlue, 10f, stroke = true)
+
+            boldValuePaint.textAlign = Paint.Align.CENTER
+            boldValuePaint.color = navy
+            canvas.drawText(pair.first, (left + right) / 2f, cardTop + 12f, boldValuePaint)
+
+            smallPaint.textAlign = Paint.Align.CENTER
+            smallPaint.color = textMuted
+            canvas.drawText(pair.second.take(14), (left + right) / 2f, cardTop + 24f, smallPaint)
+        }
+
+        return top + 144f
+    }
+
+    fun drawItemCard(
+        canvas: android.graphics.Canvas,
+        item: MaterialPdfItem,
+        top: Float,
+        index: Int
+    ): Float {
+        val left = margin
+        val right = pageWidth - margin
+        val bottom = top + 74f
+
+        drawRoundRect(
+            canvas,
+            left,
+            top,
+            right,
+            bottom,
+            if (index % 2 == 0) lightBlue else softBlue,
+            12f
+        )
+        drawRoundRect(canvas, left, top, right, bottom, borderBlue, 12f, stroke = true)
+
+        val statusColor = when (item.status) {
+            tr("יודע", "Known") -> green
+            tr("לא יודע", "Unknown") -> orange
+            else -> textMuted
+        }
+
+        val numberRect = android.graphics.RectF(right - 54f, top + 18f, right - 22f, top + 50f)
+        canvas.drawRoundRect(numberRect, 999f, 999f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = blue
+            style = Paint.Style.FILL
+        })
+
+        val numberPaint = paint(12f, android.graphics.Color.WHITE, bold, Paint.Align.CENTER)
+        canvas.drawText(
+            item.number.toString(),
+            numberRect.centerX(),
+            numberRect.centerY() - (numberPaint.descent() + numberPaint.ascent()) / 2f,
+            numberPaint
+        )
+
+        boldValuePaint.textAlign = Paint.Align.RIGHT
+        boldValuePaint.color = textDark
+        canvas.drawText(item.title.take(42), right - 66f, top + 28f, boldValuePaint)
+
+        labelPaint.textAlign = Paint.Align.RIGHT
+        labelPaint.color = statusColor
+        canvas.drawText(item.status, right - 66f, top + 52f, labelPaint)
+
+        val tags = buildList {
+            if (item.isFavorite) add(tr("מועדף", "Favorite"))
+            if (item.isExcluded) add(tr("מוחרג", "Excluded"))
+            if (item.hasNote) add(tr("הערה", "Note"))
+        }.joinToString(" · ")
+
+        valuePaint.textAlign = Paint.Align.LEFT
+        valuePaint.color = if (item.isExcluded) red else textMuted
+        canvas.drawText(tags.ifBlank { "—" }.take(24), left + 22f, top + 42f, valuePaint)
+
+        return bottom + 8f
+    }
+
+    val firstPageCapacity = 6
+    val nextPageCapacity = 8
+
+    val totalPages = if (items.size <= firstPageCapacity) {
+        1
+    } else {
+        1 + kotlin.math.ceil((items.size - firstPageCapacity) / nextPageCapacity.toDouble()).toInt()
+    }
+
+    var pageNumber = 1
+    var itemIndex = 0
+
+    while (pageNumber <= totalPages) {
+        val page = document.startPage(
+            PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        )
+        val canvas = page.canvas
+
+        drawHeader(canvas)
+
+        var y = 136f
+
+        if (pageNumber == 1) {
+            y = drawSummary(canvas, y)
+        } else {
+            sectionPaint.textAlign = Paint.Align.CENTER
+            sectionPaint.color = blue
+            canvas.drawText(tr("רשימת תרגילים", "Exercises list"), pageWidth / 2f, y, sectionPaint)
+            y += 28f
+        }
+
+        val capacity = if (pageNumber == 1) firstPageCapacity else nextPageCapacity
+
+        if (items.isEmpty()) {
+            drawRoundRect(canvas, margin, y, pageWidth - margin, y + 92f, softBlue, 12f)
+            drawRoundRect(canvas, margin, y, pageWidth - margin, y + 92f, borderBlue, 12f, stroke = true)
+
+            sectionPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(tr("אין תרגילים להצגה", "No exercises to display"), pageWidth / 2f, y + 42f, sectionPaint)
+        } else {
+            repeat(capacity) {
+                if (itemIndex >= items.size) return@repeat
+
+                y = drawItemCard(
+                    canvas = canvas,
+                    item = items[itemIndex],
+                    top = y,
+                    index = itemIndex
+                )
+
+                itemIndex++
+            }
+        }
+
+        drawFooter(canvas, pageNumber, totalPages)
+        document.finishPage(page)
+
+        pageNumber++
+    }
+
+    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+    val file = File(dir, "materials_${System.currentTimeMillis()}.pdf")
+
+    FileOutputStream(file).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return file
+}
+
 // ===== כפתור מונפש =====
 @Composable
 fun AnimatedButton(
@@ -1985,6 +2411,8 @@ private fun CompactDropdownAction(
     text: String,
     isEnglish: Boolean,
     enabled: Boolean = true,
+    textColor: Color = Color(0xFF1F2937),
+    fontWeight: FontWeight = FontWeight.SemiBold,
     onClick: () -> Unit
 ) {
     CompositionLocalProvider(
@@ -2003,7 +2431,7 @@ private fun CompactDropdownAction(
                 text = text,
                 modifier = Modifier.fillMaxWidth(),
                 color = if (enabled) {
-                    Color(0xFF1F2937)
+                    textColor
                 } else {
                     Color(0xFF6B7280)
                 },
@@ -2011,7 +2439,7 @@ private fun CompactDropdownAction(
                     fontSize = 11.5.sp,
                     lineHeight = 13.sp
                 ),
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = fontWeight,
                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 maxLines = 1
             )
@@ -2185,12 +2613,34 @@ private fun ItemFloatingActions(
 
             CompactDropdownAction(
                 text = when {
+                    isEnglish && hasNote -> "Edit / delete note"
+                    isEnglish -> "Add exercise note"
+                    hasNote -> "ערוך / מחק הערה"
+                    else -> "הוסף הערה לתרגיל"
+                },
+                isEnglish = isEnglish,
+                onClick = {
+                    expanded = false
+                    onEditNote()
+                }
+            )
+
+            Divider(
+                color = Color(0xFFDC2626).copy(alpha = 0.22f),
+                thickness = 1.dp,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+
+            CompactDropdownAction(
+                text = when {
                     isEnglish && excluded -> "Cancel exclusion"
                     isEnglish -> "Exclude from practice"
                     excluded -> "בטל החרגה"
-                    else -> "בטל החרגה"
+                    else -> "החרג מתרגול"
                 },
                 isEnglish = isEnglish,
+                textColor = Color(0xFFDC2626),
+                fontWeight = FontWeight.ExtraBold,
                 onClick = {
                     expanded = false
                     onToggleExclude()
@@ -2206,20 +2656,6 @@ private fun ItemFloatingActions(
                             android.widget.Toast.LENGTH_SHORT
                         )
                         .show()
-                }
-            )
-
-            CompactDropdownAction(
-                text = when {
-                    isEnglish && hasNote -> "Edit / delete note"
-                    isEnglish -> "Add exercise note"
-                    hasNote -> "ערוך / מחק הערה"
-                    else -> "הוסף הערה לתרגיל"
-                },
-                isEnglish = isEnglish,
-                onClick = {
-                    expanded = false
-                    onEditNote()
                 }
             )
         }

@@ -4,6 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.Intent
 import android.net.Uri
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
+import androidx.core.graphics.ColorUtils
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -249,6 +256,10 @@ fun HomeScreen(
     val userSpRole = remember { ctxRole.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
     var userRole by remember { mutableStateOf(userSpRole.getString("user_role", "trainee")) }
 
+    var homePdfTrainings by remember {
+        mutableStateOf<List<HomePdfTraining>>(emptyList())
+    }
+
     val notePrefs = remember(ctxRole) {
         ctxRole.getSharedPreferences("kmi_exercise_notes", Context.MODE_PRIVATE)
     }
@@ -323,6 +334,7 @@ fun HomeScreen(
                 lockHome = true,
                 homeDisabledToast = "אתה כבר במסך הבית 🙂",
                 showTopHome = false,
+                showTopShare = false,
 
                 currentLang =
                     if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
@@ -338,6 +350,14 @@ fun HomeScreen(
                     langManager.setLanguage(newLang)
 
                     (contextLang as Activity).recreate()
+                },
+
+                onShare = {
+                    shareHomePdf(
+                        context = ctxRole,
+                        trainings = homePdfTrainings,
+                        isEnglish = isEnglish
+                    )
                 },
 
                 // חיפוש תרגיל מהסרגל התחתון
@@ -2028,6 +2048,32 @@ fun HomeScreen(
                                 isCancelledByHoliday = isBlockedHolidayDate(training.cal)
                             )
                         }
+                }
+
+                LaunchedEffect(upcoming, isEnglish) {
+                    val locale = if (isEnglish) {
+                        java.util.Locale.ENGLISH
+                    } else {
+                        java.util.Locale("he", "IL")
+                    }
+
+                    val dayFmt = java.text.SimpleDateFormat("EEEE", locale)
+                    val dateFmt = java.text.SimpleDateFormat("dd/MM", locale)
+                    val timeFmt = java.text.SimpleDateFormat("HH:mm", locale)
+
+                    homePdfTrainings = upcoming.map { item ->
+                        val training = item.training
+
+                        HomePdfTraining(
+                            place = training.place.orEmpty(),
+                            address = training.address.orEmpty(),
+                            coach = training.coach.orEmpty(),
+                            day = dayFmt.format(training.cal.time),
+                            date = dateFmt.format(training.cal.time),
+                            time = timeFmt.format(training.cal.time),
+                            cancelledByHoliday = item.isCancelledByHoliday
+                        )
+                    }
                 }
 
                 val weekBlockedByHoliday = remember(upcoming) {
@@ -4046,6 +4092,467 @@ private fun writeNavPref(ctx: Context, pref: NavAppPref) {
         NavAppPref.WAZE -> "waze"
     }
     sp.edit().putString(NAV_PREF_KEY, v).apply()
+}
+
+private data class HomePdfTraining(
+    val place: String,
+    val address: String,
+    val coach: String,
+    val day: String,
+    val date: String,
+    val time: String,
+    val cancelledByHoliday: Boolean
+)
+
+private fun shareHomePdf(
+    context: Context,
+    trainings: List<HomePdfTraining>,
+    isEnglish: Boolean
+) {
+    val pdfFile = createHomePdf(
+        context = context,
+        trainings = trainings,
+        isEnglish = isEnglish
+    )
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        pdfFile
+    )
+
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/pdf"
+        putExtra(
+            Intent.EXTRA_SUBJECT,
+            if (isEnglish) "KAMI home report" else "מסך הבית - KAMI"
+        )
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    context.startActivity(
+        Intent.createChooser(
+            sendIntent,
+            if (isEnglish) "Share PDF" else "שיתוף PDF"
+        )
+    )
+}
+
+private fun createHomePdf(
+    context: Context,
+    trainings: List<HomePdfTraining>,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 24f
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val document = PdfDocument()
+    val page = document.startPage(
+        PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
+    )
+    val canvas = page.canvas
+
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val blue = android.graphics.Color.rgb(12, 78, 130)
+    val lightBlue = android.graphics.Color.rgb(234, 246, 255)
+    val softBlue = android.graphics.Color.rgb(244, 250, 255)
+    val borderBlue = android.graphics.Color.rgb(191, 213, 232)
+    val textDark = android.graphics.Color.rgb(15, 23, 42)
+    val textMuted = android.graphics.Color.rgb(80, 100, 120)
+    val orange = android.graphics.Color.rgb(249, 115, 22)
+
+    val regular = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+    val bold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
+    fun alpha(color: Int, value: Float): Int =
+        ColorUtils.setAlphaComponent(color, (value.coerceIn(0f, 1f) * 255).toInt())
+
+    fun paint(
+        size: Float,
+        color: Int = textDark,
+        typeface: Typeface = regular,
+        align: Paint.Align = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    ) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = size
+        this.color = color
+        this.typeface = typeface
+        textAlign = align
+    }
+
+    val titlePaint = paint(29f, android.graphics.Color.WHITE, bold)
+    val subTitlePaint = paint(14f, android.graphics.Color.WHITE, regular)
+    val sectionPaint = paint(17f, blue, bold)
+    val labelPaint = paint(10.5f, blue, bold)
+    val valuePaint = paint(12.5f, textDark, regular)
+    val boldValuePaint = paint(13f, textDark, bold)
+    val smallPaint = paint(9f, textMuted, regular)
+
+    fun drawRoundRect(
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        radius: Float = 12f,
+        stroke: Boolean = false,
+        strokeWidth: Float = 1.2f
+    ) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = if (stroke) Paint.Style.STROKE else Paint.Style.FILL
+            this.strokeWidth = strokeWidth
+        }
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, p)
+    }
+
+    fun drawKmiLogo(cx: Float, cy: Float, radius: Float) {
+        val outer = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
+        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            typeface = bold
+            textSize = radius * 0.62f
+            textAlign = Paint.Align.CENTER
+        }
+
+        canvas.drawCircle(cx, cy, radius, outer)
+        canvas.drawCircle(cx, cy, radius - 4f, inner)
+        canvas.drawText("KAMI", cx, cy + radius * 0.22f, text)
+    }
+
+    fun drawHeader() {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        val diagonal = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
+        val accent1 = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(36, 103, 158)
+        }
+        val accent2 = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(128, 183, 220)
+        }
+
+        val path = android.graphics.Path().apply {
+            moveTo(pageWidth.toFloat(), 0f)
+            lineTo(pageWidth.toFloat(), 122f)
+            lineTo(178f, 122f)
+            lineTo(238f, 0f)
+            close()
+        }
+        canvas.drawPath(path, diagonal)
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(208f, 122f)
+            lineTo(224f, 122f)
+            lineTo(284f, 0f)
+            lineTo(268f, 0f)
+            close()
+        }, accent1)
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(230f, 122f)
+            lineTo(238f, 122f)
+            lineTo(298f, 0f)
+            lineTo(290f, 0f)
+            close()
+        }, accent2)
+
+        drawKmiLogo(78f, 58f, 42f)
+
+        titlePaint.textAlign = Paint.Align.RIGHT
+        subTitlePaint.textAlign = Paint.Align.RIGHT
+
+        canvas.drawText(tr("מסך הבית", "Home"), pageWidth - 34f, 52f, titlePaint)
+        canvas.drawText(
+            tr("דו״ח אימונים לשבוע הקרוב", "Upcoming weekly trainings"),
+            pageWidth - 34f,
+            78f,
+            subTitlePaint
+        )
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            tr("תאריך הפקה:", "Generated:") + " " +
+                    java.text.SimpleDateFormat(
+                        "dd/MM/yyyy",
+                        java.util.Locale.getDefault()
+                    ).format(java.util.Date()),
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+    }
+
+    fun drawFooter() {
+        val footerY = 804f
+
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            strokeWidth = 2f
+        }
+
+        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, line)
+
+        drawKmiLogo(38f, footerY + 22f, 13f)
+
+        smallPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
+
+        smallPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(tr("עמוד 1 מתוך 1", "Page 1 of 1"), pageWidth / 2f, footerY + 25f, smallPaint)
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
+        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
+
+        val flag = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(20, 85, 200)
+        }
+
+        canvas.drawRect(pageWidth - 48f, footerY + 14f, pageWidth - 20f, footerY + 18f, flag)
+        canvas.drawRect(pageWidth - 48f, footerY + 28f, pageWidth - 20f, footerY + 32f, flag)
+    }
+
+    fun drawSummary(top: Float): Float {
+        drawRoundRect(
+            margin,
+            top,
+            pageWidth - margin,
+            top + 78f,
+            lightBlue,
+            12f
+        )
+        drawRoundRect(
+            margin,
+            top,
+            pageWidth - margin,
+            top + 78f,
+            borderBlue,
+            12f,
+            stroke = true
+        )
+
+        sectionPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            tr("אימונים לשבוע הקרוב", "Upcoming trainings"),
+            pageWidth - margin - 22f,
+            top + 32f,
+            sectionPaint
+        )
+
+        labelPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            tr("מספר אימונים מוצגים:", "Displayed trainings:"),
+            pageWidth - margin - 22f,
+            top + 58f,
+            labelPaint
+        )
+
+        boldValuePaint.textAlign = Paint.Align.LEFT
+        boldValuePaint.textSize = 24f
+        boldValuePaint.color = navy
+        canvas.drawText("${trainings.size}", margin + 28f, top + 56f, boldValuePaint)
+
+        boldValuePaint.textSize = 13f
+        boldValuePaint.color = textDark
+
+        return top + 100f
+    }
+
+    fun drawEmptyState(top: Float): Float {
+        drawRoundRect(
+            margin,
+            top,
+            pageWidth - margin,
+            top + 112f,
+            softBlue,
+            12f
+        )
+        drawRoundRect(
+            margin,
+            top,
+            pageWidth - margin,
+            top + 112f,
+            borderBlue,
+            12f,
+            stroke = true
+        )
+
+        sectionPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            tr("אין אימונים קרובים", "No upcoming trainings"),
+            pageWidth / 2f,
+            top + 46f,
+            sectionPaint
+        )
+
+        valuePaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            tr(
+                "לא נמצאו אימונים לשבוע הקרוב.",
+                "No trainings were found for the upcoming week."
+            ),
+            pageWidth / 2f,
+            top + 74f,
+            valuePaint
+        )
+
+        return top + 132f
+    }
+
+    fun drawTrainingCard(
+        training: HomePdfTraining,
+        top: Float,
+        index: Int
+    ): Float {
+        val cardHeight = if (training.cancelledByHoliday) 116f else 100f
+        val left = margin
+        val right = pageWidth - margin
+        val bottom = top + cardHeight
+        val mid = pageWidth / 2f
+
+        drawRoundRect(
+            left,
+            top,
+            right,
+            bottom,
+            if (index % 2 == 0) lightBlue else softBlue,
+            12f
+        )
+        drawRoundRect(
+            left,
+            top,
+            right,
+            bottom,
+            borderBlue,
+            12f,
+            stroke = true
+        )
+
+        val divider = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = borderBlue
+            strokeWidth = 1f
+        }
+
+        canvas.drawLine(mid, top + 22f, mid, bottom - 20f, divider)
+
+        sectionPaint.textAlign = Paint.Align.RIGHT
+        sectionPaint.textSize = 13.5f
+        canvas.drawText(
+            training.place.ifBlank { tr("מיקום לא הוגדר", "Location not set") }.take(34),
+            right - 22f,
+            top + 30f,
+            sectionPaint
+        )
+        sectionPaint.textSize = 17f
+
+        labelPaint.textAlign = Paint.Align.RIGHT
+        valuePaint.textAlign = Paint.Align.RIGHT
+        boldValuePaint.textAlign = Paint.Align.RIGHT
+
+        canvas.drawText(tr("תאריך ושעה:", "Date and time:"), right - 22f, top + 58f, labelPaint)
+        canvas.drawText(
+            "${training.day} ${training.date} · ${training.time}",
+            right - 22f,
+            top + 76f,
+            boldValuePaint
+        )
+
+        canvas.drawText(tr("כתובת:", "Address:"), mid - 22f, top + 30f, labelPaint)
+        canvas.drawText(
+            training.address.ifBlank { "—" }.take(30),
+            mid - 22f,
+            top + 48f,
+            valuePaint
+        )
+
+        canvas.drawText(tr("מאמן:", "Coach:"), mid - 22f, top + 72f, labelPaint)
+        canvas.drawText(
+            training.coach.ifBlank { "—" }.take(22),
+            mid - 22f,
+            top + 90f,
+            boldValuePaint
+        )
+
+        if (training.cancelledByHoliday) {
+            drawRoundRect(
+                left + 22f,
+                bottom - 28f,
+                right - 22f,
+                bottom - 9f,
+                alpha(orange, 0.12f),
+                999f
+            )
+            drawRoundRect(
+                left + 22f,
+                bottom - 28f,
+                right - 22f,
+                bottom - 9f,
+                alpha(orange, 0.42f),
+                999f,
+                stroke = true
+            )
+
+            labelPaint.textAlign = Paint.Align.CENTER
+            labelPaint.color = orange
+            canvas.drawText(
+                tr("האימון מבוטל עקב חג", "Training cancelled due to holiday"),
+                pageWidth / 2f,
+                bottom - 14f,
+                labelPaint
+            )
+            labelPaint.color = blue
+        }
+
+        return bottom + 8f
+    }
+
+    drawHeader()
+
+    var y = 136f
+    y = drawSummary(y)
+
+    sectionPaint.textAlign = Paint.Align.CENTER
+    canvas.drawText(
+        tr("פירוט אימונים", "Training details"),
+        pageWidth / 2f,
+        y,
+        sectionPaint
+    )
+
+    y += 24f
+
+    if (trainings.isEmpty()) {
+        drawEmptyState(y)
+    } else {
+        trainings.take(5).forEachIndexed { index, training ->
+            if (y + 122f < 792f) {
+                y = drawTrainingCard(
+                    training = training,
+                    top = y,
+                    index = index
+                )
+            }
+        }
+    }
+
+    drawFooter()
+
+    document.finishPage(page)
+
+    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+    val file = File(dir, "home_report_${System.currentTimeMillis()}.pdf")
+
+    FileOutputStream(file).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return file
 }
 
 // ===== עזרי ניווט מפות =====

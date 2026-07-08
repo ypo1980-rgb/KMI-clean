@@ -68,6 +68,14 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import java.time.YearMonth
 import il.kmi.app.localization.rememberIsEnglish
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
 
 @Composable
 fun AttendanceGroupStatsScreen(
@@ -77,6 +85,8 @@ fun AttendanceGroupStatsScreen(
     onBack: () -> Unit
 ) {
     val isEnglish = rememberIsEnglish()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
     val screenTextAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
@@ -144,11 +154,34 @@ fun AttendanceGroupStatsScreen(
                 title = tr("סטטיסטיקת נוכחות", "Attendance statistics"),
                 showTopHome = false,
                 showTopSearch = false,
-                showBottomActions = false,
+                showBottomActions = true,
+                showTopShare = false,
                 lockSearch = true,
-                centerTitle = true
+                centerTitle = true,
+                onShare = {
+                    shareAttendanceStatsPdf(
+                        context = context,
+                        branch = branch,
+                        groupKey = groupKey,
+                        avgPct = avgPct,
+                        totalSessions = totalSessions,
+                        avgPresent = avgPresent,
+                        avgTotal = avgTotal,
+                        reports = reports.map { report ->
+                            AttendanceStatsPdfReport(
+                                date = report.date.toString(),
+                                total = report.totalMembers,
+                                present = report.presentCount,
+                                excused = report.excusedCount,
+                                absent = report.absentCount,
+                                pct = report.percentPresent
+                            )
+                        },
+                        isEnglish = isEnglish
+                    )
+                }
             )
-        },
+                 },
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(left = 0)
     ) { p ->
@@ -159,11 +192,12 @@ fun AttendanceGroupStatsScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF020617),
-                            Color(0xFF111827),
-                            Color(0xFF1D4ED8),
-                            Color(0xFF22D3EE)
+                        colors = listOf(
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
                         )
                     )
                 )
@@ -204,7 +238,7 @@ fun AttendanceGroupStatsScreen(
                             tr("דו\"חות אחרונים (שנה אחורה)", "Recent reports - last year")
                         },
                         style = MaterialTheme.typography.titleSmall.merge(screenTextStyle),
-                        color = Color(0xFFECFEFF),
+                        color = Color(0xFF0F172A),
                         textAlign = screenTextAlign,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -240,10 +274,13 @@ fun AttendanceGroupStatsScreen(
                                     val cur = expandedByMonth[ym] != false
                                     expandedByMonth[ym] = !cur
                                 },
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color.White.copy(alpha = 0.08f),
-                            border = BorderStroke(1.dp, Color(0xFF334155))
+                            shape = RoundedCornerShape(18.dp),
+                            color = Color(0xFFF8FBFF),
+                            tonalElevation = 3.dp,
+                            shadowElevation = 5.dp,
+                            border = BorderStroke(1.dp, Color(0xFFD6E4F2))
                         ) {
+
                             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                                 Row(
                                     modifier = Modifier
@@ -272,7 +309,7 @@ fun AttendanceGroupStatsScreen(
                                                 text = monthTitle,
                                                 style = MaterialTheme.typography.titleMedium.merge(screenTextStyle),
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFFECFEFF),
+                                                color = Color(0xFF0F172A),
                                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -284,7 +321,7 @@ fun AttendanceGroupStatsScreen(
                                                     "${monthReports.size} דו\"חות"
                                                 },
                                                 style = MaterialTheme.typography.labelSmall.merge(screenTextStyle),
-                                                color = Color(0xFFBFDBFE),
+                                                color = Color(0xFF1E3A8A),
                                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -382,16 +419,19 @@ fun AttendanceGroupStatsScreen(
                             },
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                             shape = RoundedCornerShape(20.dp),
-                            border = BorderStroke(
-                                1.dp,
-                                if (hasRealReports) Color(0xFF93C5FD) else Color(0xFF475569)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFF8FBFF),
+                                contentColor = Color(0xFF0F172A),
+                                disabledContainerColor = Color(0xFFE5E7EB),
+                                disabledContentColor = Color(0xFF64748B)
                             ),
                             enabled = !busy && hasRealReports
                         ) {
+
                             Icon(
                                 imageVector = Icons.Filled.Delete,
                                 contentDescription = null,
-                                tint = Color.White
+                                tint = Color(0xFF0F172A)
                             )
                             Spacer(Modifier.padding(horizontal = 4.dp))
                             val label = if (!deleteMode) {
@@ -403,7 +443,7 @@ fun AttendanceGroupStatsScreen(
                             Text(
                                 text = label,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
+                                color = Color(0xFF0F172A),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -424,7 +464,7 @@ fun AttendanceGroupStatsScreen(
                                 Text(
                                     text = tr("ביטול", "Cancel"),
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color.White,
+                                    color = Color(0xFF0F172A),
                                     maxLines = 1
                                 )
                             }
@@ -521,12 +561,400 @@ fun AttendanceGroupStatsScreen(
     }
 }
 
+private data class AttendanceStatsPdfReport(
+    val date: String,
+    val total: Int,
+    val present: Int,
+    val excused: Int,
+    val absent: Int,
+    val pct: Int
+)
+
+private fun shareAttendanceStatsPdf(
+    context: Context,
+    branch: String,
+    groupKey: String,
+    avgPct: Int,
+    totalSessions: Int,
+    avgPresent: Int,
+    avgTotal: Int,
+    reports: List<AttendanceStatsPdfReport>,
+    isEnglish: Boolean
+) {
+    val pdfFile = createAttendanceStatsPdf(
+        context = context,
+        branch = branch,
+        groupKey = groupKey,
+        avgPct = avgPct,
+        totalSessions = totalSessions,
+        avgPresent = avgPresent,
+        avgTotal = avgTotal,
+        reports = reports,
+        isEnglish = isEnglish
+    )
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        pdfFile
+    )
+
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/pdf"
+        putExtra(
+            Intent.EXTRA_SUBJECT,
+            if (isEnglish) "KAMI attendance statistics" else "סטטיסטיקת נוכחות - KAMI"
+        )
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    context.startActivity(
+        Intent.createChooser(
+            sendIntent,
+            if (isEnglish) "Share PDF" else "שיתוף PDF"
+        )
+    )
+}
+
+private fun createAttendanceStatsPdf(
+    context: Context,
+    branch: String,
+    groupKey: String,
+    avgPct: Int,
+    totalSessions: Int,
+    avgPresent: Int,
+    avgTotal: Int,
+    reports: List<AttendanceStatsPdfReport>,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 24f
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val document = PdfDocument()
+
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val blue = android.graphics.Color.rgb(12, 78, 130)
+    val lightBlue = android.graphics.Color.rgb(234, 246, 255)
+    val softBlue = android.graphics.Color.rgb(244, 250, 255)
+    val borderBlue = android.graphics.Color.rgb(191, 213, 232)
+    val textDark = android.graphics.Color.rgb(15, 23, 42)
+    val textMuted = android.graphics.Color.rgb(80, 100, 120)
+
+    val regular = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+    val bold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
+    fun paint(
+        size: Float,
+        color: Int = textDark,
+        typeface: Typeface = regular,
+        align: Paint.Align = Paint.Align.RIGHT
+    ) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = size
+        this.color = color
+        this.typeface = typeface
+        textAlign = align
+    }
+
+    val titlePaint = paint(29f, android.graphics.Color.WHITE, bold)
+    val subTitlePaint = paint(14f, android.graphics.Color.WHITE, regular)
+    val sectionPaint = paint(17f, blue, bold)
+    val labelPaint = paint(10.5f, blue, bold)
+    val valuePaint = paint(12.5f, textDark, regular)
+    val boldValuePaint = paint(13f, textDark, bold)
+    val smallPaint = paint(9f, textMuted, regular)
+
+    fun drawRoundRect(
+        canvas: android.graphics.Canvas,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        radius: Float = 12f,
+        stroke: Boolean = false,
+        strokeWidth: Float = 1.2f
+    ) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = if (stroke) Paint.Style.STROKE else Paint.Style.FILL
+            this.strokeWidth = strokeWidth
+        }
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, p)
+    }
+
+    fun drawKmiLogo(canvas: android.graphics.Canvas, cx: Float, cy: Float, radius: Float) {
+        val outer = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
+        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            typeface = bold
+            textSize = radius * 0.62f
+            textAlign = Paint.Align.CENTER
+        }
+
+        canvas.drawCircle(cx, cy, radius, outer)
+        canvas.drawCircle(cx, cy, radius - 4f, inner)
+        canvas.drawText("KAMI", cx, cy + radius * 0.22f, text)
+    }
+
+    fun drawHeader(canvas: android.graphics.Canvas) {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(pageWidth.toFloat(), 0f)
+            lineTo(pageWidth.toFloat(), 122f)
+            lineTo(178f, 122f)
+            lineTo(238f, 0f)
+            close()
+        }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy })
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(208f, 122f)
+            lineTo(224f, 122f)
+            lineTo(284f, 0f)
+            lineTo(268f, 0f)
+            close()
+        }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(36, 103, 158)
+        })
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(230f, 122f)
+            lineTo(238f, 122f)
+            lineTo(298f, 0f)
+            lineTo(290f, 0f)
+            close()
+        }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(128, 183, 220)
+        })
+
+        drawKmiLogo(canvas, 78f, 58f, 42f)
+
+        titlePaint.textAlign = Paint.Align.RIGHT
+        subTitlePaint.textAlign = Paint.Align.RIGHT
+
+        canvas.drawText(tr("סטטיסטיקת נוכחות", "Attendance statistics"), pageWidth - 34f, 52f, titlePaint)
+        canvas.drawText(tr("דו״ח נוכחות קבוצתי", "Group attendance report"), pageWidth - 34f, 78f, subTitlePaint)
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            tr("תאריך הפקה:", "Generated:") + " " +
+                    java.text.SimpleDateFormat(
+                        "dd/MM/yyyy",
+                        java.util.Locale.getDefault()
+                    ).format(java.util.Date()),
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+    }
+
+    fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int, totalPages: Int) {
+        val footerY = 804f
+
+        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            strokeWidth = 2f
+        })
+
+        drawKmiLogo(canvas, 38f, footerY + 22f, 13f)
+
+        smallPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
+
+        smallPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            tr("עמוד $pageNumber מתוך $totalPages", "Page $pageNumber of $totalPages"),
+            pageWidth / 2f,
+            footerY + 25f,
+            smallPaint
+        )
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
+        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
+    }
+
+    fun drawSummary(canvas: android.graphics.Canvas, top: Float): Float {
+        drawRoundRect(canvas, margin, top, pageWidth - margin, top + 122f, lightBlue, 12f)
+        drawRoundRect(canvas, margin, top, pageWidth - margin, top + 122f, borderBlue, 12f, stroke = true)
+
+        sectionPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("$branch · $groupKey", pageWidth - margin - 22f, top + 30f, sectionPaint)
+
+        labelPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(tr("ממוצע נוכחות שנה:", "Year attendance average:"), pageWidth - margin - 22f, top + 58f, labelPaint)
+
+        boldValuePaint.textAlign = Paint.Align.LEFT
+        boldValuePaint.textSize = 25f
+        boldValuePaint.color = navy
+        canvas.drawText("$avgPct%", margin + 28f, top + 58f, boldValuePaint)
+
+        boldValuePaint.textSize = 13f
+        boldValuePaint.color = textDark
+        boldValuePaint.textAlign = Paint.Align.CENTER
+
+        val boxTop = top + 74f
+        val boxW = (pageWidth - margin * 2f - 30f) / 4f
+
+        val stats = listOf(
+            totalSessions.toString() to tr("שיעורים", "Sessions"),
+            avgPresent.toString() to tr("ממוצע הגיעו", "Avg. present"),
+            avgTotal.toString() to tr("ממוצע סה״כ", "Avg. total"),
+            "$avgPct%" to tr("ממוצע נוכחות", "Avg. attendance")
+        )
+
+        stats.forEachIndexed { index, pair ->
+            val left = margin + 15f + index * boxW
+            val right = left + boxW - 8f
+
+            drawRoundRect(canvas, left, boxTop, right, boxTop + 34f, softBlue, 10f)
+            drawRoundRect(canvas, left, boxTop, right, boxTop + 34f, borderBlue, 10f, stroke = true)
+
+            boldValuePaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(pair.first, (left + right) / 2f, boxTop + 14f, boldValuePaint)
+
+            smallPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(pair.second.take(16), (left + right) / 2f, boxTop + 28f, smallPaint)
+        }
+
+        return top + 146f
+    }
+
+    fun drawReportCard(
+        canvas: android.graphics.Canvas,
+        report: AttendanceStatsPdfReport,
+        top: Float,
+        index: Int
+    ): Float {
+        val left = margin
+        val right = pageWidth - margin
+        val bottom = top + 82f
+        val mid = pageWidth / 2f
+
+        drawRoundRect(
+            canvas,
+            left,
+            top,
+            right,
+            bottom,
+            if (index % 2 == 0) lightBlue else softBlue,
+            12f
+        )
+        drawRoundRect(canvas, left, top, right, bottom, borderBlue, 12f, stroke = true)
+
+        canvas.drawLine(mid, top + 20f, mid, bottom - 18f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = borderBlue
+            strokeWidth = 1f
+        })
+
+        sectionPaint.textAlign = Paint.Align.RIGHT
+        sectionPaint.textSize = 13.5f
+        canvas.drawText(report.date, right - 22f, top + 28f, sectionPaint)
+
+        boldValuePaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(tr("נוכחות: ${report.pct}%", "Attendance: ${report.pct}%"), right - 22f, top + 52f, boldValuePaint)
+
+        labelPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            tr(
+                "הגיעו ${report.present} · נעדרו ${report.absent}",
+                "Present ${report.present} · Absent ${report.absent}"
+            ),
+            right - 22f,
+            top + 70f,
+            labelPaint
+        )
+
+        valuePaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(tr("סה״כ מתאמנים: ${report.total}", "Total trainees: ${report.total}"), mid - 22f, top + 36f, valuePaint)
+        canvas.drawText(tr("מוצדקים: ${report.excused}", "Excused: ${report.excused}"), mid - 22f, top + 60f, valuePaint)
+
+        return bottom + 8f
+    }
+
+    val firstPageCapacity = 5
+    val nextPageCapacity = 7
+
+    val totalPages = if (reports.size <= firstPageCapacity) {
+        1
+    } else {
+        1 + kotlin.math.ceil((reports.size - firstPageCapacity) / nextPageCapacity.toDouble()).toInt()
+    }
+
+    var pageNumber = 1
+    var reportIndex = 0
+
+    while (pageNumber <= totalPages) {
+        val page = document.startPage(
+            PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        )
+        val canvas = page.canvas
+
+        drawHeader(canvas)
+
+        var y = 136f
+
+        if (pageNumber == 1) {
+            y = drawSummary(canvas, y)
+        } else {
+            sectionPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(tr("דו״חות נוכחות", "Attendance reports"), pageWidth / 2f, y, sectionPaint)
+            y += 28f
+        }
+
+        val capacity = if (pageNumber == 1) firstPageCapacity else nextPageCapacity
+
+        if (reports.isEmpty()) {
+            drawRoundRect(canvas, margin, y, pageWidth - margin, y + 92f, softBlue, 12f)
+            drawRoundRect(canvas, margin, y, pageWidth - margin, y + 92f, borderBlue, 12f, stroke = true)
+
+            sectionPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(tr("אין דוחות נוכחות שמורים", "No saved attendance reports"), pageWidth / 2f, y + 42f, sectionPaint)
+        } else {
+            repeat(capacity) {
+                if (reportIndex >= reports.size) return@repeat
+
+                y = drawReportCard(
+                    canvas = canvas,
+                    report = reports[reportIndex],
+                    top = y,
+                    index = reportIndex
+                )
+
+                reportIndex++
+            }
+        }
+
+        drawFooter(canvas, pageNumber, totalPages)
+        document.finishPage(page)
+
+        pageNumber++
+    }
+
+    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+    val file = File(dir, "attendance_stats_${System.currentTimeMillis()}.pdf")
+
+    FileOutputStream(file).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return file
+}
+
 @Composable
 private fun EmptyAttendanceReportsCard(
     branch: String,
     groupKey: String,
     isEnglish: Boolean
 ) {
+
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
     val align = if (isEnglish) TextAlign.Start else TextAlign.Right
@@ -539,10 +967,12 @@ private fun EmptyAttendanceReportsCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-        tonalElevation = 0.dp
+        color = Color(0xFFF8FBFF),
+        tonalElevation = 3.dp,
+        shadowElevation = 5.dp,
+        border = BorderStroke(1.dp, Color(0xFFD6E4F2))
     ) {
+
         CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
             Row(
                 modifier = Modifier
@@ -579,7 +1009,7 @@ private fun EmptyAttendanceReportsCard(
                             "אין עדיין דוחות נוכחות שמורים",
                             "No saved attendance reports yet"
                         ),
-                        color = Color.White,
+                        color = Color(0xFF0F172A),
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleSmall.merge(textStyle),
                         textAlign = align,
@@ -591,7 +1021,7 @@ private fun EmptyAttendanceReportsCard(
                             "המסך מחובר לשרת. לאחר שמירת דוח ממסך הנוכחות, הוא יופיע כאן לפי חודש עם פירוט מלא.",
                             "This screen is connected to the server. Once an attendance report is saved, it will appear here by month with full details."
                         ),
-                        color = Color(0xFFBFDBFE),
+                        color = Color(0xFF1E3A8A),
                         style = MaterialTheme.typography.bodySmall.merge(textStyle),
                         textAlign = align,
                         modifier = Modifier.fillMaxWidth()
@@ -643,10 +1073,10 @@ private fun StatsHeroCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.linearGradient(
+                    Brush.verticalGradient(
                         listOf(
-                            Color.White.copy(alpha = 0.08f),
-                            Color(0xFF1D4ED8).copy(alpha = 0.22f)
+                            Color(0xFFFFFFFF),
+                            Color(0xFFF3F8FD)
                         )
                     )
                 )
@@ -675,7 +1105,7 @@ private fun StatsHeroCard(
                             Text(
                                 text = "$branch · $groupKey",
                                 style = MaterialTheme.typography.labelMedium.merge(textStyle),
-                                color = Color(0xFFE5E7EB),
+                                color = Color(0xFF0F172A),
                                 textAlign = align,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -685,7 +1115,7 @@ private fun StatsHeroCard(
                             Text(
                                 text = tr("שיעורים עם דו\"ח: $totalSessions", "Reported sessions: $totalSessions"),
                                 style = MaterialTheme.typography.labelMedium.merge(textStyle),
-                                color = Color(0xFFBFDBFE),
+                                color = Color(0xFF1E3A8A),
                                 textAlign = align,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -705,7 +1135,7 @@ private fun StatsHeroCard(
                 text = tr("ממוצע נוכחות שנה: $avgPct%", "Year attendance average: $avgPct%"),
                 style = MaterialTheme.typography.titleMedium.merge(textStyle),
                 fontWeight = FontWeight.Black,
-                color = Color(0xFF22D3EE),
+                color = Color(0xFF0891B2),
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -753,18 +1183,19 @@ private fun StatsSummaryCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
-        color = Color.White.copy(alpha = 0.10f),
-        tonalElevation = 0.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+        color = Color(0xFFF8FBFF),
+        tonalElevation = 4.dp,
+        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, Color(0xFFD6E4F2))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.linearGradient(
+                    Brush.verticalGradient(
                         listOf(
-                            Color(0xFF1D4ED8).copy(alpha = 0.18f),
-                            Color.White.copy(alpha = 0.06f)
+                            Color(0xFFFFFFFF),
+                            Color(0xFFF3F8FD)
                         )
                     )
                 )
@@ -776,7 +1207,7 @@ private fun StatsSummaryCard(
                 text = tr("סיכום שנה אחורה", "Last year summary"),
                 style = MaterialTheme.typography.titleMedium.merge(textStyle),
                 fontWeight = FontWeight.Black,
-                color = Color(0xFFECFEFF),
+                color = Color(0xFF0F172A),
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -843,11 +1274,12 @@ private fun ReportRowCard(
     )
 
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = Color.White.copy(alpha = 0.10f),
-        tonalElevation = 0.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        color = Color(0xFFF8FBFF),
+        tonalElevation = 4.dp,
+        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, Color(0xFFD6E4F2))
     ) {
         val datePretty = remember(dateText, isEnglish) {
             runCatching {
@@ -870,7 +1302,7 @@ private fun ReportRowCard(
             Text(
                 text = datePretty,
                 fontWeight = FontWeight.Black,
-                color = Color.White,
+                color = Color(0xFF0F172A),
                 textAlign = align,
                 style = MaterialTheme.typography.titleMedium.merge(textStyle),
                 modifier = Modifier.fillMaxWidth()
@@ -931,7 +1363,7 @@ private fun ReportRowCard(
                     } else {
                         tr("פתח רשימת נוכחות", "Show attendance list")
                     },
-                    color = Color.White,
+                    color = Color(0xFF0F172A),
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1024,7 +1456,7 @@ private fun ReportAttendanceDetailsCard(
                 text = tr("פירוט נוכחות בדו״ח", "Attendance details"),
                 style = MaterialTheme.typography.titleSmall.merge(textStyle),
                 fontWeight = FontWeight.Black,
-                color = Color.White,
+                color = Color(0xFF0F172A),
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1073,8 +1505,10 @@ private fun AttendanceStatusSection(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.07f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.45f))
+        color = Color(0xFFFFFFFF),
+        tonalElevation = 2.dp,
+        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, Color(0xFFD6E4F2))
     ) {
         Column(
             modifier = Modifier
@@ -1096,7 +1530,7 @@ private fun AttendanceStatusSection(
                 Text(
                     text = emptyText,
                     style = MaterialTheme.typography.bodySmall.merge(textStyle),
-                    color = Color(0xFFCBD5E1),
+                    color = Color(0xFF334155),
                     textAlign = align,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1105,7 +1539,7 @@ private fun AttendanceStatusSection(
                     Text(
                         text = "• $name",
                         style = MaterialTheme.typography.bodyMedium.merge(textStyle),
-                        color = Color.White,
+                        color = Color(0xFF0F172A),
                         textAlign = align,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1138,13 +1572,13 @@ private fun StatBox(
                 text = value,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Black,
-                color = Color.White,
+                color = Color(0xFF0F172A),
                 maxLines = 1
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFFCBD5F5),
+                color = Color(0xFF334155),
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 lineHeight = MaterialTheme.typography.labelSmall.lineHeight
@@ -1162,8 +1596,10 @@ private fun MiniReportStat(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
-        color = Color.White.copy(alpha = 0.07f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+        color = Color(0xFFFFFFFF),
+        tonalElevation = 2.dp,
+        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, Color(0xFFD6E4F2))
     ) {
         Column(
             modifier = Modifier
@@ -1174,14 +1610,14 @@ private fun MiniReportStat(
         ) {
             Text(
                 text = value,
-                color = Color.White,
+                color = Color(0xFF0F172A),
                 fontWeight = FontWeight.Black,
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 1
             )
             Text(
                 text = label,
-                color = Color(0xFFCBD5F5),
+                color = Color(0xFF334155),
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Center,
                 maxLines = 1,

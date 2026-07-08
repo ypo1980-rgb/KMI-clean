@@ -8,7 +8,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Report
-import androidx.compose.material.icons.filled.Settings
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
+import androidx.core.graphics.ColorUtils
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -54,11 +62,12 @@ fun WeakPointsScreen(
         weakTr(isEnglish, he, en)
 
     val backgroundBrush = Brush.verticalGradient(
-        listOf(
-            Color(0xFF020617),
-            Color(0xFF111827),
-            Color(0xFF1D4ED8),
-            Color(0xFF22D3EE)
+        colors = listOf(
+            Color(0xFFF8FBFF),
+            Color(0xFFEAF4FF),
+            Color(0xFFB7DDF7),
+            Color(0xFF1F78B4),
+            Color(0xFF062B4A)
         )
     )
 
@@ -73,13 +82,12 @@ fun WeakPointsScreen(
                 showRoleStatus = false,
                 centerTitle = true,
                 alignTitleEnd = false,
-                extraActions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = tr("הגדרות", "Settings")
-                        )
-                    }
+                showTopShare = false,
+                onShare = {
+                    shareWeakPointsPdf(
+                        context = ctx,
+                        isEnglish = isEnglish
+                    )
                 },
                 currentLang = if (isEnglish) "en" else "he",
                 onToggleLanguage = {
@@ -120,12 +128,9 @@ fun WeakPointsScreen(
             )
 
             // כותרת קטנה
-            Text(
+            SectionTitle(
                 text = tr("מפרקים / אצבעות (כללי)", "Joints / Fingers (General)"),
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                modifier = Modifier.fillMaxWidth()
+                isEnglish = isEnglish
             )
 
             InfoCard(
@@ -154,13 +159,19 @@ fun WeakPointsScreen(
             WeakPointRow(
                 place = tr("שיער", "Hair"),
                 bodyPart = tr("ראש", "Head"),
-                effect = tr("נקודת אחיזה – ניתן להוציא משיווי משקל.", "A gripping point that can be used to break balance."),
+                effect = tr(
+                    "נקודת אחיזה – ניתן להוציא משיווי משקל.",
+                    "A gripping point that can be used to break balance."
+                ),
                 isEnglish = isEnglish
             )
             WeakPointRow(
                 place = tr("מצח", "Forehead"),
                 bodyPart = tr("ראש", "Head"),
-                effect = tr("אזור קשה – הפגיעה פחות אפקטיבית יחסית.", "A hard area - generally less effective to strike."),
+                effect = tr(
+                    "אזור קשה – הפגיעה פחות אפקטיבית יחסית.",
+                    "A hard area - generally less effective to strike."
+                ),
                 isEnglish = isEnglish
             )
             WeakPointRow(
@@ -175,7 +186,10 @@ fun WeakPointsScreen(
             WeakPointRow(
                 place = tr("עין", "Eye"),
                 bodyPart = tr("ראש", "Head"),
-                effect = tr("פגיעה בעין גורמת לנזק חמור/עיוורון אפשרי.", "A strike to the eye may cause severe injury or possible blindness."),
+                effect = tr(
+                    "פגיעה בעין גורמת לנזק חמור/עיוורון אפשרי.",
+                    "A strike to the eye may cause severe injury or possible blindness."
+                ),
                 isEnglish = isEnglish
             )
             WeakPointRow(
@@ -435,13 +449,19 @@ fun WeakPointsScreen(
             WeakPointRow(
                 place = tr("מוח גדול", "Cerebrum"),
                 bodyPart = tr("ראש", "Head"),
-                effect = tr("העצבים בגוף (אינסטינקט).", "Controls body nerves and instinctive reactions."),
+                effect = tr(
+                    "העצבים בגוף (אינסטינקט).",
+                    "Controls body nerves and instinctive reactions."
+                ),
                 isEnglish = isEnglish
             )
             WeakPointRow(
                 place = tr("מוח קטן", "Cerebellum"),
                 bodyPart = tr("ראש", "Head"),
-                effect = tr("שיווי משקל – פגיעה גורמת לאיבוד שיווי משקל.", "Responsible for balance – a strike may cause loss of balance."),
+                effect = tr(
+                    "שיווי משקל – פגיעה גורמת לאיבוד שיווי משקל.",
+                    "Responsible for balance – a strike may cause loss of balance."
+                ),
                 isEnglish = isEnglish
             )
             WeakPointRow(
@@ -459,7 +479,10 @@ fun WeakPointsScreen(
             WeakPointRow(
                 place = tr("עמוד השדרה", "Spine"),
                 bodyPart = tr("חלק עליון", "Upper Body"),
-                effect = tr("בנוי מחוליות – קשה לגרום לשבר.", "Built from vertebrae – difficult to break."),
+                effect = tr(
+                    "בנוי מחוליות – קשה לגרום לשבר.",
+                    "Built from vertebrae – difficult to break."
+                ),
                 isEnglish = isEnglish
             )
             WeakPointRow(
@@ -471,12 +494,327 @@ fun WeakPointsScreen(
             WeakPointRow(
                 place = tr("גיד אכילס", "Achilles Tendon"),
                 bodyPart = tr("חלק תחתון", "Lower Body"),
-                effect = tr("פגיעה ואי אפשר להזיז את העקב למעלה/למטה.", "Damage prevents moving the heel up or down."),
+                effect = tr(
+                    "פגיעה ואי אפשר להזיז את העקב למעלה/למטה.",
+                    "Damage prevents moving the heel up or down."
+                ),
                 isEnglish = isEnglish
             )
             Spacer(Modifier.height(16.dp))
         }
     }
+}
+
+private data class WeakPointPdfItem(
+    val section: String,
+    val place: String,
+    val bodyPart: String,
+    val effect: String
+)
+
+private fun shareWeakPointsPdf(
+    context: Context,
+    isEnglish: Boolean
+) {
+    val pdfFile = createWeakPointsPdf(
+        context = context,
+        isEnglish = isEnglish
+    )
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        pdfFile
+    )
+
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/pdf"
+        putExtra(
+            Intent.EXTRA_SUBJECT,
+            if (isEnglish) "KAMI Weak Points" else "נקודות תורפה - KAMI"
+        )
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    context.startActivity(
+        Intent.createChooser(
+            sendIntent,
+            if (isEnglish) "Share PDF" else "שיתוף PDF"
+        )
+    )
+}
+
+private fun createWeakPointsPdf(
+    context: Context,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 24f
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val items = listOf(
+        WeakPointPdfItem(tr("מפרקים / אצבעות", "Joints / Fingers"), tr("מפרקים", "Joints"), tr("כללי", "General"), tr("כל תנועה כנגד כיוון לתנועה הטבעית – שבר.", "Any movement against the natural direction may cause a fracture.")),
+        WeakPointPdfItem(tr("מפרקים / אצבעות", "Joints / Fingers"), tr("שבר באצבע", "Finger Fracture"), tr("כללי", "General"), tr("אדם מתעלף במקום.", "A severe finger break may cause collapse from pain.")),
+
+        WeakPointPdfItem(tr("חזית", "Front"), tr("שיער", "Hair"), tr("ראש", "Head"), tr("נקודת אחיזה – ניתן להוציא משיווי משקל.", "A gripping point that can be used to break balance.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("מצח", "Forehead"), tr("ראש", "Head"), tr("אזור קשה – הפגיעה פחות אפקטיבית יחסית.", "A hard area - generally less effective to strike.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("גבה", "Eyebrow"), tr("ראש", "Head"), tr("נקודה רגישה – דימום יכול לרדת לעיניים ולפגוע בראייה.", "A sensitive point – bleeding may affect vision.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("עין", "Eye"), tr("ראש", "Head"), tr("פגיעה בעין גורמת לנזק חמור/עיוורון אפשרי.", "A strike to the eye may cause severe injury or blindness.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("גשר האף / שורש האף", "Nasal Bridge / Nose Root"), tr("ראש", "Head"), tr("פגיעה באף יכולה לגרום לדמעות/דימום ועד שבר עצם האף וזעזוע מוח.", "A strike to the nose may cause tearing, bleeding, fracture or concussion.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("שורש האף / שפה תחתונה מתחת לאף", "Nose Root / Upper Lip"), tr("ראש", "Head"), tr("נקודה להוצאה משיווי משקל ע״י הרמת שורש האף.", "A control point that can break balance.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("לסת עליונה", "Upper Jaw"), tr("ראש", "Head"), tr("ניתן לשבור שיניים בקלות יחסית ע״י מכה.", "Teeth may break relatively easily.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("שפתיים", "Lips"), tr("ראש", "Head"), tr("השפה עלולה להיפצע ע״י השיניים.", "The lips may be cut by the teeth.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("לסת פתוחה", "Open Jaw"), tr("ראש", "Head"), tr("קל יותר לשבור ע״י מכה.", "Easier to break when open.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("לסת סגורה", "Closed Jaw"), tr("ראש", "Head"), tr("זעזוע – קשה יותר לשבור.", "May cause shock; harder to break.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("גרוגרת", "Throat"), tr("ראש", "Head"), tr("לחיצה/מכה קדימה – סכנת חיים, דורש טיפול רפואי מיידי.", "Life-threatening and requires immediate medical care.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("שקע הגרוגרת", "Throat Hollow"), tr("ראש", "Head"), tr("דימום קל/כאב למספר שניות.", "May cause brief pain or minor bleeding.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("עצם הבריח", "Clavicle"), tr("חלק עליון", "Upper Body"), tr("שבר יכול לשתק את הצד ולמנוע תנועת יד בצורה תקינה.", "A fracture can disable normal arm movement.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("בית החזה", "Chest"), tr("פנימי", "Internal"), tr("שבר בצלעות יכול לגרום לקרע בריאה.", "Broken ribs may puncture the lung.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("כבד", "Liver"), tr("פנימי", "Internal"), tr("שבר בצלעות יכול לגרום לקרע בכבד.", "Broken ribs may cause liver rupture.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("מפתח הלב", "Solar Plexus"), tr("פנימי", "Internal"), tr("פגיעה קשה מאוד – סכנת חיים.", "A very dangerous strike – potentially life-threatening.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("כליות", "Kidneys"), tr("פנימי", "Internal"), tr("פגיעה בכליה – נזק משמעותי אפשרי.", "A kidney strike may cause serious damage.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("בטן", "Abdomen"), tr("פנימי", "Internal"), tr("פגיעה יכולה לגרום לשטף דם פנימי.", "A strike may cause internal bleeding.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("אשכים", "Groin"), tr("חלק תחתון", "Lower Body"), tr("נקודה חלשה מאוד – תגובת כאב חריפה.", "A very vulnerable point causing intense pain.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("פיקה (ברך)", "Kneecap"), tr("חלק תחתון", "Lower Body"), tr("ניתן לרסק/לגרום לנזק – נכות אפשרית.", "Can be damaged – possible disability.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("שוק הרגל", "Shin"), tr("חלק תחתון", "Lower Body"), tr("עצם חשופה יחסית – כאב משמעותי מפגיעה.", "Exposed bone – significant pain from impact.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("גב כף הרגל", "Top of the Foot"), tr("חלק תחתון", "Lower Body"), tr("מבנה עדין – בדריכה הנזק יכול להיות גדול.", "Delicate structure – stepping may cause serious damage.")),
+        WeakPointPdfItem(tr("חזית", "Front"), tr("שרירים", "Muscles"), tr("כללי", "General"), tr("פגיעה בשריר/כלי דם גורמת כאב ופגיעה בתפקוד.", "Muscle or vessel damage causes pain and reduced function.")),
+
+        WeakPointPdfItem(tr("צד", "Side"), tr("פגיעה ברקה", "Temple"), tr("ראש", "Head"), tr("פגיעה מסוכנת מאוד.", "A highly dangerous impact point.")),
+        WeakPointPdfItem(tr("צד", "Side"), tr("אוזן", "Ear"), tr("ראש", "Head"), tr("קריעת עור התוף – דימום.", "A ruptured eardrum may cause bleeding.")),
+        WeakPointPdfItem(tr("צד", "Side"), tr("צואר", "Neck"), tr("ראש", "Head"), tr("פגיעה בכלי דם: עילפון; חניקה ממושכת – סכנת חיים.", "Blood-vessel strike may cause collapse; prolonged choking is life-threatening.")),
+        WeakPointPdfItem(tr("צד", "Side"), tr("כתף", "Shoulder"), tr("חלק עליון", "Upper Body"), tr("ניתן להוציא מהמקום ע״י הוצאת העצם מהשקע.", "Can be dislocated from the socket.")),
+        WeakPointPdfItem(tr("צד", "Side"), tr("בית השחי", "Armpit"), tr("חלק עליון", "Upper Body"), tr("שריר רגיש מאוד – פגיעה כואבת מאוד.", "Very sensitive muscle area.")),
+        WeakPointPdfItem(tr("צד", "Side"), tr("צלעות", "Ribs"), tr("חלק עליון", "Upper Body"), tr("פגיעה בעצב גורמת כאב חזק.", "Nerve impact causes strong pain.")),
+        WeakPointPdfItem(tr("צד", "Side"), tr("שבירת צלעות", "Broken Ribs"), tr("חלק עליון", "Upper Body"), tr("גרימת קרע בריאה – אפילו מוות.", "May cause lung rupture – potentially fatal.")),
+        WeakPointPdfItem(tr("צד", "Side"), tr("שקע הברך מהצד", "Side of Knee Joint"), tr("חלק תחתון", "Lower Body"), tr("קל לגרום לקרע ברצועות.", "Easy to damage ligaments.")),
+        WeakPointPdfItem(tr("צד", "Side"), tr("קרסול", "Ankle"), tr("חלק תחתון", "Lower Body"), tr("פגיעה נכונה יכולה לפגוע בקרסול ולהקשות על הליכה.", "Can damage the ankle and make walking difficult.")),
+
+        WeakPointPdfItem(tr("מאחור", "Back"), tr("מוח גדול", "Cerebrum"), tr("ראש", "Head"), tr("העצבים בגוף (אינסטינקט).", "Controls body nerves and instinctive reactions.")),
+        WeakPointPdfItem(tr("מאחור", "Back"), tr("מוח קטן", "Cerebellum"), tr("ראש", "Head"), tr("שיווי משקל – פגיעה גורמת לאיבוד שיווי משקל.", "Responsible for balance – impact may cause loss of balance.")),
+        WeakPointPdfItem(tr("מאחור", "Back"), tr("שבירת מפרקת", "Neck Break"), tr("ראש / צוואר", "Head / Neck"), tr("מוות מיידי.", "Immediate death.")),
+        WeakPointPdfItem(tr("מאחור", "Back"), tr("פגיעה בחוליות", "Vertebrae"), tr("חלק עליון", "Upper Body"), tr("נזק למפרקת.", "Damage to the cervical spine.")),
+        WeakPointPdfItem(tr("מאחור", "Back"), tr("עמוד השדרה", "Spine"), tr("חלק עליון", "Upper Body"), tr("בנוי מחוליות – קשה לגרום לשבר.", "Built from vertebrae – difficult to break.")),
+        WeakPointPdfItem(tr("מאחור", "Back"), tr("עצם הזנב", "Tailbone"), tr("חלק תחתון", "Lower Body"), tr("האדם לא יכול לשבת בצורה תקינה.", "Injury prevents normal sitting.")),
+        WeakPointPdfItem(tr("מאחור", "Back"), tr("גיד אכילס", "Achilles Tendon"), tr("חלק תחתון", "Lower Body"), tr("פגיעה ואי אפשר להזיז את העקב למעלה/למטה.", "Damage prevents moving the heel up or down."))
+    )
+
+    val document = PdfDocument()
+
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val blue = android.graphics.Color.rgb(12, 78, 130)
+    val lightBlue = android.graphics.Color.rgb(234, 246, 255)
+    val softBlue = android.graphics.Color.rgb(244, 250, 255)
+    val borderBlue = android.graphics.Color.rgb(191, 213, 232)
+    val textDark = android.graphics.Color.rgb(15, 23, 42)
+    val textMuted = android.graphics.Color.rgb(80, 100, 120)
+    val warningBg = android.graphics.Color.rgb(255, 243, 224)
+    val warningBorder = android.graphics.Color.rgb(255, 183, 77)
+
+    val regular = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+    val bold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
+    fun paint(size: Float, color: Int = textDark, typeface: Typeface = regular, align: Paint.Align = Paint.Align.RIGHT) =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = size
+            this.color = color
+            this.typeface = typeface
+            textAlign = align
+        }
+
+    val titlePaint = paint(29f, android.graphics.Color.WHITE, bold)
+    val subTitlePaint = paint(14f, android.graphics.Color.WHITE)
+    val sectionPaint = paint(17f, blue, bold)
+    val labelPaint = paint(10.5f, blue, bold)
+    val valuePaint = paint(12.5f)
+    val boldValuePaint = paint(13f, textDark, bold)
+    val smallPaint = paint(9f, textMuted)
+
+    fun drawLogo(canvas: android.graphics.Canvas, cx: Float, cy: Float, r: Float) {
+        canvas.drawCircle(cx, cy, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy })
+        canvas.drawCircle(cx, cy, r - 4f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE })
+        canvas.drawText("KAMI", cx, cy + r * 0.22f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            typeface = bold
+            textSize = r * 0.62f
+            textAlign = Paint.Align.CENTER
+        })
+    }
+
+    fun drawRound(canvas: android.graphics.Canvas, l: Float, t: Float, r: Float, b: Float, c: Int, stroke: Boolean = false) {
+        canvas.drawRoundRect(l, t, r, b, 12f, 12f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = c
+            style = if (stroke) Paint.Style.STROKE else Paint.Style.FILL
+            strokeWidth = 1.2f
+        })
+    }
+
+    fun drawHeader(canvas: android.graphics.Canvas) {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(pageWidth.toFloat(), 0f)
+            lineTo(pageWidth.toFloat(), 122f)
+            lineTo(178f, 122f)
+            lineTo(238f, 0f)
+            close()
+        }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy })
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(208f, 122f)
+            lineTo(224f, 122f)
+            lineTo(284f, 0f)
+            lineTo(268f, 0f)
+            close()
+        }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(36, 103, 158) })
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(230f, 122f)
+            lineTo(238f, 122f)
+            lineTo(298f, 0f)
+            lineTo(290f, 0f)
+            close()
+        }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(128, 183, 220) })
+
+        drawLogo(canvas, 78f, 58f, 42f)
+
+        canvas.drawText(tr("נקודות תורפה", "Weak Points"), pageWidth - 34f, 52f, titlePaint)
+        canvas.drawText(tr("כרטיס מידע מקצועי למתאמן", "Professional trainee reference card"), pageWidth - 34f, 78f, subTitlePaint)
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            tr("תאריך הפקה:", "Generated:") + " " +
+                    java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date()),
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+    }
+
+    fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int, totalPages: Int) {
+        val footerY = 804f
+        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            strokeWidth = 2f
+        })
+
+        drawLogo(canvas, 38f, footerY + 22f, 13f)
+
+        smallPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
+
+        smallPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            tr("עמוד $pageNumber מתוך $totalPages", "Page $pageNumber of $totalPages"),
+            pageWidth / 2f,
+            footerY + 25f,
+            smallPaint
+        )
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
+        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
+    }
+
+    val firstPageCapacity = 5
+    val nextPageCapacity = 7
+    val totalPages = if (items.size <= firstPageCapacity) {
+        1
+    } else {
+        1 + kotlin.math.ceil((items.size - firstPageCapacity) / nextPageCapacity.toDouble()).toInt()
+    }
+
+    var pageNumber = 1
+    var itemIndex = 0
+
+    while (itemIndex < items.size) {
+        val page = document.startPage(
+            PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        )
+        val canvas = page.canvas
+
+        drawHeader(canvas)
+
+        var y = 136f
+
+        if (pageNumber == 1) {
+            drawRound(canvas, margin, y, pageWidth - margin, y + 82f, warningBg)
+            drawRound(canvas, margin, y, pageWidth - margin, y + 82f, warningBorder, stroke = true)
+
+            sectionPaint.color = android.graphics.Color.rgb(194, 65, 12)
+            canvas.drawText(tr("אזהרת בטיחות", "Safety Warning"), pageWidth - margin - 22f, y + 30f, sectionPaint)
+
+            valuePaint.color = android.graphics.Color.rgb(78, 52, 46)
+            canvas.drawText(
+                tr("אין לתרגל ללא פיקוח מאמן מוסמך וציוד בטיחות מתאים.", "Do not practice without certified supervision and proper safety equipment."),
+                pageWidth - margin - 22f,
+                y + 56f,
+                valuePaint
+            )
+
+            sectionPaint.color = blue
+            valuePaint.color = textDark
+            y += 106f
+        }
+
+        sectionPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(tr("פירוט נקודות מרכזיות", "Key Points Summary"), pageWidth / 2f, y, sectionPaint)
+        y += 24f
+
+        val capacity = if (pageNumber == 1) firstPageCapacity else nextPageCapacity
+        repeat(capacity) {
+            if (itemIndex >= items.size) return@repeat
+
+            val item = items[itemIndex]
+            val bottom = y + 82f
+            val left = margin
+            val right = pageWidth - margin
+            val mid = pageWidth / 2f
+
+            drawRound(canvas, left, y, right, bottom, if (itemIndex % 2 == 0) lightBlue else softBlue)
+            drawRound(canvas, left, y, right, bottom, borderBlue, stroke = true)
+
+            canvas.drawLine(mid, y + 22f, mid, bottom - 18f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = borderBlue
+                strokeWidth = 1f
+            })
+
+            sectionPaint.textAlign = Paint.Align.RIGHT
+            sectionPaint.textSize = 13f
+            canvas.drawText(item.section.take(28), right - 22f, y + 26f, sectionPaint)
+            sectionPaint.textSize = 17f
+
+            boldValuePaint.textAlign = Paint.Align.RIGHT
+            canvas.drawText(item.place.take(28), right - 22f, y + 48f, boldValuePaint)
+
+            labelPaint.textAlign = Paint.Align.RIGHT
+            canvas.drawText(item.bodyPart.take(24), right - 22f, y + 68f, labelPaint)
+
+            valuePaint.textAlign = Paint.Align.RIGHT
+            canvas.drawText(item.effect.take(42), mid - 22f, y + 40f, valuePaint)
+
+            y = bottom + 8f
+            itemIndex++
+        }
+
+        drawFooter(canvas, pageNumber, totalPages)
+
+        document.finishPage(page)
+        pageNumber++
+    }
+
+    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+    val file = File(dir, "weak_points_${System.currentTimeMillis()}.pdf")
+
+    FileOutputStream(file).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+    return file
 }
 
 @Composable
@@ -486,10 +824,12 @@ private fun SectionTitle(
 ) {
     Text(
         text = text,
-        color = Color.White,
+        color = Color(0xFF111827),
         fontWeight = FontWeight.ExtraBold,
         textAlign = weakTextAlign(isEnglish),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp, vertical = 8.dp)
     )
 }
 
@@ -550,30 +890,46 @@ private fun InfoCard(
 ) {
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.08f),
-        border = BorderStroke(1.dp, Color(0xFF1D4ED8)),
-        tonalElevation = 0.dp
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, Color(0xFF2563EB).copy(alpha = 0.82f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 4.dp
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            horizontalAlignment = weakHorizontalAlignment(isEnglish)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF061426),
+                            Color(0xFF102B5C),
+                            Color(0xFF2563EB)
+                        )
+                    )
+                )
         ) {
-            Text(
-                title,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                textAlign = weakTextAlign(isEnglish),
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                text = body,
-                color = Color(0xFFE5E7EB),
-                textAlign = weakTextAlign(isEnglish),
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = weakHorizontalAlignment(isEnglish)
+            ) {
+                Text(
+                    title,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = weakTextAlign(isEnglish),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = body,
+                    color = Color(0xFFEAF4FF),
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = weakTextAlign(isEnglish),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -587,37 +943,54 @@ private fun WeakPointRow(
 ) {
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, Color(0xFF1E3A8A)),
-        tonalElevation = 0.dp
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, Color(0xFF2563EB).copy(alpha = 0.86f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 5.dp
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            horizontalAlignment = weakHorizontalAlignment(isEnglish)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF061426),
+                            Color(0xFF123B8A),
+                            Color(0xFF2563EB),
+                            Color(0xFF22D3EE)
+                        )
+                    )
+                )
         ) {
-            Text(
-                text = place,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                textAlign = weakTextAlign(isEnglish),
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                text = bodyPart,
-                color = Color(0xFFBFDBFE),
-                fontWeight = FontWeight.SemiBold,
-                textAlign = weakTextAlign(isEnglish),
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                text = effect,
-                color = Color(0xFFE5E7EB),
-                textAlign = weakTextAlign(isEnglish),
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = weakHorizontalAlignment(isEnglish)
+            ) {
+                Text(
+                    text = place,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = weakTextAlign(isEnglish),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = bodyPart,
+                    color = Color(0xFFEAF4FF),
+                    fontWeight = FontWeight.Bold,
+                    textAlign = weakTextAlign(isEnglish),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = effect,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = weakTextAlign(isEnglish),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
