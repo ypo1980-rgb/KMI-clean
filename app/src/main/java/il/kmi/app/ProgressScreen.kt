@@ -1,8 +1,8 @@
 package il.kmi.app.screens
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Paint
-import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.compose.animation.core.LinearEasing
@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.core.graphics.ColorUtils
 import il.kmi.app.KmiViewModel
 import il.kmi.app.ui.ext.color
@@ -503,8 +504,38 @@ fun ProgressScreen(
                 onBack = null,
                 onHome = onHome,
                 showTopHome = false,
+                showTopShare = false,
+                onShare = {
+                    val pdfFile = createProgressPdf(
+                        dir = File(context.cacheDir, "pdfs").apply { mkdirs() },
+                        progress = beltsData.associate { row ->
+                            row.belt to row.percent
+                        },
+                        context = context
+                    )
+
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        pdfFile
+                    )
+
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_SUBJECT, "מד התקדמות - KAMI")
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+
+                    context.startActivity(
+                        Intent.createChooser(
+                            sendIntent,
+                            "שיתוף PDF"
+                        )
+                    )
+                }
             )
-        },
+                 },
         bottomBar = {
             if (onOpenCarousel != null) {
                 Surface(
@@ -811,115 +842,372 @@ fun createProgressPdf(
     progress: Map<Belt, Int>,
     context: Context
 ): File {
-    val width = 595
-    val height = 842
-    val margin = 32f
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 24f
 
-    val doc = PdfDocument()
-    val pageInfo = PdfDocument.PageInfo.Builder(width, height, 1).create()
-    val page = doc.startPage(pageInfo)
+    val document = PdfDocument()
+    val page = document.startPage(
+        PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
+    )
     val canvas = page.canvas
 
-    val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { isDither = true }
-    val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        isDither = true
-        style = Paint.Style.STROKE
-        strokeWidth = 2.5f
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val blue = android.graphics.Color.rgb(12, 78, 130)
+    val lightBlue = android.graphics.Color.rgb(234, 246, 255)
+    val softBlue = android.graphics.Color.rgb(244, 250, 255)
+    val borderBlue = android.graphics.Color.rgb(191, 213, 232)
+    val textDark = android.graphics.Color.rgb(15, 23, 42)
+    val textMuted = android.graphics.Color.rgb(80, 100, 120)
+
+    val regular = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+    val bold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
+    fun alpha(color: Int, value: Float): Int =
+        ColorUtils.setAlphaComponent(color, (value.coerceIn(0f, 1f) * 255).toInt())
+
+    fun paint(
+        size: Float,
+        color: Int = textDark,
+        typeface: Typeface = regular,
+        align: Paint.Align = Paint.Align.RIGHT
+    ) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = size
+        this.color = color
+        this.typeface = typeface
+        textAlign = align
     }
-    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.BLACK
-        textSize = 16f
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        textAlign = Paint.Align.RIGHT
+
+    val titlePaint = paint(29f, android.graphics.Color.WHITE, bold)
+    val subTitlePaint = paint(14f, android.graphics.Color.WHITE, regular)
+    val sectionPaint = paint(17f, blue, bold)
+    val labelPaint = paint(10.5f, blue, bold)
+    val valuePaint = paint(12.5f, textDark, regular)
+    val boldValuePaint = paint(13f, textDark, bold)
+    val percentPaint = paint(16f, android.graphics.Color.WHITE, bold, Paint.Align.CENTER)
+    val smallPaint = paint(9f, textMuted, regular)
+
+    fun drawRoundRect(
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        radius: Float = 12f,
+        stroke: Boolean = false,
+        strokeWidth: Float = 1.2f
+    ) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = if (stroke) Paint.Style.STROKE else Paint.Style.FILL
+            this.strokeWidth = strokeWidth
+        }
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, p)
     }
 
-    val smallText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.DKGRAY
-        textSize = 12.5f
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-        textAlign = Paint.Align.RIGHT
+    fun drawCenteredText(
+        text: String,
+        x: Float,
+        centerY: Float,
+        paint: Paint
+    ) {
+        val y = centerY - (paint.descent() + paint.ascent()) / 2f
+        canvas.drawText(text, x, y, paint)
     }
 
-    canvas.drawText("דו״ח מד התקדמות", width - margin, margin + 8f, titlePaint)
-
-    var y = margin + 36f
-
-    val cardHeight = 92f
-    val gap = 14f
-    val pillH = 22f
-    val radius = 16f
-    val barH = 12f
-
-    val beltsToShow = Belt.values().filter { it != Belt.WHITE }
-
-    beltsToShow.forEach { belt ->
-        val pct = progress[belt] ?: 0
-
-        val left = margin
-        val right = width - margin
-        val top = y
-        val bottom = y + cardHeight
-        val rect = RectF(left, top, right, bottom)
-
-        val light = belt.lightColor.toArgb()
-        val lightWithAlpha = ColorUtils.setAlphaComponent(light, (0.55f * 255).toInt())
-        fill.color = lightWithAlpha
-        fill.style = Paint.Style.FILL
-        canvas.drawRoundRect(rect, radius, radius, fill)
-
-        val pillPad = 10f
-        val pillText = "$pct%"
-        val pillTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            textSize = 12.5f
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+    fun drawKmiLogo(cx: Float, cy: Float, radius: Float) {
+        val outer = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
+        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            typeface = bold
+            textSize = radius * 0.62f
             textAlign = Paint.Align.CENTER
         }
 
-        val pillW = pillTextPaint.measureText(pillText) + 18f
-        val pillRect = RectF(
-            left + pillPad,
-            top + pillPad,
-            left + pillPad + pillW,
-            top + pillPad + pillH
-        )
-
-        fill.color = ColorUtils.setAlphaComponent(belt.color.toArgb(), (0.90f * 255).toInt())
-        canvas.drawRoundRect(pillRect, pillH, pillH, fill)
-
-        val pillTextY = pillRect.centerY() - (pillTextPaint.descent() + pillTextPaint.ascent()) / 2
-        canvas.drawText(pillText, pillRect.centerX(), pillTextY, pillTextPaint)
-
-        val barLeft = left + 12f
-        val barRight = right - 12f
-        val barTop = top + 44f
-        val barBottom = barTop + barH
-
-        fill.color = ColorUtils.setAlphaComponent(android.graphics.Color.BLACK, (0.08f * 255).toInt())
-        canvas.drawRoundRect(RectF(barLeft, barTop, barRight, barBottom), barH, barH, fill)
-
-        val fillW = (barRight - barLeft) * (pct / 100f)
-        if (fillW > 0f) {
-            fill.color = belt.color.toArgb()
-            canvas.drawRoundRect(RectF(barLeft, barTop, barLeft + fillW, barBottom), barH, barH, fill)
-        }
-
-        smallText.color = android.graphics.Color.DKGRAY
-        canvas.drawText(
-            "$pct% (חישוב לפי פריטים שסומנו באפליקציה)",
-            barRight,
-            barBottom + 18f,
-            smallText
-        )
-
-        y = bottom + gap
+        canvas.drawCircle(cx, cy, radius, outer)
+        canvas.drawCircle(cx, cy, radius - 4f, inner)
+        canvas.drawText("KAMI", cx, cy + radius * 0.22f, text)
     }
 
-    doc.finishPage(page)
+    fun beltPdfColor(belt: Belt): Int {
+        return when (belt) {
+            Belt.BLACK -> android.graphics.Color.rgb(35, 35, 35)
+            Belt.BROWN -> android.graphics.Color.rgb(121, 85, 72)
+            else -> belt.color.toArgb()
+        }
+    }
 
-    val file = File(dir, "progress_report.pdf")
-    FileOutputStream(file).use { doc.writeTo(it) }
-    doc.close()
+    fun beltPdfLightColor(belt: Belt): Int {
+        return when (belt) {
+            Belt.BLACK -> android.graphics.Color.rgb(229, 231, 235)
+            Belt.BROWN -> android.graphics.Color.rgb(239, 224, 214)
+            else -> belt.lightColor.toArgb()
+        }
+    }
+
+    fun drawHeader() {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        val diagonal = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
+        val accent1 = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(36, 103, 158)
+        }
+        val accent2 = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(128, 183, 220)
+        }
+
+        val path = android.graphics.Path().apply {
+            moveTo(pageWidth.toFloat(), 0f)
+            lineTo(pageWidth.toFloat(), 122f)
+            lineTo(178f, 122f)
+            lineTo(238f, 0f)
+            close()
+        }
+        canvas.drawPath(path, diagonal)
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(208f, 122f)
+            lineTo(224f, 122f)
+            lineTo(284f, 0f)
+            lineTo(268f, 0f)
+            close()
+        }, accent1)
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(230f, 122f)
+            lineTo(238f, 122f)
+            lineTo(298f, 0f)
+            lineTo(290f, 0f)
+            close()
+        }, accent2)
+
+        drawKmiLogo(78f, 58f, 42f)
+
+        titlePaint.textAlign = Paint.Align.RIGHT
+        subTitlePaint.textAlign = Paint.Align.RIGHT
+
+        canvas.drawText("מד התקדמות", pageWidth - 34f, 52f, titlePaint)
+        canvas.drawText("דו״ח התקדמות אישי לפי חגורות", pageWidth - 34f, 78f, subTitlePaint)
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            "תאריך הפקה: " +
+                    java.text.SimpleDateFormat(
+                        "dd/MM/yyyy",
+                        java.util.Locale("he", "IL")
+                    ).format(java.util.Date()),
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+    }
+
+    fun drawFooter() {
+        val footerY = 804f
+
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            strokeWidth = 2f
+        }
+
+        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, line)
+
+        drawKmiLogo(38f, footerY + 22f, 13f)
+
+        smallPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
+
+        smallPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText("עמוד 1 מתוך 1", pageWidth / 2f, footerY + 25f, smallPaint)
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
+        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
+
+        val flag = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(20, 85, 200)
+        }
+
+        canvas.drawRect(pageWidth - 48f, footerY + 14f, pageWidth - 20f, footerY + 18f, flag)
+        canvas.drawRect(pageWidth - 48f, footerY + 28f, pageWidth - 20f, footerY + 32f, flag)
+    }
+
+    fun drawSummary(top: Float): Float {
+        val beltsToShow = Belt.values().filter { it != Belt.WHITE }
+        val avg = if (beltsToShow.isNotEmpty()) {
+            beltsToShow.map { belt -> (progress[belt] ?: 0).coerceIn(0, 100) }.average().toInt()
+        } else {
+            0
+        }
+
+        drawRoundRect(
+            margin,
+            top,
+            pageWidth - margin,
+            top + 82f,
+            lightBlue,
+            12f
+        )
+        drawRoundRect(
+            margin,
+            top,
+            pageWidth - margin,
+            top + 82f,
+            borderBlue,
+            12f,
+            stroke = true
+        )
+
+        sectionPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("סיכום כללי", pageWidth - margin - 22f, top + 32f, sectionPaint)
+
+        labelPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("אחוז התקדמות ממוצע:", pageWidth - margin - 22f, top + 58f, labelPaint)
+
+        boldValuePaint.textAlign = Paint.Align.LEFT
+        boldValuePaint.textSize = 24f
+        boldValuePaint.color = navy
+        canvas.drawText("$avg%", margin + 28f, top + 56f, boldValuePaint)
+
+        boldValuePaint.textSize = 13f
+        boldValuePaint.color = textDark
+
+        return top + 104f
+    }
+
+    fun drawProgressCard(
+        belt: Belt,
+        pct: Int,
+        top: Float,
+        index: Int
+    ): Float {
+        val cardHeight = 78f
+        val cardLeft = margin
+        val cardRight = pageWidth - margin
+        val cardBottom = top + cardHeight
+
+        val beltColor = beltPdfColor(belt)
+        val beltLight = beltPdfLightColor(belt)
+
+        drawRoundRect(
+            cardLeft,
+            top,
+            cardRight,
+            cardBottom,
+            if (index % 2 == 0) alpha(beltLight, 0.72f) else softBlue,
+            12f
+        )
+        drawRoundRect(
+            cardLeft,
+            top,
+            cardRight,
+            cardBottom,
+            alpha(beltColor, 0.78f),
+            12f,
+            stroke = true,
+            strokeWidth = 1.6f
+        )
+
+        val title = "חגורה: ${belt.heb.removePrefix("חגורה").trim()}"
+
+        sectionPaint.textAlign = Paint.Align.RIGHT
+        sectionPaint.textSize = 15f
+        sectionPaint.color = beltColor
+        canvas.drawText(title, cardRight - 22f, top + 28f, sectionPaint)
+
+        sectionPaint.textSize = 17f
+        sectionPaint.color = blue
+
+        val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = beltColor
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(cardRight - 22f, top + 48f, 5.5f, dotPaint)
+
+        val percentCircleX = cardLeft + 42f
+        val percentCircleY = top + 31f
+
+        val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = alpha(beltColor, 0.92f)
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(percentCircleX, percentCircleY, 23f, circlePaint)
+        drawCenteredText("$pct%", percentCircleX, percentCircleY, percentPaint)
+
+        val barLeft = cardLeft + 22f
+        val barRight = cardRight - 22f
+        val barTop = top + 52f
+        val barBottom = barTop + 10f
+
+        drawRoundRect(
+            barLeft,
+            barTop,
+            barRight,
+            barBottom,
+            alpha(navy, 0.10f),
+            999f
+        )
+
+        val fillWidth = (barRight - barLeft) * (pct / 100f)
+        if (fillWidth > 0f) {
+            drawRoundRect(
+                barLeft,
+                barTop,
+                barLeft + fillWidth,
+                barBottom,
+                beltColor,
+                999f
+            )
+        }
+
+        valuePaint.textAlign = Paint.Align.RIGHT
+        valuePaint.color = textDark
+        canvas.drawText(
+            "$pct% התקדמות לפי פריטים שסומנו באפליקציה",
+            barRight,
+            cardBottom - 8f,
+            valuePaint
+        )
+
+        return cardBottom + 9f
+    }
+
+    drawHeader()
+
+    var y = 136f
+    y = drawSummary(y)
+
+    sectionPaint.textAlign = Paint.Align.CENTER
+    canvas.drawText("פירוט לפי חגורות", pageWidth / 2f, y, sectionPaint)
+
+    y += 24f
+
+    val beltsToShow = Belt.values().filter { it != Belt.WHITE }
+
+    beltsToShow.forEachIndexed { index, belt ->
+        val pct = (progress[belt] ?: 0).coerceIn(0, 100)
+
+        if (y + 88f < 792f) {
+            y = drawProgressCard(
+                belt = belt,
+                pct = pct,
+                top = y,
+                index = index
+            )
+        }
+    }
+
+    drawFooter()
+
+    document.finishPage(page)
+
+    val file = File(dir, "progress_report_${System.currentTimeMillis()}.pdf")
+    FileOutputStream(file).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
 
     return file
 }

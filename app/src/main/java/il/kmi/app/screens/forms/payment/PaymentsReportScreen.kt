@@ -1,5 +1,13 @@
 package il.kmi.app.screens.admin
 
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -550,6 +558,7 @@ fun PaymentsReportScreen(
     var isLoadingPayments by remember { mutableStateOf(true) }
     var paymentsError by remember { mutableStateOf<String?>(null) }
     val screenScope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     LaunchedEffect(Unit) {
         isLoadingPayments = true
@@ -664,9 +673,48 @@ fun PaymentsReportScreen(
                 title = title,
                 onHome = onClose,
                 showTopHome = false,
+                showTopShare = false,
                 lockSearch = false,
                 showBottomActions = true,
-                currentLang = if (isEnglish) "en" else "he"
+                currentLang = if (isEnglish) "en" else "he",
+                onShare = {
+                    if (filteredItems.isNotEmpty()) {
+                        val pdfFile = createPaymentsReportPdf(
+                            context = context,
+                            items = filteredItems,
+                            totalRequired = totalRequired,
+                            totalPaid = totalPaid,
+                            paidCount = paidCount,
+                            unpaidCount = unpaidCount,
+                            collectionPercent = collectionPercent,
+                            selectedBranch = selectedBranch,
+                            isEnglish = isEnglish
+                        )
+
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            pdfFile
+                        )
+
+                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/pdf"
+                            putExtra(
+                                Intent.EXTRA_SUBJECT,
+                                if (isEnglish) "Payments report" else "דו״ח תשלומים"
+                            )
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+
+                        context.startActivity(
+                            Intent.createChooser(
+                                sendIntent,
+                                if (isEnglish) "Share PDF" else "שיתוף PDF"
+                            )
+                        )
+                    }
+                }
             )
         }
     ) { innerPadding ->
@@ -1667,4 +1715,355 @@ private fun paymentMethodLabel(
             .replace("_", " ")
             .replaceFirstChar { it.titlecase(Locale.ROOT) }
     }
+}
+
+private fun createPaymentsReportPdf(
+    context: Context,
+    items: List<PaymentReportItem>,
+    totalRequired: Double,
+    totalPaid: Double,
+    paidCount: Int,
+    unpaidCount: Int,
+    collectionPercent: Double,
+    selectedBranch: String,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 36f
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val document = PdfDocument()
+
+    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        textSize = 10.5f
+        color = android.graphics.Color.rgb(15, 23, 42)
+        textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    }
+
+    val titlePaint = Paint(textPaint).apply {
+        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        textSize = 22f
+        color = android.graphics.Color.WHITE
+    }
+
+    val subtitlePaint = Paint(textPaint).apply {
+        textSize = 10.5f
+        color = android.graphics.Color.rgb(226, 232, 240)
+    }
+
+    val sectionPaint = Paint(textPaint).apply {
+        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        textSize = 15f
+        color = android.graphics.Color.rgb(15, 23, 42)
+    }
+
+    val headerPaint = Paint(textPaint).apply {
+        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        textSize = 9.8f
+        color = android.graphics.Color.WHITE
+    }
+
+    val smallPaint = Paint(textPaint).apply {
+        textSize = 9.2f
+        color = android.graphics.Color.rgb(100, 116, 139)
+    }
+
+    val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(226, 232, 240)
+        strokeWidth = 1f
+    }
+
+    var pageNumber = 1
+    var page = document.startPage(
+        PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+    )
+    var canvas = page.canvas
+    var y = margin
+
+    fun textX(): Float = if (isEnglish) margin else pageWidth - margin
+
+    fun statusPdfColor(status: PaymentStatus): Int {
+        return when (status) {
+            PaymentStatus.PAID -> android.graphics.Color.rgb(22, 163, 74)
+            PaymentStatus.UNPAID -> android.graphics.Color.rgb(220, 38, 38)
+            PaymentStatus.PARTIAL -> android.graphics.Color.rgb(245, 158, 11)
+        }
+    }
+
+    fun drawHeader() {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(2, 43, 74)
+        }
+
+        canvas.drawRoundRect(
+            margin,
+            margin,
+            pageWidth - margin,
+            margin + 72f,
+            20f,
+            20f,
+            bg
+        )
+
+        titlePaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        canvas.drawText(
+            tr("דו״ח תשלומים", "Payments Report"),
+            if (isEnglish) margin + 18f else pageWidth - margin - 18f,
+            margin + 30f,
+            titlePaint
+        )
+
+        subtitlePaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        canvas.drawText(
+            "${tr("סניף", "Branch")}: ${selectedBranch.ifBlank { tr("כל הסניפים", "All branches") }} · ${paymentNowDateText()}",
+            if (isEnglish) margin + 18f else pageWidth - margin - 18f,
+            margin + 52f,
+            subtitlePaint
+        )
+
+        y = margin + 100f
+    }
+
+    fun drawFooter() {
+        smallPaint.color = android.graphics.Color.rgb(100, 116, 139)
+        smallPaint.textAlign = Paint.Align.CENTER
+        canvas.drawLine(margin, pageHeight - 42f, pageWidth - margin, pageHeight - 42f, linePaint)
+        canvas.drawText(
+            tr("עמוד $pageNumber · KAMI", "Page $pageNumber · KAMI"),
+            pageWidth / 2f,
+            pageHeight - 24f,
+            smallPaint
+        )
+    }
+
+    fun newPage() {
+        drawFooter()
+        document.finishPage(page)
+
+        pageNumber++
+        page = document.startPage(
+            PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        )
+        canvas = page.canvas
+        y = margin
+
+        drawHeader()
+    }
+
+    fun ensureSpace(height: Float) {
+        if (y + height > pageHeight - 58f) {
+            newPage()
+        }
+    }
+
+    fun drawSummaryTile(index: Int, label: String, value: String) {
+        val gap = 8f
+        val tileWidth = ((pageWidth - margin * 2f) - gap * 3f) / 4f
+        val left = if (isEnglish) {
+            margin + index * (tileWidth + gap)
+        } else {
+            pageWidth - margin - tileWidth - index * (tileWidth + gap)
+        }
+
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(248, 251, 255)
+        }
+
+        val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(214, 226, 241)
+            style = Paint.Style.STROKE
+            strokeWidth = 1f
+        }
+
+        canvas.drawRoundRect(left, y, left + tileWidth, y + 58f, 14f, 14f, bg)
+        canvas.drawRoundRect(left, y, left + tileWidth, y + 58f, 14f, 14f, border)
+
+        val valuePaint = Paint(textPaint).apply {
+            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            textSize = 16f
+            color = android.graphics.Color.rgb(15, 23, 42)
+            textAlign = Paint.Align.CENTER
+        }
+
+        val labelPaint = Paint(textPaint).apply {
+            textSize = 8.8f
+            color = android.graphics.Color.rgb(100, 116, 139)
+            textAlign = Paint.Align.CENTER
+        }
+
+        canvas.drawText(value, left + tileWidth / 2f, y + 25f, valuePaint)
+        canvas.drawText(label, left + tileWidth / 2f, y + 43f, labelPaint)
+    }
+
+    fun drawTableHeader() {
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(2, 43, 74)
+        }
+
+        canvas.drawRoundRect(
+            margin,
+            y,
+            pageWidth - margin,
+            y + 30f,
+            10f,
+            10f,
+            bg
+        )
+
+        headerPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        val cols = if (isEnglish) {
+            listOf(
+                margin + 14f,
+                margin + 168f,
+                margin + 250f,
+                margin + 324f,
+                margin + 394f,
+                margin + 462f
+            )
+        } else {
+            listOf(
+                pageWidth - margin - 14f,
+                pageWidth - margin - 168f,
+                pageWidth - margin - 250f,
+                pageWidth - margin - 324f,
+                pageWidth - margin - 394f,
+                pageWidth - margin - 462f
+            )
+        }
+
+        listOf(
+            tr("שם", "Name"),
+            tr("סניף", "Branch"),
+            tr("נדרש", "Required"),
+            tr("שולם", "Paid"),
+            tr("סטטוס", "Status"),
+            tr("טלפון", "Phone")
+        ).forEachIndexed { index, title ->
+            canvas.drawText(title, cols[index], y + 20f, headerPaint)
+        }
+
+        y += 42f
+    }
+
+    fun drawPaymentRow(index: Int, item: PaymentReportItem) {
+        ensureSpace(38f)
+
+        val rowBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (index % 2 == 0) {
+                android.graphics.Color.rgb(248, 251, 255)
+            } else {
+                android.graphics.Color.rgb(234, 244, 255)
+            }
+        }
+
+        canvas.drawRoundRect(
+            margin,
+            y - 18f,
+            pageWidth - margin,
+            y + 12f,
+            8f,
+            8f,
+            rowBg
+        )
+
+        val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = statusPdfColor(item.status)
+        }
+
+        val dotX = if (isEnglish) margin + 7f else pageWidth - margin - 7f
+        canvas.drawCircle(dotX, y - 3f, 4f, dot)
+
+        textPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        textPaint.color = android.graphics.Color.rgb(15, 23, 42)
+        textPaint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        textPaint.textSize = 10f
+
+        val cols = if (isEnglish) {
+            listOf(
+                margin + 16f,
+                margin + 168f,
+                margin + 250f,
+                margin + 324f,
+                margin + 394f,
+                margin + 462f
+            )
+        } else {
+            listOf(
+                pageWidth - margin - 16f,
+                pageWidth - margin - 168f,
+                pageWidth - margin - 250f,
+                pageWidth - margin - 324f,
+                pageWidth - margin - 394f,
+                pageWidth - margin - 462f
+            )
+        }
+
+        val values = listOf(
+            item.fullName.take(22),
+            item.branchName.ifBlank { "—" }.take(12),
+            "₪${"%.0f".format(item.requiredAmount)}",
+            "₪${"%.0f".format(item.paidAmount)}",
+            statusLabel(item.status, isEnglish).take(12),
+            item.phone.ifBlank { "—" }.take(13)
+        )
+
+        values.forEachIndexed { colIndex, value ->
+            canvas.drawText(value, cols[colIndex], y, textPaint)
+        }
+
+        y += 34f
+    }
+
+    drawHeader()
+
+    sectionPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    canvas.drawText(
+        tr("סיכום גבייה", "Collection Summary"),
+        textX(),
+        y,
+        sectionPaint
+    )
+
+    y += 14f
+
+    drawSummaryTile(0, tr("גבייה", "Collection"), "${"%.0f".format(collectionPercent)}%")
+    drawSummaryTile(1, tr("נגבה", "Collected"), "₪${"%.0f".format(totalPaid)}")
+    drawSummaryTile(2, tr("שילמו", "Paid"), paidCount.toString())
+    drawSummaryTile(3, tr("לא שילמו", "Unpaid"), unpaidCount.toString())
+
+    y += 82f
+
+    sectionPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    canvas.drawText(
+        tr("פירוט מתאמנים", "Trainee Details"),
+        textX(),
+        y,
+        sectionPaint
+    )
+
+    y += 16f
+    drawTableHeader()
+
+    items.forEachIndexed { index, item ->
+        drawPaymentRow(index, item)
+    }
+
+    drawFooter()
+    document.finishPage(page)
+
+    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+    val file = File(dir, "payments_report_${System.currentTimeMillis()}.pdf")
+
+    FileOutputStream(file).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+    return file
 }

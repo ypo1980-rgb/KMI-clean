@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
     // id("org.jetbrains.kotlin.kapt")   ← מיותר אם לא משתמשים בשום kapt
     id("com.google.devtools.ksp")
 }
@@ -42,11 +43,18 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+
+        debug {
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 
@@ -119,6 +127,8 @@ dependencies {
     implementation("com.google.firebase:firebase-storage-ktx")
     // ✅ Firebase Cloud Messaging (FCM) להתראות Push
     implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-crashlytics-ktx")
+    implementation("com.google.firebase:firebase-analytics-ktx")
 
     // -------------------------------
     // Google Login - Credential Manager + Classic fallback
@@ -130,7 +140,7 @@ dependencies {
 
     // Icons / Billing
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("com.android.billingclient:billing-ktx:6.2.1")
+    implementation("com.android.billingclient:billing-ktx:8.0.0")
 
     // Navigation / DataStore
     implementation("androidx.navigation:navigation-compose:2.8.0")

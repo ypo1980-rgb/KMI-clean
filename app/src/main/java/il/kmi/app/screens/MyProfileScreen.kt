@@ -5,6 +5,12 @@ package il.kmi.app.screens
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -60,7 +66,9 @@ import il.kmi.app.R
 // ----- מודל נתונים להזנה נוחה -----
 data class ProfileBranchEntry(
     val branch: String,
-    val address: String
+    val address: String,
+    val group: String = "—",
+    val coach: String = "—"
 )
 
 data class UserProfileInfo(
@@ -140,25 +148,37 @@ private fun profileBeltDrawableForRawId(rawId: String?): Int {
     }
 }
 
-private fun shareProfileScreenApp(
+private fun shareProfilePdf(
     ctx: Context,
+    info: UserProfileInfo,
     isEnglish: Boolean
 ) {
-    val text = if (isEnglish) {
-        "K.M.I app"
-    } else {
-        "אפליקציית K.M.I"
-    }
+    val pdfFile = createProfilePdf(
+        context = ctx,
+        info = info,
+        isEnglish = isEnglish
+    )
+
+    val uri = FileProvider.getUriForFile(
+        ctx,
+        "${ctx.packageName}.fileprovider",
+        pdfFile
+    )
 
     val sendIntent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, text)
+        type = "application/pdf"
+        putExtra(
+            Intent.EXTRA_SUBJECT,
+            if (isEnglish) "My KAMI profile" else "הפרופיל שלי - KAMI"
+        )
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 
     ctx.startActivity(
         Intent.createChooser(
             sendIntent,
-            if (isEnglish) "Share" else "שיתוף"
+            if (isEnglish) "Share PDF" else "שיתוף PDF"
         )
     )
 }
@@ -927,9 +947,37 @@ fun MyProfileScreen(
                     }
                 }
 
+                val branchMatches = groupsList.mapNotNull { groupName ->
+                    val upcomingForGroup = nextTrainingFromDatabase(
+                        branchName = b,
+                        groupName = groupName
+                    )
+
+                    if (upcomingForGroup != null) {
+                        groupName to upcomingForGroup
+                    } else {
+                        null
+                    }
+                }
+
+                val branchUpcoming = branchMatches
+                    .map { it.second }
+                    .minByOrNull { it.cal.timeInMillis }
+
+                val branchCoach = branchUpcoming?.coach.orEmpty().ifBlank { "—" }
+
+                val groupsForThisBranch = branchMatches
+                    .map { it.first }
+                    .distinct()
+                    .ifEmpty {
+                        if (group.isNotBlank()) listOf(group) else emptyList()
+                    }
+
                 ProfileBranchEntry(
                     branch = b.trim(),
-                    address = resolvedAddress.ifBlank { "—" }
+                    address = resolvedAddress.ifBlank { "—" },
+                    group = groupsForThisBranch.joinToString("\n").ifBlank { "—" },
+                    coach = branchCoach
                 )
             }
         }
@@ -982,13 +1030,21 @@ fun MyProfileScreen(
                     },
                     showTopHome = false,
                     showTopSearch = false,
+                    showTopShare = false,
                     showBottomActions = true,
                     lockSearch = false,
                     lockHome = false,
                     centerTitle = true,
-                    currentLang = if (isEnglish) "en" else "he"
+                    currentLang = if (isEnglish) "en" else "he",
+                    onShare = {
+                        shareProfilePdf(
+                            ctx = ctx,
+                            info = info,
+                            isEnglish = isEnglish
+                        )
+                    }
                 )
-            },
+                     },
             containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0)
         ) { padding ->
@@ -1252,36 +1308,10 @@ private fun UserProfileCard(
             // ─────────────────────────────────────────────
             // שורות מידע בסגנון "תגית:" ואז הערך מתחת + מפריד
             // ─────────────────────────────────────────────
-            val groupValue = info.group
-                .removePrefix("קבוצה -").removePrefix("קבוצה")
-                .trim().ifBlank { "—" }
-
-            val coachValue = info.coach
-                .removePrefix("מאמן -").removePrefix("מאמן")
-                .trim().ifBlank { "—" }
-
-            val nextTrainingValue = info.nextTraining
-                .removePrefix("אימון הבא -").removePrefix("אימון הבא")
-                .trim().ifBlank { "—" }
 
             BranchAddressListBlock(
                 label = profileTr(isEnglish, "סניפים וכתובות:", "Branches and addresses:"),
                 entries = info.branchEntries,
-                isEnglish = isEnglish
-            )
-            LabeledValueBlock(
-                label = profileTr(isEnglish, "קבוצה:", "Group:"),
-                value = groupValue,
-                isEnglish = isEnglish
-            )
-            LabeledValueBlock(
-                label = profileTr(isEnglish, "מאמן:", "Coach:"),
-                value = coachValue,
-                isEnglish = isEnglish
-            )
-            LabeledValueBlock(
-                label = profileTr(isEnglish, "אימון הבא:", "Next training:"),
-                value = nextTrainingValue,
                 isEnglish = isEnglish
             )
 
@@ -1489,6 +1519,63 @@ private fun BranchAddressListBlock(
                             textAlign = profileTextAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Text(
+                            text = profileTr(isEnglish, "קבוצה:", "Group:"),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = Color(0xFF52627A),
+                                fontWeight = FontWeight.Medium
+                            ),
+                            textAlign = profileTextAlign(isEnglish),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = profileHorizontalAlignment(isEnglish),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            entry.group
+                                .split('\n', ',', ';', '|')
+                                .map { it.trim() }
+                                .filter { it.isNotBlank() }
+                                .ifEmpty { listOf("—") }
+                                .forEach { groupLine ->
+                                    Text(
+                                        text = groupLine,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color(0xFF111827)
+                                        ),
+                                        textAlign = profileTextAlign(isEnglish),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                        }
+
+                        Spacer(Modifier.height(6.dp))
+
+                        Text(
+                            text = profileTr(isEnglish, "מאמן:", "Coach:"),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = Color(0xFF52627A),
+                                fontWeight = FontWeight.Medium
+                            ),
+                            textAlign = profileTextAlign(isEnglish),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Text(
+                            text = entry.coach.ifBlank { "—" },
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF111827)
+                            ),
+                            textAlign = profileTextAlign(isEnglish),
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
 
@@ -1604,4 +1691,303 @@ private fun PasswordRow(
             }
         }
     }
+}
+
+private fun createProfilePdf(
+    context: Context,
+    info: UserProfileInfo,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 24f
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val document = PdfDocument()
+    val page = document.startPage(
+        PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
+    )
+    val canvas = page.canvas
+
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val blue = android.graphics.Color.rgb(12, 78, 130)
+    val lightBlue = android.graphics.Color.rgb(234, 246, 255)
+    val softBlue = android.graphics.Color.rgb(244, 250, 255)
+    val borderBlue = android.graphics.Color.rgb(191, 213, 232)
+    val textDark = android.graphics.Color.rgb(15, 23, 42)
+
+    val regular = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+    val bold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
+    fun paint(
+        size: Float,
+        color: Int = textDark,
+        typeface: Typeface = regular,
+        align: Paint.Align = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    ) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = size
+        this.color = color
+        this.typeface = typeface
+        textAlign = align
+    }
+
+    val titlePaint = paint(29f, android.graphics.Color.WHITE, bold)
+    val subTitlePaint = paint(14f, android.graphics.Color.WHITE, regular)
+    val sectionPaint = paint(17f, blue, bold)
+    val labelPaint = paint(10.5f, blue, bold)
+    val valuePaint = paint(13f, textDark, regular)
+    val boldValuePaint = paint(13f, textDark, bold)
+    val smallPaint = paint(9f, android.graphics.Color.rgb(80, 100, 120), regular)
+
+    fun rightX() = pageWidth - margin
+    fun leftX() = margin
+    fun mainX() = if (isEnglish) leftX() else rightX()
+
+    fun drawRoundRect(
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        radius: Float = 12f,
+        stroke: Boolean = false
+    ) {
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = if (stroke) Paint.Style.STROKE else Paint.Style.FILL
+            strokeWidth = 1.2f
+        }
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, p)
+    }
+
+    fun drawKmiLogo(cx: Float, cy: Float, radius: Float) {
+        val outer = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
+        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            typeface = bold
+            textSize = radius * 0.62f
+            textAlign = Paint.Align.CENTER
+        }
+
+        canvas.drawCircle(cx, cy, radius, outer)
+        canvas.drawCircle(cx, cy, radius - 4f, inner)
+        canvas.drawText("KAMI", cx, cy + radius * 0.22f, text)
+    }
+
+    fun drawHeader() {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        val diagonal = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
+        val accent1 = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(36, 103, 158) }
+        val accent2 = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(128, 183, 220) }
+
+        val path = android.graphics.Path().apply {
+            moveTo(pageWidth.toFloat(), 0f)
+            lineTo(pageWidth.toFloat(), 122f)
+            lineTo(178f, 122f)
+            lineTo(238f, 0f)
+            close()
+        }
+        canvas.drawPath(path, diagonal)
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(208f, 122f)
+            lineTo(224f, 122f)
+            lineTo(284f, 0f)
+            lineTo(268f, 0f)
+            close()
+        }, accent1)
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(230f, 122f)
+            lineTo(238f, 122f)
+            lineTo(298f, 0f)
+            lineTo(290f, 0f)
+            close()
+        }, accent2)
+
+        drawKmiLogo(78f, 58f, 42f)
+
+        titlePaint.textAlign = Paint.Align.RIGHT
+        subTitlePaint.textAlign = Paint.Align.RIGHT
+
+        canvas.drawText(tr("הפרופיל שלי", "My Profile"), pageWidth - 34f, 52f, titlePaint)
+        canvas.drawText(tr("כרטיס אישי למתאמן", "Personal trainee card"), pageWidth - 34f, 78f, subTitlePaint)
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            tr("תאריך הפקה:", "Generated:") + " " +
+                    java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date()),
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+    }
+
+    fun drawFooter() {
+        val footerY = 804f
+
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            strokeWidth = 2f
+        }
+
+        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, line)
+
+        drawKmiLogo(38f, footerY + 22f, 13f)
+
+        smallPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
+
+        smallPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(tr("עמוד 1 מתוך 1", "Page 1 of 1"), pageWidth / 2f, footerY + 25f, smallPaint)
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
+        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
+
+        val flag = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(20, 85, 200)
+        }
+
+        canvas.drawRect(pageWidth - 48f, footerY + 14f, pageWidth - 20f, footerY + 18f, flag)
+        canvas.drawRect(pageWidth - 48f, footerY + 28f, pageWidth - 20f, footerY + 32f, flag)
+    }
+
+    fun drawPersonalDetails(top: Float): Float {
+        drawRoundRect(margin, top, pageWidth - margin, top + 166f, android.graphics.Color.WHITE, 12f)
+        drawRoundRect(margin, top, pageWidth - margin, top + 166f, borderBlue, 12f, stroke = true)
+
+        sectionPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(tr("פרטים אישיים", "Personal Details"), pageWidth - margin - 22f, top + 34f, sectionPaint)
+
+        val mid = pageWidth / 2f
+        val divider = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = borderBlue
+            strokeWidth = 1f
+        }
+
+        canvas.drawLine(margin + 14f, top + 52f, pageWidth - margin - 14f, top + 52f, divider)
+        canvas.drawLine(mid, top + 48f, mid, top + 142f, divider)
+
+        fun rightItem(label: String, value: String, y: Float) {
+            labelPaint.textAlign = Paint.Align.RIGHT
+            boldValuePaint.textAlign = Paint.Align.RIGHT
+            canvas.drawText(label, pageWidth - margin - 54f, y, labelPaint)
+            canvas.drawText(value.ifBlank { "—" }, pageWidth - margin - 54f, y + 20f, boldValuePaint)
+        }
+
+        fun leftItem(label: String, value: String, y: Float) {
+            labelPaint.textAlign = Paint.Align.RIGHT
+            valuePaint.textAlign = Paint.Align.RIGHT
+            canvas.drawText(label, mid - 48f, y, labelPaint)
+            canvas.drawText(value.ifBlank { "—" }, mid - 48f, y + 20f, valuePaint)
+        }
+
+        rightItem(tr("שם", "Name"), info.userName, top + 76f)
+        rightItem(tr("דרגה נוכחית", "Current rank"), info.belt, top + 116f)
+        rightItem(tr("מתאמן לחגורה", "Training toward"), info.trainingTowardsBelt, top + 150f)
+
+        leftItem(tr("מייל", "Email"), info.email, top + 76f)
+        leftItem(tr("טלפון", "Phone"), info.phone, top + 116f)
+        leftItem(tr("שם משתמש", "Username"), info.accountUserName, top + 150f)
+
+        return top + 184f
+    }
+
+    fun drawBranches(top: Float): Float {
+        sectionPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            tr("סניפים, קבוצות ומאמנים", "Branches, Groups and Coaches"),
+            pageWidth / 2f,
+            top,
+            sectionPaint
+        )
+
+        var y = top + 26f
+
+        info.branchEntries.forEachIndexed { index, entry ->
+            val groups = entry.group
+                .split('\n', ',', ';', '|')
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .ifEmpty { listOf("—") }
+
+            val cardHeight = 104f + groups.size * 13f
+
+            drawRoundRect(
+                margin,
+                y,
+                pageWidth - margin,
+                y + cardHeight,
+                if (index % 2 == 0) lightBlue else softBlue,
+                12f
+            )
+            drawRoundRect(margin, y, pageWidth - margin, y + cardHeight, borderBlue, 12f, true)
+
+            val mid = pageWidth / 2f
+            val divider = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = borderBlue
+                strokeWidth = 1f
+            }
+            canvas.drawLine(mid, y + 24f, mid, y + cardHeight - 18f, divider)
+
+            sectionPaint.textAlign = Paint.Align.RIGHT
+            sectionPaint.textSize = 13f
+            canvas.drawText(entry.branch.ifBlank { "—" }, pageWidth - margin - 22f, y + 30f, sectionPaint)
+
+            labelPaint.textAlign = Paint.Align.RIGHT
+            boldValuePaint.textAlign = Paint.Align.RIGHT
+            valuePaint.textAlign = Paint.Align.RIGHT
+
+            canvas.drawText(tr("כתובת:", "Address:"), pageWidth - margin - 22f, y + 66f, labelPaint)
+            canvas.drawText(entry.address.ifBlank { "—" }.take(34), pageWidth - margin - 22f, y + 84f, valuePaint)
+
+            canvas.drawText(tr("קבוצות:", "Groups:"), mid - 22f, y + 30f, labelPaint)
+
+            var gy = y + 48f
+            groups.forEach { group ->
+                valuePaint.textAlign = Paint.Align.RIGHT
+                canvas.drawText("• ${group.take(18)}", mid - 28f, gy, valuePaint)
+                gy += 15f
+            }
+
+            val coachLineY = y + cardHeight - 18f
+            val coachDivider = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = borderBlue
+                strokeWidth = 1f
+            }
+            canvas.drawLine(margin + 36f, coachLineY - 24f, mid - 34f, coachLineY - 24f, coachDivider)
+
+            labelPaint.textAlign = Paint.Align.RIGHT
+            boldValuePaint.textAlign = Paint.Align.RIGHT
+            canvas.drawText(tr("מאמן:", "Coach:"), mid - 92f, coachLineY, labelPaint)
+            canvas.drawText(entry.coach.ifBlank { "—" }.take(18), mid - 132f, coachLineY, boldValuePaint)
+
+            y += cardHeight + 7f
+        }
+
+        return y
+    }
+
+    drawHeader()
+
+    var y = 136f
+    y = drawPersonalDetails(y)
+    drawBranches(y)
+
+    drawFooter()
+    document.finishPage(page)
+
+    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+    val file = File(dir, "my_profile_${System.currentTimeMillis()}.pdf")
+
+    FileOutputStream(file).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+    return file
 }

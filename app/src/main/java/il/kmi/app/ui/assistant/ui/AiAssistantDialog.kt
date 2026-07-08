@@ -1807,8 +1807,8 @@ fun AiAssistantDialog(
                         onHome = {
                             stopListeningHard()
                             stopSpeaking()
-                            onDismiss()
                             DrawerBridge.openHome()
+                            onDismiss()
                         },
 
                         onSearch = {

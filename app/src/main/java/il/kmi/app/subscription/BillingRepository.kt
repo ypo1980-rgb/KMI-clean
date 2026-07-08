@@ -19,8 +19,10 @@ data class SubscriptionState(
     val productId: String? = null,
     val purchaseToken: String? = null,
     val renewalDate: Long? = null,
-    val monthlyPriceText: String? = null,
-    val yearlyPriceText: String? = null,
+    val regularMonthlyPriceText: String? = null,
+    val regularYearlyPriceText: String? = null,
+    val memberMonthlyPriceText: String? = null,
+    val memberYearlyPriceText: String? = null,
 
     // ✅ בדיקות אמיתיות מול Google Play
     val productsLoaded: Boolean = false,
@@ -61,7 +63,11 @@ class BillingRepository(
 
     private var billingClient: BillingClient = BillingClient
         .newBuilder(context)
-        .enablePendingPurchases()
+        .enablePendingPurchases(
+            PendingPurchasesParams.newBuilder()
+                .enableOneTimeProducts()
+                .build()
+        )
         .setListener(this)
         .build()
 
@@ -71,7 +77,9 @@ class BillingRepository(
     // לכן לא טוענים כאן מוצרי חבר עמותה עד שיוגדרו בפועל ב-Play Console.
     private val productIds = listOf(
         SubscriptionProducts.REGULAR_MONTHLY,
-        SubscriptionProducts.REGULAR_YEARLY
+        SubscriptionProducts.REGULAR_YEARLY,
+        SubscriptionProducts.MEMBER_MONTHLY,
+        SubscriptionProducts.MEMBER_YEARLY
     )
 
     private val cachedProductDetails = linkedMapOf<String, ProductDetails>()
@@ -94,18 +102,28 @@ class BillingRepository(
 
     private fun refreshPriceState() {
 
-        val monthlyPrice =
+        val regularMonthlyPrice =
             cachedProductDetails[SubscriptionProducts.REGULAR_MONTHLY]
                 ?.let(::extractFormattedPrice)
 
-        val yearlyPrice =
+        val regularYearlyPrice =
             cachedProductDetails[SubscriptionProducts.REGULAR_YEARLY]
+                ?.let(::extractFormattedPrice)
+
+        val memberMonthlyPrice =
+            cachedProductDetails[SubscriptionProducts.MEMBER_MONTHLY]
+                ?.let(::extractFormattedPrice)
+
+        val memberYearlyPrice =
+            cachedProductDetails[SubscriptionProducts.MEMBER_YEARLY]
                 ?.let(::extractFormattedPrice)
 
         _state.update {
             it.copy(
-                monthlyPriceText = monthlyPrice,
-                yearlyPriceText = yearlyPrice
+                regularMonthlyPriceText = regularMonthlyPrice,
+                regularYearlyPriceText = regularYearlyPrice,
+                memberMonthlyPriceText = memberMonthlyPrice,
+                memberYearlyPriceText = memberYearlyPrice
             )
         }
     }

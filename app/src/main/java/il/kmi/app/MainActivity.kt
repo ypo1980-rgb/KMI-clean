@@ -57,6 +57,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         installSplashScreen()
 
         super.onCreate(savedInstanceState)
+
+        // Crashlytics test removed
         // 🌍 Language Manager
         val languageManager = AppLanguageManager(this)
         val localizedContext = languageManager.applySavedLanguage(this)

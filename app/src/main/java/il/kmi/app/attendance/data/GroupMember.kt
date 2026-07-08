@@ -7,10 +7,12 @@ import androidx.room.PrimaryKey
 @Entity(
     tableName = "group_members",
     indices = [
-        Index(value = ["branch", "groupKey"]),               // סינון מהיר לפי סניף/קבוצה
-        Index(value = ["branch", "groupKey", "displayName"]) // להצגת רשימות ממוינות
+        Index(value = ["branch", "groupKey"]),
+        Index(value = ["branch", "groupKey", "displayName"]),
+        Index(value = ["branch", "groupKey", "phone"])
     ]
 )
+
 data class GroupMember(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val branch: String,

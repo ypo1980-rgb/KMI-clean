@@ -538,11 +538,23 @@ fun SubscriptionScreen(
             if (isEnglish) "No selected plan" else "אין מסלול נבחר"
     }
 
-    val monthlyPriceLabel = state.monthlyPriceText
-        ?: if (isEnglish) "Not loaded yet" else "טרם נטען"
+    val monthlyPriceLabel = when (savedProductId) {
+        SubscriptionProducts.MEMBER_MONTHLY,
+        SubscriptionProducts.MEMBER_YEARLY ->
+            state.memberMonthlyPriceText
 
-    val yearlyPriceLabel = state.yearlyPriceText
-        ?: if (isEnglish) "Not loaded yet" else "טרם נטען"
+        else ->
+            state.regularMonthlyPriceText
+    } ?: if (isEnglish) "Not loaded yet" else "טרם נטען"
+
+    val yearlyPriceLabel = when (savedProductId) {
+        SubscriptionProducts.MEMBER_MONTHLY,
+        SubscriptionProducts.MEMBER_YEARLY ->
+            state.memberYearlyPriceText
+
+        else ->
+            state.regularYearlyPriceText
+    } ?: if (isEnglish) "Not loaded yet" else "טרם נטען"
 
     val renewalLabel = formatDate(savedAccessUntil)
 

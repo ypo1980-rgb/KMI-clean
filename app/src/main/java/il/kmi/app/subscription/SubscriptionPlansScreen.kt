@@ -53,6 +53,19 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.shadow
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import android.media.AudioManager
+import android.media.ToneGenerator
 
 private fun formatStorePriceNoTrailingZeros(raw: String): String {
     return raw
@@ -114,7 +127,8 @@ fun SubscriptionPlansScreen(
 
     // כרגע אין ב-Google Play מסלולים נפרדים לחברי עמותה.
     // לכן מסך התוכניות מציג ומשתמש רק במסלולים הרגילים בתשלום מלא.
-    val isAssociationMember = false
+    val isAssociationMember =
+        userSp.getBoolean("is_association_member", false)
 
     var purchaseStartedFromPlans by rememberSaveable {
         mutableStateOf(false)
@@ -151,12 +165,18 @@ fun SubscriptionPlansScreen(
 
     // כרגע קיימים ב-Google Play רק שני Product IDs רגילים.
     // לכן גם אם בעתיד המשתמש יסומן כחבר עמותה, הרכישה כאן משתמשת במוצרים הקיימים בפועל.
-    val monthlyProductId = remember {
-        SubscriptionProducts.REGULAR_MONTHLY
+    val monthlyProductId = remember(isAssociationMember) {
+        if (isAssociationMember)
+            SubscriptionProducts.MEMBER_MONTHLY
+        else
+            SubscriptionProducts.REGULAR_MONTHLY
     }
 
-    val yearlyProductId = remember {
-        SubscriptionProducts.REGULAR_YEARLY
+    val yearlyProductId = remember(isAssociationMember) {
+        if (isAssociationMember)
+            SubscriptionProducts.MEMBER_YEARLY
+        else
+            SubscriptionProducts.REGULAR_YEARLY
     }
 
     // Billing – חיבור לשירות
@@ -330,9 +350,10 @@ fun SubscriptionPlansScreen(
                 }
 
                 TariffCard(
-                    isAssociationMember = isAssociationMember,
-                    monthlyPriceText = monthlyPriceText,
-                    yearlyPriceText = yearlyPriceText
+                    regularMonthlyPriceText = state.regularMonthlyPriceText?.let(::formatStorePriceNoTrailingZeros) ?: "₪25",
+                    regularYearlyPriceText = state.regularYearlyPriceText?.let(::formatStorePriceNoTrailingZeros) ?: "₪250",
+                    memberMonthlyPriceText = state.memberMonthlyPriceText?.let(::formatStorePriceNoTrailingZeros) ?: "₪20",
+                    memberYearlyPriceText = state.memberYearlyPriceText?.let(::formatStorePriceNoTrailingZeros) ?: "₪220"
                 )
 
                 if (!isAssociationMember) {
@@ -523,88 +544,269 @@ fun SubscriptionPlansScreen(
                         onContinueToContent()
                     }
                 ) {
-                    ElevatedCard(
-                        shape = RoundedCornerShape(30.dp),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = Color(0xFFF7F4FB)
-                        ),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 14.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    PremiumPurchaseSuccessDialog(
+                        isEnglish = isEnglish,
+                        planLabel = planLabel,
+                        onContinue = {
+                            showPurchaseSuccessDialog = false
+                            onContinueToContent()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PremiumPurchaseSuccessDialog(
+    isEnglish: Boolean,
+    planLabel: String,
+    onContinue: () -> Unit
+) {
+    val layoutDirection =
+        if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
+        else androidx.compose.ui.unit.LayoutDirection.Rtl
+
+    LaunchedEffect(Unit) {
+        runCatching {
+            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 55).startTone(
+                ToneGenerator.TONE_PROP_ACK,
+                180
+            )
+        }
+    }
+
+    val enter = rememberInfiniteTransition(label = "premium_success_motion")
+
+    val pulse by enter.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.07f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "crown_pulse"
+    )
+
+    val shimmer by enter.animateFloat(
+        initialValue = -220f,
+        targetValue = 420f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "button_shimmer"
+    )
+
+    val sparkleOffset by enter.animateFloat(
+        initialValue = -24f,
+        targetValue = 46f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2200),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "gold_sparkles"
+    )
+
+    CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+        Card(
+            shape = RoundedCornerShape(36.dp),
+            border = BorderStroke(
+                1.7.dp,
+                Brush.linearGradient(
+                    listOf(
+                        Color(0xFFFFF1B8),
+                        Color(0xFFD4A017),
+                        Color(0xFFFFE7A3)
+                    )
+                )
+            ),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            elevation = CardDefaults.cardElevation(defaultElevation = 22.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = 1.0f
+                    scaleY = 1.0f
+                    alpha = 1.0f
+                }
+                .shadow(24.dp, RoundedCornerShape(36.dp))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0xFF06111F),
+                                Color(0xFF0B1728),
+                                Color(0xFF050B14)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 22.dp, vertical = 26.dp)
+            ) {
+                Text(
+                    text = "✦   ✧   ✦   ✧",
+                    color = Color(0xFFFFD978).copy(alpha = 0.65f),
+                    fontSize = 18.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .graphicsLayer {
+                            translationY = sparkleOffset
+                        }
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(78.dp)
+                            .graphicsLayer {
+                                scaleX = pulse
+                                scaleY = pulse
+                            }
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(
+                                        Color(0xFFFFF1B8),
+                                        Color(0xFFE9B949),
+                                        Color(0xFF7A520E),
+                                        Color(0xFF101827)
+                                    )
+                                ),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 28.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(18.dp)
+                        Text(text = "👑", fontSize = 36.sp)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(30.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0xFF7C3AED),
+                                        Color(0xFF2563EB),
+                                        Color(0xFF06B6D4)
+                                    )
+                                )
+                            )
+                            .padding(horizontal = 24.dp, vertical = 10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = if (isEnglish) "Purchase approved" else "רכישה אושרה",
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 24.sp
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = null,
+                                tint = Color.White
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = if (isEnglish) "Congratulations!" else "ברכות!",
+                        color = Color(0xFFFFD978),
+                        fontWeight = FontWeight.Black,
+                        fontSize = 40.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            "Your $planLabel purchase was completed successfully. You can now continue to the content."
+                        } else {
+                            "הרכישה של $planLabel בוצעה בהצלחה. כעת ניתן להמשיך לתוכן."
+                        },
+                        color = Color.White.copy(alpha = 0.93f),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 22.sp,
+                        lineHeight = 32.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Button(
+                        onClick = onContinue,
+                        shape = RoundedCornerShape(26.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE9B949),
+                            contentColor = Color(0xFF111827)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(18.dp))
+                                    .width(90.dp)
+                                    .height(60.dp)
+                                    .graphicsLayer {
+                                        translationX = shimmer
+                                    }
                                     .background(
-                                        Brush.linearGradient(
+                                        Brush.horizontalGradient(
                                             listOf(
-                                                Color(0xFF7C3AED),
-                                                Color(0xFF06B6D4)
+                                                Color.Transparent,
+                                                Color.White.copy(alpha = 0.42f),
+                                                Color.Transparent
                                             )
                                         )
                                     )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.CheckCircle,
-                                        contentDescription = null,
-                                        tint = Color.White
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = if (isEnglish) "Purchase approved" else "רכישה אושרה",
-                                        color = Color.White,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = if (isEnglish) {
-                                    "Your $planLabel purchase was completed successfully. You can now continue to the content."
-                                } else {
-                                    "הרכישה של $planLabel בוצעה בהצלחה. כעת ניתן להמשיך לתוכן."
-                                },
-                                style = MaterialTheme.typography.titleMedium,
-                                textAlign = TextAlign.Center,
-                                color = Color(0xFF374151),
-                                modifier = Modifier.fillMaxWidth()
                             )
 
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Button(
-                                onClick = {
-                                    showPurchaseSuccessDialog = false
-                                    onContinueToContent()
-                                },
-                                shape = RoundedCornerShape(22.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF6D4DB3),
-                                    contentColor = Color.White
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp)
-                            ) {
-                                Text(
-                                    text = if (isEnglish) "Continue to content" else "המשך לתוכן",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Text(
+                                text = if (isEnglish) "Continue to content" else "המשך לתוכן",
+                                fontSize = 23.sp,
+                                fontWeight = FontWeight.Black
+                            )
                         }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(Color(0xFFFFD978).copy(alpha = 0.30f))
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(text = "🛡️", fontSize = 26.sp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = if (isEnglish) {
+                                "Secure purchase • Full content access"
+                            } else {
+                                "רכישה מאובטחת • גישה מלאה לתכנים"
+                            },
+                            color = Color(0xFFFFD978),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
             }
@@ -613,10 +815,11 @@ fun SubscriptionPlansScreen(
 }
 
 @Composable
-private fun TariffCard(
-    isAssociationMember: Boolean,
-    monthlyPriceText: String,
-    yearlyPriceText: String
+    private fun TariffCard(
+    regularMonthlyPriceText: String,
+    regularYearlyPriceText: String,
+    memberMonthlyPriceText: String,
+    memberYearlyPriceText: String
 ) {
     val ctx = LocalContext.current
     val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctx) }
@@ -684,19 +887,7 @@ private fun TariffCard(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         PremiumTariffRow(
-                            label = if (isAssociationMember) {
-                                if (isEnglish) {
-                                    "KAMI\nmember\nplan"
-                                } else {
-                                    "מסלול\nחבר עמותת\nק.מ.י"
-                                }
-                            } else {
-                                if (isEnglish) {
-                                    "Regular\nuser\nplan"
-                                } else {
-                                    "מסלול\nמשתמש\nרגיל"
-                                }
-                            },
+                            label = if (isEnglish) "Plan" else "מסלול",
                             monthly = if (isEnglish) "Monthly" else "חודשי",
                             yearly = if (isEnglish) "Yearly" else "שנתי",
                             isHeader = true
@@ -705,9 +896,18 @@ private fun TariffCard(
                         PremiumTariffDivider()
 
                         PremiumTariffRow(
-                            label = if (isEnglish) "Current price" else "מחיר נוכחי",
-                            monthly = monthlyPriceText,
-                            yearly = yearlyPriceText,
+                            label = if (isEnglish) "Regular user plan" else "מסלול משתמש רגיל",
+                            monthly = regularMonthlyPriceText,
+                            yearly = regularYearlyPriceText,
+                            highlight = true
+                        )
+
+                        PremiumTariffDivider()
+
+                        PremiumTariffRow(
+                            label = if (isEnglish) "KAMI member plan" else "מסלול חבר עמותת ק.מ.י",
+                            monthly = memberMonthlyPriceText,
+                            yearly = memberYearlyPriceText,
                             highlight = true
                         )
                     }
@@ -721,18 +921,10 @@ private fun TariffCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = if (isAssociationMember) {
-                            if (isEnglish) {
-                                "Association member pricing is active for this account."
-                            } else {
-                                "מחיר חבר עמותה פעיל עבור החשבון הזה."
-                            }
+                        text = if (isEnglish) {
+                            "Association members may receive discounted pricing after membership verification."
                         } else {
-                            if (isEnglish) {
-                                "Association members may receive discounted pricing after membership verification."
-                            } else {
-                                "חברי עמותה יכולים לקבל מחיר מוזל לאחר אימות סטטוס החברות."
-                            }
+                            "חברי עמותה יכולים לקבל מחיר מוזל לאחר אימות סטטוס החברות."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,

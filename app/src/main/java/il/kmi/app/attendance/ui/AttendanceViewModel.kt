@@ -47,23 +47,44 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         .replace(Regex("""[."'\u05F3\u05F4,;:()\\[\\]{}]"""), "")
         .lowercase()
 
+    private fun String.phoneKey(): String = filter { it.isDigit() }
+        .removePrefix("972")
+        .removePrefix("0")
+
+    private fun GroupMember.attendanceUniqueKey(): String {
+        val phoneKey = phone.orEmpty().phoneKey()
+        val nameKey = displayName.nameKey()
+
+        return when {
+            phoneKey.isNotBlank() -> "phone:$phoneKey"
+            nameKey.isNotBlank() -> "name:${nameKey.substringBefore(" ")}"
+            else -> "member:$id"
+        }
+    }
+
     private fun cleanupDuplicateMembersInDb() {
         val members = uiState.value.members
         if (members.size <= 1) return
 
-        val dups = members.groupBy { it.displayName.nameKey() }
+        val dups = members
+            .groupBy { it.attendanceUniqueKey() }
             .values
             .filter { it.size > 1 }
 
         if (dups.isEmpty()) return
 
         viewModelScope.launch {
-            // משאירים הראשון, מוחקים את השאר
             dups.forEach { group ->
-                group.drop(1).forEach { m ->
-                    runCatching { repo.removeMember(_branch.value, _groupKey.value, m.id) }
-                }
+                group
+                    .sortedBy { it.id }
+                    .drop(1)
+                    .forEach { m ->
+                        runCatching {
+                            repo.removeMember(_branch.value, _groupKey.value, m.id)
+                        }
+                    }
             }
+
             _refreshTick.update { it + 1 }
         }
     }
@@ -145,7 +166,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     Triple(
                         state.branch.trim(),
                         state.groupKey.trim(),
-                        state.members.map { it.displayName.trim().lowercase() }
+                        state.members.map { it.attendanceUniqueKey() }
                     )
                 }
                 .distinctUntilChanged()
@@ -153,13 +174,13 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     if (branch.isBlank() || groupKey.isBlank()) return@collect
                     if (names.size <= 1) return@collect
 
-                    val key = "$branch|$groupKey"
+                    val key = "$branch|$groupKey|${names.sorted().joinToString("|")}"
                     if (lastCleanupKey == key) return@collect
 
                     val hasDuplicates = names
                         .filter { it.isNotBlank() }
                         .groupBy { it }
-                        .any { (_, sameNames) -> sameNames.size > 1 }
+                        .any { (_, sameMembers) -> sameMembers.size > 1 }
 
                     if (hasDuplicates) {
                         lastCleanupKey = key
@@ -765,19 +786,25 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 .distinctBy { it.lowercase() }
                 .toList()
 
-            // ✅ מניעת כפילויות: לא מוסיפים אם כבר קיים במודל/DB (לפי displayName מנורמל)
-            val existingNamesNorm = uiState.value.members
+            val existingNameKeys = uiState.value.members
                 .asSequence()
-                .map { it.displayName.trim() }
-                .filter { it.isNotBlank() }
-                .map { it.lowercase() }
+                .map { it.attendanceUniqueKey() }
                 .toSet()
 
             val toAdd = names
                 .asSequence()
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
-                .filter { it.lowercase() !in existingNamesNorm }
+                .filter { name ->
+                    val nameKey = name.nameKey()
+                    val uniqueKey = if (nameKey.isNotBlank()) {
+                        "name:${nameKey.substringBefore(" ")}"
+                    } else {
+                        ""
+                    }
+
+                    uniqueKey.isNotBlank() && uniqueKey !in existingNameKeys
+                }
                 .toList()
 
             val repoBranch = _branch.value.ifBlank { b0 }.trim()

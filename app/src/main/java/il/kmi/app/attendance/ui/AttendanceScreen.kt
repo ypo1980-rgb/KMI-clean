@@ -1,6 +1,12 @@
 package il.kmi.app.attendance.ui
 
 import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -51,6 +57,7 @@ import android.app.Activity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import il.kmi.app.attendance.data.GroupMember
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import java.time.YearMonth
@@ -212,9 +219,25 @@ fun AttendanceScreen(
     }
 
     fun shareReport(s: AttendanceUiState) {
-        val text = buildReportText(s)
+        val membersForPdf = s.members.filterNot {
+            it.displayName.isDemoOrPlaceholderTrainee()
+        }
+
+        val pdfFile = createAttendancePdf(
+            context = context,
+            state = s.copy(members = membersForPdf),
+            date = date,
+            isEnglish = isEnglish
+        )
+
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            pdfFile
+        )
+
         val send = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
+            type = "application/pdf"
             putExtra(
                 Intent.EXTRA_SUBJECT,
                 if (isEnglish) {
@@ -223,13 +246,15 @@ fun AttendanceScreen(
                     "דו\"ח נוכחות – ${s.branch}/${s.groupKey} – $date"
                 }
             )
-            putExtra(Intent.EXTRA_TEXT, text)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
+
         runCatching {
             context.startActivity(
                 Intent.createChooser(
                     send,
-                    tr("שליחת דו\"ח", "Send report")
+                    tr("שיתוף דו\"ח נוכחות PDF", "Share attendance PDF")
                 )
             )
         }
@@ -247,10 +272,25 @@ fun AttendanceScreen(
 
     // ===== סטטיסטיקת נוכחות לשיעור הנוכחי =====
 
+    fun String.phoneKey(): String = filter { it.isDigit() }
+        .removePrefix("972")
+        .removePrefix("0")
+
+    fun GroupMember.attendanceUniqueKey(): String {
+        val phoneKey = phone.orEmpty().phoneKey()
+        val nameKey = displayName.nameKey()
+
+        return when {
+            phoneKey.isNotBlank() -> "phone:$phoneKey"
+            nameKey.isNotBlank() -> "name:${nameKey.substringBefore(" ")}"
+            else -> "member:$id"
+        }
+    }
+
     val displayMembers = remember(state.members) {
         state.members
             .filterNot { it.displayName.isDemoOrPlaceholderTrainee() }
-            .distinctBy { it.displayName.nameKey() }
+            .distinctBy { it.attendanceUniqueKey() }
     }
 
     val hasRealMembers = displayMembers.isNotEmpty()
@@ -275,11 +315,21 @@ fun AttendanceScreen(
                 showModePill = true,
                 showTopHome = false,
                 showTopSearch = false,
+                showTopShare =  false,
                 showBottomActions = true,
                 lockSearch = false,
                 lockHome = false,
                 centerTitle = true,
                 onHome = onHomeClick,
+                onShare = {
+                    if (hasRealMembers) {
+                        shareReport(
+                            state.copy(
+                                members = displayMembers
+                            )
+                        )
+                    }
+                },
                 onPickSearchResult = { key -> pickedKey = key },
 
                 currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
@@ -609,36 +659,16 @@ fun AttendanceScreen(
                         }
 
                         Button(
-                            onClick = {
-                                if (hasRealMembers) {
-                                    shareReport(
-                                        state.copy(
-                                            members = displayMembers
-                                        )
-                                    )
-                                }
-                            },
-                            enabled = hasRealMembers,
+                            onClick = { onOpenGroupStats(selectedBranch, selectedGroup) },
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                             shape = RoundedCornerShape(20.dp),
                             contentPadding = compactPadding,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF0EA5E9),
-                                contentColor = Color.White,
-                                disabledContainerColor = Color(0xFF475569),
-                                disabledContentColor = Color(0xFFCBD5E1)
+                                contentColor = Color.White
                             )
                         ) {
-                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                                Icon(
-                                    Icons.Filled.Assessment,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                    tint = LocalContentColor.current
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                BtnText(tr("שתף", "Share"))
-                            }
+                            BtnText(tr("דוחות", "Reports"))
                         }
 
                         OutlinedButton(
@@ -2064,4 +2094,251 @@ private fun AttendanceStatBox(
             color = Color(0xFF5E6C80)
         )
     }
+}
+
+private fun createAttendancePdf(
+    context: android.content.Context,
+    state: AttendanceUiState,
+    date: LocalDate,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 36f
+
+    val document = PdfDocument()
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        textSize = 13f
+        color = android.graphics.Color.rgb(15, 23, 42)
+    }
+
+    val titlePaint = Paint(paint).apply {
+        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        textSize = 22f
+        color = android.graphics.Color.rgb(2, 43, 74)
+        textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    }
+
+    val headerPaint = Paint(paint).apply {
+        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        textSize = 14f
+        color = android.graphics.Color.WHITE
+    }
+
+    val smallPaint = Paint(paint).apply {
+        textSize = 10f
+        color = android.graphics.Color.rgb(100, 116, 139)
+    }
+
+    fun tr(he: String, en: String): String = if (isEnglish) en else he
+
+    val total = state.members.size
+    val present = state.members.count { state.statusByMemberId[it.id] == AttendanceStatus.PRESENT }
+    val absent = state.members.count { state.statusByMemberId[it.id] == AttendanceStatus.ABSENT }
+    val excused = state.members.count { state.statusByMemberId[it.id] == AttendanceStatus.EXCUSED }
+    val pct = if (total > 0) present * 100.0 / total else 0.0
+
+    var pageNumber = 1
+    var page = document.startPage(
+        PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+    )
+    var canvas = page.canvas
+    var y = margin
+
+    fun drawHeader() {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        val headerBg = Paint().apply {
+            color = android.graphics.Color.rgb(2, 43, 74)
+        }
+        canvas.drawRoundRect(
+            margin,
+            margin,
+            pageWidth - margin,
+            margin + 58f,
+            18f,
+            18f,
+            headerBg
+        )
+
+        headerPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        canvas.drawText(
+            tr("דו\"ח נוכחות", "Attendance Report"),
+            if (isEnglish) margin + 18f else pageWidth - margin - 18f,
+            margin + 26f,
+            headerPaint
+        )
+
+        smallPaint.color = android.graphics.Color.WHITE
+        smallPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        canvas.drawText(
+            "${state.branch} / ${state.groupKey} / $date",
+            if (isEnglish) margin + 18f else pageWidth - margin - 18f,
+            margin + 47f,
+            smallPaint
+        )
+
+        y = margin + 88f
+    }
+
+    fun drawFooter() {
+        smallPaint.color = android.graphics.Color.rgb(100, 116, 139)
+        smallPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            tr("עמוד $pageNumber · KAMI", "Page $pageNumber · KAMI"),
+            pageWidth / 2f,
+            pageHeight - 24f,
+            smallPaint
+        )
+    }
+
+    fun newPage() {
+        drawFooter()
+        document.finishPage(page)
+        pageNumber++
+        page = document.startPage(
+            PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        )
+        canvas = page.canvas
+        y = margin
+        drawHeader()
+    }
+
+    fun ensureSpace(height: Float) {
+        if (y + height > pageHeight - 58f) {
+            newPage()
+        }
+    }
+
+    drawHeader()
+
+    titlePaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    canvas.drawText(
+        tr("סיכום שיעור", "Class Summary"),
+        if (isEnglish) margin else pageWidth - margin,
+        y,
+        titlePaint
+    )
+    y += 30f
+
+    paint.textSize = 13f
+    paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+    paint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+    val summaryLines = listOf(
+        tr("סה\"כ מתאמנים: $total", "Total trainees: $total"),
+        tr("הגיעו: $present", "Present: $present"),
+        tr("לא הגיעו: $absent", "Absent: $absent"),
+        tr("מוצדקים: $excused", "Excused: $excused"),
+        tr("אחוז נוכחות: ${"%.1f".format(pct)}%", "Attendance: ${"%.1f".format(pct)}%")
+    )
+
+    summaryLines.forEach {
+        canvas.drawText(
+            it,
+            if (isEnglish) margin else pageWidth - margin,
+            y,
+            paint
+        )
+        y += 22f
+    }
+
+    y += 12f
+
+    val tableTop = y
+    val tablePaint = Paint().apply {
+        color = android.graphics.Color.rgb(2, 43, 74)
+    }
+    canvas.drawRoundRect(
+        margin,
+        tableTop,
+        pageWidth - margin,
+        tableTop + 30f,
+        10f,
+        10f,
+        tablePaint
+    )
+
+    headerPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    canvas.drawText(
+        tr("מתאמן", "Trainee"),
+        if (isEnglish) margin + 16f else pageWidth - margin - 16f,
+        tableTop + 20f,
+        headerPaint
+    )
+
+    canvas.drawText(
+        tr("סטטוס", "Status"),
+        if (isEnglish) pageWidth - margin - 140f else margin + 140f,
+        tableTop + 20f,
+        headerPaint
+    )
+
+    y += 44f
+
+    paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+    paint.textSize = 12.5f
+
+    state.members.forEachIndexed { index, member ->
+        ensureSpace(34f)
+
+        val rowBg = Paint().apply {
+            color = if (index % 2 == 0) {
+                android.graphics.Color.rgb(248, 251, 255)
+            } else {
+                android.graphics.Color.rgb(234, 244, 255)
+            }
+        }
+
+        canvas.drawRoundRect(
+            margin,
+            y - 18f,
+            pageWidth - margin,
+            y + 10f,
+            8f,
+            8f,
+            rowBg
+        )
+
+        val statusText = when (state.statusByMemberId[member.id]) {
+            AttendanceStatus.PRESENT -> tr("הגיע", "Present")
+            AttendanceStatus.ABSENT -> tr("לא הגיע", "Absent")
+            AttendanceStatus.EXCUSED -> tr("מוצדק", "Excused")
+            else -> tr("לא סומן", "Not marked")
+        }
+
+        paint.color = android.graphics.Color.rgb(15, 23, 42)
+        paint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        canvas.drawText(
+            member.displayName.ifBlank { tr("מתאמן ללא שם", "Unnamed trainee") }.take(38),
+            if (isEnglish) margin + 16f else pageWidth - margin - 16f,
+            y,
+            paint
+        )
+
+        paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        canvas.drawText(
+            statusText,
+            if (isEnglish) pageWidth - margin - 140f else margin + 140f,
+            y,
+            paint
+        )
+        paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+
+        y += 34f
+    }
+
+    drawFooter()
+    document.finishPage(page)
+
+    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+    val file = File(dir, "attendance_${date}_${System.currentTimeMillis()}.pdf")
+
+    FileOutputStream(file).use { out ->
+        document.writeTo(out)
+    }
+
+    document.close()
+    return file
 }
