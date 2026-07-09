@@ -658,23 +658,9 @@ fun AttendanceScreen(
                             }
                         }
 
-                        Button(
-                            onClick = { onOpenGroupStats(selectedBranch, selectedGroup) },
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                            shape = RoundedCornerShape(20.dp),
-                            contentPadding = compactPadding,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF0EA5E9),
-                                contentColor = Color.White
-                            )
-                        ) {
-                            BtnText(tr("דוחות", "Reports"))
-                        }
-
                         OutlinedButton(
                             onClick = { onOpenGroupStats(selectedBranch, selectedGroup) },
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),                            shape = RoundedCornerShape(20.dp),
                             contentPadding = compactPadding,
                             border = BorderStroke(1.dp, Color(0xFF93C5FD)),
                             colors = ButtonDefaults.outlinedButtonColors(

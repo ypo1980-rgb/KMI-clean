@@ -206,11 +206,21 @@ fun AdminDiagnosticsScreen(
                 adminLogs = snapshot?.documents.orEmpty().map { doc ->
                     AdminDiagnosticLog(
                         id = doc.id,
-                        type = doc.getString("type").orEmpty(),
-                        title = doc.getString("title").orEmpty(),
+                        type = doc.getString("type")
+                            ?: doc.getString("action")
+                            ?: doc.getString("level")
+                            ?: "",
+                        title = doc.getString("title")
+                            ?: doc.getString("action")
+                            ?: doc.getString("source")
+                            ?: "",
                         message = doc.getString("message").orEmpty(),
-                        area = doc.getString("area").orEmpty(),
-                        severity = doc.getString("severity") ?: "info",
+                        area = doc.getString("area")
+                            ?: doc.getString("source")
+                            ?: "",
+                        severity = doc.getString("severity")
+                            ?: doc.getString("level")
+                            ?: "info",
                         userRole = doc.getString("userRole") ?: "unknown",
                         appVersion = doc.getString("appVersion").orEmpty(),
                         deviceModel = doc.getString("deviceModel").orEmpty(),
@@ -243,27 +253,39 @@ fun AdminDiagnosticsScreen(
                         ?: ""
 
                     val message = doc.getString("message").orEmpty()
+                    val combinedErrorText = "$stage\n$errorClass\n$errorMessage\n$message"
+
                     val isRealUserCancel =
-                        errorMessage.contains("User cancelled", ignoreCase = true) ||
-                                errorMessage.contains("Cancelled by user", ignoreCase = true) ||
-                                errorMessage.contains("cancelled the selector", ignoreCase = true)
+                        combinedErrorText.contains("User cancelled", ignoreCase = true) ||
+                                combinedErrorText.contains("Cancelled by user", ignoreCase = true) ||
+                                combinedErrorText.contains("cancelled the selector", ignoreCase = true) ||
+                                combinedErrorText.contains("בוטלה", ignoreCase = true)
 
                     val isReauth16 =
-                        errorMessage.contains("Account reauth failed", ignoreCase = true) ||
-                                errorMessage.contains("reauth failed", ignoreCase = true) ||
-                                errorMessage.contains("[16]", ignoreCase = true)
+                        combinedErrorText.contains("Account reauth failed", ignoreCase = true) ||
+                                combinedErrorText.contains("reauth failed", ignoreCase = true) ||
+                                combinedErrorText.contains("[16]", ignoreCase = true)
 
                     val isError =
-                        isReauth16 ||
-                                apiStatusCode != null ||
-                                errorClass.isNotBlank() && !isRealUserCancel ||
-                                errorMessage.isNotBlank() && !isRealUserCancel ||
-                                stage.contains("failure", ignoreCase = true) ||
-                                stage.contains("failed", ignoreCase = true) ||
-                                stage.contains("exception", ignoreCase = true) ||
-                                stage.contains("no_credential", ignoreCase = true) ||
-                                stage.contains("invalid", ignoreCase = true) ||
-                                stage.contains("blank", ignoreCase = true)
+                        !isRealUserCancel && (
+                                isReauth16 ||
+                                        apiStatusCode != null ||
+                                        errorClass.isNotBlank() ||
+                                        errorMessage.isNotBlank() ||
+                                        combinedErrorText.contains("failure", ignoreCase = true) ||
+                                        combinedErrorText.contains("failed", ignoreCase = true) ||
+                                        combinedErrorText.contains("exception", ignoreCase = true) ||
+                                        combinedErrorText.contains("error", ignoreCase = true) ||
+                                        combinedErrorText.contains("no_credential", ignoreCase = true) ||
+                                        combinedErrorText.contains("invalid", ignoreCase = true) ||
+                                        combinedErrorText.contains("blank", ignoreCase = true) ||
+                                        combinedErrorText.contains("לא מוגדרת", ignoreCase = true) ||
+                                        combinedErrorText.contains("אינה מוגדרת", ignoreCase = true) ||
+                                        combinedErrorText.contains("לא ניתן", ignoreCase = true) ||
+                                        combinedErrorText.contains("שגיאה", ignoreCase = true) ||
+                                        combinedErrorText.contains("תקלה", ignoreCase = true) ||
+                                        combinedErrorText.contains("כשל", ignoreCase = true)
+                                )
 
                     val isSuccess =
                         stage.contains("success", ignoreCase = true) ||
@@ -500,13 +522,21 @@ fun AdminDiagnosticsScreen(
     }
 
     val errorCount = visibleLogs.count {
-        it.severity.equals("error", ignoreCase = true) ||
-                it.type.contains("error", ignoreCase = true) ||
-                it.type.contains("failed", ignoreCase = true) ||
-                it.type.contains("failure", ignoreCase = true) ||
-                it.message.contains("errorClass=", ignoreCase = true) ||
-                it.message.contains("errorMessage=", ignoreCase = true) ||
-                it.message.contains("apiStatusCode=", ignoreCase = true)
+        val text = "${it.severity}\n${it.type}\n${it.title}\n${it.area}\n${it.message}"
+
+        text.contains("error", ignoreCase = true) ||
+                text.contains("failed", ignoreCase = true) ||
+                text.contains("failure", ignoreCase = true) ||
+                text.contains("exception", ignoreCase = true) ||
+                text.contains("errorClass=", ignoreCase = true) ||
+                text.contains("errorMessage=", ignoreCase = true) ||
+                text.contains("apiStatusCode=", ignoreCase = true) ||
+                text.contains("שגיאה", ignoreCase = true) ||
+                text.contains("תקלה", ignoreCase = true) ||
+                text.contains("כשל", ignoreCase = true) ||
+                text.contains("לא מוגדרת", ignoreCase = true) ||
+                text.contains("אינה מוגדרת", ignoreCase = true) ||
+                text.contains("לא ניתן", ignoreCase = true)
     }
 
     val loginCount = visibleLogs.count { log ->
