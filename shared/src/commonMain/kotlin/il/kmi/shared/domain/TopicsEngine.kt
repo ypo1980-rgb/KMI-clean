@@ -11,6 +11,10 @@ object TopicsEngine {
         val subTitles: List<String>
     )
 
+    private fun ContentRepo.SubTopic.totalExercisesCountDeep(): Int {
+        return items.size + subTopics.sumOf { it.totalExercisesCountDeep() }
+    }
+
     fun topicTitlesFor(belt: Belt): List<String> {
         val topics = ContentRepo.data[belt]?.topics.orEmpty()
         return topics.map { it.title.trim() }
@@ -26,12 +30,19 @@ object TopicsEngine {
     }
 
     fun topicDetailsFor(belt: Belt, topicTitle: String): TopicDetails {
-        val subs = subTopicTitlesFor(belt, topicTitle)
-        val count = ContentRepo.getAllItemsFor(
+        val cleanTopicTitle = topicTitle.trim()
+
+        val subTopics = ContentRepo.getSubTopicsFor(
             belt = belt,
-            topicTitle = topicTitle,
-            subTopicTitle = null
-        ).size
+            topicTitle = cleanTopicTitle
+        )
+
+        val subs = subTopics
+            .map { it.title.trim() }
+            .filter { it.isNotBlank() && it != cleanTopicTitle }
+            .distinct()
+
+        val count = subTopics.sumOf { it.totalExercisesCountDeep() }
 
         return TopicDetails(
             itemCount = count,

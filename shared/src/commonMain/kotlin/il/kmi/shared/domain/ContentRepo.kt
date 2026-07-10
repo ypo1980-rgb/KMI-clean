@@ -311,7 +311,6 @@ object ContentRepo {
                 "עמידת מוצא צידית"
             )
         ),
-
         Topic(
             "מניעת התקרבות התוקף",
             listOf(
@@ -320,7 +319,6 @@ object ContentRepo {
                 "מכת קשת האגודל והאצבע"
             )
         ),
-
         Topic(
             title = "עבודת ידיים",
             items = emptyList(),
@@ -363,7 +361,6 @@ object ContentRepo {
                         "מכת סנוקרת ימין"
                     )
                 ),
-
                 SubTopic(
                     "מרפק",
                     listOf(
@@ -598,7 +595,6 @@ object ContentRepo {
                         )
                     )
                 ),
-
                 SubTopic(
                     title = "הגנות נגד בעיטות",
                     items = emptyList(),
@@ -643,8 +639,7 @@ object ContentRepo {
                         "הגנות יד רפלקסיביות נגד דקירות מזרחיות",
                         "הגנות יד רפלקסיביות נגד דקירה ישרה"
                     )
-                )
-                ,
+                ),
                 SubTopic(
                     "עבודת קרקע",
                     listOf(

@@ -17,6 +17,17 @@ val keystoreProperties = Properties().apply {
     }
 }
 
+val releaseStoreFile = keystoreProperties.getProperty("RELEASE_STORE_FILE")
+val releaseStorePassword = keystoreProperties.getProperty("RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = keystoreProperties.getProperty("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = keystoreProperties.getProperty("RELEASE_KEY_PASSWORD")
+
+val hasReleaseSigningConfig =
+    !releaseStoreFile.isNullOrBlank() &&
+            !releaseStorePassword.isNullOrBlank() &&
+            !releaseKeyAlias.isNullOrBlank() &&
+            !releaseKeyPassword.isNullOrBlank()
+
 android {
     namespace = "il.kmi.app"
     compileSdk = 35
@@ -51,11 +62,13 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = file(keystoreProperties["RELEASE_STORE_FILE"] as String)
-            storePassword = keystoreProperties["RELEASE_STORE_PASSWORD"] as String
-            keyAlias = keystoreProperties["RELEASE_KEY_ALIAS"] as String
-            keyPassword = keystoreProperties["RELEASE_KEY_PASSWORD"] as String
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseStoreFile))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+            }
         }
     }
 
@@ -63,7 +76,10 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+
+            if (hasReleaseSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
 
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
