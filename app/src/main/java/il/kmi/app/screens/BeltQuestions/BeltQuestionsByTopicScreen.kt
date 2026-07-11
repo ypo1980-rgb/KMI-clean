@@ -1325,6 +1325,21 @@ internal fun TopicsBySubjectCard(
     fun formatCount(n: Int): String =
         if (isEnglish) "exercises $n" else "$n תרגילים"
 
+    fun uniqueExerciseCountForTopics(
+        vararg topicTitles: String
+    ): Int {
+        return topicTitles
+            .asSequence()
+            .map { topicTitle ->
+                ExerciseCountProvider.topicStats(
+                    belt = currentBelt,
+                    topicTitle = topicTitle
+                ).exerciseCount
+            }
+            .firstOrNull { count -> count > 0 }
+            ?: 0
+    }
+
     fun formatSubTopicsAndExercises(subTopics: Int, exercises: Int): String =
         if (isEnglish) {
             "$subTopics sub-topics · $exercises exercises"
@@ -1383,6 +1398,64 @@ internal fun TopicsBySubjectCard(
             .replace(Regex("\\s+"), " ")
             .trim()
 
+    fun uniqueExerciseCountFromContentRepo(
+        vararg topicTitles: String
+    ): Int {
+        val normalizedTopicTitles: List<String> = topicTitles
+            .map { topicTitle: String ->
+                normalizeCountPart(topicTitle)
+            }
+            .filter { topicTitle: String ->
+                topicTitle.isNotBlank()
+            }
+            .distinct()
+
+        val exerciseNames: List<String> = normalizedTopicTitles
+            .flatMap { topicTitle: String ->
+                val subTopics: List<String> = runCatching {
+                    ContentRepo.listSubTopicTitles(
+                        currentBelt,
+                        topicTitle
+                    )
+                }.getOrDefault(emptyList())
+
+                val directItems: List<String> = runCatching {
+                    ContentRepo.listItemTitles(
+                        belt = currentBelt,
+                        topicTitle = topicTitle,
+                        subTopicTitle = null
+                    )
+                }.getOrDefault(emptyList())
+
+                val subTopicItems: List<String> =
+                    subTopics.flatMap { subTopic: String ->
+                        runCatching {
+                            ContentRepo.listItemTitles(
+                                belt = currentBelt,
+                                topicTitle = topicTitle,
+                                subTopicTitle = subTopic
+                            )
+                        }.getOrDefault(emptyList())
+                    }
+
+                directItems + subTopicItems
+            }
+            .map { rawTitle: String ->
+                ExerciseTitleFormatter
+                    .displayName(rawTitle)
+                    .ifBlank { rawTitle }
+            }
+            .map { title: String ->
+                normalizeCountPart(title)
+            }
+            .filter { title: String ->
+                title.isNotBlank()
+            }
+            .distinct()
+
+        return exerciseNames.size
+    }
+
     fun subjectTopicCandidatesForCount(
         subjectId: String,
         title: String
@@ -1439,110 +1512,52 @@ internal fun TopicsBySubjectCard(
     fun countTextForSubjectCard(
         card: SubjectTopicsUiLogic.SubjectCardModel
     ): String {
-        val globalTopicTitle = when (card.id.trim().lowercase()) {
+        val uniqueCount = when (card.id.trim().lowercase()) {
             "rolls_breakfalls",
-            "topic_breakfalls_rolls" -> "בלימות וגלגולים"
+            "topic_breakfalls_rolls" -> {
+                uniqueExerciseCountForTopics(
+                    "בלימות וגלגולים",
+                    "גלגולים ובלימות"
+                )
+            }
 
-            "topic_ready_stance" -> "עמידת מוצא"
+            "topic_ready_stance" -> {
+                uniqueExerciseCountForTopics(
+                    "עמידת מוצא"
+                )
+            }
 
-            "topic_ground_prep" -> "עבודת קרקע"
+            "topic_ground_prep" -> {
+                uniqueExerciseCountForTopics(
+                    "עבודת קרקע"
+                )
+            }
 
             "topic_kavaler",
-            "kavaler" -> "קוואלר"
+            "kavaler" -> {
+                uniqueExerciseCountForTopics(
+                    "קוואלר"
+                )
+            }
 
             "kicks",
-            "topic_kicks" -> "בעיטות"
-
-            else -> null
-        }
-
-        if (globalTopicTitle != null) {
-            val stats = ExerciseCountProvider.topicStats(
-                belt = currentBelt,
-                topicTitle = globalTopicTitle
-            )
-
-            if (stats.exerciseCount > 0) {
-                return formatCount(stats.exerciseCount)
+            "topic_kicks" -> {
+                uniqueExerciseCountForTopics(
+                    "בעיטות",
+                    "topic_kicks"
+                )
             }
+
+            else -> 0
         }
 
-        val candidates = subjectTopicCandidatesForCount(
-            subjectId = card.id,
-            title = card.title
+        if (uniqueCount > 0) {
+            return formatCount(uniqueCount)
+        }
+
+        return translateCardCountText(
+            card.countText
         )
-
-        val subTitles = candidates
-            .flatMap { candidate ->
-                runCatching {
-                    ContentRepo.listSubTopicTitles(currentBelt, candidate)
-                }.getOrDefault(emptyList())
-            }
-            .map { normalizeCountPart(it) }
-            .filter { it.isNotBlank() }
-            .filter { subTitle ->
-                candidates.none { candidate ->
-                    normalizeCountPart(candidate).equals(
-                        normalizeCountPart(subTitle),
-                        ignoreCase = true
-                    )
-                }
-            }
-            .distinct()
-
-        val directItems = candidates
-            .flatMap { candidate ->
-                runCatching {
-                    ContentRepo.listItemTitles(
-                        belt = currentBelt,
-                        topicTitle = candidate,
-                        subTopicTitle = null
-                    )
-                }.getOrDefault(emptyList())
-            }
-
-        val subItems = candidates
-            .flatMap { candidate ->
-                subTitles.flatMap { subTitle ->
-                    runCatching {
-                        ContentRepo.listItemTitles(
-                            belt = currentBelt,
-                            topicTitle = candidate,
-                            subTopicTitle = subTitle
-                        )
-                    }.getOrDefault(emptyList())
-                }
-            }
-
-        val realItemCount = (directItems + subItems)
-            .map { ExerciseTitleFormatter.displayName(it).ifBlank { it } }
-            .map { normalizeCountPart(it) }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .size
-
-        val cachedSubTopicCounts = subTopicsPickCountsBySubjectId[card.id].orEmpty()
-
-        val finalSubTopicCount = maxOf(
-            subTitles.size,
-            cachedSubTopicCounts.size
-        )
-
-        val finalItemCount = when {
-            realItemCount > 0 -> realItemCount
-            cachedSubTopicCounts.values.sum() > 0 -> cachedSubTopicCounts.values.sum()
-            else -> fallbackLastNumberFromText(card.countText)
-        }
-
-        if (finalItemCount <= 0) {
-            return translateCardCountText(card.countText)
-        }
-
-        return if (finalSubTopicCount > 0) {
-            formatSubTopicsAndExercises(finalSubTopicCount, finalItemCount)
-        } else {
-            formatCount(finalItemCount)
-        }
     }
 
     fun openSubjectSmart(subject: SubjectTopic) {
@@ -1739,6 +1754,7 @@ internal fun TopicsBySubjectCard(
         subjectsWithSubTopicsCards,
         subjectsWithoutSubTopicsCards,
         subTopicsPickCountsBySubjectId,
+        currentBelt,
         isEnglish,
         hasAccess
     ) {
@@ -1754,14 +1770,26 @@ internal fun TopicsBySubjectCard(
 
             val releaseCounts = subTopicsPickCountsBySubjectId["releases"].orEmpty()
 
+            val displayedReleasesCount =
+                releaseCounts
+                    .values
+                    .sum()
+
             it.copy(
                 id = "releases",
                 title = if (hasAccess) baseTitle else "$baseTitle 🔒",
-                countText = countTextFromSubTopicTotalsOrFallback(
-                    counts = releaseCounts,
-                    fallback = it.countText,
-                    subTopicsCount = releaseCounts.size
-                )
+                countText = if (displayedReleasesCount > 0) {
+                    formatSubTopicsAndExercises(
+                        subTopics = releaseCounts.size,
+                        exercises = displayedReleasesCount
+                    )
+                } else {
+                    countTextFromSubTopicTotalsOrFallback(
+                        counts = releaseCounts,
+                        fallback = it.countText,
+                        subTopicsCount = releaseCounts.size
+                    )
+                }
             )
         }
     }
@@ -1801,12 +1829,27 @@ internal fun TopicsBySubjectCard(
         )
     }
 
-    val handsRootCard = remember(handsRootCount, handsPickCounts, isEnglish) {
-        val totalHandsExercises =
-            handsPickCounts.values.sum().takeIf { it > 0 } ?: handsRootCount
+    val handsRootCard = remember(
+        handsRootCount,
+        handsPickCounts,
+        currentBelt,
+        isEnglish
+    ) {
+        val uniqueHandsCount = uniqueExerciseCountForTopics(
+            "עבודות ידיים",
+            "עבודת ידיים"
+        )
+
+        val fallbackHandsCount =
+            handsPickCounts.values.sum().takeIf { it > 0 }
+                ?: handsRootCount
+
+        val displayedHandsCount =
+            uniqueHandsCount.takeIf { it > 0 }
+                ?: fallbackHandsCount
 
         val base = SubjectTopicsUiLogic.buildHandsRootCard(
-            handsRootCount = totalHandsExercises,
+            handsRootCount = displayedHandsCount,
             formatCount = ::formatCount,
             subTopicsCount = handsPickCounts.size
         )
@@ -1817,11 +1860,18 @@ internal fun TopicsBySubjectCard(
                 fallbackHeb = base.title,
                 isEnglish = isEnglish
             ),
-            countText = countTextFromSubTopicTotalsOrFallback(
-                counts = handsPickCounts,
-                fallback = base.countText,
-                subTopicsCount = handsPickCounts.size
-            )
+            countText = if (displayedHandsCount > 0) {
+                formatSubTopicsAndExercises(
+                    subTopics = handsPickCounts.size,
+                    exercises = displayedHandsCount
+                )
+            } else {
+                countTextFromSubTopicTotalsOrFallback(
+                    counts = handsPickCounts,
+                    fallback = base.countText,
+                    subTopicsCount = handsPickCounts.size
+                )
+            }
         )
     }
 

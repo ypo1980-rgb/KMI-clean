@@ -1,5 +1,6 @@
 package il.kmi.app.screens.BeltQuestions
 
+import android.util.Log
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -1458,24 +1459,21 @@ internal object SubjectTopicsUiLogic {
             s: il.kmi.shared.domain.content.HardSectionsCatalog.Section
         ): Int {
             return if (s.subSections.isNotEmpty()) {
-                s.subSections.sumOf { child -> countDeepAllBelts(child) }
+                s.subSections.sumOf { child ->
+                    countDeepAllBelts(child)
+                }
             } else {
-                s.beltGroups
-                    .flatMap { group -> group.items }
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-                    .distinct()
-                    .size
+                s.beltGroups.sumOf { group ->
+                    group.items
+                        .map { item -> item.trim() }
+                        .filter { item -> item.isNotBlank() }
+                        .distinct()
+                        .size
+                }
             }
         }
 
-        val currentBeltCount = countDeepForCurrentBelt(section)
-
-        return if (currentBeltCount > 0) {
-            currentBeltCount
-        } else {
-            countDeepAllBelts(section)
-        }
+        return countDeepAllBelts(section)
     }
 
     private fun releasesCountForPick(
@@ -1483,10 +1481,21 @@ internal object SubjectTopicsUiLogic {
         currentBelt: Belt
     ): Int {
         val sectionId = releasesSectionIdForTitle(raw) ?: return 0
-        return hardSectionTotalItems(
+
+        val count = hardSectionTotalItems(
             sectionId = sectionId,
             currentBelt = currentBelt
         )
+
+        Log.d(
+            "KMI_RELEASES_COUNT",
+            "pick='$raw' " +
+                    "sectionId='$sectionId' " +
+                    "currentBelt='${currentBelt.id}' " +
+                    "count=$count"
+        )
+
+        return count
     }
 
     private fun normalizeCountValue(raw: String): String =
@@ -1547,11 +1556,111 @@ internal object SubjectTopicsUiLogic {
             .distinct()
     }
 
+    private fun isKicksSubject(
+        subject: SubjectTopic
+    ): Boolean {
+        val cleanId = subject.id
+            .trim()
+            .lowercase()
+
+        val cleanTitle = normalizeCountValue(
+            subject.titleHeb
+        ).lowercase()
+
+        return cleanId == "kicks" ||
+                cleanId == "topic_kicks" ||
+                cleanId == "kicks_hard" ||
+                cleanTitle == "בעיטות" ||
+                cleanTitle.contains("בעיטות")
+    }
+
+    private fun countAllKicksItems(
+        subjects: List<SubjectTopic>
+    ): Int {
+        val kicksSubjects = subjects.filter(::isKicksSubject)
+        val uniqueCanonicalIds = linkedSetOf<String>()
+
+        Log.d(
+            "KMI_KICKS_COUNT",
+            "kicksSubjects=${kicksSubjects.size} " +
+                    kicksSubjects.joinToString { subject ->
+                        "id='${subject.id}', title='${subject.titleHeb}'"
+                    }
+        )
+
+        kicksSubjects.forEach { kicksSubject ->
+            Log.d(
+                "KMI_KICKS_COUNT",
+                "subject id='${kicksSubject.id}' " +
+                        "title='${kicksSubject.titleHeb}' " +
+                        "belts=${kicksSubject.topicsByBelt.keys}"
+            )
+
+            kicksSubject.topicsByBelt.keys.forEach { belt ->
+                val sections = SubjectTopicsEngine
+                    .resolveSectionsForSubject(
+                        belt = belt,
+                        subject = kicksSubject
+                    )
+
+                val items = sections
+                    .flatMap { section ->
+                        section.items
+                    }
+
+                val rawCanonicalIds = items
+                    .map { item ->
+                        item.canonicalId.trim()
+                    }
+                    .filter { canonicalId ->
+                        canonicalId.isNotBlank()
+                    }
+
+                val uniqueForBelt = rawCanonicalIds
+                    .distinct()
+
+                Log.d(
+                    "KMI_KICKS_COUNT",
+                    "subject='${kicksSubject.id}' " +
+                            "belt='${belt.id}' " +
+                            "sections=${sections.size} " +
+                            "rawItems=${items.size} " +
+                            "uniqueForBelt=${uniqueForBelt.size}"
+                )
+
+                Log.d(
+                    "KMI_KICKS_COUNT",
+                    "subject='${kicksSubject.id}' " +
+                            "belt='${belt.id}' " +
+                            "canonicalIds=${uniqueForBelt.joinToString()}"
+                )
+
+                uniqueCanonicalIds.addAll(
+                    uniqueForBelt
+                )
+            }
+        }
+
+        Log.d(
+            "KMI_KICKS_COUNT",
+            "finalUniqueCount=${uniqueCanonicalIds.size}"
+        )
+
+        Log.d(
+            "KMI_KICKS_COUNT",
+            "finalCanonicalIds=${uniqueCanonicalIds.joinToString()}"
+        )
+
+        return uniqueCanonicalIds.size
+    }
+
     private fun countSubjectItemsForBelt(
         subject: SubjectTopic,
         currentBelt: Belt
     ): Int {
-        return SubjectTopicsEngine.countUiTitlesForSubject(subject)
+        return SubjectTopicsEngine.countUiTitlesForSubject(
+            subject
+        )
     }
 
     fun buildTopicsUiCountsPayload(
@@ -1559,12 +1668,54 @@ internal object SubjectTopicsUiLogic {
         handsBase: SubjectTopic?,
         currentBelt: Belt
     ): TopicsUiCountsPayload {
+        val allKicksCount = countAllKicksItems(
+            subjects = subjects
+        )
+
+        Log.d(
+            "KMI_KICKS_COUNT",
+            "buildPayload currentBelt='${currentBelt.id}' " +
+                    "allKicksCount=$allKicksCount"
+        )
+
         val subjectCounts = subjects.associate { subject ->
-            subject.id to countSubjectItemsForBelt(
+            val regularCount = countSubjectItemsForBelt(
                 subject = subject,
                 currentBelt = currentBelt
             )
+
+            val count =
+                if (isKicksSubject(subject) && allKicksCount > 0) {
+                    allKicksCount
+                } else {
+                    regularCount
+                }
+
+            if (isKicksSubject(subject)) {
+                Log.d(
+                    "KMI_KICKS_COUNT",
+                    "card subjectId='${subject.id}' " +
+                            "title='${subject.titleHeb}' " +
+                            "regularCount=$regularCount " +
+                            "allKicksCount=$allKicksCount " +
+                            "selectedCount=$count"
+                )
+            }
+
+            subject.id to count
         }
+
+        Log.d(
+            "KMI_KICKS_COUNT",
+            "subjectCountsForKicks=" +
+                    subjectCounts
+                        .filterKeys { key ->
+                            key.contains(
+                                "kick",
+                                ignoreCase = true
+                            )
+                        }
+        )
 
         val handsPicksOrder: List<String> =
             handsPicks(handsBase)
@@ -1639,6 +1790,21 @@ internal object SubjectTopicsUiLogic {
 
                     base.id to countsForBase
                 }
+
+        Log.d(
+            "KMI_RELEASES_COUNT",
+            "releasesCounts=" +
+                    subTopicsPickCountsBySubjectId["releases"]
+        )
+
+        Log.d(
+            "KMI_RELEASES_COUNT",
+            "releasesTotal=" +
+                    subTopicsPickCountsBySubjectId["releases"]
+                        .orEmpty()
+                        .values
+                        .sum()
+        )
 
         return TopicsUiCountsPayload(
             subjectCounts = subjectCounts,

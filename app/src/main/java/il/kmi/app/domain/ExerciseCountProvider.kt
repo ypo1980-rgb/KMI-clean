@@ -41,9 +41,14 @@ object ExerciseCountProvider {
             }
 
             clean == "בעיטות" ||
-                    clean == "topic_kicks" ||
-                    clean == "kicks" -> {
-                "kicks"
+                    clean == "topic_kicks" -> {
+                "topic_kicks"
+            }
+
+            clean == "הגנות נגד בעיטות" ||
+                    clean == "kicks" ||
+                    clean == "kicks_hard" -> {
+                "kicks_hard"
             }
 
             else -> null
@@ -151,7 +156,10 @@ object ExerciseCountProvider {
             )
         }
 
-        val hardCount = hardSectionExerciseCountForTopic(cleanTopic)
+        val hardCount = hardSectionExerciseCountForTopic(
+            cleanTopic
+        )
+
         if (hardCount > 0) {
             return ExerciseCountStats(
                 subTopicCount = 0,

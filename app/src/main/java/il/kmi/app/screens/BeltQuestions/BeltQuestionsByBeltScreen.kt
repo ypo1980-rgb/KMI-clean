@@ -1118,10 +1118,10 @@ private fun TopicsCardForBelt(
     val rowTitleColor = if (isDarkTheme) Color(0xFFF8FAFC) else Color(0xFF1F2937)
 
     // ✅ צבע הספירה לפי צבע החגורה — יותר ברור, בלי לצבוע את כל שורת הנושא
-    val rowSubColor = if (isDarkTheme) {
-        belt.color.copy(alpha = 1f)
-    } else {
-        belt.color.copy(alpha = 1f)
+    val rowSubColor = when {
+        isDarkTheme -> belt.color.copy(alpha = 1f)
+        belt == Belt.YELLOW -> Color(0xFFC98A00)
+        else -> belt.color.copy(alpha = 1f)
     }
 
     // ✅ שורת הנושא עצמה נשארת נקייה, בלי ריבועים
@@ -1296,7 +1296,7 @@ private fun TopicsCardForBelt(
 
                 Column(
                     modifier = Modifier
-                        .heightIn(max = listHeight)
+                        .height(listHeight)
                         .verticalScroll(topicsScroll)
                 ) {
                     topicTitles.forEachIndexed { index, title ->

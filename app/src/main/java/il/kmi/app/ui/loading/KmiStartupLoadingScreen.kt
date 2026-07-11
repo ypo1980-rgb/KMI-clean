@@ -67,6 +67,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -128,9 +129,11 @@ fun KmiStartupLoadingScreen(
     }
 
     LaunchedEffect(Unit) {
-        val preloadJob = launch {
+        val preloadJob = launch(Dispatchers.IO) {
             runCatching {
-                KmiStartupPreloader.preload(context)
+                KmiStartupPreloader.preload(
+                    context.applicationContext
+                )
             }
         }
 
