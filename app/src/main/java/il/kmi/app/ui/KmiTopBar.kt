@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -139,6 +140,29 @@ data class UiSearchResult(
     val subtitle: String?
 )
 
+/**
+ * גשר גלובלי לפתיחת מסך ההדרכה מתוך סרגל האייקונים.
+ *
+ * הניווט עצמו יחובר ב-MainNavHost, כך ש-KmiTopBar לא יהיה תלוי
+ * ישירות ב-NavHostController.
+ */
+object OnboardingBridge {
+
+    private var openHandler: (() -> Unit)? = null
+
+    fun bind(
+        handler: (() -> Unit)?
+    ) {
+        openHandler = handler
+    }
+
+    fun open(): Boolean {
+        val handler = openHandler ?: return false
+        handler()
+        return true
+    }
+}
+
 // --- חתימה (כולל חדשים) ---
 @Composable
 fun KmiTopBar(
@@ -156,6 +180,7 @@ fun KmiTopBar(
     showRoleStatus: Boolean = true,
     showSettings: Boolean = true,
     showBottomActions: Boolean = true,
+    showBottomHelp: Boolean = true,
     showBottomShare: Boolean = true,
     showModePill: Boolean = true,
     modePillIsCoach: Boolean? = null,
@@ -869,6 +894,34 @@ fun KmiTopBar(
                                             }
                                         }
                                     )
+
+                                    if (showBottomHelp) {
+                                        VerticalQuickActionItem(
+                                            icon = Icons.Filled.HelpOutline,
+                                            label = if (isEnglish) "Guide" else "הדרכה",
+                                            tint = Color(0xFF06B6D4),
+                                            background = Color(0x1A06B6D4),
+                                            enabled = true,
+                                            onClick = {
+                                                quickActionsExpanded = false
+                                                focusManager.clearFocus(force = true)
+
+                                                val opened = OnboardingBridge.open()
+
+                                                if (!opened) {
+                                                    android.widget.Toast.makeText(
+                                                        ctx,
+                                                        if (isEnglish) {
+                                                            "The app guide is not available yet"
+                                                        } else {
+                                                            "מסך ההדרכה עדיין לא מחובר"
+                                                        },
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        )
+                                    }
 
                                     if (showBottomShare) {
                                         VerticalQuickActionItem(

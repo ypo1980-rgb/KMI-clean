@@ -57,6 +57,10 @@ import il.kmi.app.screens.InitialLanguageScreen
 import com.google.firebase.auth.FirebaseAuth
 import il.kmi.app.screens.registration.RegistrationFormScreen
 import il.kmi.app.analytics.KmiUsageTracker
+import il.kmi.app.onboarding.OnboardingPreferences
+import il.kmi.app.onboarding.onboardingNavGraph
+import il.kmi.app.onboarding.OnboardingRoute
+import il.kmi.app.ui.OnboardingBridge
 
 private const val APP_ENTRY_ROUTE = "app_entry"
 private const val GOOGLE_PROFILE_COMPLETION_ROUTE = "google_profile_completion"
@@ -206,12 +210,44 @@ fun MainNavHost(
                 userPrefsForEntry.getBoolean("initial_language_selected", false)
     }
 
-    val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctx) }
-    val isEnglish = langManager.getCurrentLanguage() ==
-            il.kmi.shared.localization.AppLanguage.ENGLISH
+    val langManager = remember {
+        il.kmi.shared.localization.AppLanguageManager(ctx)
+    }
 
-    // ✅ אם MainApp ביקש לפתוח מסך ספציפי, למשל registration_landing,
-    // לא עוברים דרך app_entry / splash כדי למנוע מסך לבן ומעבר מיותר.
+    val isEnglish =
+        langManager.getCurrentLanguage() ==
+                il.kmi.shared.localization.AppLanguage.ENGLISH
+
+    DisposableEffect(nav) {
+        OnboardingBridge.bind {
+            val currentRoute =
+                nav.currentBackStackEntry
+                    ?.destination
+                    ?.route
+                    .orEmpty()
+
+            val alreadyInsideOnboarding =
+                currentRoute.startsWith("onboarding")
+
+            if (!alreadyInsideOnboarding) {
+                nav.navigate(
+                    OnboardingRoute.build(
+                        manual = true
+                    )
+                ) {
+                    launchSingleTop = true
+                    restoreState = false
+                }
+            }
+        }
+
+        onDispose {
+            OnboardingBridge.bind(null)
+        }
+    }
+
+// ✅ אם MainApp ביקש לפתוח מסך ספציפי, למשל registration_landing,
+// לא עוברים דרך app_entry / splash כדי למנוע מסך לבן ומעבר מיותר.
     val actualStartDestination = remember(startDestination) {
         when (startDestination) {
             // ✅ אחרי מסך הטעינה הנקי מ-AndroidAppRoot מותר להתחיל ישירות בבית.
@@ -1045,8 +1081,20 @@ fun MainNavHost(
                 kmiPrefs = kmiPrefs
             )
 
+            onboardingNavGraph(
+                nav = nav,
+                isEnglish = isEnglish,
+                onFinished = {
+                    nav.navigate(Route.Home.route) {
+                        popUpTo(0) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                    }
+                }
+            )
 
-            // --- NEW: Coach graph ---
+// --- NEW: Coach graph ---
             coachNavGraph(
                 nav = nav,
                 vm = vm,

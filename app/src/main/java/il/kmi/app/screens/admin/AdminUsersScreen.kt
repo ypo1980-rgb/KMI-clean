@@ -674,6 +674,1073 @@ object AdminUsersPreloadCache {
     }
 }
 
+private fun createAdminUsersPdf(
+    context: android.content.Context,
+    isEnglish: Boolean,
+    users: List<AdminUserRecord>,
+    traineeUsers: List<AdminUserRecord>,
+    coachUsers: List<AdminUserRecord>,
+    beltCounts: List<Pair<String, Int>>,
+    filtersSummary: String,
+    totalUsers: Int,
+    branchCount: Int,
+    averageAge: Double?,
+    totalAppOpens: Int,
+    activeUsersWithUsage: Int,
+    unlikeQuestions: List<AdminUserRecord.AssistantQuestionRecord>
+): java.io.File {
+    val pageWidth = 595
+    val pageHeight = 842
+
+    val contentLeft = 34f
+    val contentRight = pageWidth - 34f
+    val contentBottom = pageHeight - 58f
+
+    val document = android.graphics.pdf.PdfDocument()
+
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
+    val lightBlue = android.graphics.Color.rgb(128, 183, 220)
+    val darkText = android.graphics.Color.rgb(15, 23, 42)
+    val mutedText = android.graphics.Color.rgb(100, 116, 139)
+    val cardFill = android.graphics.Color.rgb(248, 250, 252)
+    val cardBorder = android.graphics.Color.rgb(203, 213, 225)
+    val successGreen = android.graphics.Color.rgb(22, 163, 74)
+    val infoBlue = android.graphics.Color.rgb(2, 132, 199)
+    val coachPurple = android.graphics.Color.rgb(124, 58, 237)
+    val warningOrange = android.graphics.Color.rgb(217, 119, 6)
+
+    val regularTypeface = android.graphics.Typeface.create(
+        android.graphics.Typeface.SANS_SERIF,
+        android.graphics.Typeface.NORMAL
+    )
+
+    val boldTypeface = android.graphics.Typeface.create(
+        android.graphics.Typeface.SANS_SERIF,
+        android.graphics.Typeface.BOLD
+    )
+
+    val headerTitlePaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = android.graphics.Color.WHITE
+        textSize = 25f
+        typeface = boldTypeface
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val headerSubtitlePaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = android.graphics.Color.WHITE
+        textSize = 12f
+        typeface = regularTypeface
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val sectionPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = darkText
+        textSize = 15f
+        typeface = boldTypeface
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val bodyPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = darkText
+        textSize = 10f
+        typeface = regularTypeface
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val bodyBoldPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = darkText
+        textSize = 11f
+        typeface = boldTypeface
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val smallPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = mutedText
+        textSize = 8.5f
+        typeface = regularTypeface
+    }
+
+    val cardFillPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = cardFill
+        style = android.graphics.Paint.Style.FILL
+    }
+
+    val cardStrokePaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = cardBorder
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 1f
+    }
+
+    var pageNumber = 0
+    lateinit var page: android.graphics.pdf.PdfDocument.Page
+    lateinit var canvas: android.graphics.Canvas
+    var y = 0f
+
+    fun tr(he: String, en: String): String {
+        return if (isEnglish) en else he
+    }
+
+    fun textX(): Float {
+        return if (isEnglish) contentLeft else contentRight
+    }
+
+    fun cleanText(value: String): String {
+        return value
+            .replace("\n", " ")
+            .replace("\r", " ")
+            .replace("\t", " ")
+            .replace("\u200F", "")
+            .replace("\u200E", "")
+            .replace("\u00A0", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    fun splitLines(
+        value: String,
+        paint: android.graphics.Paint,
+        maxWidth: Float,
+        maxLines: Int
+    ): List<String> {
+        val words = cleanText(value)
+            .split(" ")
+            .filter { it.isNotBlank() }
+
+        if (words.isEmpty()) {
+            return emptyList()
+        }
+
+        val result = mutableListOf<String>()
+        var current = ""
+
+        words.forEach { word ->
+            val candidate = if (current.isBlank()) {
+                word
+            } else {
+                "$current $word"
+            }
+
+            if (paint.measureText(candidate) <= maxWidth) {
+                current = candidate
+            } else {
+                if (current.isNotBlank()) {
+                    result += current
+                }
+
+                current = word
+            }
+        }
+
+        if (current.isNotBlank()) {
+            result += current
+        }
+
+        if (result.size <= maxLines) {
+            return result
+        }
+
+        val limited = result.take(maxLines).toMutableList()
+        var last = limited.last()
+
+        while (
+            last.length > 3 &&
+            paint.measureText("$last…") > maxWidth
+        ) {
+            last = last.dropLast(1)
+        }
+
+        limited[limited.lastIndex] = "$last…"
+
+        return limited
+    }
+
+    fun drawHeader() {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        val headerBottom = 122f
+
+        val navyPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val mediumStripePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = mediumBlue
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val lightStripePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = lightBlue
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(pageWidth.toFloat(), 0f)
+                lineTo(pageWidth.toFloat(), headerBottom)
+                lineTo(178f, headerBottom)
+                lineTo(238f, 0f)
+                close()
+            },
+            navyPaint
+        )
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(208f, headerBottom)
+                lineTo(224f, headerBottom)
+                lineTo(284f, 0f)
+                lineTo(268f, 0f)
+                close()
+            },
+            mediumStripePaint
+        )
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(230f, headerBottom)
+                lineTo(238f, headerBottom)
+                lineTo(298f, 0f)
+                lineTo(290f, 0f)
+                close()
+            },
+            lightStripePaint
+        )
+
+        val logoCenterX = 78f
+        val logoCenterY = 58f
+        val logoRadius = 42f
+
+        val logoOuterPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val logoInnerPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = android.graphics.Color.WHITE
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val logoTextPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            textSize = logoRadius * 0.62f
+            typeface = boldTypeface
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        canvas.drawCircle(
+            logoCenterX,
+            logoCenterY,
+            logoRadius,
+            logoOuterPaint
+        )
+
+        canvas.drawCircle(
+            logoCenterX,
+            logoCenterY,
+            logoRadius - 4f,
+            logoInnerPaint
+        )
+
+        canvas.drawText(
+            "KAMI",
+            logoCenterX,
+            logoCenterY + logoRadius * 0.22f,
+            logoTextPaint
+        )
+
+        val headerTextX = if (isEnglish) {
+            308f
+        } else {
+            435f
+        }
+
+        canvas.drawText(
+            tr(
+                "דו״ח ניהול משתמשים",
+                "User Management Report"
+            ),
+            headerTextX,
+            50f,
+            headerTitlePaint
+        )
+
+        canvas.drawText(
+            tr(
+                "משתמשים, שימושים וחלוקה לפי חגורות",
+                "Users, activity and belt distribution"
+            ),
+            headerTextX,
+            77f,
+            headerSubtitlePaint
+        )
+
+        val generatedDate = java.text.SimpleDateFormat(
+            "dd/MM/yyyy HH:mm",
+            java.util.Locale.getDefault()
+        ).format(java.util.Date())
+
+        smallPaint.textAlign = android.graphics.Paint.Align.RIGHT
+
+        canvas.drawText(
+            tr(
+                "תאריך הפקה: $generatedDate",
+                "Generated: $generatedDate"
+            ),
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+
+        y = 174f
+    }
+
+    fun drawFooter() {
+        val dividerPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = cardBorder
+            strokeWidth = 1f
+        }
+
+        canvas.drawLine(
+            contentLeft,
+            pageHeight - 42f,
+            contentRight,
+            pageHeight - 42f,
+            dividerPaint
+        )
+
+        smallPaint.textAlign = android.graphics.Paint.Align.CENTER
+
+        canvas.drawText(
+            tr(
+                "עמוד $pageNumber · KAMI",
+                "Page $pageNumber · KAMI"
+            ),
+            pageWidth / 2f,
+            pageHeight - 24f,
+            smallPaint
+        )
+    }
+
+    fun startPage() {
+        if (pageNumber > 0) {
+            drawFooter()
+            document.finishPage(page)
+        }
+
+        pageNumber++
+
+        page = document.startPage(
+            android.graphics.pdf.PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                pageNumber
+            ).create()
+        )
+
+        canvas = page.canvas
+        drawHeader()
+    }
+
+    fun ensureSpace(requiredHeight: Float) {
+        if (y + requiredHeight > contentBottom) {
+            startPage()
+        }
+    }
+
+    fun drawSectionTitle(title: String) {
+        ensureSpace(28f)
+
+        canvas.drawText(
+            title,
+            textX(),
+            y,
+            sectionPaint
+        )
+
+        y += 22f
+    }
+
+    fun drawSummaryCard(
+        title: String,
+        value: String,
+        valueColor: Int,
+        left: Float,
+        top: Float,
+        width: Float
+    ) {
+        val rect = android.graphics.RectF(
+            left,
+            top,
+            left + width,
+            top + 56f
+        )
+
+        canvas.drawRoundRect(
+            rect,
+            12f,
+            12f,
+            cardFillPaint
+        )
+
+        canvas.drawRoundRect(
+            rect,
+            12f,
+            12f,
+            cardStrokePaint
+        )
+
+        val valuePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = valueColor
+            textSize = 17f
+            typeface = boldTypeface
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        val labelPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = darkText
+            textSize = 9.2f
+            typeface = boldTypeface
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        canvas.drawText(
+            value,
+            rect.centerX(),
+            top + 24f,
+            valuePaint
+        )
+
+        canvas.drawText(
+            title,
+            rect.centerX(),
+            top + 43f,
+            labelPaint
+        )
+    }
+
+    fun drawBeltRow(
+        label: String,
+        count: Int
+    ) {
+        ensureSpace(31f)
+
+        val rowTop = y
+        val rowBottom = rowTop + 25f
+
+        canvas.drawRoundRect(
+            contentLeft,
+            rowTop,
+            contentRight,
+            rowBottom,
+            8f,
+            8f,
+            cardFillPaint
+        )
+
+        bodyBoldPaint.textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+
+        val labelX = if (isEnglish) {
+            contentLeft + 12f
+        } else {
+            contentRight - 12f
+        }
+
+        canvas.drawText(
+            label,
+            labelX,
+            rowTop + 17f,
+            bodyBoldPaint
+        )
+
+        val countPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = infoBlue
+            textSize = 11f
+            typeface = boldTypeface
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        canvas.drawText(
+            count.toString(),
+            if (isEnglish) contentRight - 26f else contentLeft + 26f,
+            rowTop + 17f,
+            countPaint
+        )
+
+        y = rowBottom + 5f
+    }
+
+    fun drawUserCard(
+        user: AdminUserRecord,
+        roleTitle: String,
+        roleColor: Int
+    ) {
+        val beltTitle = traineeRankDisplayName(
+            rawId = user.currentBeltId,
+            isEnglish = isEnglish
+        ).ifBlank {
+            tr(
+                "ללא חגורה",
+                "No belt"
+            )
+        }
+
+        val ageTitle = user.age?.toString()
+            ?: tr(
+                "לא ידוע",
+                "Unknown"
+            )
+
+        val regionTitle = user.displayRegionText(isEnglish)
+        val branchesTitle = user.displayBranchesText(isEnglish)
+        val lastSeenTitle = user.displayLastSeenText(isEnglish)
+        val tenureTitle = user.displayAppTenureText(isEnglish)
+
+        val nameLines = splitLines(
+            value = user.fullName,
+            paint = bodyBoldPaint,
+            maxWidth = contentRight - contentLeft - 110f,
+            maxLines = 2
+        )
+
+        val detailsText = tr(
+            "$beltTitle • גיל: $ageTitle • אזור: $regionTitle",
+            "$beltTitle • Age: $ageTitle • Region: $regionTitle"
+        )
+
+        val detailsLines = splitLines(
+            value = detailsText,
+            paint = bodyPaint,
+            maxWidth = contentRight - contentLeft - 28f,
+            maxLines = 2
+        )
+
+        val branchesLines = splitLines(
+            value = tr(
+                "סניפים: $branchesTitle",
+                "Branches: $branchesTitle"
+            ),
+            paint = bodyPaint,
+            maxWidth = contentRight - contentLeft - 28f,
+            maxLines = 2
+        )
+
+        val usageLines = splitLines(
+            value = tr(
+                "שימושים: ${user.appOpenCount} • שימוש אחרון: $lastSeenTitle • ותק: $tenureTitle",
+                "App opens: ${user.appOpenCount} • Last use: $lastSeenTitle • Tenure: $tenureTitle"
+            ),
+            paint = bodyPaint,
+            maxWidth = contentRight - contentLeft - 28f,
+            maxLines = 2
+        )
+
+        val requiredHeight =
+            22f +
+                    nameLines.size * 14f +
+                    detailsLines.size * 13f +
+                    branchesLines.size * 13f +
+                    usageLines.size * 13f +
+                    16f
+
+        ensureSpace(requiredHeight + 8f)
+
+        val rowTop = y
+        val rowBottom = rowTop + requiredHeight
+
+        canvas.drawRoundRect(
+            contentLeft,
+            rowTop,
+            contentRight,
+            rowBottom,
+            12f,
+            12f,
+            cardFillPaint
+        )
+
+        canvas.drawRoundRect(
+            contentLeft,
+            rowTop,
+            contentRight,
+            rowBottom,
+            12f,
+            12f,
+            cardStrokePaint
+        )
+
+        val roleStripePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = roleColor
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val stripeRect = if (isEnglish) {
+            android.graphics.RectF(
+                contentLeft,
+                rowTop,
+                contentLeft + 5f,
+                rowBottom
+            )
+        } else {
+            android.graphics.RectF(
+                contentRight - 5f,
+                rowTop,
+                contentRight,
+                rowBottom
+            )
+        }
+
+        canvas.drawRoundRect(
+            stripeRect,
+            4f,
+            4f,
+            roleStripePaint
+        )
+
+        val innerX = if (isEnglish) {
+            contentLeft + 14f
+        } else {
+            contentRight - 14f
+        }
+
+        var textY = rowTop + 18f
+
+        nameLines.forEach { line ->
+            canvas.drawText(
+                line,
+                innerX,
+                textY,
+                bodyBoldPaint
+            )
+
+            textY += 14f
+        }
+
+        val rolePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = roleColor
+            textSize = 9f
+            typeface = boldTypeface
+            textAlign = if (isEnglish) {
+                android.graphics.Paint.Align.RIGHT
+            } else {
+                android.graphics.Paint.Align.LEFT
+            }
+        }
+
+        canvas.drawText(
+            roleTitle,
+            if (isEnglish) contentRight - 14f else contentLeft + 14f,
+            rowTop + 18f,
+            rolePaint
+        )
+
+        detailsLines.forEach { line ->
+            canvas.drawText(
+                line,
+                innerX,
+                textY,
+                bodyPaint
+            )
+
+            textY += 13f
+        }
+
+        branchesLines.forEach { line ->
+            canvas.drawText(
+                line,
+                innerX,
+                textY,
+                bodyPaint
+            )
+
+            textY += 13f
+        }
+
+        usageLines.forEach { line ->
+            canvas.drawText(
+                line,
+                innerX,
+                textY,
+                bodyPaint
+            )
+
+            textY += 13f
+        }
+
+        y = rowBottom + 8f
+    }
+
+    fun drawUnlikeQuestion(
+        index: Int,
+        question: AdminUserRecord.AssistantQuestionRecord
+    ) {
+        val questionLines = splitLines(
+            value = question.question,
+            paint = bodyPaint,
+            maxWidth = contentRight - contentLeft - 36f,
+            maxLines = 5
+        )
+
+        val metadata = listOfNotNull(
+            question.userName?.trim()?.takeIf { it.isNotBlank() },
+            question.userUid?.trim()?.takeIf { it.isNotBlank() }
+        ).joinToString(" • ")
+
+        val metadataLines = splitLines(
+            value = metadata,
+            paint = smallPaint,
+            maxWidth = contentRight - contentLeft - 36f,
+            maxLines = 2
+        )
+
+        val requiredHeight =
+            18f +
+                    questionLines.size * 13f +
+                    metadataLines.size * 11f +
+                    12f
+
+        ensureSpace(requiredHeight + 7f)
+
+        val rowTop = y
+        val rowBottom = rowTop + requiredHeight
+
+        canvas.drawRoundRect(
+            contentLeft,
+            rowTop,
+            contentRight,
+            rowBottom,
+            10f,
+            10f,
+            cardFillPaint
+        )
+
+        canvas.drawRoundRect(
+            contentLeft,
+            rowTop,
+            contentRight,
+            rowBottom,
+            10f,
+            10f,
+            cardStrokePaint
+        )
+
+        val numberPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = warningOrange
+            textSize = 10f
+            typeface = boldTypeface
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        val numberX = if (isEnglish) {
+            contentLeft + 16f
+        } else {
+            contentRight - 16f
+        }
+
+        canvas.drawText(
+            (index + 1).toString(),
+            numberX,
+            rowTop + 18f,
+            numberPaint
+        )
+
+        val innerX = if (isEnglish) {
+            contentLeft + 34f
+        } else {
+            contentRight - 34f
+        }
+
+        var textY = rowTop + 18f
+
+        questionLines.forEach { line ->
+            canvas.drawText(
+                line,
+                innerX,
+                textY,
+                bodyPaint
+            )
+
+            textY += 13f
+        }
+
+        metadataLines.forEach { line ->
+            canvas.drawText(
+                line,
+                innerX,
+                textY,
+                smallPaint
+            )
+
+            textY += 11f
+        }
+
+        y = rowBottom + 7f
+    }
+
+    startPage()
+
+    drawSectionTitle(
+        tr(
+            "סיכום נתונים",
+            "Summary"
+        )
+    )
+
+    val gap = 8f
+    val summaryWidth =
+        (contentRight - contentLeft - gap * 2f) / 3f
+
+    drawSummaryCard(
+        title = tr("משתמשים", "Users"),
+        value = totalUsers.toString(),
+        valueColor = infoBlue,
+        left = contentLeft,
+        top = y,
+        width = summaryWidth
+    )
+
+    drawSummaryCard(
+        title = tr("סניפים", "Branches"),
+        value = branchCount.toString(),
+        valueColor = mediumBlue,
+        left = contentLeft + summaryWidth + gap,
+        top = y,
+        width = summaryWidth
+    )
+
+    drawSummaryCard(
+        title = tr("גיל ממוצע", "Avg. age"),
+        value = averageAge?.let {
+            String.format(
+                java.util.Locale.US,
+                "%.1f",
+                it
+            )
+        } ?: "-",
+        valueColor = successGreen,
+        left = contentLeft + (summaryWidth + gap) * 2f,
+        top = y,
+        width = summaryWidth
+    )
+
+    y += 66f
+
+    drawSummaryCard(
+        title = tr("שימושים", "App opens"),
+        value = totalAppOpens.toString(),
+        valueColor = infoBlue,
+        left = contentLeft,
+        top = y,
+        width = summaryWidth
+    )
+
+    drawSummaryCard(
+        title = tr("פעילים", "Active users"),
+        value = activeUsersWithUsage.toString(),
+        valueColor = successGreen,
+        left = contentLeft + summaryWidth + gap,
+        top = y,
+        width = summaryWidth
+    )
+
+    drawSummaryCard(
+        title = tr("מסוננים", "Filtered"),
+        value = users.size.toString(),
+        valueColor = coachPurple,
+        left = contentLeft + (summaryWidth + gap) * 2f,
+        top = y,
+        width = summaryWidth
+    )
+
+    y += 72f
+
+    drawSectionTitle(
+        tr(
+            "פילטרים פעילים",
+            "Active filters"
+        )
+    )
+
+    val filterLines = splitLines(
+        value = filtersSummary,
+        paint = bodyPaint,
+        maxWidth = contentRight - contentLeft,
+        maxLines = 4
+    )
+
+    filterLines.forEach { line ->
+        canvas.drawText(
+            line,
+            textX(),
+            y,
+            bodyPaint
+        )
+
+        y += 13f
+    }
+
+    y += 10f
+
+    drawSectionTitle(
+        tr(
+            "חלוקה לפי חגורה",
+            "Belt distribution"
+        )
+    )
+
+    beltCounts.forEach { (label, count) ->
+        drawBeltRow(
+            label = label,
+            count = count
+        )
+    }
+
+    y += 8f
+
+    drawSectionTitle(
+        tr(
+            "מתאמנים (${traineeUsers.size})",
+            "Trainees (${traineeUsers.size})"
+        )
+    )
+
+    traineeUsers.forEach { user ->
+        drawUserCard(
+            user = user,
+            roleTitle = tr("מתאמן", "Trainee"),
+            roleColor = infoBlue
+        )
+    }
+
+    y += 8f
+
+    drawSectionTitle(
+        tr(
+            "מאמנים (${coachUsers.size})",
+            "Coaches (${coachUsers.size})"
+        )
+    )
+
+    coachUsers.forEach { user ->
+        drawUserCard(
+            user = user,
+            roleTitle = tr("מאמן", "Coach"),
+            roleColor = coachPurple
+        )
+    }
+
+    if (unlikeQuestions.isNotEmpty()) {
+        y += 8f
+
+        drawSectionTitle(
+            tr(
+                "שאלות שסומנו UNLIKE",
+                "Questions marked UNLIKE"
+            )
+        )
+
+        unlikeQuestions
+            .take(20)
+            .forEachIndexed { index, question ->
+                drawUnlikeQuestion(
+                    index = index,
+                    question = question
+                )
+            }
+    }
+
+    drawFooter()
+    document.finishPage(page)
+
+    val outputDirectory = java.io.File(
+        context.cacheDir,
+        "admin_users_pdf"
+    ).apply {
+        mkdirs()
+    }
+
+    val outputFile = java.io.File(
+        outputDirectory,
+        "admin_users_${System.currentTimeMillis()}.pdf"
+    )
+
+    try {
+        java.io.FileOutputStream(outputFile).use { output ->
+            document.writeTo(output)
+        }
+    } finally {
+        document.close()
+    }
+
+    return outputFile
+}
+
 // ===========================
 //   מסך ניהול משתמשים
 // ===========================
@@ -855,31 +1922,187 @@ fun AdminUsersScreen(
 
     val outerScroll = rememberScrollState()
 
+    val activeFiltersSummary = buildList {
+        genderFilter?.let { gender ->
+            add(
+                when (gender) {
+                    "male" -> adminTr(isEnglish, "מין: זכר", "Gender: Male")
+                    "female" -> adminTr(isEnglish, "מין: נקבה", "Gender: Female")
+                    else -> adminTr(
+                        isEnglish,
+                        "מין: $gender",
+                        "Gender: $gender"
+                    )
+                }
+            )
+        }
+
+        regionFilter?.let { region ->
+            add(
+                adminTr(
+                    isEnglish,
+                    "אזור: $region",
+                    "Region: $region"
+                )
+            )
+        }
+
+        beltFilter?.let { belt ->
+            add(
+                adminTr(
+                    isEnglish,
+                    "חגורה: $belt",
+                    "Belt: $belt"
+                )
+            )
+        }
+
+        ageBucketFilter?.let { ageBucket ->
+            add(
+                adminTr(
+                    isEnglish,
+                    "קבוצת גיל: ${adminAgeBucketLabel(ageBucket, isEnglish)}",
+                    "Age group: ${adminAgeBucketLabel(ageBucket, isEnglish)}"
+                )
+            )
+        }
+    }.joinToString(" • ").ifBlank {
+        adminTr(
+            isEnglish,
+            "אין פילטרים פעילים",
+            "No active filters"
+        )
+    }
+
+    val pdfBeltCounts = beltCountsOrdered.map { (label, count, _) ->
+        label to count
+    }
+
+    val onExportUsersPdf: () -> Unit = {
+        if (loading) {
+            android.widget.Toast.makeText(
+                contextLang,
+                adminTr(
+                    isEnglish,
+                    "נתוני המשתמשים עדיין נטענים",
+                    "The users data is still loading"
+                ),
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            runCatching {
+                val pdfFile = createAdminUsersPdf(
+                    context = contextLang,
+                    isEnglish = isEnglish,
+                    users = filteredUsers,
+                    traineeUsers = traineeUiUsers,
+                    coachUsers = coachUiUsers,
+                    beltCounts = pdfBeltCounts,
+                    filtersSummary = activeFiltersSummary,
+                    totalUsers = totalUsers,
+                    branchCount = branchCount,
+                    averageAge = avgAge,
+                    totalAppOpens = totalAppOpens,
+                    activeUsersWithUsage = activeUsersWithUsage,
+                    unlikeQuestions = unlikeQuestions
+                )
+
+                val pdfUri = androidx.core.content.FileProvider.getUriForFile(
+                    contextLang,
+                    "${contextLang.packageName}.fileprovider",
+                    pdfFile
+                )
+
+                val shareIntent = android.content.Intent(
+                    android.content.Intent.ACTION_SEND
+                ).apply {
+                    type = "application/pdf"
+
+                    putExtra(
+                        android.content.Intent.EXTRA_SUBJECT,
+                        adminTr(
+                            isEnglish,
+                            "דו״ח ניהול משתמשים",
+                            "User Management Report"
+                        )
+                    )
+
+                    putExtra(
+                        android.content.Intent.EXTRA_STREAM,
+                        pdfUri
+                    )
+
+                    addFlags(
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+
+                    if (contextLang !is android.app.Activity) {
+                        addFlags(
+                            android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                        )
+                    }
+                }
+
+                val chooserIntent = android.content.Intent.createChooser(
+                    shareIntent,
+                    adminTr(
+                        isEnglish,
+                        "שיתוף דו״ח PDF",
+                        "Share PDF report"
+                    )
+                )
+
+                if (contextLang !is android.app.Activity) {
+                    chooserIntent.addFlags(
+                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    )
+                }
+
+                contextLang.startActivity(chooserIntent)
+            }.onFailure {
+                android.widget.Toast.makeText(
+                    contextLang,
+                    adminTr(
+                        isEnglish,
+                        "יצירת קובץ ה־PDF נכשלה",
+                        "Failed to create the PDF file"
+                    ),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
 
             KmiTopBar(
-                title = adminTr(isEnglish, "ניהול משתמשים", "User management"),
-
-                // ✅ מפעיל את אייקון הבית בסרגל האייקונים הצדדי
+                title = adminTr(
+                    isEnglish,
+                    "ניהול משתמשים",
+                    "User management"
+                ),
                 onHome = onHome,
-
-                // ✅ לא מציגים בית/חיפוש בכותרת העליונה עצמה,
-                // אלא רק בסרגל האייקונים הצדדי כמו בשאר המסכים
                 showTopHome = false,
                 showTopSearch = false,
-
-                // ✅ חובה false כדי שאייקון החיפוש בסרגל הצדדי יעבוד
+                showTopShare = false,
                 lockSearch = false,
-
-                // ✅ הבית לא נעול
                 lockHome = false,
-
                 showBottomActions = true,
-                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                onShare = onExportUsersPdf,
+                currentLang = if (
+                    langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+                ) {
+                    "en"
+                } else {
+                    "he"
+                },
                 onToggleLanguage = {
                     val newLang =
-                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                        if (
+                            langManager.getCurrentLanguage() ==
+                            AppLanguage.HEBREW
+                        ) {
                             AppLanguage.ENGLISH
                         } else {
                             AppLanguage.HEBREW
@@ -888,7 +2111,6 @@ fun AdminUsersScreen(
                     langManager.setLanguage(newLang)
                     (contextLang as? Activity)?.recreate()
                 }
-                // אין צורך ב-onBack כי זה לא דיאלוג נוסף
             )
         }
     ) { padding ->

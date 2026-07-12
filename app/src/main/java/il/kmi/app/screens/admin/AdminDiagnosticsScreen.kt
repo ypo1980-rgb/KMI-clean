@@ -115,6 +115,908 @@ private enum class AdminDiagnosticsType(
     Push("push", "Push", "Push")
 }
 
+private fun createAdminDiagnosticsPdf(
+    context: android.content.Context,
+    isEnglish: Boolean,
+    rangeTitle: String,
+    typeTitle: String,
+    logs: List<AdminDiagnosticLog>,
+    topScreens: List<AdminTopScreen>,
+    errorCount: Int,
+    loginCount: Int,
+    searchNoResultsCount: Int,
+    successCount: Int
+): java.io.File {
+    val pageWidth = 595
+    val pageHeight = 842
+
+    val contentLeft = 36f
+    val contentRight = pageWidth - 36f
+    val contentBottom = pageHeight - 58f
+
+    val document = android.graphics.pdf.PdfDocument()
+
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
+    val lightHeaderBlue = android.graphics.Color.rgb(128, 183, 220)
+    val darkText = android.graphics.Color.rgb(15, 23, 42)
+    val mutedText = android.graphics.Color.rgb(100, 116, 139)
+    val lightCard = android.graphics.Color.rgb(248, 250, 252)
+    val cardBorder = android.graphics.Color.rgb(203, 213, 225)
+    val errorRed = android.graphics.Color.rgb(225, 29, 72)
+    val successGreen = android.graphics.Color.rgb(22, 163, 74)
+    val warningOrange = android.graphics.Color.rgb(217, 119, 6)
+    val infoBlue = android.graphics.Color.rgb(2, 132, 199)
+
+    val regularTypeface = android.graphics.Typeface.create(
+        android.graphics.Typeface.SANS_SERIF,
+        android.graphics.Typeface.NORMAL
+    )
+
+    val boldTypeface = android.graphics.Typeface.create(
+        android.graphics.Typeface.SANS_SERIF,
+        android.graphics.Typeface.BOLD
+    )
+
+    val titlePaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = android.graphics.Color.WHITE
+        textSize = 25f
+        typeface = boldTypeface
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val subtitlePaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = android.graphics.Color.WHITE
+        textSize = 12f
+        typeface = regularTypeface
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val sectionPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = darkText
+        textSize = 15f
+        typeface = boldTypeface
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val bodyPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = darkText
+        textSize = 10.5f
+        typeface = regularTypeface
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val bodyBoldPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = darkText
+        textSize = 11f
+        typeface = boldTypeface
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val smallPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = mutedText
+        textSize = 8.8f
+        typeface = regularTypeface
+    }
+
+    val cardFillPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = lightCard
+        style = android.graphics.Paint.Style.FILL
+    }
+
+    val cardStrokePaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = cardBorder
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 1f
+    }
+
+    var pageNumber = 0
+    lateinit var page: android.graphics.pdf.PdfDocument.Page
+    lateinit var canvas: android.graphics.Canvas
+    var y = 0f
+
+    fun textX(): Float {
+        return if (isEnglish) contentLeft else contentRight
+    }
+
+    fun cleanText(value: String): String {
+        return value
+            .replace("\n", " ")
+            .replace("\r", " ")
+            .replace("\t", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    fun splitLines(
+        value: String,
+        paint: android.graphics.Paint,
+        maxWidth: Float,
+        maxLines: Int
+    ): List<String> {
+        val words = cleanText(value)
+            .split(" ")
+            .filter { it.isNotBlank() }
+
+        if (words.isEmpty()) {
+            return emptyList()
+        }
+
+        val lines = mutableListOf<String>()
+        var currentLine = ""
+
+        words.forEach { word ->
+            val candidate = if (currentLine.isBlank()) {
+                word
+            } else {
+                "$currentLine $word"
+            }
+
+            if (paint.measureText(candidate) <= maxWidth) {
+                currentLine = candidate
+            } else {
+                if (currentLine.isNotBlank()) {
+                    lines += currentLine
+                }
+
+                currentLine = word
+            }
+        }
+
+        if (currentLine.isNotBlank()) {
+            lines += currentLine
+        }
+
+        if (lines.size <= maxLines) {
+            return lines
+        }
+
+        val result = lines.take(maxLines).toMutableList()
+        var lastLine = result.last()
+
+        while (
+            lastLine.length > 3 &&
+            paint.measureText("$lastLine…") > maxWidth
+        ) {
+            lastLine = lastLine.dropLast(1)
+        }
+
+        result[result.lastIndex] = "$lastLine…"
+
+        return result
+    }
+
+    fun drawHeader() {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        val headerBottom = 122f
+
+        val navyPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val mediumStripePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = mediumBlue
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val lightStripePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = lightHeaderBlue
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(pageWidth.toFloat(), 0f)
+                lineTo(pageWidth.toFloat(), headerBottom)
+                lineTo(178f, headerBottom)
+                lineTo(238f, 0f)
+                close()
+            },
+            navyPaint
+        )
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(208f, headerBottom)
+                lineTo(224f, headerBottom)
+                lineTo(284f, 0f)
+                lineTo(268f, 0f)
+                close()
+            },
+            mediumStripePaint
+        )
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(230f, headerBottom)
+                lineTo(238f, headerBottom)
+                lineTo(298f, 0f)
+                lineTo(290f, 0f)
+                close()
+            },
+            lightStripePaint
+        )
+
+        val logoCenterX = 78f
+        val logoCenterY = 58f
+        val logoRadius = 42f
+
+        val logoOuterPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val logoInnerPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = android.graphics.Color.WHITE
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val logoTextPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            textSize = logoRadius * 0.62f
+            typeface = boldTypeface
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        canvas.drawCircle(
+            logoCenterX,
+            logoCenterY,
+            logoRadius,
+            logoOuterPaint
+        )
+
+        canvas.drawCircle(
+            logoCenterX,
+            logoCenterY,
+            logoRadius - 4f,
+            logoInnerPaint
+        )
+
+        canvas.drawText(
+            "KAMI",
+            logoCenterX,
+            logoCenterY + logoRadius * 0.22f,
+            logoTextPaint
+        )
+
+        val headerTextX = if (isEnglish) {
+            308f
+        } else {
+            435f
+        }
+
+        canvas.drawText(
+            if (isEnglish) {
+                "Diagnostics Report"
+            } else {
+                "דו״ח בקרה ולוגים"
+            },
+            headerTextX,
+            50f,
+            titlePaint
+        )
+
+        canvas.drawText(
+            if (isEnglish) {
+                "$rangeTitle · $typeTitle"
+            } else {
+                "$rangeTitle · $typeTitle"
+            },
+            headerTextX,
+            77f,
+            subtitlePaint
+        )
+
+        val generatedDate = java.text.SimpleDateFormat(
+            "dd/MM/yyyy HH:mm",
+            java.util.Locale.getDefault()
+        ).format(java.util.Date())
+
+        smallPaint.textAlign = android.graphics.Paint.Align.RIGHT
+
+        canvas.drawText(
+            if (isEnglish) {
+                "Generated: $generatedDate"
+            } else {
+                "תאריך הפקה: $generatedDate"
+            },
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+
+        y = 174f
+    }
+
+    fun drawFooter() {
+        val dividerPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = cardBorder
+            strokeWidth = 1f
+        }
+
+        canvas.drawLine(
+            contentLeft,
+            pageHeight - 42f,
+            contentRight,
+            pageHeight - 42f,
+            dividerPaint
+        )
+
+        smallPaint.textAlign = android.graphics.Paint.Align.CENTER
+
+        canvas.drawText(
+            if (isEnglish) {
+                "Page $pageNumber · KAMI"
+            } else {
+                "עמוד $pageNumber · KAMI"
+            },
+            pageWidth / 2f,
+            pageHeight - 24f,
+            smallPaint
+        )
+    }
+
+    fun startPage() {
+        if (pageNumber > 0) {
+            drawFooter()
+            document.finishPage(page)
+        }
+
+        pageNumber++
+
+        page = document.startPage(
+            android.graphics.pdf.PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                pageNumber
+            ).create()
+        )
+
+        canvas = page.canvas
+        drawHeader()
+    }
+
+    fun ensureSpace(requiredHeight: Float) {
+        if (y + requiredHeight > contentBottom) {
+            startPage()
+        }
+    }
+
+    fun drawSectionTitle(value: String) {
+        ensureSpace(28f)
+
+        canvas.drawText(
+            value,
+            textX(),
+            y,
+            sectionPaint
+        )
+
+        y += 20f
+    }
+
+    fun drawSummaryCard(
+        title: String,
+        value: Int,
+        color: Int,
+        left: Float,
+        top: Float,
+        width: Float
+    ) {
+        val rect = android.graphics.RectF(
+            left,
+            top,
+            left + width,
+            top + 56f
+        )
+
+        canvas.drawRoundRect(
+            rect,
+            12f,
+            12f,
+            cardFillPaint
+        )
+
+        canvas.drawRoundRect(
+            rect,
+            12f,
+            12f,
+            cardStrokePaint
+        )
+
+        val valuePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            this.color = color
+            textSize = 17f
+            typeface = boldTypeface
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        val labelPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            this.color = darkText
+            textSize = 9.5f
+            typeface = boldTypeface
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        canvas.drawText(
+            value.toString(),
+            rect.centerX(),
+            top + 24f,
+            valuePaint
+        )
+
+        canvas.drawText(
+            title,
+            rect.centerX(),
+            top + 43f,
+            labelPaint
+        )
+    }
+
+    fun drawTopScreenRow(
+        index: Int,
+        screen: AdminTopScreen
+    ) {
+        ensureSpace(32f)
+
+        val rowTop = y
+        val rowBottom = rowTop + 26f
+
+        canvas.drawRoundRect(
+            contentLeft,
+            rowTop,
+            contentRight,
+            rowBottom,
+            8f,
+            8f,
+            cardFillPaint
+        )
+
+        val numberPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = infoBlue
+            textSize = 10f
+            typeface = boldTypeface
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        canvas.drawText(
+            (index + 1).toString(),
+            if (isEnglish) contentLeft + 18f else contentRight - 18f,
+            rowTop + 17f,
+            numberPaint
+        )
+
+        val countPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = successGreen
+            textSize = 10f
+            typeface = boldTypeface
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        canvas.drawText(
+            screen.count.toString(),
+            if (isEnglish) contentRight - 28f else contentLeft + 28f,
+            rowTop + 17f,
+            countPaint
+        )
+
+        val nameX = if (isEnglish) {
+            contentLeft + 42f
+        } else {
+            contentRight - 42f
+        }
+
+        val maxWidth = contentRight - contentLeft - 110f
+
+        val nameLine = splitLines(
+            value = screen.screenName,
+            paint = bodyBoldPaint,
+            maxWidth = maxWidth,
+            maxLines = 1
+        ).firstOrNull().orEmpty()
+
+        canvas.drawText(
+            nameLine,
+            nameX,
+            rowTop + 17f,
+            bodyBoldPaint
+        )
+
+        y = rowBottom + 6f
+    }
+
+    fun drawLogCard(log: AdminDiagnosticLog) {
+        val titleLines = splitLines(
+            value = log.title.ifBlank {
+                log.type.ifBlank {
+                    if (isEnglish) "Log event" else "אירוע לוג"
+                }
+            },
+            paint = bodyBoldPaint,
+            maxWidth = contentRight - contentLeft - 24f,
+            maxLines = 2
+        )
+
+        val messageLines = splitLines(
+            value = log.message,
+            paint = bodyPaint,
+            maxWidth = contentRight - contentLeft - 24f,
+            maxLines = 5
+        )
+
+        val metadataText = buildString {
+            append(
+                if (isEnglish) {
+                    "Area: ${log.area.ifBlank { "-" }}"
+                } else {
+                    "אזור: ${log.area.ifBlank { "-" }}"
+                }
+            )
+
+            if (log.userRole.isNotBlank()) {
+                append("  |  ")
+                append(
+                    if (isEnglish) {
+                        "Role: ${log.userRole}"
+                    } else {
+                        "תפקיד: ${log.userRole}"
+                    }
+                )
+            }
+
+            if (log.appVersion.isNotBlank()) {
+                append("  |  ")
+                append(
+                    if (isEnglish) {
+                        "Version: ${log.appVersion}"
+                    } else {
+                        "גרסה: ${log.appVersion}"
+                    }
+                )
+            }
+        }
+
+        val metadataLines = splitLines(
+            value = metadataText,
+            paint = smallPaint,
+            maxWidth = contentRight - contentLeft - 24f,
+            maxLines = 2
+        )
+
+        val requiredHeight =
+            28f +
+                    titleLines.size * 14f +
+                    messageLines.size * 13f +
+                    metadataLines.size * 12f +
+                    22f
+
+        ensureSpace(requiredHeight + 8f)
+
+        val rowTop = y
+        val rowBottom = rowTop + requiredHeight
+
+        canvas.drawRoundRect(
+            contentLeft,
+            rowTop,
+            contentRight,
+            rowBottom,
+            12f,
+            12f,
+            cardFillPaint
+        )
+
+        canvas.drawRoundRect(
+            contentLeft,
+            rowTop,
+            contentRight,
+            rowBottom,
+            12f,
+            12f,
+            cardStrokePaint
+        )
+
+        val statusColor = when {
+            log.severity.equals("error", ignoreCase = true) ||
+                    log.type.contains("error", ignoreCase = true) ||
+                    log.type.contains("failed", ignoreCase = true) ->
+                errorRed
+
+            log.severity.equals("success", ignoreCase = true) ||
+                    log.type.contains("success", ignoreCase = true) ->
+                successGreen
+
+            log.type.contains("search", ignoreCase = true) ->
+                warningOrange
+
+            else ->
+                infoBlue
+        }
+
+        val statusPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = statusColor
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        canvas.drawRoundRect(
+            if (isEnglish) {
+                android.graphics.RectF(
+                    contentLeft,
+                    rowTop,
+                    contentLeft + 5f,
+                    rowBottom
+                )
+            } else {
+                android.graphics.RectF(
+                    contentRight - 5f,
+                    rowTop,
+                    contentRight,
+                    rowBottom
+                )
+            },
+            4f,
+            4f,
+            statusPaint
+        )
+
+        val innerX = if (isEnglish) {
+            contentLeft + 14f
+        } else {
+            contentRight - 14f
+        }
+
+        var textY = rowTop + 19f
+
+        titleLines.forEach { line ->
+            canvas.drawText(
+                line,
+                innerX,
+                textY,
+                bodyBoldPaint
+            )
+
+            textY += 14f
+        }
+
+        val timeText = formatLogTime(
+            timestamp = log.createdAt,
+            isEnglish = isEnglish
+        )
+
+        smallPaint.textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+
+        canvas.drawText(
+            timeText,
+            innerX,
+            textY,
+            smallPaint
+        )
+
+        textY += 14f
+
+        messageLines.forEach { line ->
+            canvas.drawText(
+                line,
+                innerX,
+                textY,
+                bodyPaint
+            )
+
+            textY += 13f
+        }
+
+        if (messageLines.isNotEmpty()) {
+            textY += 3f
+        }
+
+        metadataLines.forEach { line ->
+            canvas.drawText(
+                line,
+                innerX,
+                textY,
+                smallPaint
+            )
+
+            textY += 12f
+        }
+
+        y = rowBottom + 8f
+    }
+
+    startPage()
+
+    drawSectionTitle(
+        if (isEnglish) {
+            "Summary"
+        } else {
+            "סיכום נתונים"
+        }
+    )
+
+    val summaryGap = 8f
+    val summaryCardWidth =
+        (contentRight - contentLeft - summaryGap * 2f) / 3f
+
+    drawSummaryCard(
+        title = if (isEnglish) "Events" else "אירועים",
+        value = logs.size,
+        color = infoBlue,
+        left = contentLeft,
+        top = y,
+        width = summaryCardWidth
+    )
+
+    drawSummaryCard(
+        title = if (isEnglish) "Errors" else "שגיאות",
+        value = errorCount,
+        color = errorRed,
+        left = contentLeft + summaryCardWidth + summaryGap,
+        top = y,
+        width = summaryCardWidth
+    )
+
+    drawSummaryCard(
+        title = if (isEnglish) "Logins" else "כניסות",
+        value = loginCount,
+        color = successGreen,
+        left = contentLeft + (summaryCardWidth + summaryGap) * 2f,
+        top = y,
+        width = summaryCardWidth
+    )
+
+    y += 66f
+
+    drawSummaryCard(
+        title = if (isEnglish) "No results" else "ללא תוצאה",
+        value = searchNoResultsCount,
+        color = warningOrange,
+        left = contentLeft,
+        top = y,
+        width = summaryCardWidth
+    )
+
+    drawSummaryCard(
+        title = if (isEnglish) "Successes" else "הצלחות",
+        value = successCount,
+        color = successGreen,
+        left = contentLeft + summaryCardWidth + summaryGap,
+        top = y,
+        width = summaryCardWidth
+    )
+
+    drawSummaryCard(
+        title = if (isEnglish) "Screens" else "מסכים",
+        value = topScreens.size,
+        color = infoBlue,
+        left = contentLeft + (summaryCardWidth + summaryGap) * 2f,
+        top = y,
+        width = summaryCardWidth
+    )
+
+    y += 74f
+
+    if (topScreens.isNotEmpty()) {
+        drawSectionTitle(
+            if (isEnglish) {
+                "Top screens"
+            } else {
+                "המסכים הנצפים ביותר"
+            }
+        )
+
+        topScreens.take(10).forEachIndexed { index, screen ->
+            drawTopScreenRow(
+                index = index,
+                screen = screen
+            )
+        }
+
+        y += 8f
+    }
+
+    drawSectionTitle(
+        if (isEnglish) {
+            "Diagnostic events (${logs.size})"
+        } else {
+            "אירועי אבחון (${logs.size})"
+        }
+    )
+
+    logs.forEach { log ->
+        drawLogCard(log)
+    }
+
+    drawFooter()
+    document.finishPage(page)
+
+    val outputDirectory = java.io.File(
+        context.cacheDir,
+        "admin_diagnostics_pdf"
+    ).apply {
+        mkdirs()
+    }
+
+    val outputFile = java.io.File(
+        outputDirectory,
+        "admin_diagnostics_${System.currentTimeMillis()}.pdf"
+    )
+
+    try {
+        java.io.FileOutputStream(outputFile).use { output ->
+            document.writeTo(output)
+        }
+    } finally {
+        document.close()
+    }
+
+    return outputFile
+}
+
 @Composable
 fun AdminDiagnosticsScreen(
     isEnglish: Boolean,
@@ -585,15 +1487,120 @@ fun AdminDiagnosticsScreen(
             .take(10)
     }
 
+    val selectedRangeTitle = if (isEnglish) {
+        selectedRange.titleEn
+    } else {
+        selectedRange.titleHe
+    }
+
+    val selectedTypeTitle = if (isEnglish) {
+        selectedType.titleEn
+    } else {
+        selectedType.titleHe
+    }
+
+    val onExportDiagnosticsPdf: () -> Unit = {
+        if (loading) {
+            android.widget.Toast.makeText(
+                ctx,
+                tr(
+                    "הנתונים עדיין נטענים",
+                    "The diagnostics data is still loading"
+                ),
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            runCatching {
+                val pdfFile = createAdminDiagnosticsPdf(
+                    context = ctx,
+                    isEnglish = isEnglish,
+                    rangeTitle = selectedRangeTitle,
+                    typeTitle = selectedTypeTitle,
+                    logs = visibleLogs,
+                    topScreens = visibleTopScreens,
+                    errorCount = errorCount,
+                    loginCount = loginCount,
+                    searchNoResultsCount = searchNoResultsCount,
+                    successCount = successCount
+                )
+
+                val pdfUri = androidx.core.content.FileProvider.getUriForFile(
+                    ctx,
+                    "${ctx.packageName}.fileprovider",
+                    pdfFile
+                )
+
+                val shareIntent = android.content.Intent(
+                    android.content.Intent.ACTION_SEND
+                ).apply {
+                    type = "application/pdf"
+
+                    putExtra(
+                        android.content.Intent.EXTRA_SUBJECT,
+                        tr(
+                            "דו״ח בקרה ולוגים",
+                            "Diagnostics Report"
+                        )
+                    )
+
+                    putExtra(
+                        android.content.Intent.EXTRA_STREAM,
+                        pdfUri
+                    )
+
+                    addFlags(
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+
+                    if (ctx !is android.app.Activity) {
+                        addFlags(
+                            android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                        )
+                    }
+                }
+
+                val chooserIntent = android.content.Intent.createChooser(
+                    shareIntent,
+                    tr(
+                        "שיתוף דו״ח PDF",
+                        "Share PDF report"
+                    )
+                )
+
+                if (ctx !is android.app.Activity) {
+                    chooserIntent.addFlags(
+                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                    )
+                }
+
+                ctx.startActivity(chooserIntent)
+            }.onFailure {
+                android.widget.Toast.makeText(
+                    ctx,
+                    tr(
+                        "יצירת קובץ ה־PDF נכשלה",
+                        "Failed to create the PDF file"
+                    ),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             KmiTopBar(
-                title = tr("מרכז בקרה ולוגים", "Control Center & Logs"),
+                title = tr(
+                    "מרכז בקרה ולוגים",
+                    "Control Center & Logs"
+                ),
                 onHome = onHome,
                 showTopHome = false,
                 showTopSearch = false,
+                showTopShare = false,
                 showBottomActions = true,
                 lockSearch = false,
+                onShare = onExportDiagnosticsPdf,
                 centerTitle = true,
                 onPickSearchResult = {}
             )
