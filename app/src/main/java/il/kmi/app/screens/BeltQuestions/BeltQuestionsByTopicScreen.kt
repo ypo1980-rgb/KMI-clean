@@ -1,7 +1,17 @@
 package il.kmi.app.screens.BeltQuestions
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -375,6 +385,593 @@ private fun rememberEnsureContentRepoInitialized() {
     }
 }
 
+internal data class SubjectTopicsPdfItem(
+    val id: String,
+    val title: String,
+    val countText: String
+)
+
+private fun shareSubjectTopicsPdf(
+    context: Context,
+    items: List<SubjectTopicsPdfItem>,
+    isEnglish: Boolean
+) {
+    if (items.isEmpty()) return
+
+    val pdfFile = createSubjectTopicsPdf(
+        context = context,
+        items = items,
+        isEnglish = isEnglish
+    )
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        pdfFile
+    )
+
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/pdf"
+        putExtra(
+            Intent.EXTRA_SUBJECT,
+            if (isEnglish) {
+                "KAMI exercises by topic"
+            } else {
+                "תרגילים לפי נושא - KAMI"
+            }
+        )
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    context.startActivity(
+        Intent.createChooser(
+            sendIntent,
+            if (isEnglish) "Share PDF" else "שיתוף PDF"
+        )
+    )
+}
+
+private fun createSubjectTopicsPdf(
+    context: Context,
+    items: List<SubjectTopicsPdfItem>,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 24f
+
+    fun tr(he: String, en: String): String =
+        if (isEnglish) en else he
+
+    fun exerciseCountFromText(raw: String): Int {
+        return Regex("""\d+""")
+            .findAll(raw)
+            .mapNotNull { it.value.toIntOrNull() }
+            .lastOrNull()
+            ?: 0
+    }
+
+    val document = PdfDocument()
+
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
+    val lightHeaderBlue = android.graphics.Color.rgb(128, 183, 220)
+    val lightBlue = android.graphics.Color.rgb(234, 246, 255)
+    val softBlue = android.graphics.Color.rgb(244, 250, 255)
+    val borderBlue = android.graphics.Color.rgb(191, 213, 232)
+    val textDark = android.graphics.Color.rgb(15, 23, 42)
+    val textMuted = android.graphics.Color.rgb(80, 100, 120)
+
+    val regularTypeface =
+        Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+
+    val boldTypeface =
+        Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
+    fun paint(
+        size: Float,
+        color: Int = textDark,
+        typeface: Typeface = regularTypeface,
+        align: Paint.Align = Paint.Align.RIGHT
+    ): Paint {
+        return Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = size
+            this.color = color
+            this.typeface = typeface
+            textAlign = align
+        }
+    }
+
+    val titlePaint = paint(
+        size = 29f,
+        color = android.graphics.Color.WHITE,
+        typeface = boldTypeface
+    )
+
+    val subtitlePaint = paint(
+        size = 14f,
+        color = android.graphics.Color.WHITE
+    )
+
+    val sectionPaint = paint(
+        size = 17f,
+        color = android.graphics.Color.rgb(12, 78, 130),
+        typeface = boldTypeface
+    )
+
+    val itemTitlePaint = paint(
+        size = 13f,
+        color = textDark,
+        typeface = boldTypeface
+    )
+
+    val itemCountPaint = paint(
+        size = 10f,
+        color = android.graphics.Color.rgb(12, 78, 130)
+    )
+
+    val smallPaint = paint(
+        size = 9f,
+        color = textMuted
+    )
+
+    fun drawRoundRect(
+        canvas: android.graphics.Canvas,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        radius: Float = 12f,
+        stroke: Boolean = false,
+        strokeWidth: Float = 1.2f
+    ) {
+        val rectPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = if (stroke) Paint.Style.STROKE else Paint.Style.FILL
+            this.strokeWidth = strokeWidth
+        }
+
+        canvas.drawRoundRect(
+            left,
+            top,
+            right,
+            bottom,
+            radius,
+            radius,
+            rectPaint
+        )
+    }
+
+    fun drawKmiLogo(
+        canvas: android.graphics.Canvas,
+        cx: Float,
+        cy: Float,
+        radius: Float
+    ) {
+        val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+        }
+
+        val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+        }
+
+        val logoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            typeface = boldTypeface
+            textSize = radius * 0.62f
+            textAlign = Paint.Align.CENTER
+        }
+
+        canvas.drawCircle(cx, cy, radius, outerPaint)
+        canvas.drawCircle(cx, cy, radius - 4f, innerPaint)
+
+        canvas.drawText(
+            "KAMI",
+            cx,
+            cy + radius * 0.22f,
+            logoTextPaint
+        )
+    }
+
+    fun drawHeader(canvas: android.graphics.Canvas) {
+        canvas.drawColor(android.graphics.Color.WHITE)
+
+        val headerBottom = 122f
+        val headerTextRight = 435f
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(pageWidth.toFloat(), 0f)
+                lineTo(pageWidth.toFloat(), headerBottom)
+                lineTo(178f, headerBottom)
+                lineTo(238f, 0f)
+                close()
+            },
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = navy
+            }
+        )
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(208f, headerBottom)
+                lineTo(224f, headerBottom)
+                lineTo(284f, 0f)
+                lineTo(268f, 0f)
+                close()
+            },
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = mediumBlue
+            }
+        )
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(230f, headerBottom)
+                lineTo(238f, headerBottom)
+                lineTo(298f, 0f)
+                lineTo(290f, 0f)
+                close()
+            },
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = lightHeaderBlue
+            }
+        )
+
+        drawKmiLogo(
+            canvas = canvas,
+            cx = 78f,
+            cy = 58f,
+            radius = 42f
+        )
+
+        titlePaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        subtitlePaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        val headerTextX =
+            if (isEnglish) 308f else headerTextRight
+
+        canvas.drawText(
+            tr(
+                "תרגילים לפי נושא",
+                "Exercises by Topic"
+            ),
+            headerTextX,
+            52f,
+            titlePaint
+        )
+
+        canvas.drawText(
+            tr(
+                "כל נושאי התרגול והספירות",
+                "All practice topics and counts"
+            ),
+            headerTextX,
+            78f,
+            subtitlePaint
+        )
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+
+        canvas.drawText(
+            tr("תאריך הפקה:", "Generated:") + " " +
+                    SimpleDateFormat(
+                        "dd/MM/yyyy",
+                        Locale.getDefault()
+                    ).format(Date()),
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+    }
+
+    fun drawFooter(
+        canvas: android.graphics.Canvas,
+        pageNumber: Int,
+        totalPages: Int
+    ) {
+        val footerY = 804f
+
+        canvas.drawLine(
+            0f,
+            footerY,
+            pageWidth.toFloat(),
+            footerY,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = navy
+                strokeWidth = 2f
+            }
+        )
+
+        drawKmiLogo(
+            canvas = canvas,
+            cx = 38f,
+            cy = footerY + 22f,
+            radius = 13f
+        )
+
+        smallPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText(
+            "Together We Protect",
+            62f,
+            footerY + 25f,
+            smallPaint
+        )
+
+        smallPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText(
+            tr(
+                "עמוד $pageNumber מתוך $totalPages",
+                "Page $pageNumber of $totalPages"
+            ),
+            pageWidth / 2f,
+            footerY + 25f,
+            smallPaint
+        )
+
+        smallPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(
+            "Krav Maga Israel",
+            pageWidth - 66f,
+            footerY + 18f,
+            smallPaint
+        )
+
+        canvas.drawText(
+            "www.kmi.org.il",
+            pageWidth - 66f,
+            footerY + 31f,
+            smallPaint
+        )
+    }
+
+    fun drawSummary(
+        canvas: android.graphics.Canvas,
+        top: Float
+    ): Float {
+        val totalExercises =
+            items.sumOf { exerciseCountFromText(it.countText) }
+
+        drawRoundRect(
+            canvas,
+            margin,
+            top,
+            pageWidth - margin,
+            top + 74f,
+            lightBlue
+        )
+
+        drawRoundRect(
+            canvas,
+            margin,
+            top,
+            pageWidth - margin,
+            top + 74f,
+            borderBlue,
+            stroke = true
+        )
+
+        sectionPaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        canvas.drawText(
+            tr("סיכום נושאים", "Topics Summary"),
+            if (isEnglish) margin + 20f else pageWidth - margin - 20f,
+            top + 27f,
+            sectionPaint
+        )
+
+        val summaryPaint = paint(
+            size = 12f,
+            color = textDark,
+            typeface = boldTypeface,
+            align = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        )
+
+        canvas.drawText(
+            tr(
+                "${items.size} נושאים · $totalExercises תרגילים",
+                "${items.size} topics · $totalExercises exercises"
+            ),
+            if (isEnglish) margin + 20f else pageWidth - margin - 20f,
+            top + 53f,
+            summaryPaint
+        )
+
+        return top + 94f
+    }
+
+    fun drawTopicCard(
+        canvas: android.graphics.Canvas,
+        item: SubjectTopicsPdfItem,
+        top: Float,
+        index: Int
+    ): Float {
+        val left = margin
+        val right = pageWidth - margin
+        val bottom = top + 58f
+
+        drawRoundRect(
+            canvas,
+            left,
+            top,
+            right,
+            bottom,
+            if (index % 2 == 0) lightBlue else softBlue
+        )
+
+        drawRoundRect(
+            canvas,
+            left,
+            top,
+            right,
+            bottom,
+            borderBlue,
+            stroke = true
+        )
+
+        val numberCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(12, 78, 130)
+        }
+
+        val circleX =
+            if (isEnglish) right - 22f else left + 22f
+
+        canvas.drawCircle(
+            circleX,
+            top + 29f,
+            11f,
+            numberCirclePaint
+        )
+
+        val numberPaint = paint(
+            size = 10f,
+            color = android.graphics.Color.WHITE,
+            typeface = boldTypeface,
+            align = Paint.Align.CENTER
+        )
+
+        canvas.drawText(
+            (index + 1).toString(),
+            circleX,
+            top + 33f,
+            numberPaint
+        )
+
+        itemTitlePaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        itemCountPaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        val textX =
+            if (isEnglish) left + 20f else right - 20f
+
+        canvas.drawText(
+            item.title.take(44),
+            textX,
+            top + 25f,
+            itemTitlePaint
+        )
+
+        canvas.drawText(
+            item.countText,
+            textX,
+            top + 44f,
+            itemCountPaint
+        )
+
+        return bottom + 8f
+    }
+
+    val firstPageCapacity = 8
+    val nextPageCapacity = 10
+
+    val totalPages =
+        if (items.size <= firstPageCapacity) {
+            1
+        } else {
+            1 + kotlin.math.ceil(
+                (items.size - firstPageCapacity) /
+                        nextPageCapacity.toDouble()
+            ).toInt()
+        }
+
+    var pageNumber = 1
+    var itemIndex = 0
+
+    while (pageNumber <= totalPages) {
+        val page = document.startPage(
+            PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                pageNumber
+            ).create()
+        )
+
+        val canvas = page.canvas
+
+        drawHeader(canvas)
+
+        var y = 164f
+
+        if (pageNumber == 1) {
+            y = drawSummary(
+                canvas = canvas,
+                top = y
+            )
+        } else {
+            sectionPaint.textAlign = Paint.Align.CENTER
+
+            canvas.drawText(
+                tr("נושאי תרגול", "Practice Topics"),
+                pageWidth / 2f,
+                y,
+                sectionPaint
+            )
+
+            y += 28f
+        }
+
+        val capacity =
+            if (pageNumber == 1) {
+                firstPageCapacity
+            } else {
+                nextPageCapacity
+            }
+
+        repeat(capacity) {
+            if (itemIndex >= items.size) {
+                return@repeat
+            }
+
+            y = drawTopicCard(
+                canvas = canvas,
+                item = items[itemIndex],
+                top = y,
+                index = itemIndex
+            )
+
+            itemIndex++
+        }
+
+        drawFooter(
+            canvas = canvas,
+            pageNumber = pageNumber,
+            totalPages = totalPages
+        )
+
+        document.finishPage(page)
+        pageNumber++
+    }
+
+    val directory = File(
+        context.cacheDir,
+        "pdfs"
+    ).apply {
+        mkdirs()
+    }
+
+    val file = File(
+        directory,
+        "exercises_by_topic_${System.currentTimeMillis()}.pdf"
+    )
+
+    FileOutputStream(file).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return file
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BeltQuestionsByTopicScreen(
@@ -397,6 +994,11 @@ fun BeltQuestionsByTopicScreen(
     rememberEnsureContentRepoInitialized()
     val isEnglish = rememberIsEnglish()
     val ctx = LocalContext.current
+
+    var subjectTopicsPdfItems by remember {
+        mutableStateOf<List<SubjectTopicsPdfItem>>(emptyList())
+    }
+
     // הערות תרגילים מנוהלות עכשיו בדיאלוג הגלובלי החדש דרך KmiTopBar
 
     val userSp = remember(ctx) {
@@ -553,8 +1155,16 @@ fun BeltQuestionsByTopicScreen(
                 topBeltIconRes = null,
                 // החיפוש הגלובלי נפתח ומטופל פנימית בתוך KmiTopBar
                 lockSearch = false,
+                showTopShare = true,
                 showBottomActions = true,
-                centerTitle = true
+                centerTitle = true,
+                onShare = {
+                    shareSubjectTopicsPdf(
+                        context = ctx,
+                        items = subjectTopicsPdfItems,
+                        isEnglish = isEnglish
+                    )
+                }
             )
         },
         bottomBar = {}
@@ -623,6 +1233,9 @@ fun BeltQuestionsByTopicScreen(
                         pendingHardSubjectId = "kicks_hard"
                         localHardSubjectId = null
                         localHardSectionId = null
+                    },
+                    onPdfItemsChanged = { items ->
+                        subjectTopicsPdfItems = items
                     },
                     onQuickViewClick = {
                         quickMenuExpanded = true
@@ -863,7 +1476,7 @@ private fun InlineSubTopicsExpansionCard(
                     ),
                     shape = RoundedCornerShape(18.dp)
                 )
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             picks.forEachIndexed { index, pick ->
@@ -874,7 +1487,7 @@ private fun InlineSubTopicsExpansionCard(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .clickable { onPick(pick) }
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -894,9 +1507,9 @@ private fun InlineSubTopicsExpansionCard(
                             text = cleanTitle,
                             color = Color(0xFF111827),
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 12.sp,
-                            lineHeight = 14.sp,
-                            maxLines = 1,
+                            fontSize = 11.sp,
+                            lineHeight = 13.sp,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
@@ -908,10 +1521,12 @@ private fun InlineSubTopicsExpansionCard(
                             text = countLabel(countForDisplay(pick)),
                             color = accent,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 10.sp,
-                            lineHeight = 12.sp,
+                            fontSize = 9.sp,
+                            lineHeight = 11.sp,
                             textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 2.dp)
                         )
                     }
                 }
@@ -1247,6 +1862,7 @@ internal fun TopicsBySubjectCard(
     onOpenDefenseList: (belt: Belt, kind: String, pick: String) -> Unit = { _, _, _ -> },
     onOpenHardSubjectRoute: (belt: Belt, subjectId: String) -> Unit,
     onOpenKicksHardLocal: () -> Unit,
+    onPdfItemsChanged: (List<SubjectTopicsPdfItem>) -> Unit = {},
     onQuickViewClick: () -> Unit = {}
 ) {
 
@@ -1873,6 +2489,69 @@ internal fun TopicsBySubjectCard(
                 )
             }
         )
+    }
+
+    LaunchedEffect(
+        defenseRootCard,
+        releasesRootCard,
+        handsRootCard,
+        otherSubjectsWithSubTopicsCards,
+        otherSubjectsWithoutSubTopicsCards,
+        countsReady,
+        isEnglish
+    ) {
+        if (!countsReady) return@LaunchedEffect
+
+        val pdfItems = buildList {
+            add(
+                SubjectTopicsPdfItem(
+                    id = "defense_root",
+                    title = stripLockSuffix(defenseRootCard.title),
+                    countText = defenseRootCard.countText
+                )
+            )
+
+            releasesRootCard?.let { card ->
+                add(
+                    SubjectTopicsPdfItem(
+                        id = "releases",
+                        title = stripLockSuffix(card.title),
+                        countText = card.countText
+                    )
+                )
+            }
+
+            add(
+                SubjectTopicsPdfItem(
+                    id = "hands_root",
+                    title = stripLockSuffix(handsRootCard.title),
+                    countText = handsRootCard.countText
+                )
+            )
+
+            otherSubjectsWithSubTopicsCards.forEach { card ->
+                add(
+                    SubjectTopicsPdfItem(
+                        id = card.id,
+                        title = stripLockSuffix(card.title),
+                        countText = countTextForSubjectCard(card)
+                    )
+                )
+            }
+
+            otherSubjectsWithoutSubTopicsCards.forEach { card ->
+                add(
+                    SubjectTopicsPdfItem(
+                        id = card.id,
+                        title = stripLockSuffix(card.title),
+                        countText = countTextForSubjectCard(card)
+                    )
+                )
+            }
+        }
+            .distinctBy { it.id.trim().lowercase() }
+
+        onPdfItemsChanged(pdfItems)
     }
 
     CompositionLocalProvider(

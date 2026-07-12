@@ -100,10 +100,14 @@ fun NavGraphBuilder.subTopicsByTopicNavGraph(
         SubTopicsScreen(
             belt = belt,
             topic = topic,
-            onBack = { nav.popBackStack() },
+            onBack = {
+                nav.popBackStack()
+            },
             onHome = {
                 nav.navigate(Route.Home.route) {
-                    popUpTo(Route.Home.route) { inclusive = false }
+                    popUpTo(Route.Home.route) {
+                        inclusive = false
+                    }
                     launchSingleTop = true
                     restoreState = true
                 }
@@ -126,6 +130,17 @@ fun NavGraphBuilder.subTopicsByTopicNavGraph(
                 nav.navigate(route) {
                     launchSingleTop = true
                     restoreState = true
+                }
+            },
+            onOpenPdfMaterials = { selectedBelt, selectedTopic ->
+                val route = Route.Materials.make(
+                    belt = selectedBelt,
+                    topic = selectedTopic
+                )
+
+                nav.navigate(route) {
+                    launchSingleTop = true
+                    restoreState = false
                 }
             },
             vm = vm

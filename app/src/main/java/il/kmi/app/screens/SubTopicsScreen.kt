@@ -46,15 +46,16 @@ import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.ExerciseCountProvider
+import il.kmi.app.subscription.KmiAccess
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
 import il.kmi.shared.domain.content.HardSectionsCatalog.totalItemsCount
 import il.kmi.app.KmiViewModel
+import il.kmi.app.openBeltPdf
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.localization.AppLanguage
 import androidx.compose.ui.platform.LocalContext
-import com.google.common.collect.Multimaps.index
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 
@@ -787,10 +788,11 @@ private val catalogScreenGradientBottom = Color(0xFF062B4A)
 fun SubTopicsScreen(
     belt: Belt,
     topic: String,
-    onBack: () -> Unit,                 // נשאר בפרמטרים אך לא מוצג בכותרת
+    onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSubTopic: (String) -> Unit,
     onOpenExercise: (String) -> Unit,
+    onOpenPdfMaterials: (Belt, String) -> Unit,
     vm: KmiViewModel
 ) {
 
@@ -1105,6 +1107,94 @@ fun SubTopicsScreen(
         mutableStateOf<OpenedExerciseRequest?>(null)
     }
 
+    var hardPdfExercises by remember(
+        hardTitle,
+        topicDecoded
+    ) {
+        mutableStateOf<List<SubjectPdfExercise>>(emptyList())
+    }
+
+    val pdfExercises: List<SubjectPdfExercise> = remember(
+        belt,
+        topicDecoded,
+        isEnglish,
+        isHardFlow,
+        hardItems,
+        hardBeltGroups,
+        hardPdfExercises,
+        activeNestedLeaf,
+        activeNestedGroup,
+        hasRealSubs,
+        directItems
+    ) {
+        when {
+            isHardFlow && hardBeltGroups.isNotEmpty() -> {
+                hardPdfExercises
+            }
+
+            isHardFlow && hardItems.isNotEmpty() -> {
+                hardItems.map { (_, displayName) ->
+                    SubjectPdfExercise(
+                        belt = belt,
+                        title = displayName.trim(),
+                        status = null
+                    )
+                }
+            }
+
+            activeNestedLeaf != null -> {
+                activeNestedLeaf.items.map { rawItem ->
+                    SubjectPdfExercise(
+                        belt = belt,
+                        title = exerciseTitleForUi(
+                            raw = rawItem,
+                            isEnglish = isEnglish
+                        ),
+                        status = null
+                    )
+                }
+            }
+
+            activeNestedGroup != null -> {
+                activeNestedGroup.leaves.flatMap { leaf ->
+                    leaf.items.map { rawItem ->
+                        SubjectPdfExercise(
+                            belt = belt,
+                            title = exerciseTitleForUi(
+                                raw = rawItem,
+                                isEnglish = isEnglish
+                            ),
+                            status = null
+                        )
+                    }
+                }
+            }
+
+            !hasRealSubs -> {
+                directItems.map { rawItem ->
+                    SubjectPdfExercise(
+                        belt = belt,
+                        title = exerciseTitleForUi(
+                            raw = rawItem,
+                            isEnglish = isEnglish
+                        ),
+                        status = null
+                    )
+                }
+            }
+
+            else -> {
+                emptyList()
+            }
+        }
+            .filter { exercise ->
+                exercise.title.isNotBlank()
+            }
+            .distinctBy { exercise ->
+                "${exercise.belt.id}::${exercise.title}"
+            }
+    }
+
     Scaffold(
         topBar = {
             il.kmi.app.ui.KmiTopBar(
@@ -1116,6 +1206,82 @@ fun SubTopicsScreen(
                 lockSearch = false,
                 onSearch = null,
                 onPickSearchResult = { key -> pickedKey = key },
+                onShare = {
+                    runCatching {
+                        if (pdfExercises.isEmpty()) {
+                            android.widget.Toast.makeText(
+                                context,
+                                if (isEnglish) {
+                                    "No exercises are displayed on this screen."
+                                } else {
+                                    "לא נמצאו תרגילים להצגה בקובץ."
+                                },
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+
+                            return@runCatching
+                        }
+
+                        val pdfFile = createSubjectExercisesPdf(
+                            context = context,
+                            belt = belt,
+                            topic = topicDecoded,
+                            exercises = pdfExercises,
+                            isEnglish = isEnglish
+                        )
+
+                        val pdfUri = androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            pdfFile
+                        )
+
+                        val shareIntent = android.content.Intent(
+                            android.content.Intent.ACTION_SEND
+                        ).apply {
+                            type = "application/pdf"
+
+                            putExtra(
+                                android.content.Intent.EXTRA_SUBJECT,
+                                if (isEnglish) {
+                                    "Exercises by subject - ${exerciseTitleForUi(topicDecoded, true)}"
+                                } else {
+                                    "תרגילים לפי נושא - $topicDecoded"
+                                }
+                            )
+
+                            putExtra(
+                                android.content.Intent.EXTRA_STREAM,
+                                pdfUri
+                            )
+
+                            addFlags(
+                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        }
+
+                        context.startActivity(
+                            android.content.Intent.createChooser(
+                                shareIntent,
+                                if (isEnglish) {
+                                    "Share PDF"
+                                } else {
+                                    "שיתוף PDF"
+                                }
+                            )
+                        )
+                    }.onFailure {
+                        android.widget.Toast.makeText(
+                            context,
+                            if (isEnglish) {
+                                "Failed to create the PDF file."
+                            } else {
+                                "יצירת קובץ ה־PDF נכשלה."
+                            },
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                },
                 centerTitle = true
             )
         }
@@ -1145,6 +1311,9 @@ fun SubTopicsScreen(
                     topicKey = hardTitle.ifBlank { topicDecoded },
                     isDarkMode = isDarkMode,
                     vm = vm,
+                    onPdfExercisesChanged = { exercises ->
+                        hardPdfExercises = exercises
+                    },
                     onOpenExercise = { item, itemBelt ->
                         openedExerciseRequest = OpenedExerciseRequest(
                             belt = itemBelt,
@@ -1498,7 +1667,16 @@ fun SubTopicsScreen(
                 onPractice = { },
                 onSummary = { },
                 onVoice = { },
-                onPdf = { }
+                onPdf = {
+                    android.util.Log.d("PDF_TEST", "onPdf clicked")
+
+                    quickMenuExpanded = false
+
+                    openBeltPdf(
+                        context = context,
+                        belt = belt
+                    )
+                }
             )
         }
     }
@@ -1619,6 +1797,612 @@ private fun saveSubTopicExerciseNote(
             putString(noteKey, clean)
         }
     }.apply()
+}
+
+private fun createSubjectExercisesPdf(
+    context: android.content.Context,
+    belt: Belt,
+    topic: String,
+    exercises: List<SubjectPdfExercise>,
+    isEnglish: Boolean
+): java.io.File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val horizontalMargin = 36f
+    val contentRight = pageWidth - horizontalMargin
+    val contentLeft = horizontalMargin
+    val bottomLimit = pageHeight - 58f
+
+    val document = android.graphics.pdf.PdfDocument()
+
+    val knownCount = exercises.count { exercise ->
+        exercise.status == true
+    }
+
+    val unknownCount = exercises.count { exercise ->
+        exercise.status == false
+    }
+
+    val unmarkedCount = exercises.count { exercise ->
+        exercise.status == null
+    }
+
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
+    val lightBlue = android.graphics.Color.rgb(234, 244, 255)
+    val borderBlue = android.graphics.Color.rgb(191, 215, 235)
+    val darkText = android.graphics.Color.rgb(15, 23, 42)
+    val mutedText = android.graphics.Color.rgb(100, 116, 139)
+    val white = android.graphics.Color.WHITE
+
+    val regularTypeface = android.graphics.Typeface.create(
+        android.graphics.Typeface.SANS_SERIF,
+        android.graphics.Typeface.NORMAL
+    )
+
+    val boldTypeface = android.graphics.Typeface.create(
+        android.graphics.Typeface.SANS_SERIF,
+        android.graphics.Typeface.BOLD
+    )
+
+    val titlePaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        typeface = boldTypeface
+        textSize = 26f
+        color = white
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val subtitlePaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        typeface = regularTypeface
+        textSize = 13f
+        color = white
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val sectionPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        typeface = boldTypeface
+        textSize = 16f
+        color = darkText
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val itemPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        typeface = boldTypeface
+        textSize = 11.5f
+        color = darkText
+        textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+    }
+
+    val numberPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        typeface = boldTypeface
+        textSize = 10.5f
+        color = white
+        textAlign = android.graphics.Paint.Align.CENTER
+    }
+
+    val smallPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        typeface = regularTypeface
+        textSize = 9.5f
+        color = mutedText
+    }
+
+    val rowBackgroundPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = lightBlue
+        style = android.graphics.Paint.Style.FILL
+    }
+
+    val rowBorderPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = borderBlue
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 1.2f
+    }
+
+    val numberBackgroundPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = mediumBlue
+        style = android.graphics.Paint.Style.FILL
+    }
+
+    val headerBackgroundPaint = android.graphics.Paint(
+        android.graphics.Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = navy
+        style = android.graphics.Paint.Style.FILL
+    }
+
+    var pageNumber = 0
+    lateinit var page: android.graphics.pdf.PdfDocument.Page
+    lateinit var canvas: android.graphics.Canvas
+    var y = 0f
+
+    fun textX(): Float {
+        return if (isEnglish) contentLeft else contentRight
+    }
+
+    fun beltLabel(): String {
+        return if (isEnglish) {
+            belt.en.ifBlank { belt.id }
+        } else {
+            belt.heb
+        }
+    }
+
+    fun drawKmiLogo(
+        targetCanvas: android.graphics.Canvas,
+        centerX: Float,
+        centerY: Float,
+        radius: Float
+    ) {
+        val outerPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val innerPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = android.graphics.Color.WHITE
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val logoTextPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            typeface = boldTypeface
+            textSize = radius * 0.62f
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        targetCanvas.drawCircle(
+            centerX,
+            centerY,
+            radius,
+            outerPaint
+        )
+
+        targetCanvas.drawCircle(
+            centerX,
+            centerY,
+            radius - 4f,
+            innerPaint
+        )
+
+        targetCanvas.drawText(
+            "KAMI",
+            centerX,
+            centerY + radius * 0.22f,
+            logoTextPaint
+        )
+    }
+
+    fun drawHeader() {
+        canvas.drawColor(white)
+
+        val headerBottom = 122f
+        val headerTextRight = 435f
+
+        val navyHeaderPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val mediumStripePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = mediumBlue
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        val lightStripePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = android.graphics.Color.rgb(128, 183, 220)
+            style = android.graphics.Paint.Style.FILL
+        }
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(pageWidth.toFloat(), 0f)
+                lineTo(pageWidth.toFloat(), headerBottom)
+                lineTo(178f, headerBottom)
+                lineTo(238f, 0f)
+                close()
+            },
+            navyHeaderPaint
+        )
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(208f, headerBottom)
+                lineTo(224f, headerBottom)
+                lineTo(284f, 0f)
+                lineTo(268f, 0f)
+                close()
+            },
+            mediumStripePaint
+        )
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(230f, headerBottom)
+                lineTo(238f, headerBottom)
+                lineTo(298f, 0f)
+                lineTo(290f, 0f)
+                close()
+            },
+            lightStripePaint
+        )
+
+        drawKmiLogo(
+            targetCanvas = canvas,
+            centerX = 78f,
+            centerY = 58f,
+            radius = 42f
+        )
+
+        titlePaint.textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+
+        subtitlePaint.textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+
+        val headerTextX = if (isEnglish) {
+            308f
+        } else {
+            headerTextRight
+        }
+
+        canvas.drawText(
+            if (isEnglish) {
+                "Subject Summary Report"
+            } else {
+                "דו״ח סיכום נושא"
+            },
+            headerTextX,
+            52f,
+            titlePaint
+        )
+
+        canvas.drawText(
+            if (isEnglish) {
+                "${beltLabel()} · $topic"
+            } else {
+                "${beltLabel()} · $topic"
+            },
+            headerTextX,
+            78f,
+            subtitlePaint
+        )
+
+        smallPaint.color = mutedText
+        smallPaint.textAlign = android.graphics.Paint.Align.RIGHT
+
+        val generatedDate = java.text.SimpleDateFormat(
+            "dd/MM/yyyy",
+            java.util.Locale.getDefault()
+        ).format(java.util.Date())
+
+        canvas.drawText(
+            if (isEnglish) {
+                "Generated: $generatedDate"
+            } else {
+                "תאריך הפקה: $generatedDate"
+            },
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+
+        y = 174f
+    }
+
+    fun drawFooter() {
+        val linePaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = borderBlue
+            strokeWidth = 1f
+        }
+
+        canvas.drawLine(
+            contentLeft,
+            pageHeight - 42f,
+            contentRight,
+            pageHeight - 42f,
+            linePaint
+        )
+
+        smallPaint.textAlign = android.graphics.Paint.Align.CENTER
+
+        canvas.drawText(
+            if (isEnglish) {
+                "Page $pageNumber · KAMI"
+            } else {
+                "עמוד $pageNumber · KAMI"
+            },
+            pageWidth / 2f,
+            pageHeight - 24f,
+            smallPaint
+        )
+    }
+
+    fun startNewPage() {
+        if (pageNumber > 0) {
+            drawFooter()
+            document.finishPage(page)
+        }
+
+        pageNumber++
+
+        page = document.startPage(
+            android.graphics.pdf.PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                pageNumber
+            ).create()
+        )
+
+        canvas = page.canvas
+        drawHeader()
+    }
+
+    fun ensureSpace(requiredHeight: Float) {
+        if (y + requiredHeight > bottomLimit) {
+            startNewPage()
+        }
+    }
+
+    fun drawExerciseRow(
+        index: Int,
+        exercise: SubjectPdfExercise
+    ) {
+        val rowHeight = 54f
+
+        ensureSpace(rowHeight + 8f)
+
+        val rowTop = y
+        val rowBottom = y + rowHeight
+
+        canvas.drawRoundRect(
+            contentLeft,
+            rowTop,
+            contentRight,
+            rowBottom,
+            14f,
+            14f,
+            rowBackgroundPaint
+        )
+
+        canvas.drawRoundRect(
+            contentLeft,
+            rowTop,
+            contentRight,
+            rowBottom,
+            14f,
+            14f,
+            rowBorderPaint
+        )
+
+        val statusColor = when (exercise.status) {
+            true -> android.graphics.Color.rgb(22, 163, 74)
+            false -> android.graphics.Color.rgb(220, 38, 38)
+            null -> android.graphics.Color.rgb(100, 116, 139)
+        }
+
+        val statusText = when (exercise.status) {
+            true -> if (isEnglish) "Known" else "יודע"
+            false -> if (isEnglish) "Unknown" else "לא יודע"
+            null -> if (isEnglish) "Unmarked" else "לא סומן"
+        }
+
+        val statusPaint = android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = statusColor
+            typeface = boldTypeface
+            textSize = 9.5f
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+
+        val numberCenterX = if (isEnglish) {
+            contentLeft + 23f
+        } else {
+            contentRight - 23f
+        }
+
+        val numberCenterY = rowTop + rowHeight / 2f
+
+        canvas.drawCircle(
+            numberCenterX,
+            numberCenterY,
+            15f,
+            numberBackgroundPaint
+        )
+
+        canvas.drawText(
+            (index + 1).toString(),
+            numberCenterX,
+            numberCenterY + 4f,
+            numberPaint
+        )
+
+        val statusCenterX = if (isEnglish) {
+            contentRight - 42f
+        } else {
+            contentLeft + 42f
+        }
+
+        canvas.drawCircle(
+            statusCenterX,
+            rowTop + 18f,
+            6f,
+            android.graphics.Paint(
+                android.graphics.Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color = statusColor
+            }
+        )
+
+        canvas.drawText(
+            statusText,
+            statusCenterX,
+            rowTop + 39f,
+            statusPaint
+        )
+
+        val exerciseTextX = if (isEnglish) {
+            contentLeft + 50f
+        } else {
+            contentRight - 50f
+        }
+
+        val cleanExercise = exercise.title
+            .replace("\n", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        val maxLength = 62
+
+        val displayExercise = if (cleanExercise.length > maxLength) {
+            cleanExercise.take(maxLength - 1) + "…"
+        } else {
+            cleanExercise
+        }
+
+        canvas.drawText(
+            displayExercise,
+            exerciseTextX,
+            rowTop + 25f,
+            itemPaint
+        )
+
+        smallPaint.textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+
+        canvas.drawText(
+            if (isEnglish) {
+                exercise.belt.en
+            } else {
+                exercise.belt.heb
+            },
+            exerciseTextX,
+            rowTop + 42f,
+            smallPaint
+        )
+
+        y = rowBottom + 8f
+    }
+
+    startNewPage()
+
+    canvas.drawText(
+        if (isEnglish) {
+            "Summary: $knownCount known · $unknownCount unknown · $unmarkedCount unmarked"
+        } else {
+            "סיכום: $knownCount יודע · $unknownCount לא יודע · $unmarkedCount לא סומן"
+        },
+        textX(),
+        y,
+        sectionPaint
+    )
+
+    y += 26f
+
+    canvas.drawText(
+        if (isEnglish) {
+            "Exercise list (${exercises.size})"
+        } else {
+            "רשימת תרגילים (${exercises.size})"
+        },
+        textX(),
+        y,
+        sectionPaint
+    )
+
+    y += 24f
+
+    exercises.forEachIndexed { index, exercise ->
+        drawExerciseRow(
+            index = index,
+            exercise = exercise
+        )
+    }
+
+    drawFooter()
+    document.finishPage(page)
+
+    val dir = java.io.File(
+        context.cacheDir,
+        "pdfs"
+    ).apply {
+        mkdirs()
+    }
+
+    val safeBeltId = belt.id
+        .lowercase()
+        .replace(Regex("[^a-z0-9_-]"), "_")
+
+    val file = java.io.File(
+        dir,
+        "subject_${safeBeltId}_${System.currentTimeMillis()}.pdf"
+    )
+
+    try {
+        java.io.FileOutputStream(file).use { output ->
+            document.writeTo(output)
+        }
+    } finally {
+        document.close()
+    }
+
+    return file
 }
 
 @Composable
@@ -1934,6 +2718,12 @@ private data class HardStickyBeltGroup(
     val items: List<String>
 )
 
+private data class SubjectPdfExercise(
+    val belt: Belt,
+    val title: String,
+    val status: Boolean?
+)
+
 private data class HardStickyExerciseRow(
     val belt: Belt,
     val indexInBelt: Int,
@@ -1947,6 +2737,7 @@ private fun HardBeltGroupsStickyContent(
     topicKey: String,
     isDarkMode: Boolean,
     vm: KmiViewModel,
+    onPdfExercisesChanged: (List<SubjectPdfExercise>) -> Unit,
     onOpenExercise: (item: String, belt: Belt) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -2186,6 +2977,23 @@ private fun HardBeltGroupsStickyContent(
 
             itemStates[statusId] = valueFromVm
         }
+    }
+
+    val pdfExercisesSnapshot = flatRows.map { row ->
+        SubjectPdfExercise(
+            belt = row.belt,
+            title = row.displayItem,
+            status = itemStates[
+                statusIdFor(
+                    belt = row.belt,
+                    rawItem = row.rawItem
+                )
+            ]
+        )
+    }
+
+    LaunchedEffect(pdfExercisesSnapshot) {
+        onPdfExercisesChanged(pdfExercisesSnapshot)
     }
 
     fun toggleStatus(row: HardStickyExerciseRow) {

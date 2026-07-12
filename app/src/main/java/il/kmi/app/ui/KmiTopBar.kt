@@ -93,15 +93,15 @@ import il.kmi.shared.domain.Explanations
 //===============================================================================
 
 // ====== Colors & Theme ======
-private val White        = Color(0xFFFFFFFF)
-private val Ink950       = Color(0xFF0B1020)
-private val Ink900       = Color(0xFF0F172A)
-private val Ink800       = Color(0xFF172036)
-private val Ink700       = Color(0xFF24304D)
-private val Ink600       = Color(0xFF475569)
-private val DividerCol   = Color(0x33FFFFFF)
-private val AccentBlue   = Color(0xFF3B82F6)
-private val AccentGreen  = Color(0xFF16A34A)
+private val White = Color(0xFFFFFFFF)
+private val Ink950 = Color(0xFF0B1020)
+private val Ink900 = Color(0xFF0F172A)
+private val Ink800 = Color(0xFF172036)
+private val Ink700 = Color(0xFF24304D)
+private val Ink600 = Color(0xFF475569)
+private val DividerCol = Color(0x33FFFFFF)
+private val AccentBlue = Color(0xFF3B82F6)
+private val AccentGreen = Color(0xFF16A34A)
 
 /** ערכת צבעים */
 @Composable
@@ -156,6 +156,7 @@ fun KmiTopBar(
     showRoleStatus: Boolean = true,
     showSettings: Boolean = true,
     showBottomActions: Boolean = true,
+    showBottomShare: Boolean = true,
     showModePill: Boolean = true,
     modePillIsCoach: Boolean? = null,
     onShare: (() -> Unit)? = null,
@@ -269,7 +270,12 @@ fun KmiTopBar(
 
     // תפקיד המשתמש (coach/trainee) – כולל פולבאק ל־default prefs
     var userRole by remember {
-        mutableStateOf(spUser.getString("user_role", null) ?: spDefault.getString("user_role", null))
+        mutableStateOf(
+            spUser.getString("user_role", null) ?: spDefault.getString(
+                "user_role",
+                null
+            )
+        )
     }
 
     // בדיקת הרשמה – כולל לוגין (username+password)
@@ -277,7 +283,10 @@ fun KmiTopBar(
         getBoolean("is_registered", false) ||
                 getBoolean("verified_registration", false) ||
                 !getString("user_id", null).isNullOrBlank() ||
-                (!getString("username", null).isNullOrBlank() && !getString("password", null).isNullOrBlank())
+                (!getString("username", null).isNullOrBlank() && !getString(
+                    "password",
+                    null
+                ).isNullOrBlank())
 
     fun computeIsRegistered(): Boolean =
         spUser.isRegFlag() || spDefault.isRegFlag()
@@ -288,9 +297,17 @@ fun KmiTopBar(
     DisposableEffect(spUser, spDefault) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "user_role") {
-                userRole = spUser.getString("user_role", null) ?: spDefault.getString("user_role", null)
+                userRole =
+                    spUser.getString("user_role", null) ?: spDefault.getString("user_role", null)
             }
-            if (key == null || key in setOf("is_registered","verified_registration","user_id","username","password")) {
+            if (key == null || key in setOf(
+                    "is_registered",
+                    "verified_registration",
+                    "user_id",
+                    "username",
+                    "password"
+                )
+            ) {
                 isRegistered = computeIsRegistered()
             }
         }
@@ -552,78 +569,9 @@ fun KmiTopBar(
             },
 
             actions = {
-                CompositionLocalProvider(
-                    LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxHeight(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-
-                        // ⬅️ בית + חיפוש + שפה
-                        if (showTopHome && onHome != null) {
-                            val homeTint = if (lockHome) {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
-                            } else {
-                                Color(0xFF2563EB)
-                            }
-
-                            val homeBg = if (lockHome) {
-                                Color(0x14000000)
-                            } else {
-                                Color(0x1A2563EB)
-                            }
-
-                            PremiumActionIcon(
-                                icon = Icons.Filled.Home,
-                                tint = homeTint,
-                                background = homeBg,
-                                contentDescription = "בית",
-                                onClick = {
-                                    if (lockHome) {
-                                        android.widget.Toast
-                                            .makeText(
-                                                ctx,
-                                                homeDisabledToast ?: "אתה כבר במסך הבית 🙂",
-                                                android.widget.Toast.LENGTH_SHORT
-                                            )
-                                            .show()
-                                    } else {
-                                        onHome()
-                                    }
-                                }
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-
-                        // 🔎 חיפוש — רק אם לא נעול וגם הותר בכותרת
-                        if (showTopSearch && !lockSearch && onSearch != null) {
-                            PremiumActionIcon(
-                                icon = Icons.Filled.Search,
-                                tint = Color(0xFF10B981),
-                                background = Color(0x1A10B981),
-                                contentDescription = "חיפוש",
-                                onClick = onSearch
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-
-                        // 📤 שתף — אייקון שיתוף עליון, ניתן להסתרה במסכים מסוימים
-                        if (showTopShare) {
-                            PremiumActionIcon(
-                                icon = Icons.Filled.Share,
-                                tint = Color(0xFF4F46E5),
-                                background = Color(0x1A4F46E5),
-                                contentDescription = "שתף",
-                                onClick = { runKmiShare() }
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-
-                        // אקשנס נוספים מהמסכים
-                        extraActions()
-                    }
-                }
+                // בכותרת העליונה לא מוצגים אייקוני פעולה.
+                // בית, חיפוש, הגדרות, סטטיסטיקה, AI ושיתוף
+                // מוצגים ומופעלים דרך סרגל האייקונים בלבד.
             },
 
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -827,55 +775,55 @@ fun KmiTopBar(
                                     verticalArrangement = Arrangement.spacedBy(5.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                VerticalQuickActionItem(
-                                    icon = Icons.Filled.Search,
-                                    label = if (isEnglish) "Search" else "חיפוש",
-                                    tint = Color(0xFF10B981),
-                                    background = Color(0x1A10B981),
-                                    enabled = !lockSearch,
-                                    onClick = {
-                                        quickActionsExpanded = false
-                                        focusManager.clearFocus(force = true)
-
-                                        // אם מסך חיצוני רוצה להגיב לחיפוש — נשאיר לו אפשרות.
-                                        onSearch?.invoke()
-
-                                        // החיפוש הגלובאלי האמיתי נפתח כאן.
-                                        globalSearchQuery = ""
-                                        showGlobalSearch = true
-                                    }
-                                )
-
-                                VerticalQuickActionItem(
-                                    icon = Icons.Filled.Home,
-                                    label = if (isEnglish) "Home" else "בית",
-                                    tint = if (lockHome) {
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-                                    } else {
-                                        Color(0xFF2563EB)
-                                    },
-                                    background = if (lockHome) {
-                                        Color(0x14000000)
-                                    } else {
-                                        Color(0x1A2563EB)
-                                    },
-                                    enabled = onHome != null,
-                                    onClick = {
-                                        if (lockHome) {
-                                            android.widget.Toast
-                                                .makeText(
-                                                    ctx,
-                                                    homeDisabledToast ?: "אתה כבר במסך הבית 🙂",
-                                                    android.widget.Toast.LENGTH_SHORT
-                                                )
-                                                .show()
-                                        } else {
+                                    VerticalQuickActionItem(
+                                        icon = Icons.Filled.Search,
+                                        label = if (isEnglish) "Search" else "חיפוש",
+                                        tint = Color(0xFF10B981),
+                                        background = Color(0x1A10B981),
+                                        enabled = !lockSearch,
+                                        onClick = {
                                             quickActionsExpanded = false
                                             focusManager.clearFocus(force = true)
-                                            onHome?.invoke()
+
+                                            // אם מסך חיצוני רוצה להגיב לחיפוש — נשאיר לו אפשרות.
+                                            onSearch?.invoke()
+
+                                            // החיפוש הגלובאלי האמיתי נפתח כאן.
+                                            globalSearchQuery = ""
+                                            showGlobalSearch = true
                                         }
-                                    }
-                                )
+                                    )
+
+                                    VerticalQuickActionItem(
+                                        icon = Icons.Filled.Home,
+                                        label = if (isEnglish) "Home" else "בית",
+                                        tint = if (lockHome) {
+                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                        } else {
+                                            Color(0xFF2563EB)
+                                        },
+                                        background = if (lockHome) {
+                                            Color(0x14000000)
+                                        } else {
+                                            Color(0x1A2563EB)
+                                        },
+                                        enabled = onHome != null,
+                                        onClick = {
+                                            if (lockHome) {
+                                                android.widget.Toast
+                                                    .makeText(
+                                                        ctx,
+                                                        homeDisabledToast ?: "אתה כבר במסך הבית 🙂",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    )
+                                                    .show()
+                                            } else {
+                                                quickActionsExpanded = false
+                                                focusManager.clearFocus(force = true)
+                                                onHome?.invoke()
+                                            }
+                                        }
+                                    )
 
                                     VerticalQuickActionItem(
                                         icon = Icons.Filled.Settings,
@@ -922,23 +870,25 @@ fun KmiTopBar(
                                         }
                                     )
 
-                                VerticalQuickActionItem(
-                                    icon = Icons.Filled.Share,
-                                    label = if (isEnglish) "Share" else "שתף",
-                                    tint = Color(0xFFEC4899),
-                                    background = Color(0x1AEC4899),
-                                    enabled = true,
-                                    onClick = {
-                                        quickActionsExpanded = false
-                                        runKmiShare()
+                                    if (showBottomShare) {
+                                        VerticalQuickActionItem(
+                                            icon = Icons.Filled.Share,
+                                            label = if (isEnglish) "Share" else "שתף",
+                                            tint = Color(0xFFEC4899),
+                                            background = Color(0x1AEC4899),
+                                            enabled = true,
+                                            onClick = {
+                                                quickActionsExpanded = false
+                                                runKmiShare()
+                                            }
+                                        )
                                     }
-                                )
+                                }
                             }
                         }
                     }
                 }
             }
-        }
         }
 
         // לוגו אופציונלי
@@ -1854,7 +1804,9 @@ fun KmiTopBar(
                                                 .fillMaxWidth()
                                                 .clickable {
                                                     val resolved =
-                                                        il.kmi.app.domain.ContentRepo.resolveItemKey(rawKey)
+                                                        il.kmi.app.domain.ContentRepo.resolveItemKey(
+                                                            rawKey
+                                                        )
 
                                                     val dialogBelt =
                                                         resolved?.belt
@@ -1886,39 +1838,57 @@ fun KmiTopBar(
                                                     showGlobalSearch = false
                                                     globalSearchQuery = ""
 
-                                                    val keyForPrefs = stableKey.ifBlank { dialogTitle }
+                                                    val keyForPrefs =
+                                                        stableKey.ifBlank { dialogTitle }
 
                                                     val editedExplanation = ctx
-                                                        .getSharedPreferences("kmi_explanation_overrides", Context.MODE_PRIVATE)
+                                                        .getSharedPreferences(
+                                                            "kmi_explanation_overrides",
+                                                            Context.MODE_PRIVATE
+                                                        )
                                                         .getString(keyForPrefs, null)
                                                         ?.trim()
                                                         .orEmpty()
 
                                                     val favoritesSet = ctx
-                                                        .getSharedPreferences("kmi_global_favorites", Context.MODE_PRIVATE)
-                                                        .getStringSet("favorite_exercises", emptySet())
+                                                        .getSharedPreferences(
+                                                            "kmi_global_favorites",
+                                                            Context.MODE_PRIVATE
+                                                        )
+                                                        .getStringSet(
+                                                            "favorite_exercises",
+                                                            emptySet()
+                                                        )
                                                         ?: emptySet()
 
-                                                    val noteRoleKey = if (userIsCoach) "coach" else "trainee"
+                                                    val noteRoleKey =
+                                                        if (userIsCoach) "coach" else "trainee"
                                                     val notePrefsKey = "$keyForPrefs::$noteRoleKey"
 
                                                     val savedUserNote = ctx
-                                                        .getSharedPreferences("kmi_exercise_user_notes", Context.MODE_PRIVATE)
+                                                        .getSharedPreferences(
+                                                            "kmi_exercise_user_notes",
+                                                            Context.MODE_PRIVATE
+                                                        )
                                                         .getString(notePrefsKey, "")
                                                         ?.trim()
                                                         .orEmpty()
 
                                                     premiumExerciseTitle = dialogTitle
-                                                    premiumExerciseBeltName = beltLabelForDialog(dialogBelt)
-                                                    premiumExerciseExplanation = editedExplanation.ifBlank { explanation }
+                                                    premiumExerciseBeltName =
+                                                        beltLabelForDialog(dialogBelt)
+                                                    premiumExerciseExplanation =
+                                                        editedExplanation.ifBlank { explanation }
                                                     premiumExerciseStableKey = keyForPrefs
-                                                    premiumExerciseIsFavorite = favoritesSet.contains(keyForPrefs)
+                                                    premiumExerciseIsFavorite =
+                                                        favoritesSet.contains(keyForPrefs)
                                                     premiumExerciseUserNote = savedUserNote
-                                                    premiumExerciseUserNoteTitle = if (userIsCoach) {
-                                                        if (isEnglish) "Coach notes" else "הערות המאמן"
-                                                    } else {
-                                                        if (isEnglish) "Trainee notes" else "הערות המתאמן"
-                                                    }
+                                                    premiumExerciseUserNoteTitle =
+                                                        if (userIsCoach) {
+                                                            if (isEnglish) "Coach notes" else "הערות המאמן"
+                                                        } else {
+                                                            if (isEnglish) "Trainee notes" else "הערות המתאמן"
+                                                        }
                                                     showPremiumExerciseDialog = true
                                                 }
                                                 .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -2701,6 +2671,7 @@ private fun Context.safeFindActivity(maxDepth: Int = 12): Activity? {
 
 // ===== Recent Broadcasts (message + timestamp) =====
 private const val PREF_RECENTS_KEY = "recent_coach_broadcasts_v2"
+
 private data class RecentBroadcast(val message: String, val ts: Long)
 
 private fun SharedPreferences.getRecentBroadcasts(): List<RecentBroadcast> {
@@ -2715,6 +2686,7 @@ private fun SharedPreferences.getRecentBroadcasts(): List<RecentBroadcast> {
                     val t = any.optLong("t", 0L)
                     if (m.isNotBlank()) out += RecentBroadcast(m, t)
                 }
+
                 is String -> { // תאימות לאחור
                     val m = any.trim()
                     if (m.isNotBlank()) out += RecentBroadcast(m, 0L)
@@ -2773,7 +2745,7 @@ private fun buildExplanationWithStanceHighlight(
     if (idx == -1) return AnnotatedString(source)
 
     val before = source.substring(0, idx)
-    val after  = source.substring(idx + stanceSentence.length)
+    val after = source.substring(idx + stanceSentence.length)
 
     val builder = AnnotatedString.Builder()
 
@@ -2819,8 +2791,8 @@ fun ExplanationWithStanceHighlight(
     Text(
         text = annotated,
         modifier = modifier,
-        style  = MaterialTheme.typography.bodyLarge,
-        color  = MaterialTheme.colorScheme.onSurface
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurface
     )
 }
 
@@ -2868,7 +2840,7 @@ private fun buildExplanationWithStanceHighlight(
 /** תג מצב ריבועי (מאמן/מתאמן) */
 @Composable
 private fun RoleSquareBadge(isCoach: Boolean) {
-    val bg  = if (isCoach) Color(0xFF2A1F52) else Color(0xFF1E2947)
+    val bg = if (isCoach) Color(0xFF2A1F52) else Color(0xFF1E2947)
     val txt = Color.White
     val line2 = if (isCoach) "מאמן" else "מתאמן"
 
