@@ -341,7 +341,7 @@ class BillingRepository(
             SubscriptionProducts.MEMBER_MONTHLY -> 15L * 60L * 1000L
 
             SubscriptionProducts.REGULAR_YEARLY,
-            SubscriptionProducts.MEMBER_YEARLY -> 45L * 60L * 1000L
+            SubscriptionProducts.MEMBER_YEARLY -> 4L * 60L * 60L * 1000L
 
             else -> 15L * 60L * 1000L
         }

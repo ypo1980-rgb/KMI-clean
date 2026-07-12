@@ -1736,39 +1736,54 @@ private fun createPaymentsReportPdf(
 
     val document = PdfDocument()
 
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
+    val lightHeaderBlue = android.graphics.Color.rgb(128, 183, 220)
+    val textDark = android.graphics.Color.rgb(15, 23, 42)
+    val textMuted = android.graphics.Color.rgb(100, 116, 139)
+
+    val regularTypeface =
+        Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+
+    val boldTypeface =
+        Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        typeface = regularTypeface
         textSize = 10.5f
-        color = android.graphics.Color.rgb(15, 23, 42)
+        color = textDark
         textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
     }
 
-    val titlePaint = Paint(textPaint).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        textSize = 22f
+    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = boldTypeface
+        textSize = 29f
         color = android.graphics.Color.WHITE
+        textAlign = Paint.Align.RIGHT
     }
 
-    val subtitlePaint = Paint(textPaint).apply {
-        textSize = 10.5f
-        color = android.graphics.Color.rgb(226, 232, 240)
+    val subtitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = regularTypeface
+        textSize = 14f
+        color = android.graphics.Color.WHITE
+        textAlign = Paint.Align.RIGHT
     }
 
     val sectionPaint = Paint(textPaint).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        typeface = boldTypeface
         textSize = 15f
-        color = android.graphics.Color.rgb(15, 23, 42)
+        color = textDark
     }
 
     val headerPaint = Paint(textPaint).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        typeface = boldTypeface
         textSize = 9.8f
         color = android.graphics.Color.WHITE
     }
 
     val smallPaint = Paint(textPaint).apply {
         textSize = 9.2f
-        color = android.graphics.Color.rgb(100, 116, 139)
+        color = textMuted
     }
 
     val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1781,7 +1796,7 @@ private fun createPaymentsReportPdf(
         PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
     )
     var canvas = page.canvas
-    var y = margin
+    var y = 174f
 
     fun textX(): Float = if (isEnglish) margin else pageWidth - margin
 
@@ -1793,44 +1808,141 @@ private fun createPaymentsReportPdf(
         }
     }
 
+    fun drawKmiLogo(
+        targetCanvas: android.graphics.Canvas,
+        cx: Float,
+        cy: Float,
+        radius: Float
+    ) {
+        val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            style = Paint.Style.FILL
+        }
+
+        val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            style = Paint.Style.FILL
+        }
+
+        val logoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            typeface = boldTypeface
+            textSize = radius * 0.62f
+            textAlign = Paint.Align.CENTER
+        }
+
+        targetCanvas.drawCircle(cx, cy, radius, outerPaint)
+        targetCanvas.drawCircle(cx, cy, radius - 4f, innerPaint)
+
+        targetCanvas.drawText(
+            "KAMI",
+            cx,
+            cy + radius * 0.22f,
+            logoTextPaint
+        )
+    }
+
     fun drawHeader() {
         canvas.drawColor(android.graphics.Color.WHITE)
 
-        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(2, 43, 74)
-        }
+        val headerBottom = 122f
+        val headerTextRight = 435f
 
-        canvas.drawRoundRect(
-            margin,
-            margin,
-            pageWidth - margin,
-            margin + 72f,
-            20f,
-            20f,
-            bg
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(pageWidth.toFloat(), 0f)
+                lineTo(pageWidth.toFloat(), headerBottom)
+                lineTo(178f, headerBottom)
+                lineTo(238f, 0f)
+                close()
+            },
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = navy
+                style = Paint.Style.FILL
+            }
         )
 
-        titlePaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(208f, headerBottom)
+                lineTo(224f, headerBottom)
+                lineTo(284f, 0f)
+                lineTo(268f, 0f)
+                close()
+            },
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = mediumBlue
+                style = Paint.Style.FILL
+            }
+        )
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(230f, headerBottom)
+                lineTo(238f, headerBottom)
+                lineTo(298f, 0f)
+                lineTo(290f, 0f)
+                close()
+            },
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = lightHeaderBlue
+                style = Paint.Style.FILL
+            }
+        )
+
+        drawKmiLogo(
+            targetCanvas = canvas,
+            cx = 78f,
+            cy = 58f,
+            radius = 42f
+        )
+
+        titlePaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        subtitlePaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        val headerTextX =
+            if (isEnglish) 308f else headerTextRight
+
         canvas.drawText(
-            tr("דו״ח תשלומים", "Payments Report"),
-            if (isEnglish) margin + 18f else pageWidth - margin - 18f,
-            margin + 30f,
+            tr(
+                "דו״ח תשלומים",
+                "Payments Report"
+            ),
+            headerTextX,
+            52f,
             titlePaint
         )
 
-        subtitlePaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
         canvas.drawText(
-            "${tr("סניף", "Branch")}: ${selectedBranch.ifBlank { tr("כל הסניפים", "All branches") }} · ${paymentNowDateText()}",
-            if (isEnglish) margin + 18f else pageWidth - margin - 18f,
-            margin + 52f,
+            "${tr("סניף", "Branch")}: ${
+                selectedBranch.ifBlank {
+                    tr("כל הסניפים", "All branches")
+                }
+            }",
+            headerTextX,
+            78f,
             subtitlePaint
         )
 
-        y = margin + 100f
+        smallPaint.color = textMuted
+        smallPaint.textAlign = Paint.Align.RIGHT
+
+        canvas.drawText(
+            tr("תאריך הפקה:", "Generated:") + " " +
+                    paymentNowDateText(),
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+
+        y = 174f
     }
 
     fun drawFooter() {
-        smallPaint.color = android.graphics.Color.rgb(100, 116, 139)
+        smallPaint.color = textMuted
         smallPaint.textAlign = Paint.Align.CENTER
         canvas.drawLine(margin, pageHeight - 42f, pageWidth - margin, pageHeight - 42f, linePaint)
         canvas.drawText(

@@ -2093,28 +2093,55 @@ private fun createAttendancePdf(
     val margin = 36f
 
     val document = PdfDocument()
+
+    val navy = android.graphics.Color.rgb(2, 43, 74)
+    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
+    val lightHeaderBlue = android.graphics.Color.rgb(128, 183, 220)
+    val textDark = android.graphics.Color.rgb(15, 23, 42)
+    val textMuted = android.graphics.Color.rgb(100, 116, 139)
+
+    val regularTypeface =
+        Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+
+    val boldTypeface =
+        Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
     val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        typeface = regularTypeface
         textSize = 13f
-        color = android.graphics.Color.rgb(15, 23, 42)
+        color = textDark
     }
 
     val titlePaint = Paint(paint).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        typeface = boldTypeface
         textSize = 22f
-        color = android.graphics.Color.rgb(2, 43, 74)
+        color = navy
         textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
     }
 
     val headerPaint = Paint(paint).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        typeface = boldTypeface
         textSize = 14f
         color = android.graphics.Color.WHITE
     }
 
+    val pdfHeaderTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = boldTypeface
+        textSize = 29f
+        color = android.graphics.Color.WHITE
+        textAlign = Paint.Align.RIGHT
+    }
+
+    val pdfHeaderSubtitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = regularTypeface
+        textSize = 14f
+        color = android.graphics.Color.WHITE
+        textAlign = Paint.Align.RIGHT
+    }
+
     val smallPaint = Paint(paint).apply {
         textSize = 10f
-        color = android.graphics.Color.rgb(100, 116, 139)
+        color = textMuted
     }
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
@@ -2130,46 +2157,156 @@ private fun createAttendancePdf(
         PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
     )
     var canvas = page.canvas
-    var y = margin
+    var y = 174f
+
+    fun drawKmiLogo(
+        targetCanvas: android.graphics.Canvas,
+        cx: Float,
+        cy: Float,
+        radius: Float
+    ) {
+        val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            style = Paint.Style.FILL
+        }
+
+        val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            style = Paint.Style.FILL
+        }
+
+        val logoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            typeface = boldTypeface
+            textSize = radius * 0.62f
+            textAlign = Paint.Align.CENTER
+        }
+
+        targetCanvas.drawCircle(
+            cx,
+            cy,
+            radius,
+            outerPaint
+        )
+
+        targetCanvas.drawCircle(
+            cx,
+            cy,
+            radius - 4f,
+            innerPaint
+        )
+
+        targetCanvas.drawText(
+            "KAMI",
+            cx,
+            cy + radius * 0.22f,
+            logoTextPaint
+        )
+    }
 
     fun drawHeader() {
         canvas.drawColor(android.graphics.Color.WHITE)
 
-        val headerBg = Paint().apply {
-            color = android.graphics.Color.rgb(2, 43, 74)
-        }
-        canvas.drawRoundRect(
-            margin,
-            margin,
-            pageWidth - margin,
-            margin + 58f,
-            18f,
-            18f,
-            headerBg
+        val headerBottom = 122f
+        val headerTextRight = 435f
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(pageWidth.toFloat(), 0f)
+                lineTo(pageWidth.toFloat(), headerBottom)
+                lineTo(178f, headerBottom)
+                lineTo(238f, 0f)
+                close()
+            },
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = navy
+                style = Paint.Style.FILL
+            }
         )
 
-        headerPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-        canvas.drawText(
-            tr("דו\"ח נוכחות", "Attendance Report"),
-            if (isEnglish) margin + 18f else pageWidth - margin - 18f,
-            margin + 26f,
-            headerPaint
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(208f, headerBottom)
+                lineTo(224f, headerBottom)
+                lineTo(284f, 0f)
+                lineTo(268f, 0f)
+                close()
+            },
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = mediumBlue
+                style = Paint.Style.FILL
+            }
         )
 
-        smallPaint.color = android.graphics.Color.WHITE
-        smallPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(230f, headerBottom)
+                lineTo(238f, headerBottom)
+                lineTo(298f, 0f)
+                lineTo(290f, 0f)
+                close()
+            },
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = lightHeaderBlue
+                style = Paint.Style.FILL
+            }
+        )
+
+        drawKmiLogo(
+            targetCanvas = canvas,
+            cx = 78f,
+            cy = 58f,
+            radius = 42f
+        )
+
+        pdfHeaderTitlePaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        pdfHeaderSubtitlePaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        val headerTextX =
+            if (isEnglish) 308f else headerTextRight
+
         canvas.drawText(
-            "${state.branch} / ${state.groupKey} / $date",
-            if (isEnglish) margin + 18f else pageWidth - margin - 18f,
-            margin + 47f,
+            tr(
+                "דו״ח נוכחות",
+                "Attendance Report"
+            ),
+            headerTextX,
+            52f,
+            pdfHeaderTitlePaint
+        )
+
+        canvas.drawText(
+            tr(
+                "${state.branch} · ${state.groupKey}",
+                "${state.branch} · ${state.groupKey}"
+            ),
+            headerTextX,
+            78f,
+            pdfHeaderSubtitlePaint
+        )
+
+        smallPaint.color = textMuted
+        smallPaint.textAlign = Paint.Align.RIGHT
+
+        canvas.drawText(
+            tr("תאריך הפקה:", "Generated:") + " " +
+                    java.text.SimpleDateFormat(
+                        "dd/MM/yyyy",
+                        java.util.Locale.getDefault()
+                    ).format(java.util.Date()),
+            pageWidth - 34f,
+            142f,
             smallPaint
         )
 
-        y = margin + 88f
+        y = 174f
     }
 
     fun drawFooter() {
-        smallPaint.color = android.graphics.Color.rgb(100, 116, 139)
+        smallPaint.color = textMuted
         smallPaint.textAlign = Paint.Align.CENTER
         canvas.drawText(
             tr("עמוד $pageNumber · KAMI", "Page $pageNumber · KAMI"),

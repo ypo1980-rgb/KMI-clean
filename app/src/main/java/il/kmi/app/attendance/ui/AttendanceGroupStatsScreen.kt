@@ -704,17 +704,22 @@ private fun createAttendanceStatsPdf(
     fun drawHeader(canvas: android.graphics.Canvas) {
         canvas.drawColor(android.graphics.Color.WHITE)
 
-        canvas.drawPath(android.graphics.Path().apply {
-            moveTo(pageWidth.toFloat(), 0f)
-            lineTo(pageWidth.toFloat(), 122f)
-            lineTo(178f, 122f)
-            lineTo(238f, 0f)
-            close()
-        }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy })
+        val headerBottom = 122f
+        val headerTextRight = 435f
 
         canvas.drawPath(android.graphics.Path().apply {
-            moveTo(208f, 122f)
-            lineTo(224f, 122f)
+            moveTo(pageWidth.toFloat(), 0f)
+            lineTo(pageWidth.toFloat(), headerBottom)
+            lineTo(178f, headerBottom)
+            lineTo(238f, 0f)
+            close()
+        }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+        })
+
+        canvas.drawPath(android.graphics.Path().apply {
+            moveTo(208f, headerBottom)
+            lineTo(224f, headerBottom)
             lineTo(284f, 0f)
             lineTo(268f, 0f)
             close()
@@ -723,8 +728,8 @@ private fun createAttendanceStatsPdf(
         })
 
         canvas.drawPath(android.graphics.Path().apply {
-            moveTo(230f, 122f)
-            lineTo(238f, 122f)
+            moveTo(230f, headerBottom)
+            lineTo(238f, headerBottom)
             lineTo(298f, 0f)
             lineTo(290f, 0f)
             close()
@@ -732,13 +737,35 @@ private fun createAttendanceStatsPdf(
             color = android.graphics.Color.rgb(128, 183, 220)
         })
 
-        drawKmiLogo(canvas, 78f, 58f, 42f)
+        drawKmiLogo(
+            canvas = canvas,
+            cx = 78f,
+            cy = 58f,
+            radius = 42f
+        )
 
         titlePaint.textAlign = Paint.Align.RIGHT
         subTitlePaint.textAlign = Paint.Align.RIGHT
 
-        canvas.drawText(tr("סטטיסטיקת נוכחות", "Attendance statistics"), pageWidth - 34f, 52f, titlePaint)
-        canvas.drawText(tr("דו״ח נוכחות קבוצתי", "Group attendance report"), pageWidth - 34f, 78f, subTitlePaint)
+        canvas.drawText(
+            tr(
+                "סטטיסטיקת נוכחות",
+                "Attendance statistics"
+            ),
+            headerTextRight,
+            52f,
+            titlePaint
+        )
+
+        canvas.drawText(
+            tr(
+                "דו״ח נוכחות קבוצתי",
+                "Group attendance report"
+            ),
+            headerTextRight,
+            78f,
+            subTitlePaint
+        )
 
         smallPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText(
