@@ -998,10 +998,22 @@ private fun createAdminUsersPdf(
             logoTextPaint
         )
 
+        headerTitlePaint.textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+
+        headerSubtitlePaint.textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+
         val headerTextX = if (isEnglish) {
             308f
         } else {
-            435f
+            pageWidth - 34f
         }
 
         canvas.drawText(

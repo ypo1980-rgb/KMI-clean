@@ -2208,7 +2208,6 @@ private fun createAttendancePdf(
         canvas.drawColor(android.graphics.Color.WHITE)
 
         val headerBottom = 122f
-        val headerTextRight = 435f
 
         canvas.drawPath(
             android.graphics.Path().apply {
@@ -2260,30 +2259,44 @@ private fun createAttendancePdf(
         )
 
         pdfHeaderTitlePaint.textAlign =
-            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
 
         pdfHeaderSubtitlePaint.textAlign =
-            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
 
-        val headerTextX =
-            if (isEnglish) 308f else headerTextRight
+        val headerTitleX = if (isEnglish) {
+            308f
+        } else {
+            pageWidth - 34f
+        }
+
+        val headerSubtitleX = if (isEnglish) {
+            308f
+        } else {
+            pageWidth - 34f
+        }
 
         canvas.drawText(
             tr(
                 "דו״ח נוכחות",
                 "Attendance Report"
             ),
-            headerTextX,
+            headerTitleX,
             52f,
             pdfHeaderTitlePaint
         )
 
         canvas.drawText(
-            tr(
-                "${state.branch} · ${state.groupKey}",
-                "${state.branch} · ${state.groupKey}"
-            ),
-            headerTextX,
+            "${state.branch} · ${state.groupKey}",
+            headerSubtitleX,
             78f,
             pdfHeaderSubtitlePaint
         )

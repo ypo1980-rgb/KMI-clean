@@ -599,7 +599,7 @@ private fun buildInternalExamSessionForUi(
                 val mutedText = AColor.rgb(80, 100, 120)
 
                 val headerBottom = 122f
-                val headerTextRight = 435f
+                val headerTextRight = pageW - 34f
 
                 val navyHeaderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = navy
@@ -709,7 +709,7 @@ private fun buildInternalExamSessionForUi(
                 val headerTextX = if (isEnglish) {
                     308f
                 } else {
-                    headerTextRight
+                    pageW - 34f
                 }
 
                 canvas.drawText(

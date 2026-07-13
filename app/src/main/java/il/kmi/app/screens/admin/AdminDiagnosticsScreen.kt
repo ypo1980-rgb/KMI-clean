@@ -429,10 +429,22 @@ private fun createAdminDiagnosticsPdf(
             logoTextPaint
         )
 
+        titlePaint.textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+
+        subtitlePaint.textAlign = if (isEnglish) {
+            android.graphics.Paint.Align.LEFT
+        } else {
+            android.graphics.Paint.Align.RIGHT
+        }
+
         val headerTextX = if (isEnglish) {
             308f
         } else {
-            435f
+            pageWidth - 34f
         }
 
         canvas.drawText(
@@ -447,11 +459,7 @@ private fun createAdminDiagnosticsPdf(
         )
 
         canvas.drawText(
-            if (isEnglish) {
-                "$rangeTitle · $typeTitle"
-            } else {
-                "$rangeTitle · $typeTitle"
-            },
+            "$rangeTitle · $typeTitle",
             headerTextX,
             77f,
             subtitlePaint
@@ -536,6 +544,13 @@ private fun createAdminDiagnosticsPdf(
 
     fun drawSectionTitle(value: String) {
         ensureSpace(28f)
+
+        sectionPaint.textAlign =
+            if (isEnglish) {
+                android.graphics.Paint.Align.LEFT
+            } else {
+                android.graphics.Paint.Align.RIGHT
+            }
 
         canvas.drawText(
             value,

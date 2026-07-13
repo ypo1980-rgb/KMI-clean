@@ -5459,37 +5459,180 @@ private fun createCoachTraineesPdf(
     fun drawHeader() {
         canvas.drawColor(android.graphics.Color.WHITE)
 
-        val headerBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(2, 43, 74)
+        val navy = android.graphics.Color.rgb(2, 43, 74)
+        val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
+        val lightBlue = android.graphics.Color.rgb(128, 183, 220)
+        val mutedText = android.graphics.Color.rgb(100, 116, 139)
+
+        val headerBottom = 122f
+
+        val navyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            style = Paint.Style.FILL
         }
 
-        canvas.drawRoundRect(
-            margin,
-            margin,
-            pageWidth - margin,
-            margin + 72f,
-            20f,
-            20f,
-            headerBg
+        val mediumStripePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = mediumBlue
+            style = Paint.Style.FILL
+        }
+
+        val lightStripePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = lightBlue
+            style = Paint.Style.FILL
+        }
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(pageWidth.toFloat(), 0f)
+                lineTo(pageWidth.toFloat(), headerBottom)
+                lineTo(178f, headerBottom)
+                lineTo(238f, 0f)
+                close()
+            },
+            navyPaint
         )
 
-        titlePaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(208f, headerBottom)
+                lineTo(224f, headerBottom)
+                lineTo(284f, 0f)
+                lineTo(268f, 0f)
+                close()
+            },
+            mediumStripePaint
+        )
+
+        canvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(230f, headerBottom)
+                lineTo(238f, headerBottom)
+                lineTo(298f, 0f)
+                lineTo(290f, 0f)
+                close()
+            },
+            lightStripePaint
+        )
+
+        val logoCenterX = 78f
+        val logoCenterY = 58f
+        val logoRadius = 42f
+
+        val logoOuterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            style = Paint.Style.FILL
+        }
+
+        val logoInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            style = Paint.Style.FILL
+        }
+
+        val logoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            typeface = Typeface.create(
+                Typeface.SANS_SERIF,
+                Typeface.BOLD
+            )
+            textSize = logoRadius * 0.62f
+            textAlign = Paint.Align.CENTER
+        }
+
+        canvas.drawCircle(
+            logoCenterX,
+            logoCenterY,
+            logoRadius,
+            logoOuterPaint
+        )
+
+        canvas.drawCircle(
+            logoCenterX,
+            logoCenterY,
+            logoRadius - 4f,
+            logoInnerPaint
+        )
+
         canvas.drawText(
-            tr("דו״ח רשימת מתאמנים", "Trainees List Report"),
-            if (isEnglish) margin + 18f else pageWidth - margin - 18f,
-            margin + 30f,
+            "KAMI",
+            logoCenterX,
+            logoCenterY + logoRadius * 0.22f,
+            logoTextPaint
+        )
+
+        titlePaint.apply {
+            typeface = Typeface.create(
+                Typeface.SANS_SERIF,
+                Typeface.BOLD
+            )
+            textSize = 25f
+            color = android.graphics.Color.WHITE
+            textAlign = if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+        }
+
+        subtitlePaint.apply {
+            typeface = Typeface.create(
+                Typeface.SANS_SERIF,
+                Typeface.NORMAL
+            )
+            textSize = 12f
+            color = android.graphics.Color.WHITE
+            textAlign = if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+        }
+
+        val headerTextX = if (isEnglish) {
+            308f
+        } else {
+            pageWidth - 34f
+        }
+
+        canvas.drawText(
+            tr(
+                "דו״ח רשימת מתאמנים",
+                "Trainees List Report"
+            ),
+            headerTextX,
+            50f,
             titlePaint
         )
 
-        subtitlePaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
         canvas.drawText(
-            "${tr("סניף", "Branch")}: ${branch.ifBlank { "—" }} · ${tr("קבוצה", "Group")}: ${groupKey.ifBlank { "—" }}",
-            if (isEnglish) margin + 18f else pageWidth - margin - 18f,
-            margin + 52f,
+            "${tr("סניף", "Branch")}: ${branch.ifBlank { "—" }} · " +
+                    "${tr("קבוצה", "Group")}: ${groupKey.ifBlank { "—" }}",
+            headerTextX,
+            77f,
             subtitlePaint
         )
 
-        y = margin + 100f
+        val generatedDate = java.text.SimpleDateFormat(
+            "dd/MM/yyyy HH:mm",
+            java.util.Locale.getDefault()
+        ).format(java.util.Date())
+
+        smallPaint.apply {
+            color = mutedText
+            textSize = 8.5f
+            textAlign = Paint.Align.RIGHT
+        }
+
+        canvas.drawText(
+            tr(
+                "תאריך הפקה: $generatedDate",
+                "Generated: $generatedDate"
+            ),
+            pageWidth - 34f,
+            142f,
+            smallPaint
+        )
+
+        y = 174f
     }
 
     fun drawFooter() {

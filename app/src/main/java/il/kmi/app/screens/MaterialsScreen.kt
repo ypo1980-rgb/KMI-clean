@@ -2050,8 +2050,28 @@ private fun createMaterialsPdf(
         titlePaint.textAlign = Paint.Align.RIGHT
         subTitlePaint.textAlign = Paint.Align.RIGHT
 
-        canvas.drawText(tr("תרגילים לפי חגורה", "Belt exercises"), pageWidth - 34f, 52f, titlePaint)
-        canvas.drawText(topicTitle.take(42), pageWidth - 34f, 78f, subTitlePaint)
+        titlePaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        subTitlePaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        val headerX =
+            if (isEnglish) margin else pageWidth - margin
+
+        canvas.drawText(
+            tr("תרגילים לפי חגורה", "Belt exercises"),
+            headerX,
+            52f,
+            titlePaint
+        )
+
+        canvas.drawText(
+            topicTitle.take(42),
+            headerX,
+            78f,
+            subTitlePaint
+        )
 
         smallPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText(
@@ -2103,8 +2123,15 @@ private fun createMaterialsPdf(
         drawRoundRect(canvas, margin, top, pageWidth - margin, top + 120f, lightBlue, 12f)
         drawRoundRect(canvas, margin, top, pageWidth - margin, top + 120f, borderBlue, 12f, stroke = true)
 
-        sectionPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(tr("סיכום תרגילים", "Exercises summary"), pageWidth - margin - 22f, top + 30f, sectionPaint)
+        sectionPaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        canvas.drawText(
+            tr("סיכום תרגילים", "Exercises summary"),
+            if (isEnglish) margin + 22f else pageWidth - margin - 22f,
+            top + 30f,
+            sectionPaint
+        )
 
         val stats = listOf(
             total.toString() to tr("תרגילים", "Exercises"),
@@ -2181,13 +2208,27 @@ private fun createMaterialsPdf(
             numberPaint
         )
 
-        boldValuePaint.textAlign = Paint.Align.RIGHT
-        boldValuePaint.color = textDark
-        canvas.drawText(item.title.take(42), right - 66f, top + 28f, boldValuePaint)
+        boldValuePaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
 
-        labelPaint.textAlign = Paint.Align.RIGHT
-        labelPaint.color = statusColor
-        canvas.drawText(item.status, right - 66f, top + 52f, labelPaint)
+        boldValuePaint.color = textDark
+
+        canvas.drawText(
+            item.title.take(42),
+            if (isEnglish) left + 66f else right - 66f,
+            top + 28f,
+            boldValuePaint
+        )
+
+        labelPaint.textAlign =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        canvas.drawText(
+            item.status,
+            if (isEnglish) left + 66f else right - 66f,
+            top + 52f,
+            labelPaint
+        )
 
         val tags = buildList {
             if (item.isFavorite) add(tr("מועדף", "Favorite"))

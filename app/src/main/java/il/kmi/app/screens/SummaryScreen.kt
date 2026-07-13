@@ -2633,11 +2633,7 @@ private fun createSummaryPdf(
         return android.text.StaticLayout.Builder
             .obtain(text, 0, text.length, textPaint, width)
             .setAlignment(
-                alignment ?: if (rtl) {
-                    android.text.Layout.Alignment.ALIGN_OPPOSITE
-                } else {
-                    android.text.Layout.Alignment.ALIGN_NORMAL
-                }
+                alignment ?: android.text.Layout.Alignment.ALIGN_NORMAL
             )
             .setTextDirection(
                 if (rtl) {

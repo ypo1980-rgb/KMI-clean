@@ -28,7 +28,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import il.kmi.app.R
+import il.kmi.app.ui.KmiTopBar
 
 @Composable
 fun OnboardingScreen(
@@ -90,10 +91,27 @@ fun OnboardingScreen(
             contentWindowInsets = WindowInsets(0),
             containerColor = Color.Transparent,
             topBar = {
-                OnboardingTopBar(
-                    isEnglish = isEnglish,
-                    allowSkip = allowSkip,
-                    onSkip = onSkip
+                KmiTopBar(
+                    title = if (isEnglish) {
+                        "App guide"
+                    } else {
+                        "הדרכת האפליקציה"
+                    },
+                    currentLang = if (isEnglish) "en" else "he",
+                    showMenu = true,
+                    showBottomActions = true,
+                    showBottomHelp = true,
+                    showBottomShare = true,
+                    showSettings = true,
+                    showRoleBadge = false,
+                    showTopBeltIcon = false,
+                    showLogoInBar = false,
+                    showTopHome = false,
+                    showTopSearch = false,
+                    showTopShare = false,
+                    showModePill = false,
+                    showFontQuick = false,
+                    showRoleStatus = false
                 )
             },
             bottomBar = {
@@ -133,17 +151,22 @@ fun OnboardingScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 22.dp, vertical = 18.dp),
+                        .padding(
+                            horizontal = 22.dp,
+                            vertical = 8.dp
+                        ),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    OnboardingProgressIndicator(
+                    OnboardingNavigationHeader(
                         currentStepIndex = currentStepIndex,
                         stepsCount = steps.size,
                         accentColor = currentStep.accentColor,
-                        isEnglish = isEnglish
+                        isEnglish = isEnglish,
+                        allowSkip = allowSkip,
+                        onSkip = onSkip
                     )
 
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(4.dp))
 
                     AnimatedContent(
                         targetState = currentStepIndex,
@@ -170,7 +193,6 @@ fun OnboardingScreen(
 
                         OnboardingStepCard(
                             step = step,
-                            stepNumber = stepIndex + 1,
                             isEnglish = isEnglish
                         )
                     }
@@ -181,19 +203,69 @@ fun OnboardingScreen(
 }
 
 @Composable
+private fun OnboardingNavigationHeader(
+    currentStepIndex: Int,
+    stepsCount: Int,
+    accentColor: Color,
+    isEnglish: Boolean,
+    allowSkip: Boolean,
+    onSkip: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+    ) {
+        if (allowSkip) {
+            TextButton(
+                onClick = onSkip,
+                modifier = Modifier
+                    .align(AbsoluteAlignment.TopLeft)
+                    .height(34.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 6.dp,
+                    vertical = 0.dp
+                )
+            ) {
+                Text(
+                    text = if (isEnglish) {
+                        "Skip"
+                    } else {
+                        "דלג"
+                    },
+                    color = Color(0xFF6D4ED8),
+                    fontSize = 13.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        OnboardingProgressIndicator(
+            currentStepIndex = currentStepIndex,
+            stepsCount = stepsCount,
+            accentColor = accentColor,
+            isEnglish = isEnglish,
+            modifier = Modifier
+                .align(Alignment.Center)
+        )
+    }
+}
+
+@Composable
 private fun OnboardingProgressIndicator(
     currentStepIndex: Int,
     stepsCount: Int,
     accentColor: Color,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(9.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -203,13 +275,14 @@ private fun OnboardingProgressIndicator(
 
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 3.dp)
-                        .height(8.dp)
+                        .padding(horizontal = 2.5.dp)
                         .then(
                             if (isSelected) {
-                                Modifier.fillMaxWidth(0.10f)
+                                Modifier
+                                    .width(28.dp)
+                                    .height(7.dp)
                             } else {
-                                Modifier.size(8.dp)
+                                Modifier.size(7.dp)
                             }
                         )
                         .clip(CircleShape)
@@ -231,67 +304,10 @@ private fun OnboardingProgressIndicator(
                 "שלב ${currentStepIndex + 1} מתוך $stepsCount"
             },
             color = Color(0xFF64748B),
-            fontSize = 12.sp,
-            lineHeight = 15.sp,
+            fontSize = 11.sp,
+            lineHeight = 13.sp,
             fontWeight = FontWeight.Bold
         )
-    }
-}
-
-@Composable
-private fun OnboardingTopBar(
-    isEnglish: Boolean,
-    allowSkip: Boolean,
-    onSkip: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding(),
-        color = Color.White,
-        shadowElevation = 3.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-                .padding(horizontal = 18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (isEnglish) {
-                    "App guide"
-                } else {
-                    "הדרכה על האפליקציה"
-                },
-                modifier = Modifier.weight(1f),
-                color = Color(0xFF111827),
-                fontSize = 20.sp,
-                lineHeight = 24.sp,
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = if (isEnglish) {
-                    TextAlign.Start
-                } else {
-                    TextAlign.Right
-                }
-            )
-
-            if (allowSkip) {
-                TextButton(
-                    onClick = onSkip
-                ) {
-                    Text(
-                        text = if (isEnglish) {
-                            "Skip"
-                        } else {
-                            "דלג"
-                        },
-                        color = Color(0xFF6D4ED8),
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -303,7 +319,7 @@ private fun onboardingImageForStep(
             R.drawable.onboarding_welcome
 
         "belts" ->
-            R.drawable.onboarding_subjects
+            R.drawable.onboarding_belts
 
         "drawer" ->
             R.drawable.onboarding_drawer
@@ -329,14 +345,8 @@ private fun onboardingImageForStep(
         "ai" ->
             R.drawable.onboarding_ai
 
-        /*
-         * עדיין אין drawable בשם onboarding_exam.
-         * לאחר הוספת התמונה, החלף את null ב:
-         *
-         * R.drawable.onboarding_exam
-         */
         "internal_exam" ->
-            null
+            R.drawable.onboarding_exam
 
         else ->
             null
@@ -346,9 +356,11 @@ private fun onboardingImageForStep(
 @Composable
 private fun OnboardingStepCard(
     step: OnboardingStep,
-    stepNumber: Int,
     isEnglish: Boolean
 ) {
+    val imageRes = onboardingImageForStep(step)
+    val scrollState = rememberScrollState()
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(30.dp),
@@ -359,33 +371,46 @@ private fun OnboardingStepCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(
-                    horizontal = 20.dp,
-                    vertical = 22.dp
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 8.dp,
+                    bottom = 10.dp
                 ),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top
         ) {
-            val imageRes = onboardingImageForStep(step)
+            Text(
+                text = step.title(isEnglish),
+                modifier = Modifier.fillMaxWidth(),
+                color = Color(0xFF111827),
+                fontSize = 14.5.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+                maxLines = 2
+            )
 
             if (imageRes != null) {
+                Spacer(Modifier.height(5.dp))
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(390.dp),
+                        .height(316.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Surface(
                         modifier = Modifier
-                            .width(214.dp)
-                            .height(382.dp)
+                            .width(188.dp)
+                            .height(316.dp)
                             .shadow(
-                                elevation = 22.dp,
-                                shape = RoundedCornerShape(34.dp),
+                                elevation = 18.dp,
+                                shape = RoundedCornerShape(30.dp),
                                 clip = false
                             ),
-                        shape = RoundedCornerShape(34.dp),
+                        shape = RoundedCornerShape(30.dp),
                         color = Color(0xFF090D18),
                         tonalElevation = 0.dp,
                         shadowElevation = 0.dp,
@@ -397,8 +422,8 @@ private fun OnboardingStepCard(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(7.dp)
-                                .clip(RoundedCornerShape(28.dp))
+                                .padding(6.dp)
+                                .clip(RoundedCornerShape(25.dp))
                                 .background(Color.Black)
                         ) {
                             Image(
@@ -413,47 +438,26 @@ private fun OnboardingStepCard(
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
-                                    .padding(top = 6.dp)
-                                    .width(68.dp)
-                                    .height(18.dp)
+                                    .padding(top = 5.dp)
+                                    .width(58.dp)
+                                    .height(16.dp)
                                     .clip(RoundedCornerShape(999.dp))
                                     .background(Color(0xFF070A12))
                             )
-
-                            Surface(
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .padding(12.dp),
-                                shape = CircleShape,
-                                color = step.accentColor,
-                                shadowElevation = 8.dp
-                            ) {
-                                Text(
-                                    text = stepNumber.toString(),
-                                    modifier = Modifier.padding(
-                                        horizontal = 12.dp,
-                                        vertical = 8.dp
-                                    ),
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 16.sp,
-                                    lineHeight = 18.sp
-                                )
-                            }
                         }
                     }
 
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .width(126.dp)
-                            .height(14.dp)
+                            .width(110.dp)
+                            .height(12.dp)
                             .clip(RoundedCornerShape(999.dp))
                             .background(
                                 Brush.horizontalGradient(
                                     colors = listOf(
                                         Color.Transparent,
-                                        step.accentColor.copy(alpha = 0.32f),
+                                        step.accentColor.copy(alpha = 0.30f),
                                         Color.Transparent
                                     )
                                 )
@@ -461,20 +465,19 @@ private fun OnboardingStepCard(
                     )
                 }
 
-                Spacer(Modifier.height(20.dp))
+                if (scrollState.canScrollForward) {
+                    Spacer(Modifier.height(6.dp))
+
+                    PremiumScrollHint(
+                        step = step,
+                        isEnglish = isEnglish
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+                } else {
+                    Spacer(Modifier.height(6.dp))
+                }
             }
-
-            Text(
-                text = step.title(isEnglish),
-                modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF111827),
-                fontSize = 22.sp,
-                lineHeight = 27.sp,
-                fontWeight = FontWeight.Black,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(Modifier.height(12.dp))
 
             Text(
                 text = step.description(isEnglish),
@@ -494,6 +497,147 @@ private fun OnboardingStepCard(
 }
 
 @Composable
+private fun PremiumScrollHint(
+    step: OnboardingStep,
+    isEnglish: Boolean
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .shadow(
+                elevation = 14.dp,
+                shape = RoundedCornerShape(22.dp),
+                clip = false
+            ),
+        shape = RoundedCornerShape(22.dp),
+        color = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = Color.White.copy(alpha = 0.55f)
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            step.accentColor.copy(alpha = 0.96f),
+                            Color(0xFF7C3AED),
+                            Color(0xFF4F46E5)
+                        )
+                    ),
+                    shape = RoundedCornerShape(22.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.18f),
+                    shape = RoundedCornerShape(22.dp)
+                )
+                .padding(
+                    horizontal = 14.dp,
+                    vertical = 6.dp
+                )
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth(0.78f)
+                    .height(1.dp)
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.White.copy(alpha = 0.65f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    horizontalAlignment = if (isEnglish) {
+                        Alignment.End
+                    } else {
+                        Alignment.Start
+                    },
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
+                    Text(
+                        text = if (isEnglish) {
+                            "Continue to the full guide"
+                        } else {
+                            "המשך להסבר המלא"
+                        },
+                        color = Color.White,
+                        fontSize = 12.5.sp,
+                        lineHeight = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        textAlign = if (isEnglish) {
+                            TextAlign.Right
+                        } else {
+                            TextAlign.Left
+                        }
+                    )
+
+                    Text(
+                        text = if (isEnglish) {
+                            "More information is waiting below"
+                        } else {
+                            "מידע נוסף מחכה לך למטה"
+                        },
+                        color = Color.White.copy(alpha = 0.78f),
+                        fontSize = 9.5.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = if (isEnglish) {
+                            TextAlign.Right
+                        } else {
+                            TextAlign.Left
+                        }
+                    )
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                Surface(
+                    modifier = Modifier.size(28.dp),
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.18f),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.28f)
+                    )
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "↓",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun OnboardingBottomBar(
     isEnglish: Boolean,
     isFirstStep: Boolean,
@@ -504,20 +648,43 @@ private fun OnboardingBottomBar(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color.White,
-        shadowElevation = 12.dp
+        shadowElevation = 10.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 18.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(
+                    horizontal = 18.dp,
+                    vertical = 7.dp
+                ),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (!isFirstStep) {
-                TextButton(
+                Button(
                     onClick = onPrevious,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                        .shadow(
+                            elevation = 4.dp,
+                            shape = RoundedCornerShape(14.dp),
+                            clip = false
+                        ),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = Color(0xFFD7DDEA)
+                    ),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color(0xFF475569)
+                    ),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 12.dp,
+                        vertical = 0.dp
+                    )
                 ) {
                     Text(
                         text = if (isEnglish) {
@@ -525,8 +692,9 @@ private fun OnboardingBottomBar(
                         } else {
                             "הקודם"
                         },
-                        color = Color(0xFF475569),
-                        fontWeight = FontWeight.Bold
+                        fontSize = 12.sp,
+                        lineHeight = 15.sp,
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
             } else {
@@ -538,12 +706,25 @@ private fun OnboardingBottomBar(
             Button(
                 onClick = onNext,
                 modifier = Modifier
-                    .weight(1.35f)
-                    .height(52.dp),
-                shape = RoundedCornerShape(18.dp),
+                    .weight(1.2f)
+                    .height(36.dp)
+                    .shadow(
+                        elevation = 7.dp,
+                        shape = RoundedCornerShape(14.dp),
+                        clip = false
+                    ),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.32f)
+                ),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF6D4ED8),
                     contentColor = Color.White
+                ),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 14.dp,
+                    vertical = 0.dp
                 )
             ) {
                 Text(
@@ -553,8 +734,9 @@ private fun OnboardingBottomBar(
                         isEnglish -> "Next"
                         else -> "הבא"
                     },
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
+                    fontWeight = FontWeight.Black
                 )
             }
         }

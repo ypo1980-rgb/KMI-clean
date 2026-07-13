@@ -7,35 +7,31 @@ object OnboardingContent {
     val steps: List<OnboardingStep> = listOf(
         OnboardingStep(
             id = "welcome",
-            titleHe = "ברוכים הבאים ל־KAMI",
-            titleEn = "Welcome to KAMI",
+            titleHe = "מסך הבית",
+            titleEn = "Home screen",
             descriptionHe = """
-        כל חומרי הלימוד, ההתקדמות והמבחנים שלך במקום אחד.
-
-        בסיור קצר נכיר את הכלים המרכזיים באפליקציה.
+        כל האימונים הקרובים, הודעות המאמן, סיכום ההתקדמות ולוח האימונים החודשי שלך — במקום אחד.
     """.trimIndent(),
             descriptionEn = """
-        Your learning materials, progress and exams in one place.
-
-        This short tour introduces the app's main tools.
+        Your upcoming training sessions, coach messages, progress summary and monthly schedule — all in one place.
     """.trimIndent(),
             imageRes = il.kmi.app.R.drawable.onboarding_welcome,
             accentColor = Color(0xFF6D4ED8)
         ),
         OnboardingStep(
             id = "belts",
-            titleHe = "חגורות וחומרי לימוד",
-            titleEn = "Belts and learning materials",
+            titleHe = "תפריט צד",
+            titleEn = "Side menu",
             descriptionHe = """
-                בחר חגורה כדי לצפות בחומר הרלוונטי לרמה שלך.
-                
-                בכל חגורה תמצא נושאים, תתי־נושאים ותרגילים המבוססים על תוכן האפליקציה.
-            """.trimIndent(),
+        תפריט הצד מרכז במקום אחד את כל האזורים החשובים באפליקציה.
+
+        ממנו ניתן לפתוח את הפרופיל האישי, רשימת המתאמנים, מבחנים, תרגילים, תשלומים, יצירת קשר, הפורום, הגדרות השפה וכלי ניהול נוספים.
+    """.trimIndent(),
             descriptionEn = """
-                Select a belt to view the material relevant to your level.
-                
-                Each belt contains subjects, subtopics and exercises from the app's content.
-            """.trimIndent(),
+        The side menu provides quick access to the main areas of the app.
+
+        From here you can open your profile, trainee list, exams, exercises, payments, contact options, the forum, language settings and additional management tools.
+    """.trimIndent(),
             accentColor = Color(0xFFF59E0B)
         ),
         OnboardingStep(
@@ -56,42 +52,42 @@ object OnboardingContent {
         ),
         OnboardingStep(
             id = "knowledge_status",
-            titleHe = "יודע, לא יודע ולא סומן",
-            titleEn = "Known, unknown and unmarked",
+            titleHe = "סיווג תרגילים לפי נושא נבחר",
+            titleEn = "Exercise Classification by Selected Topic",
             descriptionHe = """
-                סמן את מצב הידע שלך עבור כל תרגיל:
-                
-                ירוק – יודע
-                אדום – לא יודע
-                ללא סימון – עדיין לא נבדק
-                
-                הסימונים נשמרים ומשמשים לסיכומים, לתרגול ולדוחות PDF.
-            """.trimIndent(),
+        במסך זה ניתן לסווג כל תרגיל לפי מצב הידע שלך:
+
+        ירוק – יודע
+        אדום – לא יודע
+        ללא סימון – עדיין לא נבדק
+
+        הסיווגים נשמרים ומשמשים לסיכומים, לתרגול ממוקד ולדוחות PDF.
+    """.trimIndent(),
             descriptionEn = """
-                Mark your knowledge status for every exercise:
-                
-                Green – known
-                Red – unknown
-                Unmarked – not reviewed yet
-                
-                These marks are saved and used in summaries, practice sessions and PDF reports.
-            """.trimIndent(),
+        On this screen, you can classify each exercise according to your knowledge status:
+
+        Green – known
+        Red – unknown
+        Unmarked – not reviewed yet
+
+        These classifications are saved and used for summaries, focused practice sessions and PDF reports.
+    """.trimIndent(),
             accentColor = Color(0xFF16A34A)
         ),
         OnboardingStep(
             id = "exercise_cards",
-            titleHe = "כרטיסיות ותרגול",
-            titleEn = "Exercise cards and practice",
+            titleHe = "תרגילים לפי נושא",
+            titleEn = "Exercises by Topic",
             descriptionHe = """
-                במסך הכרטיסיות ניתן לעבור בין כל התרגילים, תרגילים שלא ידועים ומועדפים.
-                
-                ניתן לפתוח הסבר, לשמור הערה אישית ולהתחיל תרגול לפי הרשימה הפעילה.
-            """.trimIndent(),
+        במסך התרגילים לפי נושא יוצגו כל התרגילים השייכים לנושא שנבחר, מכל החגורות הרלוונטיות.
+
+        ניתן לפתוח הסבר מפורט, לשמור הערה אישית ולהתחיל תרגול לפי הרשימה הפעילה.
+    """.trimIndent(),
             descriptionEn = """
-                The exercise cards screen lets you switch between all exercises, unknown exercises and favorites.
-                
-                You can open explanations, save personal notes and start a practice session from the active list.
-            """.trimIndent(),
+        The Exercises by Topic screen displays all exercises related to the selected topic across the relevant belts.
+
+        You can open a detailed explanation, save a personal note and start a practice session from the active list.
+    """.trimIndent(),
             accentColor = Color(0xFF7C3AED)
         ),
         OnboardingStep(
