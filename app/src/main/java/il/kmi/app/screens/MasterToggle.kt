@@ -1,9 +1,6 @@
 package il.kmi.app.screens
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -13,11 +10,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -31,55 +26,48 @@ fun MasterToggle(
         false -> null
     }
 
-    val bgTarget = when (mastered) {
+    val backgroundColor = when (mastered) {
         true -> Color(0xFF2E7D32)
         false -> Color(0xFFC62828)
-        null -> Color.White.copy(alpha = 0.92f)
+        null -> Color.White.copy(alpha = 0.96f)
     }
 
-    val borderTarget = when (mastered) {
+    val borderColor = when (mastered) {
         true -> Color(0xFF1B5E20)
         false -> Color(0xFF8E1B1B)
         null -> Color.Black.copy(alpha = 0.22f)
     }
 
-    val iconTint = when (mastered) {
-        true, false -> Color.White
-        null -> Color.Transparent
+    val elevation = when (mastered) {
+        null -> 2.dp
+        else -> 8.dp
     }
 
-    val bg by animateColorAsState(
-        targetValue = bgTarget,
-        label = "masterToggleBg"
-    )
-
-    val borderColor by animateColorAsState(
-        targetValue = borderTarget,
-        label = "masterToggleBorder"
-    )
-
-    val elevation by animateDpAsState(
-        targetValue = if (mastered == null) 2.dp else 8.dp,
-        label = "masterToggleElevation"
-    )
-
     Surface(
-        modifier = Modifier
-            .size(42.dp)
-            .clickable(role = Role.Button) { onSelect(nextValue) },
+        onClick = {
+            onSelect(nextValue)
+        },
+        modifier = Modifier.size(42.dp),
         shape = CircleShape,
-        color = bg,
+        color = backgroundColor,
         shadowElevation = elevation,
-        border = BorderStroke(1.dp, borderColor)
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = borderColor
+        )
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.size(42.dp),
+            contentAlignment = Alignment.Center
+        ) {
             when (mastered) {
                 true -> {
                     Icon(
                         imageVector = Icons.Filled.Check,
-                        contentDescription = "סומן כנלמד",
+                        contentDescription = "סומן כיודע",
                         modifier = Modifier.size(25.dp),
-                        tint = iconTint
+                        tint = Color.White
                     )
                 }
 
@@ -88,13 +76,11 @@ fun MasterToggle(
                         imageVector = Icons.Filled.Close,
                         contentDescription = "סומן כלא יודע",
                         modifier = Modifier.size(25.dp),
-                        tint = iconTint
+                        tint = Color.White
                     )
                 }
 
-                null -> {
-                    // מצב ריק — עיגול נקי ללא אייקון.
-                }
+                null -> Unit
             }
         }
     }

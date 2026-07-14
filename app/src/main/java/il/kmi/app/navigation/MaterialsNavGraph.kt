@@ -69,12 +69,13 @@ fun NavGraphBuilder.materialsNavGraph(
 
             onOpenHome = {
                 nav.navigate(Route.Home.route) {
-                    popUpTo(nav.graph.startDestinationId) {
-                        inclusive = false
-                        saveState = true
-                    }
                     launchSingleTop = true
-                    restoreState = true
+                    restoreState = false
+
+                    popUpTo(Route.Home.route) {
+                        inclusive = false
+                        saveState = false
+                    }
                 }
             },
 
@@ -139,12 +140,13 @@ fun NavGraphBuilder.materialsNavGraph(
 
             onOpenHome = {
                 nav.navigate(Route.Home.route) {
-                    popUpTo(nav.graph.startDestinationId) {
-                        inclusive = false
-                        saveState = true
-                    }
                     launchSingleTop = true
-                    restoreState = true
+                    restoreState = false
+
+                    popUpTo(Route.Home.route) {
+                        inclusive = false
+                        saveState = false
+                    }
                 }
             },
 

@@ -2015,7 +2015,7 @@ private fun createSubjectExercisesPdf(
         canvas.drawColor(white)
 
         val headerBottom = 122f
-        val headerTextRight = 435f
+        val headerTextRight = pageWidth - 34f
 
         val navyHeaderPaint = android.graphics.Paint(
             android.graphics.Paint.ANTI_ALIAS_FLAG
@@ -2108,11 +2108,7 @@ private fun createSubjectExercisesPdf(
         )
 
         canvas.drawText(
-            if (isEnglish) {
-                "${beltLabel()} · $topic"
-            } else {
-                "${beltLabel()} · $topic"
-            },
+            "${beltLabel()} · $topic",
             headerTextX,
             78f,
             subtitlePaint

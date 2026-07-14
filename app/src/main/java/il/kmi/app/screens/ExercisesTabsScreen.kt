@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
@@ -50,6 +51,7 @@ import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.domain.ContentRepo
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.ext.color
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -340,7 +342,11 @@ private fun createExerciseCardsPdf(
             logoTextPaint
         )
 
-        val headerTextX = if (isEnglish) 308f else 435f
+        val headerTextX = if (isEnglish) {
+            308f
+        } else {
+            pageWidth - 34f
+        }
 
         canvas.drawText(
             if (isEnglish) {
@@ -904,19 +910,46 @@ fun ExercisesTabsScreen(
         return allTopicItems.firstOrNull { it.items.contains(raw) }?.topic ?: topic
     }
 
-    LaunchedEffect(belt, topic, subTopicFilter, itemList, allTopicItems) {
+    LaunchedEffect(
+        belt,
+        topic,
+        subTopicFilter,
+        itemList,
+        allTopicItems,
+        marksVersion
+    ) {
         itemStates.clear()
 
         itemList.forEach { raw ->
-            val tp = topicForRawItem(raw)
+            val itemTopic = topicForRawItem(raw)
+            val canonicalId = CanonicalIds.canonicalFor(
+                belt,
+                itemTopic,
+                raw
+            )
 
-            // ✅ קריטי: משתמשים באותו canonicalId שהשאר האפליקציה שומרת
-            val canonicalId = CanonicalIds.canonicalFor(belt, tp, raw)
+            val status = runCatching {
+                vm.getItemStatusNullable(
+                    belt = belt,
+                    topic = itemTopic,
+                    item = canonicalId
+                )
+            }.getOrNull()
+                ?: runCatching {
+                    if (
+                        vm.isMastered(
+                            belt = belt,
+                            topic = itemTopic,
+                            item = canonicalId
+                        )
+                    ) {
+                        true
+                    } else {
+                        null
+                    }
+                }.getOrNull()
 
-            val v = runCatching { vm.getItemStatusNullable(belt, tp, canonicalId) }.getOrNull()
-                ?: runCatching { if (vm.isMastered(belt, tp, canonicalId)) true else null }.getOrNull()
-
-            itemStates[raw] = v
+            itemStates[raw] = status
         }
     }
 
@@ -982,6 +1015,10 @@ fun ExercisesTabsScreen(
                                             )
                             )
         }
+    }
+
+    fun isUnknownForCards(raw: String): Boolean {
+        return itemStates[raw] == false || isUnknownRawItem(raw)
     }
 
     fun toggleFavorite(rawId: String) {
@@ -1113,7 +1150,7 @@ fun ExercisesTabsScreen(
 
     val pdfFilteredItems: List<String> = when (selectedTab) {
         1 -> itemList.filter { rawItem ->
-            isUnknownRawItem(rawItem)
+            isUnknownForCards(rawItem)
         }
 
         2 -> itemList.filter { rawItem ->
@@ -1126,9 +1163,8 @@ fun ExercisesTabsScreen(
     val pdfItems: List<ExerciseCardsPdfItem> = pdfFilteredItems
         .map { rawItem ->
             val status: Boolean? = when {
-                isUnknownRawItem(rawItem) -> false
+                isUnknownForCards(rawItem) -> false
                 itemStates[rawItem] == true -> true
-                itemStates[rawItem] == false -> false
                 else -> null
             }
 
@@ -1424,8 +1460,13 @@ fun ExercisesTabsScreen(
 
         val allCount     = itemList.size
         // ✅ תומך גם ב-cleanId, גם ב-canonicalId וגם ב-statusId שמגיע מ-MaterialsScreen
-        val unknownCount = itemList.count { isUnknownRawItem(it) }
-        val favCount     = itemList.count { normalizeItemId(it) in favorites }
+        val unknownCount = itemList.count { item ->
+            isUnknownForCards(item)
+        }
+
+        val favCount = itemList.count { item ->
+            normalizeItemId(item) in favorites
+        }
 
         Column(
             modifier = Modifier
@@ -1460,8 +1501,14 @@ fun ExercisesTabsScreen(
             Spacer(Modifier.height(8.dp))
 
             val filtered = when (selectedTab) {
-                1 -> itemList.filter { isUnknownRawItem(it) }
-                2 -> itemList.filter { normalizeItemId(it) in favorites }
+                1 -> itemList.filter { item ->
+                    isUnknownForCards(item)
+                }
+
+                2 -> itemList.filter { item ->
+                    normalizeItemId(item) in favorites
+                }
+
                 else -> itemList
             }
 
@@ -1478,91 +1525,219 @@ fun ExercisesTabsScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .verticalScroll(scroll),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                filtered.forEach { item ->
+                filtered.forEachIndexed { index, item ->
                     val bringer = remember { BringIntoViewRequester() }
                     var pressed by remember { mutableStateOf(false) }
-                    val scale by animateFloatAsState(if (pressed) 1.15f else 1f, label = "scale")
 
-                    val tpForUi = topicForRawItem(item)
-                    val displayName = CanonicalIds.uiDisplayName(tpForUi, item)
-                    val isFav = favorites.contains(normalizeItemId(item))
+                    val scale by animateFloatAsState(
+                        targetValue = if (pressed) 0.985f else 1f,
+                        animationSpec = tween(120),
+                        label = "exerciseRowScale"
+                    )
+
+                    val displayName = displayByRaw[item]
+                        ?: formattedExerciseTitle(item)
+
+                    val isFav = normalizeItemId(item) in favorites
+
                     val itemHasNote = remember(item, notesRefreshKey) {
                         hasNote(item)
                     }
 
+                    val itemIsUnknown = isUnknownForCards(item)
+
                     CompositionLocalProvider(
-                        LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+                        LocalLayoutDirection provides LayoutDirection.Ltr
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .bringIntoViewRequester(bringer),
+                                .bringIntoViewRequester(bringer)
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                }
+                                .clickable {
+                                    pressed = true
+                                    explainFromSearch = item
+
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(120)
+                                        pressed = false
+                                    }
+                                }
+                                .padding(
+                                    start = 4.dp,
+                                    end = 4.dp,
+                                    top = 9.dp,
+                                    bottom = 9.dp
+                                ),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             ExerciseRowActionsMenu(
                                 isEnglish = isEnglish,
                                 isFav = isFav,
                                 hasNote = itemHasNote,
-                                isUnknown = isUnknownRawItem(item),
+                                isUnknown = itemIsUnknown,
                                 onInfo = {
                                     pressed = true
                                     explainFromSearch = item
+
                                     scope.launch {
-                                        kotlinx.coroutines.delay(150)
+                                        kotlinx.coroutines.delay(120)
                                         pressed = false
                                     }
                                 },
                                 onToggleFavorite = {
-                                    FavoritesStore.toggle(item)
+                                    toggleFavorite(item)
                                 },
                                 onEditNote = {
                                     noteEditorFor = item
                                     noteDraft = loadNote(item)
                                 },
                                 onToggleUnknown = {
-                                    setUnknown(item, !isUnknownRawItem(item))
-                                },
-                                modifier = Modifier.scale(scale)
+                                    setUnknown(
+                                        item,
+                                        !isUnknownForCards(item)
+                                    )
+                                }
                             )
 
                             Spacer(Modifier.width(10.dp))
 
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { explainFromSearch = item },
-                                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides if (isEnglish) {
+                                    LayoutDirection.Ltr
+                                } else {
+                                    LayoutDirection.Rtl
+                                }
                             ) {
-                                Text(
-                                    text = displayName,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                    color = MaterialTheme.colorScheme.onBackground
-                                )
-
-                                if (itemHasNote) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = if (isEnglish) {
+                                        Alignment.Start
+                                    } else {
+                                        Alignment.End
+                                    }
+                                ) {
                                     Text(
-                                        text = tr("יש הערה שמורה", "Saved note exists"),
+                                        text = tr(
+                                            "תרגיל ${index + 1}",
+                                            "Exercise ${index + 1}"
+                                        ),
                                         modifier = Modifier.fillMaxWidth(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+                                        color = when {
+                                            itemIsUnknown -> Color(0xFFDC2626)
+                                            isFav -> Color(0xFF7C3AED)
+                                            else -> MaterialTheme.colorScheme.primary
+                                        },
+                                        fontSize = 7.5.sp,
+                                        lineHeight = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        textAlign = if (isEnglish) {
+                                            TextAlign.Left
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                        maxLines = 1
                                     )
+
+                                    Spacer(Modifier.height(3.dp))
+
+                                    Text(
+                                        text = displayName,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = if (isEnglish) {
+                                            TextAlign.Left
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                        color = MaterialTheme.colorScheme.onBackground,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 10.5.sp,
+                                            lineHeight = 14.sp
+                                        ),
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+
+                                    if (itemHasNote || isFav || itemIsUnknown) {
+                                        Spacer(Modifier.height(3.dp))
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = if (isEnglish) {
+                                                Arrangement.Start
+                                            } else {
+                                                Arrangement.End
+                                            },
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (itemIsUnknown) {
+                                                Text(
+                                                    text = tr("לא יודע", "Unknown"),
+                                                    color = Color(0xFFDC2626),
+                                                    fontSize = 7.5.sp,
+                                                    lineHeight = 9.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+
+                                            if (itemIsUnknown && (isFav || itemHasNote)) {
+                                                Spacer(Modifier.width(7.dp))
+                                            }
+
+                                            if (isFav) {
+                                                Text(
+                                                    text = tr("★ מועדף", "★ Favorite"),
+                                                    color = Color(0xFF7C3AED),
+                                                    fontSize = 7.5.sp,
+                                                    lineHeight = 9.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+
+                                            if (isFav && itemHasNote) {
+                                                Spacer(Modifier.width(7.dp))
+                                            }
+
+                                            if (itemHasNote) {
+                                                Text(
+                                                    text = tr(
+                                                        "הערה שמורה",
+                                                        "Saved note"
+                                                    ),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontSize = 7.5.sp,
+                                                    lineHeight = 9.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
-                    Divider()
+                    if (index < filtered.lastIndex) {
+                        Divider(
+                            modifier = Modifier.padding(
+                                start = 48.dp,
+                                end = 4.dp
+                            ),
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(
+                                alpha = 0.72f
+                            )
+                        )
+                    }
                 }
             }
         }
-
-        // אין כאן יותר דיאלוג מתוצאת חיפוש גלובלי.
-        // החיפוש, ההסבר, המועדפים והערות המשתמש מטופלים דרך KmiTopBar.
 
         // ===== דיאלוג הסבר (לחיצה על שורה או אייקון info ברשימה) =====
         explainFromSearch?.let { item ->
@@ -1700,14 +1875,14 @@ private fun ExerciseRowActionsMenu(
         Surface(
             onClick = { expanded = true },
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
+            color = Color(0xFF60717A),
             shadowElevation = 4.dp,
             border = BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.24f)
             ),
             modifier = Modifier
-                .size(40.dp)
+                .size(34.dp)
                 .graphicsLayer {
                     scaleX = infoScale
                     scaleY = infoScale
@@ -1717,15 +1892,15 @@ private fun ExerciseRowActionsMenu(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Info,
-                    contentDescription = tr("פעולות לתרגיל", "Exercise actions"),
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .size(18.dp)
-                        .graphicsLayer {
-                            rotationZ = infoRotation
-                        }
+                Text(
+                    text = "i",
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    lineHeight = 17.sp,
+                    fontWeight = FontWeight.Black,
+                    modifier = Modifier.graphicsLayer {
+                        rotationZ = infoRotation
+                    }
                 )
             }
         }

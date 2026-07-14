@@ -146,10 +146,11 @@ fun NavGraphBuilder.homeNavGraph(
                 onContinue = {
                     nav.navigate(Route.BeltQ.route) {
                         launchSingleTop = true
-                        restoreState = true
+                        restoreState = false
+
                         popUpTo(Route.Home.route) {
                             inclusive = false
-                            saveState = true
+                            saveState = false
                         }
                     }
                 },

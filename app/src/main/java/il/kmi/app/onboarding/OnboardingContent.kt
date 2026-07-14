@@ -36,18 +36,18 @@ object OnboardingContent {
         ),
         OnboardingStep(
             id = "subjects",
-            titleHe = "תרגילים לפי נושא",
-            titleEn = "Exercises by subject",
+            titleHe = "תרגילים לפי חגורה",
+            titleEn = "Exercises by Belt",
             descriptionHe = """
-                ניתן לפתוח נושא מסוים ולראות את כל התרגילים השייכים אליו.
-                
-                במסכים הכוללים מספר חגורות, התרגילים מסודרים בקבוצות ברורות לפי חגורה.
-            """.trimIndent(),
+        במסך זה ניתן לצפות בכל התרגילים השייכים לחגורה שנבחרה.
+
+        התרגילים מסודרים לפי נושאים ותתי־נושאים, כך שניתן למצוא במהירות את חומר הלימוד המתאים לרמה שלך.
+    """.trimIndent(),
             descriptionEn = """
-                Open a subject to view all exercises associated with it.
-                
-                When several belts are included, exercises are arranged in clear belt groups.
-            """.trimIndent(),
+        This screen displays all exercises included in the selected belt.
+
+        The exercises are organized by topics and subtopics, making it easy to find the learning material relevant to your level.
+    """.trimIndent(),
             accentColor = Color(0xFF0EA5E9)
         ),
         OnboardingStep(

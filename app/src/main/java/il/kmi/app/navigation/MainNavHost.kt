@@ -473,13 +473,37 @@ fun MainNavHost(
                                 return@KmiStartupLoadingScreen
                             }
 
+                            /*
+                             * הדרכה אוטומטית בפעם הראשונה בלבד.
+                             */
+                            if (!OnboardingPreferences.hasCompleted(ctx)) {
+
+                                nav.navigate(
+                                    OnboardingRoute.build(
+                                        manual = false
+                                    )
+                                ) {
+                                    popUpTo(Route.Splash.route) {
+                                        inclusive = true
+                                    }
+
+                                    launchSingleTop = true
+                                    restoreState = false
+                                }
+
+                                return@KmiStartupLoadingScreen
+                            }
+
                             Log.d(
                                 TAG_NAV,
                                 "stage=splash_navigation_decision, decision=home, source=local_profile_completed, ${authStateForLog()}"
                             )
 
                             nav.navigate(Route.Home.route) {
-                                popUpTo(Route.Splash.route) { inclusive = true }
+                                popUpTo(Route.Splash.route) {
+                                    inclusive = true
+                                }
+
                                 launchSingleTop = true
                                 restoreState = false
                             }
@@ -530,6 +554,24 @@ fun MainNavHost(
                                 }
 
                                 if (consumePendingForumPushAndNavigate("splash_remote_profile_completed")) {
+                                    return@launch
+                                }
+
+                                if (!OnboardingPreferences.hasCompleted(ctx)) {
+
+                                    nav.navigate(
+                                        OnboardingRoute.build(
+                                            manual = false
+                                        )
+                                    ) {
+                                        popUpTo(Route.Splash.route) {
+                                            inclusive = true
+                                        }
+
+                                        launchSingleTop = true
+                                        restoreState = false
+                                    }
+
                                     return@launch
                                 }
 
@@ -1085,11 +1127,14 @@ fun MainNavHost(
                 nav = nav,
                 isEnglish = isEnglish,
                 onFinished = {
+                    OnboardingPreferences.markCompleted(ctx)
+
                     nav.navigate(Route.Home.route) {
                         popUpTo(0) {
                             inclusive = false
                         }
                         launchSingleTop = true
+                        restoreState = false
                     }
                 }
             )

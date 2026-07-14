@@ -46,6 +46,7 @@ import androidx.compose.ui.res.painterResource
 import il.kmi.app.R
 import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.highlightItem
 import android.app.Activity
 import android.content.Context
@@ -231,7 +232,9 @@ fun MaterialsScreen(
 
     // ✅ גורם למסך להתרענן אחרי סימון יודע/לא יודע ממסכים אחרים, כולל RandomPracticeScreen
     val marksVersion by vm.marksVersion.collectAsState()
-
+    val globalFavorites: Set<String> by FavoritesStore
+        .favoritesFlow
+        .collectAsState(initial = emptySet())
     val accessSp = remember(context) {
         context.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
     }
@@ -243,7 +246,19 @@ fun MaterialsScreen(
     val scope = rememberCoroutineScope()
     val scroll = rememberScrollState()
     val itemStates =
-        remember(belt.id, topic, subTopicFilter) { mutableStateMapOf<String, Boolean?>() }
+        remember(belt.id, topic, subTopicFilter) {
+            mutableStateMapOf<String, Boolean?>()
+        }
+
+    /*
+     * שומר את הערך שנבחר מיד בלחיצה,
+     * כדי שטעינה חוזרת מ־marksVersion לא תדרוס אותו
+     * לפני שהשמירה הסתיימה.
+     */
+    val pendingItemStates =
+        remember(belt.id, topic, subTopicFilter) {
+            mutableStateMapOf<String, Boolean?>()
+        }
 
     var explainTriple by remember { mutableStateOf<Triple<Belt, String, String>?>(null) }
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -554,11 +569,49 @@ fun MaterialsScreen(
         return "status_${belt.id}_${topicKey}_${index}_${cleanItem}"
     }
 
+    /*
+   * מזהי הבסיס שמתקבלים מה־Registry עבור הרשימה הנוכחית.
+   */
+    val baseStatusIds = remember(
+        itemList,
+        belt.id,
+        topicKey,
+        topicUi
+    ) {
+        itemList.mapIndexed { index, item ->
+            exerciseIdentityIdFor(
+                index = index,
+                item = item
+            )
+        }
+    }
+
+    /*
+     * אם אותו מזהה הוחזר ליותר משורה אחת,
+     * מפרידים רק את השורות המתנגשות.
+     *
+     * תרגילים בעלי ex_XXX חד־ערכי ממשיכים להשתמש ב־ex_XXX בלבד.
+     */
+    val duplicatedBaseStatusIds = remember(baseStatusIds) {
+        baseStatusIds
+            .groupingBy { id -> id }
+            .eachCount()
+            .filterValues { count -> count > 1 }
+            .keys
+    }
+
     fun statusIdFor(index: Int, item: String): String {
-        return exerciseIdentityIdFor(
-            index = index,
-            item = item
-        )
+        val baseId = baseStatusIds.getOrNull(index)
+            ?: exerciseIdentityIdFor(
+                index = index,
+                item = item
+            )
+
+        return if (duplicatedBaseStatusIds.contains(baseId)) {
+            "${baseId}__${topicKey}__row_$index"
+        } else {
+            baseId
+        }
     }
 
     // הדגשת תרגיל (✅ בלי Reflection: זה top-level flow)
@@ -601,6 +654,13 @@ fun MaterialsScreen(
         )
     }
 
+    fun globalFavoriteIdFor(rawItem: String): String {
+        return rawItem
+            .substringAfter("::", rawItem)
+            .substringAfter(":", rawItem)
+            .trim()
+    }
+
     fun favoriteAliasesFor(
         topicTitle: String,
         rawItem: String
@@ -637,21 +697,33 @@ fun MaterialsScreen(
         topicTitle: String,
         rawItem: String
     ): Boolean {
-        return favoriteAliasesFor(topicTitle, rawItem).any { id ->
-            favorites.contains(id)
-        }
+        val globalFavoriteId = globalFavoriteIdFor(rawItem)
+
+        return globalFavorites.contains(globalFavoriteId) ||
+                favoriteAliasesFor(topicTitle, rawItem).any { id ->
+                    favorites.contains(id)
+                }
     }
 
     fun toggleFavoriteAliases(
         topicTitle: String,
         rawItem: String
     ) {
-        val aliases = favoriteAliasesFor(topicTitle, rawItem)
+        val aliases = favoriteAliasesFor(
+            topicTitle = topicTitle,
+            rawItem = rawItem
+        )
+
+        val globalFavoriteId = globalFavoriteIdFor(rawItem)
         val nextFavorites = favorites.toMutableSet()
 
-        val shouldAdd = aliases.none { id ->
-            nextFavorites.contains(id)
-        }
+        val isCurrentlyFavorite =
+            globalFavorites.contains(globalFavoriteId) ||
+                    aliases.any { id ->
+                        nextFavorites.contains(id)
+                    }
+
+        val shouldAdd = !isCurrentlyFavorite
 
         if (shouldAdd) {
             nextFavorites.addAll(aliases)
@@ -661,7 +733,15 @@ fun MaterialsScreen(
             }
         }
 
+        val isGlobalFavorite =
+            globalFavorites.contains(globalFavoriteId)
+
+        if (isGlobalFavorite != shouldAdd) {
+            FavoritesStore.toggle(globalFavoriteId)
+        }
+
         favorites = nextFavorites
+
         sp.edit()
             .putStringSet(favKey, nextFavorites)
             .apply()
@@ -747,125 +827,131 @@ fun MaterialsScreen(
     // טעינת מצבי שליטה — מקור אמת יחיד: VM/DataStore
     // ✅ טוען את כל הסימונים למפה זמנית ורק בסוף מעדכן UI,
     // כדי למנוע מצב ביניים שבו רוב השורות מצוירות כ-null.
-    LaunchedEffect(belt, topicUi, subTopicFilter, itemList, marksVersion) {
-
-        // ✅ חשוב:
-        // produceState מתחיל לפעמים עם itemList ריק, ואז נטען שוב עם הרשימה האמיתית.
-        // אם ננקה את itemStates בזמן שהרשימה ריקה — כל הוי/איקס נעלמים רגעית.
+    LaunchedEffect(
+        belt,
+        topicUi,
+        subTopicFilter,
+        itemList,
+        marksVersion
+    ) {
         if (itemList.isEmpty()) {
             return@LaunchedEffect
         }
 
-        val nextStates = mutableMapOf<String, Boolean?>()
+        /*
+         * לחיצה אחת יכולה לעדכן כמה מפתחות ולשנות את marksVersion
+         * מספר פעמים. ההשהיה מבטלת טעינות ביניים ומריצה רק את
+         * הטעינה האחרונה.
+         */
 
-        itemList.forEachIndexed { index, item ->
-            val statusId = statusIdFor(index, item)
-            val legacyStatusId = legacyStatusIdFor(index, item)
+        val nextStates = withContext(Dispatchers.Default) {
+            buildMap<String, Boolean?> {
+                itemList.forEachIndexed { index, item ->
+                    val statusId = statusIdFor(index, item)
+                    val legacyStatusId = legacyStatusIdFor(index, item)
 
-            // ✅ בתת־נושא קוראים רק מהמפתח המדויק.
-            // אחרת סימונים ישנים מ־topicUi / כללי עלולים לסמן אוטומטית תרגילים אחרים.
-            val topicKeysToRead = if (subTopicFilter.isNullOrBlank()) {
-                listOf(
-                    topicKey,
-                    topicUi,
-                    "כללי"
-                )
-            } else {
-                listOf(topicKey)
-            }
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .distinct()
-
-            var vFromVm: Boolean? = null
-
-            for (key in topicKeysToRead) {
-                val valueFromStatusId: Boolean? =
-                    runCatching {
-                        vm.getItemStatusNullable(
-                            belt = belt,
-                            topic = key,
-                            item = statusId
+                    val topicKeysToRead = if (subTopicFilter.isNullOrBlank()) {
+                        listOf(
+                            topicKey,
+                            topicUi,
+                            "כללי"
                         )
-                    }.getOrNull()
-                        ?: runCatching {
-                            if (
-                                vm.isMastered(
-                                    belt = belt,
-                                    topic = key,
-                                    item = statusId
-                                )
-                            ) true else null
-                        }.getOrNull()
-                        ?: runCatching {
+                    } else {
+                        listOf(topicKey)
+                    }
+                        .map { key -> key.trim() }
+                        .filter { key -> key.isNotBlank() }
+                        .distinct()
+
+                    var valueFromViewModel: Boolean? = null
+
+                    for (key in topicKeysToRead) {
+                        val value = runCatching {
                             vm.getItemStatusNullable(
                                 belt = belt,
                                 topic = key,
-                                item = legacyStatusId
+                                item = statusId
                             )
                         }.getOrNull()
-                        ?: runCatching {
-                            if (
-                                vm.isMastered(
+                            ?: runCatching {
+                                if (
+                                    vm.isMastered(
+                                        belt = belt,
+                                        topic = key,
+                                        item = statusId
+                                    )
+                                ) {
+                                    true
+                                } else {
+                                    null
+                                }
+                            }.getOrNull()
+                            ?: runCatching {
+                                vm.getItemStatusNullable(
                                     belt = belt,
                                     topic = key,
                                     item = legacyStatusId
                                 )
-                            ) true else null
-                        }.getOrNull()
+                            }.getOrNull()
+                            ?: runCatching {
+                                if (
+                                    vm.isMastered(
+                                        belt = belt,
+                                        topic = key,
+                                        item = legacyStatusId
+                                    )
+                                ) {
+                                    true
+                                } else {
+                                    null
+                                }
+                            }.getOrNull()
 
-                // ✅ סימוני וי/איקס נקראים רק לפי statusId.
-                // אסור לקרוא לפי canonicalId, כי הוא עלול להיות משותף לכמה שורות דומות.
-                val valueFromKey = valueFromStatusId
+                        if (value != null) {
+                            valueFromViewModel = value
+                            break
+                        }
+                    }
 
-                if (valueFromKey != null) {
-                    vFromVm = valueFromKey
-                    break
-                }
-            }
+                    val localFallback: Boolean? = when {
+                        masteredSet.contains(statusId) ||
+                                masteredSet.contains(legacyStatusId) -> true
 
-            // ✅ fallback לשמירה המקומית הישנה
-            val localFallback: Boolean? = when {
-                masteredSet.contains(statusId) || masteredSet.contains(legacyStatusId) -> true
-                unknowns.contains(statusId) || unknowns.contains(legacyStatusId) -> false
-                else -> null
-            }
+                        unknowns.contains(statusId) ||
+                                unknowns.contains(legacyStatusId) -> false
 
-            val finalValue = vFromVm ?: localFallback
+                        else -> null
+                    }
 
-            // ✅ ריפוי VM רק אם מצאנו ערך מקומי אבל ה־VM ריק.
-            // בתת־נושא כותבים רק למפתח המדויק כדי לא לזהם את topicUi / כללי.
-            if (vFromVm == null && finalValue != null) {
-                val topicKeysToHeal = if (subTopicFilter.isNullOrBlank()) {
-                    listOf(
-                        topicKey,
-                        topicUi,
-                        "כללי"
-                    )
-                } else {
-                    listOf(topicKey)
-                }
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-                    .distinct()
+                    val loadedValue =
+                        valueFromViewModel ?: localFallback
 
-                topicKeysToHeal.forEach { key ->
-                    vm.setItemStatusNullable(
-                        belt = belt,
-                        topic = key,
-                        item = statusId,
-                        value = finalValue
+                    put(
+                        statusId,
+                        if (pendingItemStates.containsKey(statusId)) {
+                            pendingItemStates[statusId]
+                        } else {
+                            loadedValue
+                        }
                     )
                 }
             }
-
-            // ✅ שומרים זמנית לפי statusId בלבד כדי למנוע סימון כפול בין תרגילים דומים.
-            nextStates[statusId] = finalValue
         }
 
-        // ✅ עדכון UI פעם אחת אחרי שכל הרשימה נטענה
-        itemStates.clear()
-        itemStates.putAll(nextStates)
+        /*
+ * לא מנקים את המפה לפני העדכון.
+ * clear() גרם לפריים שבו כל הסימונים הופיעו במצב אפור.
+ */
+        nextStates.forEach { (statusId, loadedValue) ->
+            val visibleValue =
+                if (pendingItemStates.containsKey(statusId)) {
+                    pendingItemStates[statusId]
+                } else {
+                    loadedValue
+                }
+
+            itemStates[statusId] = visibleValue
+        }
     }
 
     val currentCanonicalIds = remember(
@@ -1563,11 +1649,16 @@ fun MaterialsScreen(
                                     mutableStateOf(loadNote(canonicalId))
                                 }
 
-                                val mastered = itemStates[statusId] ?: when {
-                                    masteredSet.contains(statusId) -> true
-                                    unknowns.contains(statusId) -> false
-                                    else -> null
-                                }
+                                        val mastered: Boolean? =
+                                            if (itemStates.containsKey(statusId)) {
+                                                itemStates[statusId]
+                                            } else {
+                                                when {
+                                                    masteredSet.contains(statusId) -> true
+                                                    unknowns.contains(statusId) -> false
+                                                    else -> null
+                                                }
+                                            }
 
                                 val isExcluded = excludedItems.contains(canonicalId)
                                 val isHighlighted = highlight != null && canonicalId == highlight
@@ -1726,120 +1817,152 @@ fun MaterialsScreen(
                                             modifier = Modifier.scale(0.82f),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            key(statusId, mastered) {
-                                                MasterToggle(
-                                                    mastered = mastered,
-                                                    onSelect = { newVal ->
-                                                        itemStates[statusId] = newVal
+                                            MasterToggle(
+                                                mastered = mastered,
+                                                onSelect = { newVal ->
 
-                                                        // ✅ במסך תת־נושא שומרים רק למפתח המדויק.
-                                                        // אחרת סימון בתת־נושא עלול להשפיע על תרגילים אחרים דרך topicUi / כללי.
-                                                        val topicKeysToWriteToVm =
-                                                            if (subTopicFilter.isNullOrBlank()) {
-                                                                listOf(
-                                                                    topicKey,
-                                                                    topicUi,
-                                                                    "כללי"
-                                                                )
-                                                            } else {
-                                                                listOf(topicKey)
-                                                            }
-                                                                .map { it.trim() }
-                                                                .filter { it.isNotBlank() }
-                                                                .distinct()
+                                                    /*
+                                                     * עדכון מיידי של השורה בלבד.
+                                                     * הסטטוס נשמר לפי statusId החד־ערכי בלבד.
+                                                     */
+                                                    /*
+       * עדכון מיידי של השורה.
+       */
+                                                    pendingItemStates[statusId] = newVal
+                                                    itemStates[statusId] = newVal
 
-                                                        topicKeysToWriteToVm.forEach { key ->
+                                                    /*
+                                                     * חשוב לעדכן גם את ה־fallback המקומי.
+                                                     *
+                                                     * בלי העדכון הזה, בלחיצה השלישית ה־ViewModel מחזיר null,
+                                                     * אבל unknowns עדיין מכיל את התרגיל ולכן האיקס האדום חוזר.
+                                                     */
+                                                    val nextMasteredSet = masteredSet.toMutableSet()
+                                                    val nextUnknownSet = unknowns.toMutableSet()
+
+                                                    when (newVal) {
+                                                        true -> {
+                                                            nextMasteredSet.add(statusId)
+                                                            nextUnknownSet.remove(statusId)
+                                                        }
+
+                                                        false -> {
+                                                            nextUnknownSet.add(statusId)
+                                                            nextMasteredSet.remove(statusId)
+                                                        }
+
+                                                        null -> {
+                                                            nextMasteredSet.remove(statusId)
+                                                            nextUnknownSet.remove(statusId)
+                                                        }
+                                                    }
+
+                                                    masteredSet = nextMasteredSet
+                                                    unknowns = nextUnknownSet
+
+                                                    val statusTopicKeys =
+                                                        if (subTopicFilter.isNullOrBlank()) {
+                                                            listOf(
+                                                                topicKey,
+                                                                topicUi,
+                                                                "כללי"
+                                                            )
+                                                        } else {
+                                                            listOf(topicKey)
+                                                        }
+                                                            .map { key -> key.trim() }
+                                                            .filter { key -> key.isNotBlank() }
+                                                            .distinct()
+
+                                                    scope.launch(Dispatchers.IO) {
+
+                                                        /*
+                                                         * סטטוס יודע / לא יודע / לא סומן
+                                                         * נשמר רק לפי statusId.
+                                                         *
+                                                         * canonicalId נשאר עבור הערות, מועדפים,
+                                                         * החרגות והסברים בלבד.
+                                                         */
+                                                        statusTopicKeys.forEach { topicKeyToSave ->
                                                             vm.setItemStatusNullable(
                                                                 belt = belt,
-                                                                topic = key,
+                                                                topic = topicKeyToSave,
                                                                 item = statusId,
                                                                 value = newVal
                                                             )
                                                         }
 
-                                                        // ✅ שמירה מקומית תואמת לסיכום/מסכים ישנים
-                                                        setMasteredLocal(statusId, newVal == true)
-                                                        setUnknown(statusId, newVal == false)
+                                                        val editor = sp.edit()
 
-                                                        // ✅ בתת־נושא שומרים מקומית רק למפתח המדויק.
-                                                        // במסך נושא רגיל נשארת שמירה רחבה לסנכרון עם תרגול.
-                                                        val localKeysToWrite =
-                                                            if (subTopicFilter.isNullOrBlank()) {
-                                                                listOf(
-                                                                    topicKey,
-                                                                    topicUi,
-                                                                    "כללי"
-                                                                )
-                                                            } else {
-                                                                listOf(topicKey)
-                                                            }
-                                                                .map { it.trim() }
-                                                                .filter { it.isNotBlank() }
-                                                                .distinct()
+                                                        statusTopicKeys.forEach { topicKeyToSave ->
+                                                            val masteredPreferenceKey =
+                                                                "mastered_${belt.id}_${topicKeyToSave}"
 
-                                                        localKeysToWrite.forEach { key ->
-                                                            val masteredKeyForPractice =
-                                                                "mastered_${belt.id}_${key}"
-                                                            val unknownKeyForPractice =
-                                                                "unknown_${belt.id}_${key}"
+                                                            val unknownPreferenceKey =
+                                                                "unknown_${belt.id}_${topicKeyToSave}"
 
-                                                            val masteredSetForPractice =
-                                                                (sp.getStringSet(
-                                                                    masteredKeyForPractice,
-                                                                    emptySet()
-                                                                ) ?: emptySet())
-                                                                    .toMutableSet()
+                                                            val savedMastered =
+                                                                (
+                                                                        sp.getStringSet(
+                                                                            masteredPreferenceKey,
+                                                                            emptySet()
+                                                                        ) ?: emptySet()
+                                                                        ).toMutableSet()
 
-                                                            val unknownSetForPractice =
-                                                                (sp.getStringSet(
-                                                                    unknownKeyForPractice,
-                                                                    emptySet()
-                                                                ) ?: emptySet())
-                                                                    .toMutableSet()
+                                                            val savedUnknown =
+                                                                (
+                                                                        sp.getStringSet(
+                                                                            unknownPreferenceKey,
+                                                                            emptySet()
+                                                                        ) ?: emptySet()
+                                                                        ).toMutableSet()
 
                                                             when (newVal) {
                                                                 true -> {
-                                                                    masteredSetForPractice.add(
-                                                                        statusId
-                                                                    )
-                                                                    unknownSetForPractice.remove(
-                                                                        statusId
-                                                                    )
+                                                                    savedMastered.add(statusId)
+                                                                    savedUnknown.remove(statusId)
                                                                 }
 
                                                                 false -> {
-                                                                    unknownSetForPractice.add(
-                                                                        statusId
-                                                                    )
-                                                                    masteredSetForPractice.remove(
-                                                                        statusId
-                                                                    )
+                                                                    savedUnknown.add(statusId)
+                                                                    savedMastered.remove(statusId)
                                                                 }
 
                                                                 null -> {
-                                                                    masteredSetForPractice.remove(
-                                                                        statusId
-                                                                    )
-                                                                    unknownSetForPractice.remove(
-                                                                        statusId
-                                                                    )
+                                                                    savedMastered.remove(statusId)
+                                                                    savedUnknown.remove(statusId)
                                                                 }
                                                             }
 
-                                                            sp.edit()
-                                                                .putStringSet(
-                                                                    masteredKeyForPractice,
-                                                                    masteredSetForPractice
-                                                                )
-                                                                .putStringSet(
-                                                                    unknownKeyForPractice,
-                                                                    unknownSetForPractice
-                                                                )
-                                                                .apply()
+                                                            editor.putStringSet(
+                                                                masteredPreferenceKey,
+                                                                savedMastered
+                                                            )
+
+                                                            editor.putStringSet(
+                                                                unknownPreferenceKey,
+                                                                savedUnknown
+                                                            )
+                                                        }
+
+                                                        editor.apply()
+
+                                                        withContext(Dispatchers.Main.immediate) {
+                                                            /*
+                                                             * containsKey חשוב במיוחד עבור null:
+                                                             * גם "לא קיים מפתח" וגם "ערך null" מחזירים null בקריאה רגילה.
+                                                             */
+                                                            if (
+                                                                pendingItemStates.containsKey(statusId) &&
+                                                                pendingItemStates[statusId] == newVal
+                                                            ) {
+                                                                pendingItemStates.remove(statusId)
+                                                                itemStates[statusId] = newVal
+                                                            }
                                                         }
                                                     }
-                                                )
-                                            }
+                                                }
+                                            )
                                         }
                                     }
 
@@ -1852,8 +1975,8 @@ fun MaterialsScreen(
                                     )
                                 }
 
-                                // דיאלוג הערה
-                                if (showNoteDialog) {
+                                        // דיאלוג הערה
+                                        if (showNoteDialog) {
                                     ExerciseNoteEditorDialog(
                                         noteText = noteText,
                                         isEnglish = isEnglish,
