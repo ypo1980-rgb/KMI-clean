@@ -2067,6 +2067,16 @@ private fun createMaterialsPdf(
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
+    val beltTitle = when (belt) {
+        Belt.WHITE -> tr("חגורה לבנה", "White belt")
+        Belt.YELLOW -> tr("חגורה צהובה", "Yellow belt")
+        Belt.ORANGE -> tr("חגורה כתומה", "Orange belt")
+        Belt.GREEN -> tr("חגורה ירוקה", "Green belt")
+        Belt.BLUE -> tr("חגורה כחולה", "Blue belt")
+        Belt.BROWN -> tr("חגורה חומה", "Brown belt")
+        Belt.BLACK -> tr("חגורה שחורה", "Black belt")
+    }
+
     val document = PdfDocument()
 
     val navy = android.graphics.Color.rgb(2, 43, 74)
@@ -2078,7 +2088,6 @@ private fun createMaterialsPdf(
     val textMuted = android.graphics.Color.rgb(80, 100, 120)
     val red = android.graphics.Color.rgb(220, 38, 38)
     val green = android.graphics.Color.rgb(22, 163, 74)
-    val orange = android.graphics.Color.rgb(217, 119, 6)
 
     val regular = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
     val bold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
@@ -2189,8 +2198,10 @@ private fun createMaterialsPdf(
             titlePaint
         )
 
+        val pdfSubTitle = "$topicTitle — $beltTitle"
+
         canvas.drawText(
-            topicTitle.take(42),
+            pdfSubTitle.take(55),
             headerX,
             78f,
             subTitlePaint
@@ -2313,7 +2324,7 @@ private fun createMaterialsPdf(
 
         val statusColor = when (item.status) {
             tr("יודע", "Known") -> green
-            tr("לא יודע", "Unknown") -> orange
+            tr("לא יודע", "Unknown") -> red
             else -> textMuted
         }
 
@@ -2345,6 +2356,8 @@ private fun createMaterialsPdf(
 
         labelPaint.textAlign =
             if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        labelPaint.color = statusColor
 
         canvas.drawText(
             item.status,

@@ -50,6 +50,13 @@ import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.shared.prefs.KmiPrefs
 import il.kmi.app.FcmTokenManager
+import il.kmi.app.KmiCalendarSync
+import il.kmi.app.hasCalendarPermission
+import il.kmi.app.reminders.TrainingReminderScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 private const val TAG_REG = "KMI_REGISTRATION"
 
@@ -1157,9 +1164,67 @@ fun RegistrationFormScreen(
 
                     FcmTokenManager.refreshTokenForUserDocId(finalUid)
 
+                    /*
+                     * הסניף והקבוצה החדשים כבר נשמרו ב־Firestore
+                     * וב־SharedPreferences. כעת מרעננים מיד את
+                     * היומן ואת תזכורות האימון, אם הם פעילים.
+                     */
+                    val settingsSp = ctx.getSharedPreferences(
+                        "kmi_settings",
+                        Context.MODE_PRIVATE
+                    )
+
+                    val backgroundScope = CoroutineScope(
+                        SupervisorJob() + Dispatchers.IO
+                    )
+
+                    backgroundScope.launch {
+                        val calendarSyncEnabled = settingsSp.getBoolean(
+                            "calendar_sync_selected_enabled",
+                            false
+                        )
+
+                        val selectedCalendarId = settingsSp.getLong(
+                            "calendar_sync_selected_calendar_id",
+                            -1L
+                        )
+
+                        if (
+                            calendarSyncEnabled &&
+                            selectedCalendarId > 0L &&
+                            hasCalendarPermission(ctx)
+                        ) {
+                            KmiCalendarSync.upsertAllToSelectedCalendar(
+                                context = ctx.applicationContext,
+                                selectedCalendarId = selectedCalendarId
+                            )
+                        }
+
+                        val trainingRemindersEnabled = settingsSp.getBoolean(
+                            "training_reminders_enabled",
+                            true
+                        )
+
+                        if (trainingRemindersEnabled) {
+                            val leadMinutes = settingsSp.getInt(
+                                "training_reminder_minutes",
+                                settingsSp.getInt("lead_minutes", 60)
+                            ).takeIf { it > 0 } ?: 60
+
+                            TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
+                                context = ctx.applicationContext,
+                                leadMinutes = leadMinutes
+                            )
+                        }
+                    }
+
                     Toast.makeText(
                         ctx,
-                        if (isEnglish) "Registration saved successfully ✅" else "הרישום נשמר בהצלחה ✅",
+                        if (isEnglish) {
+                            "Profile saved and active schedules are being updated ✅"
+                        } else {
+                            "הפרופיל נשמר והמערכות הפעילות מתעדכנות ✅"
+                        },
                         Toast.LENGTH_SHORT
                     ).show()
 

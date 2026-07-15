@@ -16,13 +16,26 @@ import androidx.core.content.ContextCompat
 import il.kmi.shared.domain.Explanations
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.reminders.DailyExercisePicker
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
 class DailyReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
 
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences(
+            PREFS_NAME,
+            Context.MODE_PRIVATE
+        )
         val reminderPrefs = ReminderPrefs(prefs)
+
+        val isEnglish =
+            AppLanguageManager(context).getCurrentLanguage() ==
+                    AppLanguage.ENGLISH
+
+        fun tr(he: String, en: String): String {
+            return if (isEnglish) en else he
+        }
 
         val isCoach = isCoachUser(context, prefs)
         val isEnabled = reminderPrefs.isEnabledForRole(isCoach)
@@ -58,7 +71,24 @@ class DailyReminderReceiver : BroadcastReceiver() {
 
         reminderPrefs.setLastItemKey(picker.candidateKey(picked))
 
-        createNotificationChannel(context)
+        createNotificationChannel(
+            context = context,
+            isEnglish = isEnglish
+        )
+
+        val beltTitle = if (isEnglish) {
+            when (picked.belt) {
+                Belt.WHITE -> "White belt"
+                Belt.YELLOW -> "Yellow belt"
+                Belt.ORANGE -> "Orange belt"
+                Belt.GREEN -> "Green belt"
+                Belt.BLUE -> "Blue belt"
+                Belt.BROWN -> "Brown belt"
+                Belt.BLACK -> "Black belt"
+            }
+        } else {
+            picked.belt.heb
+        }
 
         val openCardIntent = Intent(context, DailyReminderCardActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -76,7 +106,26 @@ class DailyReminderReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val contentText = "${picked.belt.heb} • ${picked.item} — לחץ לצפייה"
+        val contentText = if (isEnglish) {
+            "$beltTitle • ${picked.item} — Tap to view"
+        } else {
+            "$beltTitle • ${picked.item} — לחץ לצפייה"
+        }
+
+        val notificationTitle = tr(
+            "התרגיל היומי שלך",
+            "Your daily exercise"
+        )
+
+        val favoriteActionTitle = tr(
+            "⭐ שמור",
+            "⭐ Save"
+        )
+
+        val anotherActionTitle = tr(
+            "➕ תרגיל נוסף",
+            "➕ Another exercise"
+        )
 
         val favoriteIntent = Intent(context, DailyReminderFavoriteReceiver::class.java).apply {
             putExtra("daily_reminder_item", picked.item)
@@ -100,13 +149,13 @@ class DailyReminderReceiver : BroadcastReceiver() {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("התרגיל היומי שלך")
+            .setContentTitle(notificationTitle)
             .setContentText(contentText)
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(
-                        "התרגיל היומי שלך\n" +
-                                "${picked.belt.heb} • ${picked.item}\n\n" +
+                        "$notificationTitle\n" +
+                                "$beltTitle • ${picked.item}\n\n" +
                                 explanation
                     )
             )
@@ -115,12 +164,12 @@ class DailyReminderReceiver : BroadcastReceiver() {
             .setContentIntent(openAppPendingIntent)
             .addAction(
                 android.R.drawable.btn_star_big_on,
-                "⭐ שמור",
+                favoriteActionTitle,
                 favoritePendingIntent
             )
             .addAction(
                 android.R.drawable.ic_menu_rotate,
-                "➕ תרגיל נוסף",
+                anotherActionTitle,
                 anotherPendingIntent
             )
             .build()
@@ -139,19 +188,35 @@ class DailyReminderReceiver : BroadcastReceiver() {
         DailyReminderScheduler.rescheduleNextDay(context)
     }
 
-    private fun createNotificationChannel(context: Context) {
+    private fun createNotificationChannel(
+        context: Context,
+        isEnglish: Boolean
+    ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+
+        val channelName = if (isEnglish) {
+            "KAMI daily exercise"
+        } else {
+            "התרגיל היומי של ק.מ.י"
+        }
+
+        val channelDescription = if (isEnglish) {
+            "A daily KAMI exercise based on the user's belt"
+        } else {
+            "תזכורת יומית עם תרגיל ק.מ.י לפי חגורת המשתמש"
+        }
 
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "KAMI Daily Exercise Reminder",
+            channelName,
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "תזכורת יומית עם תרגיל KAMI לפי חגורת המשתמש"
+            description = channelDescription
         }
 
         val manager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
         manager.createNotificationChannel(channel)
     }
 
@@ -161,13 +226,17 @@ class DailyReminderReceiver : BroadcastReceiver() {
     ): Boolean {
         val userPrefs = context.getSharedPreferences(USER_PREFS_NAME, Context.MODE_PRIVATE)
 
+        /*
+         * קוראים תחילה את תפקיד המשתמש המחובר.
+         * כך משתמש חדש אינו יורש את תפקיד המשתמש הקודם.
+         */
         val rawRole =
-            prefs.getString(KEY_USER_ROLE, null)
-                ?: prefs.getString("user_role", null)
-                ?: prefs.getString("role", null)
-                ?: userPrefs.getString(KEY_USER_ROLE, null)
+            userPrefs.getString(KEY_USER_ROLE, null)
                 ?: userPrefs.getString("user_role", null)
                 ?: userPrefs.getString("role", null)
+                ?: prefs.getString(KEY_USER_ROLE, null)
+                ?: prefs.getString("user_role", null)
+                ?: prefs.getString("role", null)
                 ?: "trainee"
 
         val clean = rawRole.trim().lowercase()

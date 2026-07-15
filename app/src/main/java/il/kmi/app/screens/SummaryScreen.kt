@@ -18,11 +18,14 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -43,6 +46,8 @@ import java.io.FileOutputStream
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+import kotlinx.coroutines.CancellationException
 import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -1019,6 +1024,121 @@ private fun SummaryToggleButton(
     }
 }
 
+@Composable
+private fun PremiumSummaryLoadingRing(
+    size: Dp,
+    width: Dp,
+    rotation: Float,
+    colors: List<Color>
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .graphicsLayer {
+                rotationZ = rotation
+            }
+            .border(
+                width = width,
+                brush = Brush.sweepGradient(colors),
+                shape = CircleShape
+            )
+    )
+}
+
+@Composable
+private fun PremiumSummaryLoading() {
+    val infiniteTransition = rememberInfiniteTransition(
+        label = "premiumSummaryLoading"
+    )
+
+    val outerRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1350,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumSummaryOuterRotation"
+    )
+
+    val innerRotation by infiniteTransition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1850,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumSummaryInnerRotation"
+    )
+
+    Box(
+        modifier = Modifier.size(82.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        PremiumSummaryLoadingRing(
+            size = 76.dp,
+            width = 5.dp,
+            rotation = outerRotation,
+            colors = listOf(
+                Color.Transparent,
+                Color(0xFFA78BFA),
+                Color(0xFF38BDF8),
+                Color.Transparent
+            )
+        )
+
+        PremiumSummaryLoadingRing(
+            size = 52.dp,
+            width = 4.dp,
+            rotation = innerRotation,
+            colors = listOf(
+                Color.Transparent,
+                Color(0xFFF59E0B),
+                Color(0xFF22C55E),
+                Color.Transparent
+            )
+        )
+
+        Surface(
+            modifier = Modifier.size(25.dp),
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.96f),
+            shadowElevation = 8.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.42f)
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.White,
+                                Color(0xFFEDE9FE),
+                                Color(0xFFE0F2FE)
+                            )
+                        ),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "✓",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF0F5E9C),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
 /* ------------------------------ SummaryScreen ------------------------------ */
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1051,6 +1171,18 @@ fun SummaryScreen(
     var showProgress by rememberSaveable { mutableStateOf(false) }
     var showComparison by rememberSaveable { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
+
+    /*
+     * כל עוד רשימת התרגילים והסימונים לא מוכנה,
+     * לא מרכיבים את תוכן מסך הסיכום.
+     */
+    var isSummaryLoading by remember(
+        belt,
+        topic,
+        subTopicFilter
+    ) {
+        mutableStateOf(true)
+    }
 
     var userProgressComparison by remember {
         mutableStateOf<UserProgressComparison?>(null)
@@ -1263,35 +1395,6 @@ fun SummaryScreen(
         itemsByTopic = out
     }
 
-    // ✅ Warmup לכל הסימונים של כל הנושאים ותתי-הנושאים במסך הסיכום.
-    // בלי זה, getTopicStatusSnapshot קורא רק cache,
-    // ולכן סימונים נטענים רק אחרי שנכנסים ידנית לנושא/תת-נושא.
-    LaunchedEffect(belt, itemsByTopic) {
-        val warmupByStatusTopicKey: Map<String, List<String>> =
-            itemsByTopic
-                .values
-                .flatten()
-                .groupBy { row -> row.statusTopicKey }
-                .mapValues { (_, rows) ->
-                    rows.map { row ->
-                        summaryExerciseIdentityIdFor(
-                            belt = belt,
-                            topicKey = row.statusTopicKey,
-                            topicTitle = row.sourceTopicTitle,
-                            index = row.indexInStatusGroup,
-                            item = row.itemRaw
-                        )
-                    }.distinct()
-                }
-
-        warmupByStatusTopicKey.forEach { (statusTopicKey, statusIds) ->
-            vm.warmUpTopicStatuses(
-                belt = belt,
-                topic = statusTopicKey,
-                items = statusIds
-            )
-        }
-    }
 
     /**
      * ✅ masteredMap נשמר לפי (topicTitle, statusId)
@@ -1303,11 +1406,59 @@ fun SummaryScreen(
         mutableStateOf<Map<Pair<String, String>, MarkState>>(emptyMap())
     }
 
-    LaunchedEffect(belt, itemsByTopic, subTopicFilter, topic, marksVer) {
+    LaunchedEffect(
+        belt,
+        itemsByTopic,
+        subTopicFilter,
+        topic
+    ) {
         loadError = null
+        isSummaryLoading = true
+
+        if (itemsByTopic.isEmpty()) {
+            /*
+             * itemsByTopic מתחיל ריק ונבנה ב־LaunchedEffect אחר.
+             * משאירים את הטוען פעיל עד שהרשימה תהיה מוכנה.
+             */
+            masteredMap = emptyMap()
+            return@LaunchedEffect
+        }
+
+        /*
+         * מאפשרים ל־Compose לצייר קודם את אנימציית הטעינה,
+         * ורק לאחר מכן מתחילים את העבודה הכבדה.
+         */
+        yield()
+
         try {
-            // ✅ מחשבים ברקע כדי למנוע תקיעה של ה-UI
-            val computed: Map<Pair<String, String>, MarkState> = withContext(Dispatchers.Default) {
+            val statusGroups: Map<String, List<String>> =
+                itemsByTopic
+                    .values
+                    .flatten()
+                    .groupBy { row -> row.statusTopicKey }
+                    .mapValues { (_, rows) ->
+                        rows.map { row ->
+                            summaryExerciseIdentityIdFor(
+                                belt = belt,
+                                topicKey = row.statusTopicKey,
+                                topicTitle = row.sourceTopicTitle,
+                                index = row.indexInStatusGroup,
+                                item = row.itemRaw
+                            )
+                        }.distinct()
+                    }
+
+            /*
+             * ממתינים עד שכל הסימונים נמצאים במטמון.
+             * רק לאחר מכן מחשבים ומפרסמים את המפה למסך.
+             */
+            vm.warmUpStatusGroupsAndAwait(
+                belt = belt,
+                groups = statusGroups
+            )
+
+            val computed: Map<Pair<String, String>, MarkState> =
+                withContext(Dispatchers.Default) {
                 val map = mutableMapOf<Pair<String, String>, MarkState>()
 
                 itemsByTopic.forEach { (topicTitle, rows) ->
@@ -1352,10 +1503,29 @@ fun SummaryScreen(
                 map
             }
 
+            /*
+             * מפרסמים למסך מפה מלאה בלבד.
+             * לאחר ההצבה, כל הספירות נגזרות מאותה תמונת מצב.
+             */
             masteredMap = computed
+            isSummaryLoading = false
+
+        } catch (cancelled: CancellationException) {
+            /*
+             * ביטול של LaunchedEffect אינו שגיאת נתונים.
+             * משאירים את הטוען פעיל ומאפשרים ל־Effect החדש להמשיך.
+             */
+            throw cancelled
+
         } catch (e: Exception) {
-            loadError = e.message ?: tr("שגיאה בקריאת הנתונים", "Error reading data")
+            loadError = e.message
+                ?: tr(
+                    "שגיאה בקריאת הנתונים",
+                    "Error reading data"
+                )
+
             masteredMap = emptyMap()
+            isSummaryLoading = false
         }
     }
 
@@ -1702,6 +1872,67 @@ fun SummaryScreen(
             }
         }
     ) { innerPadding ->
+
+        if (isSummaryLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFFF8FBFF),
+                                Color(0xFFEAF4FF),
+                                Color(0xFFB7DDF7),
+                                Color(0xFF1F78B4),
+                                Color(0xFF062B4A)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(26.dp),
+                    color = Color.White.copy(alpha = 0.95f),
+                    tonalElevation = 8.dp,
+                    shadowElevation = 12.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(
+                            horizontal = 34.dp,
+                            vertical = 28.dp
+                        ),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        PremiumSummaryLoading()
+
+                        Text(
+                            text = tr(
+                                "טוען את כל סימוני התרגילים...",
+                                "Loading all exercise marks..."
+                            ),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF172033),
+                            textAlign = TextAlign.Center
+                        )
+
+                        Text(
+                            text = tr(
+                                "מסך הסיכום יוצג מיד כשהנתונים יהיו מוכנים",
+                                "The summary will appear when all data is ready"
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF667085),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+
+            return@Scaffold
+        }
 
         // ===== דיאלוג הסבר + מועדפים + הערה =====
         explainFromSearch?.let { (b, t, iRaw) ->

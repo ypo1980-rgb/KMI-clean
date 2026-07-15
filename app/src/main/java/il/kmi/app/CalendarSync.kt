@@ -117,15 +117,48 @@ object KmiCalendarSync {
             .distinct()
     }
 
-    private fun selectedBranchesForCalendarSync(context: Context): List<String> {
-        val sp = context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+    private fun selectedBranchesForCalendarSync(
+        context: Context
+    ): List<String> {
+        val userSp = context.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
+        val settingsSp = context.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
 
+        /*
+         * "branch" הוא המקור העדכני שנכתב עבור המשתמש הנוכחי.
+         * הוא יכול להכיל סניף אחד או רשימה מופרדת בפסיקים.
+         */
+        val currentUserBranches = prefsList(
+            userSp,
+            "branch"
+        )
+
+        if (currentUserBranches.isNotEmpty()) {
+            return currentUserBranches
+        }
+
+        val currentSettingsBranches = prefsList(
+            settingsSp,
+            "branch"
+        )
+
+        if (currentSettingsBranches.isNotEmpty()) {
+            return currentSettingsBranches
+        }
+
+        /*
+         * תאימות בלבד לפרופילים שנשמרו בגרסאות קודמות.
+         */
         return prefsList(
-            sp,
+            userSp,
             "branches_json",
             "selected_branches",
             "branches",
-            "branch",
             "active_branch",
             "activeBranch",
             "branch2",
@@ -133,27 +166,77 @@ object KmiCalendarSync {
         )
     }
 
-    private fun selectedGroupsForCalendarSync(context: Context): List<String> {
-        val sp = context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-
-        return prefsList(
-            sp,
-            "groups_json",
-            "selected_groups",
-            "groups",
-            "age_groups",
-            "age_group",
-            "active_group",
-            "activeGroup",
-            "group"
+    private fun selectedGroupsForCalendarSync(
+        context: Context
+    ): List<String> {
+        val userSp = context.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
         )
-            .map {
-                TrainingCatalog
-                    .normalizeGroupName(it)
-                    .ifBlank { it }
-            }
-            .filter { it.isNotBlank() }
-            .distinct()
+        val settingsSp = context.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
+
+        fun normalize(values: List<String>): List<String> {
+            return values
+                .map {
+                    TrainingCatalog
+                        .normalizeGroupName(it)
+                        .ifBlank { it }
+                }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
+
+        /*
+         * age_groups הוא המקור העדכני ויכול להכיל
+         * קבוצה אחת או כמה קבוצות.
+         */
+        val currentUserGroups = normalize(
+            prefsList(
+                userSp,
+                "age_groups"
+            )
+        )
+
+        if (currentUserGroups.isNotEmpty()) {
+            return currentUserGroups
+        }
+
+        val currentSettingsGroups = normalize(
+            prefsList(
+                settingsSp,
+                "age_groups"
+            )
+        )
+
+        if (currentSettingsGroups.isNotEmpty()) {
+            return currentSettingsGroups
+        }
+
+        val primaryUserGroup = normalize(
+            prefsList(
+                userSp,
+                "group",
+                "age_group"
+            )
+        )
+
+        if (primaryUserGroup.isNotEmpty()) {
+            return primaryUserGroup
+        }
+
+        return normalize(
+            prefsList(
+                userSp,
+                "groups_json",
+                "selected_groups",
+                "groups",
+                "active_group",
+                "activeGroup"
+            )
+        )
     }
 
     private fun calendarDayFromDatabase(dayOfWeek: String): Int {
@@ -424,6 +507,67 @@ object KmiCalendarSync {
         return UpsertResult(eventId, created)
     }
 
+    /*
+     * מוחק רק אירועים שהאפליקציה עצמה יצרה.
+     * המחיקה מתבצעת לפי חבילת האפליקציה והמפתח הייחודי,
+     * ולכן אינה נוגעת באירועים פרטיים של המשתמש.
+     */
+    private fun deleteManagedEventsByPrefix(
+        context: Context,
+        eventKeyPrefix: String
+    ) {
+        val cr = context.contentResolver
+        val projection = arrayOf(Events._ID)
+
+        val selection =
+            "${Events.CUSTOM_APP_PACKAGE}=? AND ${Events.CUSTOM_APP_URI} LIKE ?"
+
+        val selectionArgs = arrayOf(
+            context.packageName,
+            "$eventKeyPrefix:%"
+        )
+
+        val eventIds = mutableListOf<Long>()
+
+        cr.query(
+            Events.CONTENT_URI,
+            projection,
+            selection,
+            selectionArgs,
+            null
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                eventIds += cursor.getLong(0)
+            }
+        }
+
+        eventIds.forEach { eventId ->
+            val eventUri = ContentUris.withAppendedId(
+                Events.CONTENT_URI,
+                eventId
+            )
+            cr.delete(eventUri, null, null)
+        }
+    }
+
+    private fun replaceManagedCalendarEvents(
+        context: Context
+    ) {
+        /*
+         * מנקה גם אירועים שנוצרו במנגנון הישן וגם אירועים
+         * שנוצרו באמצעות בחירת יומן יעד.
+         */
+        deleteManagedEventsByPrefix(
+            context = context,
+            eventKeyPrefix = "KMI_WEEKLY"
+        )
+
+        deleteManagedEventsByPrefix(
+            context = context,
+            eventKeyPrefix = "KMI_SELECTED_WEEKLY"
+        )
+    }
+
     private fun upsertAllToCalendar(
         context: Context,
         calendarId: Long,
@@ -446,8 +590,18 @@ object KmiCalendarSync {
                 Toast.LENGTH_LONG
             ).show()
 
+            /*
+             * לא מוחקים את האירועים הקיימים אם לא נמצאו נתונים חדשים.
+             * כך תקלה זמנית במסד הנתונים לא מוחקת למשתמש את היומן.
+             */
             return false
         }
+
+        /*
+         * נמצאו אימונים תקינים לפרופיל הנוכחי:
+         * מוחקים את אירועי ק.מ.י הקודמים ויוצרים תמונת מצב חדשה.
+         */
+        replaceManagedCalendarEvents(context)
 
         candidates.forEach { candidate ->
             upsertWeeklyEvent(

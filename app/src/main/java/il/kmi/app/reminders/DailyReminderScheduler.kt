@@ -8,7 +8,6 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import java.util.Calendar
 import il.kmi.app.halacha.ShabbatHolidayChecker
 
 object DailyReminderScheduler {
@@ -64,18 +63,16 @@ object DailyReminderScheduler {
         val now = System.currentTimeMillis()
 
         if (triggerAtMillis <= now + 60_000L) {
-            val tomorrow = Calendar.getInstance().apply {
-                add(Calendar.DAY_OF_YEAR, 1)
-                set(Calendar.HOUR_OF_DAY, hour)
-                set(Calendar.MINUTE, minute)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-
+            /*
+             * מחשבים שוב מנקודת זמן שנמצאת אחרי חלון הביטחון.
+             * כך השעה של היום לא נבחרת שוב, והחיפוש מתקדם
+             * באמת ליום החוקי הבא.
+             */
             triggerAtMillis =
                 ShabbatHolidayChecker.computeNextAllowedTriggerTimeMillis(
-                    preferredHour = tomorrow.get(Calendar.HOUR_OF_DAY),
-                    preferredMinute = tomorrow.get(Calendar.MINUTE)
+                    preferredHour = hour,
+                    preferredMinute = minute,
+                    nowMillis = now + 60_000L
                 )
         }
 
@@ -160,13 +157,17 @@ object DailyReminderScheduler {
     ): Boolean {
         val userPrefs = context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
 
+        /*
+         * kmi_user שייך לפרופיל המחובר כרגע ולכן נקרא ראשון.
+         * kmi_prefs נשאר רק כתאימות לגרסאות קודמות.
+         */
         val rawRole =
-            prefs.getString(KEY_USER_ROLE, null)
-                ?: prefs.getString("user_role", null)
-                ?: prefs.getString("role", null)
-                ?: userPrefs.getString(KEY_USER_ROLE, null)
+            userPrefs.getString(KEY_USER_ROLE, null)
                 ?: userPrefs.getString("user_role", null)
                 ?: userPrefs.getString("role", null)
+                ?: prefs.getString(KEY_USER_ROLE, null)
+                ?: prefs.getString("user_role", null)
+                ?: prefs.getString("role", null)
                 ?: "trainee"
 
         val clean = rawRole.trim().lowercase()

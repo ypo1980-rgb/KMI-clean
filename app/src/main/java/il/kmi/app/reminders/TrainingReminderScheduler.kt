@@ -209,53 +209,123 @@ object TrainingReminderScheduler {
     }
 
     private fun resolveUserBranches(context: Context): List<String> {
-        val userSp = context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-        val settingsSp = context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+        val userSp = context.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
+        val settingsSp = context.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
 
+        /*
+         * "branch" הוא הערך הקנוני שנכתב בעת רישום או רענון
+         * הפרופיל. אם הוא קיים, לא מאחדים איתו מפתחות ישנים.
+         */
+        val currentUserBranches = splitPrefsValues(
+            userSp.getString("branch", null)
+        )
+
+        if (currentUserBranches.isNotEmpty()) {
+            return currentUserBranches
+        }
+
+        val currentSettingsBranches = splitPrefsValues(
+            settingsSp.getString("branch", null)
+        )
+
+        if (currentSettingsBranches.isNotEmpty()) {
+            return currentSettingsBranches
+        }
+
+        /*
+         * תאימות למשתמשים מגרסאות ישנות שבהן "branch"
+         * עדיין לא נשמר.
+         */
         return splitPrefsValues(
             userSp.getString("branches_json", null),
             userSp.getString("selected_branches", null),
             userSp.getString("branches", null),
-            userSp.getString("activeBranch", null),
             userSp.getString("active_branch", null),
-            userSp.getString("branch", null),
+            userSp.getString("activeBranch", null),
             settingsSp.getString("branches_json", null),
             settingsSp.getString("selected_branches", null),
             settingsSp.getString("branches", null),
-            settingsSp.getString("activeBranch", null),
             settingsSp.getString("active_branch", null),
-            settingsSp.getString("branch", null)
+            settingsSp.getString("activeBranch", null)
         )
     }
 
     private fun resolveUserGroups(context: Context): List<String> {
-        val userSp = context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-        val settingsSp = context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+        val userSp = context.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
+        val settingsSp = context.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
 
-        return splitPrefsValues(
-            userSp.getString("groups_json", null),
-            userSp.getString("selected_groups", null),
-            userSp.getString("groups", null),
-            userSp.getString("age_groups", null),
-            userSp.getString("activeGroup", null),
-            userSp.getString("active_group", null),
-            userSp.getString("groupKey", null),
-            userSp.getString("group_key", null),
-            userSp.getString("age_group", null),
-            userSp.getString("group", null),
-            settingsSp.getString("groups_json", null),
-            settingsSp.getString("selected_groups", null),
-            settingsSp.getString("groups", null),
-            settingsSp.getString("age_groups", null),
-            settingsSp.getString("activeGroup", null),
-            settingsSp.getString("active_group", null),
-            settingsSp.getString("groupKey", null),
-            settingsSp.getString("group_key", null),
-            settingsSp.getString("age_group", null),
-            settingsSp.getString("group", null)
-        ).map {
-            TrainingCatalog.normalizeGroupName(it).ifBlank { it }
-        }.distinct()
+        fun normalize(values: List<String>): List<String> {
+            return values.map {
+                TrainingCatalog.normalizeGroupName(it).ifBlank { it }
+            }.filter {
+                it.isNotBlank()
+            }.distinct()
+        }
+
+        /*
+         * age_groups הוא המקור העדכני שיכול להכיל קבוצה אחת
+         * או כמה קבוצות של המשתמש הנוכחי.
+         */
+        val currentUserGroups = normalize(
+            splitPrefsValues(
+                userSp.getString("age_groups", null)
+            )
+        )
+
+        if (currentUserGroups.isNotEmpty()) {
+            return currentUserGroups
+        }
+
+        val currentSettingsGroups = normalize(
+            splitPrefsValues(
+                settingsSp.getString("age_groups", null)
+            )
+        )
+
+        if (currentSettingsGroups.isNotEmpty()) {
+            return currentSettingsGroups
+        }
+
+        val primaryUserGroup = normalize(
+            splitPrefsValues(
+                userSp.getString("group", null),
+                userSp.getString("age_group", null)
+            )
+        )
+
+        if (primaryUserGroup.isNotEmpty()) {
+            return primaryUserGroup
+        }
+
+        return normalize(
+            splitPrefsValues(
+                userSp.getString("groups_json", null),
+                userSp.getString("selected_groups", null),
+                userSp.getString("groups", null),
+                userSp.getString("active_group", null),
+                userSp.getString("activeGroup", null),
+                userSp.getString("groupKey", null),
+                userSp.getString("group_key", null),
+                settingsSp.getString("groups_json", null),
+                settingsSp.getString("selected_groups", null),
+                settingsSp.getString("groups", null),
+                settingsSp.getString("active_group", null),
+                settingsSp.getString("activeGroup", null),
+                settingsSp.getString("group", null)
+            )
+        )
     }
 
     private fun splitPrefsValues(vararg values: String?): List<String> {

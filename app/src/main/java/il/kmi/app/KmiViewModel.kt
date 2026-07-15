@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import il.kmi.app.data.training.TrainingSummaryLocalRepo
 import il.kmi.shared.domain.catalog.CatalogRepo
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 // ========= הדגשת תרגיל במסך הפריטים =========
 private val _highlightItem = MutableStateFlow<String?>(null)
@@ -116,6 +119,53 @@ class KmiViewModel(
             if (changed) {
                 recalcProgress()
                 _marksVersion.value = _marksVersion.value + 1L
+            }
+        }
+    }
+
+    /**
+     * טעינה מרוכזת עבור מסך הסיכום.
+     *
+     * בניגוד ל־warmUpTopicStatuses, הפונקציה ממתינה עד שכל
+     * קבוצות הסימונים נטענו ורק אז מחזירה שליטה למסך.
+     */
+    suspend fun warmUpStatusGroupsAndAwait(
+        belt: Belt,
+        groups: Map<String, Collection<String>>
+    ) = coroutineScope {
+        val loadedGroups = groups.map { (topic, items) ->
+            async {
+                val canonicalTopic = canonicalTopicKey(topic)
+
+                val loadedItems = items.distinct().mapNotNull { item ->
+                    val topicMap = masteredItems[belt.id]?.get(canonicalTopic)
+                    val alreadyCached = topicMap?.containsKey(item) == true
+
+                    if (alreadyCached) {
+                        null
+                    } else {
+                        ds.readItemStatus(
+                            belt = belt,
+                            topic = canonicalTopic,
+                            item = item
+                        )?.let { value ->
+                            item to value
+                        }
+                    }
+                }
+
+                canonicalTopic to loadedItems
+            }
+        }.awaitAll()
+
+        loadedGroups.forEach { (canonicalTopic, loadedItems) ->
+            loadedItems.forEach { (item, value) ->
+                putCache(
+                    belt = belt,
+                    topicKey = canonicalTopic,
+                    item = item,
+                    value = value
+                )
             }
         }
     }

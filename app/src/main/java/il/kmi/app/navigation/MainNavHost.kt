@@ -230,6 +230,14 @@ fun MainNavHost(
                 currentRoute.startsWith("onboarding")
 
             if (!alreadyInsideOnboarding) {
+                /*
+                 * פתיחה ידנית של ההדרכה מסרגל הצד:
+                 * בסיום חוזרים לבית ולא למסך טעינת הפתיחה.
+                 */
+                sp.edit()
+                    .remove("onboarding_continue_to_splash")
+                    .apply()
+
                 nav.navigate(
                     OnboardingRoute.build(
                         manual = true
@@ -268,6 +276,53 @@ fun MainNavHost(
 
     // מונע שני ניווטים רצופים אל אותו מסך כניסה בגלל recomposition / Activity recreation
     var entryNavigationLocked by remember { mutableStateOf(false) }
+
+    fun openOnboardingBeforeStartupLoading() {
+        /*
+         * נשמר מחוץ ל־Compose כדי שהערך לא יתאפס
+         * כאשר מחסנית הניווט נבנית מחדש.
+         */
+        sp.edit()
+            .putBoolean(
+                "onboarding_continue_to_splash",
+                true
+            )
+            .commit()
+
+        nav.navigate(
+            OnboardingRoute.build(
+                manual = false
+            )
+        ) {
+            popUpTo(0) {
+                inclusive = true
+            }
+            launchSingleTop = true
+            restoreState = false
+        }
+    }
+
+    fun openStartupLoading() {
+        sp.edit()
+            .remove("onboarding_continue_to_splash")
+            .apply()
+
+        nav.navigate(Route.Splash.route) {
+            popUpTo(0) {
+                inclusive = true
+            }
+            launchSingleTop = true
+            restoreState = false
+        }
+    }
+
+    fun openFirstStartupDestination() {
+        if (OnboardingPreferences.hasCompleted(ctx)) {
+            openStartupLoading()
+        } else {
+            openOnboardingBeforeStartupLoading()
+        }
+    }
 
 // ✅ לא מבצעים preload גלובלי בעליית האפליקציה.
 // רשימת המתאמנים נטענת רק בכניסה למסך CoachTraineesScreen,
@@ -369,16 +424,11 @@ fun MainNavHost(
                         return@LaunchedEffect
                     }
 
-                    // חשוב:
-                    // APP_ENTRY לא בודק כאן פרופיל ולא מדלג ל-Home / השלמת פרטים.
-                    // הוא תמיד מעביר קודם למסך הטעינה.
-                    // מסך הטעינה הוא זה שמחליט בסיום לאן ממשיכים.
-
-                    nav.navigate(Route.Splash.route) {
-                        popUpTo(APP_ENTRY_ROUTE) { inclusive = true }
-                        launchSingleTop = true
-                        restoreState = false
-                    }
+                    /*
+                     * אם קיימת הדרכה שטרם הושלמה, מציגים אותה לפני
+                     * מסך טעינת הנתונים. בהפעלות הבאות עוברים ישירות לטעינה.
+                     */
+                    openFirstStartupDestination()
                 }
             }
 
@@ -393,11 +443,7 @@ fun MainNavHost(
                         // אחרי שהגענו למסך אמיתי, מאפשרים ניווט עתידי תקין
                         entryNavigationLocked = false
 
-                        nav.navigate(Route.Splash.route) {
-                            popUpTo("initial_language") { inclusive = true }
-                            launchSingleTop = true
-                            restoreState = false
-                        }
+                        openFirstStartupDestination()
                     }
                 )
             }
@@ -620,16 +666,12 @@ fun MainNavHost(
                     },
 
                     // Google Login הצליח + הפרופיל מלא
-                    // ✅ קודם מציגים את מסך הלוגו הדינמי וטעינת הנתונים
+                    // בהפעלה הראשונה מציגים הדרכה, ולאחריה טעינת נתונים.
                     onProfileComplete = {
 
                         markInitialLanguageSelected(sp)
 
-                        nav.navigate(Route.Splash.route) {
-                            popUpTo(0) { inclusive = true }
-                            launchSingleTop = true
-                            restoreState = false
-                        }
+                        openFirstStartupDestination()
                     },
 
                     // Google Login הצליח אבל חסרים פרטי KMI
@@ -863,11 +905,7 @@ fun MainNavHost(
                     onOpenLegal = { nav.navigate(Route.Legal.route) },
                     onOpenTerms = { nav.navigate(Route.Legal.route) },
                     onRegistrationDone = {
-                        nav.navigate(Route.Splash.route) {
-                            popUpTo(0) { inclusive = true }
-                            launchSingleTop = true
-                            restoreState = false
-                        }
+                        openFirstStartupDestination()
                     }
                 )
             }
@@ -889,11 +927,7 @@ fun MainNavHost(
                     onOpenLegal = { nav.navigate(Route.Legal.route) },
                     onOpenTerms = { nav.navigate(Route.Legal.route) },
                     onRegistrationDone = {
-                        nav.navigate(Route.Splash.route) {
-                            popUpTo(0) { inclusive = true }
-                            launchSingleTop = true
-                            restoreState = false
-                        }
+                        openFirstStartupDestination()
                     },
                     startAfterGoogleLogin = true
                 )
@@ -1129,12 +1163,21 @@ fun MainNavHost(
                 onFinished = {
                     OnboardingPreferences.markCompleted(ctx)
 
-                    nav.navigate(Route.Home.route) {
-                        popUpTo(0) {
-                            inclusive = false
+                    val continueToSplash = sp.getBoolean(
+                        "onboarding_continue_to_splash",
+                        false
+                    )
+
+                    if (continueToSplash) {
+                        openStartupLoading()
+                    } else {
+                        nav.navigate(Route.Home.route) {
+                            popUpTo(0) {
+                                inclusive = false
+                            }
+                            launchSingleTop = true
+                            restoreState = false
                         }
-                        launchSingleTop = true
-                        restoreState = false
                     }
                 }
             )

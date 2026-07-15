@@ -59,6 +59,11 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.R
+import il.kmi.app.KmiCalendarSync
+import il.kmi.app.hasCalendarPermission
+import il.kmi.app.reminders.TrainingReminderScheduler
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 
 //-----------------------------------------------------------------------------
@@ -530,30 +535,51 @@ fun MyProfileScreen(
                 val p = firestoreProfile
                 val data = snap.data.orEmpty()
 
-                val branchesFromFirestore = firestoreProfileStringList(
-                    data,
-                    "branches",
-                    "branches_json",
-                    "selected_branches",
-                    "branchesCsv",
+                /*
+                 * בוחר את המקור העדכני הראשון שאינו ריק.
+                 * אין לאחד את כל השדות, משום שחלקם עשויים
+                 * להכיל ערכים שנשארו לפני עריכת הפרופיל.
+                 */
+                fun preferredFirestoreList(
+                    vararg keys: String
+                ): List<String> {
+                    keys.forEach { key ->
+                        val values = firestoreProfileStringList(
+                            data,
+                            key
+                        )
+
+                        if (values.isNotEmpty()) {
+                            return values
+                        }
+                    }
+
+                    return emptyList()
+                }
+
+                val branchesFromFirestore = preferredFirestoreList(
+                    "branch",
                     "activeBranch",
                     "active_branch",
-                    "branch"
+                    "branchesCsv",
+                    "branches",
+                    "branches_json",
+                    "selected_branches"
                 )
 
-                val groupsFromFirestore = firestoreProfileStringList(
-                    data,
-                    "groups",
-                    "groups_json",
-                    "selected_groups",
-                    "groupsCsv",
+                val groupsFromFirestore = preferredFirestoreList(
+                    "age_groups",
+                    "group",
+                    "age_group",
+                    "primaryGroup",
                     "activeGroup",
                     "active_group",
-                    "primaryGroup",
                     "groupKey",
                     "group_key",
-                    "age_group",
-                    "group"
+                    "groupsCsv",
+                    "groups",
+                    "groups_json",
+                    "selected_groups"
                 )
                     .map {
                         TrainingCatalog
@@ -569,7 +595,7 @@ fun MyProfileScreen(
                 val groupsJson = org.json.JSONArray(groupsFromFirestore).toString()
 
 // מיישר גם את SharedPreferences כדי ששאר המסכים ייהנו מהמידע.
-                userSp.edit()
+                val profilePrefsSaved = userSp.edit()
                     .putString("fullName", p.fullName)
                     .putString("email", p.email)
                     .putString("phone", p.phone)
@@ -593,7 +619,53 @@ fun MyProfileScreen(
                     .putString("belt", p.belt)
                     .putString("current_belt", p.belt)
                     .putString("user_role", p.role)
-                    .apply()
+                    .commit()
+
+                if (profilePrefsSaved) {
+                    /*
+                     * רק לאחר שהסניף והקבוצה החדשים נשמרו בפועל,
+                     * מרעננים את המנגנונים הפעילים.
+                     */
+                    withContext(Dispatchers.IO) {
+                        val calendarSyncEnabled = sp.getBoolean(
+                            "calendar_sync_selected_enabled",
+                            false
+                        )
+
+                        val selectedCalendarId = sp.getLong(
+                            "calendar_sync_selected_calendar_id",
+                            -1L
+                        )
+
+                        if (
+                            calendarSyncEnabled &&
+                            selectedCalendarId > 0L &&
+                            hasCalendarPermission(ctx)
+                        ) {
+                            KmiCalendarSync.upsertAllToSelectedCalendar(
+                                context = ctx.applicationContext,
+                                selectedCalendarId = selectedCalendarId
+                            )
+                        }
+
+                        val trainingRemindersEnabled = sp.getBoolean(
+                            "training_reminders_enabled",
+                            true
+                        )
+
+                        if (trainingRemindersEnabled) {
+                            val leadMinutes = sp.getInt(
+                                "training_reminder_minutes",
+                                sp.getInt("lead_minutes", 60)
+                            ).takeIf { it > 0 } ?: 60
+
+                            TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
+                                context = ctx.applicationContext,
+                                leadMinutes = leadMinutes
+                            )
+                        }
+                    }
+                }
             }.onFailure {
                 // לא מפילים את המסך — ממשיכים עם KmiPrefs/SharedPreferences.
             }
