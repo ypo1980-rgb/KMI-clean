@@ -442,6 +442,11 @@ fun AppDrawerContent(
     DisposableEffect(
         isEnglish,
         onOpenMyProfile,
+        onOpenCoachAttendance,
+        onOpenCoachBroadcast,
+        onOpenCoachTrainees,
+        onOpenCoachPaymentsReport,
+        onOpenCoachInternalExam,
         onOpenAboutAvi,
         onOpenAboutNetworkCoaches,
         onOpenAboutMethod,
@@ -458,6 +463,36 @@ fun AppDrawerContent(
                 VoiceDrawerDestination.MY_PROFILE -> {
                     onClose()
                     onOpenMyProfile()
+                    true
+                }
+
+                VoiceDrawerDestination.COACH_ATTENDANCE -> {
+                    onClose()
+                    onOpenCoachAttendance()
+                    true
+                }
+
+                VoiceDrawerDestination.COACH_BROADCAST -> {
+                    onClose()
+                    onOpenCoachBroadcast()
+                    true
+                }
+
+                VoiceDrawerDestination.COACH_TRAINEES -> {
+                    onClose()
+                    onOpenCoachTrainees()
+                    true
+                }
+
+                VoiceDrawerDestination.COACH_PAYMENTS_REPORT -> {
+                    onClose()
+                    onOpenCoachPaymentsReport()
+                    true
+                }
+
+                VoiceDrawerDestination.COACH_INTERNAL_EXAM -> {
+                    onClose()
+                    onOpenCoachInternalExam()
                     true
                 }
 

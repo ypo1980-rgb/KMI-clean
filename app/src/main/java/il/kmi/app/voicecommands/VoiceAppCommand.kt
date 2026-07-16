@@ -6,6 +6,13 @@ package il.kmi.app.voicecommands
  */
 enum class VoiceDrawerDestination {
     MY_PROFILE,
+
+    COACH_ATTENDANCE,
+    COACH_BROADCAST,
+    COACH_TRAINEES,
+    COACH_PAYMENTS_REPORT,
+    COACH_INTERNAL_EXAM,
+
     ABOUT_AVI,
     NETWORK_COACHES,
     ABOUT_METHOD,
@@ -167,6 +174,72 @@ object VoiceAppCommandParser {
         text: String
     ): VoiceDrawerDestination? {
         return when {
+            containsAny(
+                text,
+                "עדכון נוכחות",
+                "דוח נוכחות",
+                "דו״ח נוכחות",
+                "רישום נוכחות",
+                "פתח נוכחות",
+                "פתח עדכון נוכחות",
+                "mark attendance",
+                "attendance report",
+                "open attendance"
+            ) ->
+                VoiceDrawerDestination.COACH_ATTENDANCE
+
+            containsAny(
+                text,
+                "שליחת הודעה",
+                "שלח הודעה",
+                "שידור מאמן",
+                "הודעה למתאמנים",
+                "פתח שליחת הודעה",
+                "send message",
+                "coach broadcast",
+                "message trainees"
+            ) ->
+                VoiceDrawerDestination.COACH_BROADCAST
+
+            containsAny(
+                text,
+                "רשימת מתאמנים",
+                "המתאמנים שלי",
+                "פתח רשימת מתאמנים",
+                "פתח מתאמנים",
+                "מסך המתאמנים",
+                "trainees list",
+                "my trainees",
+                "open trainees",
+                "trainees screen"
+            ) ->
+                VoiceDrawerDestination.COACH_TRAINEES
+
+            containsAny(
+                text,
+                "דוח תשלומים",
+                "דו״ח תשלומים",
+                "דוח התשלומים",
+                "פתח דוח תשלומים",
+                "תשלומי מתאמנים",
+                "payments report",
+                "open payments report",
+                "trainee payments"
+            ) ->
+                VoiceDrawerDestination.COACH_PAYMENTS_REPORT
+
+            containsAny(
+                text,
+                "מבחן פנימי",
+                "מבחן פנימי לחגורה",
+                "פתח מבחן פנימי",
+                "מבחן חגורה",
+                "internal exam",
+                "internal belt exam",
+                "open internal exam"
+            ) ->
+                VoiceDrawerDestination.COACH_INTERNAL_EXAM
+
             containsAny(
                 text,
                 "הפרופיל שלי",

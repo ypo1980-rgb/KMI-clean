@@ -383,14 +383,11 @@ fun MainNavHost(
         }
     }
 
-// ✅ אם MainApp ביקש לפתוח מסך ספציפי, למשל registration_landing,
-// לא עוברים דרך app_entry / splash כדי למנוע מסך לבן ומעבר מיותר.
+// המסך הראשוני וטעינת הנתונים מנוהלים לפני MainApp ב־AndroidAppRoot.
+// לאחר סיום הטעינה מותר ל־MainNavHost להתחיל ישירות בבית.
     val actualStartDestination = remember(startDestination) {
         when (startDestination) {
-            // ✅ אחרי מסך הטעינה הנקי מ-AndroidAppRoot מותר להתחיל ישירות בבית.
-            // זה מונע צורך בלחיצה כפולה על "דלג".
             Route.Home.route,
-
             GOOGLE_PROFILE_COMPLETION_ROUTE,
             Route.RegistrationLanding.route,
             Route.Registration.route,
@@ -556,10 +553,10 @@ fun MainNavHost(
                     }
 
                     /*
-                     * אם קיימת הדרכה שטרם הושלמה, מציגים אותה לפני
-                     * מסך טעינת הנתונים. בהפעלות הבאות עוברים ישירות לטעינה.
+                     * לאחר בחירת השפה תמיד מציגים תחילה את מסך הכניסה.
+                     * המסך יוצג פעם אחת בכל הפעלה חדשה של האפליקציה.
                      */
-                    openFirstStartupDestination()
+                    nav.openIntroCleanFrom(APP_ENTRY_ROUTE)
                 }
             }
 
@@ -574,7 +571,7 @@ fun MainNavHost(
                         // אחרי שהגענו למסך אמיתי, מאפשרים ניווט עתידי תקין
                         entryNavigationLocked = false
 
-                        openFirstStartupDestination()
+                        nav.openIntroCleanFrom("initial_language")
                     }
                 )
             }
@@ -784,15 +781,31 @@ fun MainNavHost(
                 }
 
                 IntroScreen(
-                    // כניסה רגילה — כן מגיעה למסך "לקוח חדש / קיים"
+                    /*
+                     * המסך הראשוני מוצג תמיד:
+                     * משתמש מחובר ממשיך לטעינה;
+                     * משתמש שאינו מחובר ממשיך למסך "לקוח חדש / קיים".
+                     */
                     onContinue = {
 
                         markInitialLanguageSelected(sp)
 
-                        nav.navigate(Route.RegistrationLanding.route) {
-                            popUpTo(Route.Intro.route) { inclusive = true }
-                            launchSingleTop = true
-                            restoreState = false
+                        val firebaseUser =
+                            FirebaseAuth.getInstance().currentUser
+
+                        if (
+                            firebaseUser != null &&
+                            !firebaseUser.isAnonymous
+                        ) {
+                            openFirstStartupDestination()
+                        } else {
+                            nav.navigate(Route.RegistrationLanding.route) {
+                                popUpTo(Route.Intro.route) {
+                                    inclusive = true
+                                }
+                                launchSingleTop = true
+                                restoreState = false
+                            }
                         }
                     },
 

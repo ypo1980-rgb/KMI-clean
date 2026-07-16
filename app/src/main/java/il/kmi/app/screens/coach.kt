@@ -324,12 +324,13 @@ private fun CoachTopStatsCard(
 ) {
 
     Surface(
-        color = Color(0xFF111827),
+        color = Color(0xFFF4F8FF),
         shape = RoundedCornerShape(22.dp),
-        shadowElevation = 8.dp,
+        shadowElevation = 6.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
-            1.dp,
-            Color.White.copy(alpha = 0.10f)
+            width = 1.dp,
+            color = Color(0xFFD8E4F4)
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -347,7 +348,7 @@ private fun CoachTopStatsCard(
                     lineHeight = 20.sp
                 ),
                 fontWeight = FontWeight.ExtraBold,
-                color = Color.White,
+                color = Color(0xFF172036),
                 textAlign = coachTextAlign(isEnglish),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -362,7 +363,7 @@ private fun CoachTopStatsCard(
                     fontSize = 11.sp,
                     lineHeight = 13.sp
                 ),
-                color = Color.White.copy(alpha = 0.72f),
+                color = Color(0xFF64748B),
                 textAlign = coachTextAlign(isEnglish),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -507,12 +508,13 @@ private fun CoachTopStatTile(
     }
 
     Surface(
-        color = Color(0xFF243044),
+        color = Color.White,
         shape = RoundedCornerShape(16.dp),
         shadowElevation = 2.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
-            1.dp,
-            Color.White.copy(alpha = 0.10f)
+            width = 1.dp,
+            color = Color(0xFFD6E0EE)
         ),
         modifier = modifier.heightIn(min = 72.dp)
     ) {
@@ -539,7 +541,7 @@ private fun CoachTopStatTile(
                     lineHeight = 17.sp
                 ),
                 fontWeight = FontWeight.ExtraBold,
-                color = Color.White,
+                color = Color(0xFF172036),
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -555,7 +557,7 @@ private fun CoachTopStatTile(
                     lineHeight = 10.sp
                 ),
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White.copy(alpha = 0.76f),
+                color = Color(0xFF64748B),
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -2658,11 +2660,12 @@ fun CoachTraineesScreen(
                                 isTopStatsExpanded = !isTopStatsExpanded
                             },
                             shape = RoundedCornerShape(999.dp),
-                            color = Color(0xFF111827).copy(alpha = 0.92f),
-                            shadowElevation = 5.dp,
+                            color = Color(0xFFF0EEFF),
+                            shadowElevation = 4.dp,
+                            tonalElevation = 0.dp,
                             border = BorderStroke(
-                                1.dp,
-                                Color.White.copy(alpha = 0.18f)
+                                width = 1.dp,
+                                color = Color(0xFFB7AEF5)
                             ),
                             modifier = Modifier
                                 .widthIn(min = 150.dp)
@@ -2682,7 +2685,7 @@ fun CoachTraineesScreen(
                                         Icons.Default.KeyboardArrowDown
                                     },
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = Color(0xFF4B478F),
                                     modifier = Modifier.size(19.dp)
                                 )
 
@@ -2699,7 +2702,7 @@ fun CoachTraineesScreen(
                                         lineHeight = 14.sp
                                     ),
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White,
+                                    color = Color(0xFF4B478F),
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -2719,12 +2722,13 @@ fun CoachTraineesScreen(
 
                 item {
                     Surface(
-                        color = Color(0xFF111827).copy(alpha = 0.96f),
+                        color = Color(0xFFF4F8FF),
                         shape = RoundedCornerShape(24.dp),
-                        shadowElevation = 8.dp,
+                        shadowElevation = 6.dp,
+                        tonalElevation = 0.dp,
                         border = BorderStroke(
-                            1.dp,
-                            Color.White.copy(alpha = 0.14f)
+                            width = 1.dp,
+                            color = Color(0xFFD8E4F4)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -2739,7 +2743,8 @@ fun CoachTraineesScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        isTraineePickerExpanded = !isTraineePickerExpanded
+                                        isTraineePickerExpanded =
+                                            !isTraineePickerExpanded
                                     },
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -2751,7 +2756,7 @@ fun CoachTraineesScreen(
                                         Icons.Default.KeyboardArrowDown
                                     },
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = Color(0xFF4F46E5),
                                     modifier = Modifier.size(24.dp)
                                 )
 
@@ -2768,7 +2773,7 @@ fun CoachTraineesScreen(
                                             lineHeight = 20.sp
                                         ),
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White,
+                                        color = Color(0xFF172036),
                                         textAlign = screenTextAlign,
                                         modifier = Modifier.fillMaxWidth()
                                     )
@@ -2780,7 +2785,7 @@ fun CoachTraineesScreen(
                                             fontSize = 12.sp,
                                             lineHeight = 14.sp
                                         ),
-                                        color = Color.White.copy(alpha = 0.72f),
+                                        color = Color(0xFF64748B),
                                         textAlign = screenTextAlign,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -2797,14 +2802,14 @@ fun CoachTraineesScreen(
                                     textStyle = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 13.sp,
                                         textAlign = coachTextAlign(isEnglish),
-                                        color = Color.White
+                                        color = Color(0xFF172036)
                                     ),
                                     placeholder = {
                                         Text(
                                             text = coachTr(isEnglish, "חיפוש מתאמן", "Search trainee"),
                                             style = MaterialTheme.typography.bodySmall.copy(
                                                 fontSize = 12.sp,
-                                                color = Color.White.copy(alpha = 0.62f)
+                                                color = Color(0xFF7C879B)
                                             )
                                         )
                                     },
@@ -2812,7 +2817,7 @@ fun CoachTraineesScreen(
                                         Text(
                                             text = "🔎",
                                             fontSize = 15.sp,
-                                            color = Color.White.copy(alpha = 0.82f)
+                                            color = Color(0xFF64748B)
                                         )
                                     },
                                     trailingIcon = {
@@ -2825,27 +2830,27 @@ fun CoachTraineesScreen(
                                                     .clickable {
                                                         traineeSearchQuery = ""
                                                     },
-                                                tint = Color.White.copy(alpha = 0.82f)
+                                                tint = Color(0xFF64748B)
                                             )
                                         }
                                     },
                                     shape = RoundedCornerShape(18.dp),
                                     colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White,
-                                        disabledTextColor = Color.White.copy(alpha = 0.60f),
-                                        cursorColor = Color.White,
-                                        focusedBorderColor = Color(0xFFA78BFA),
-                                        unfocusedBorderColor = Color.White.copy(alpha = 0.18f),
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        focusedPlaceholderColor = Color.White.copy(alpha = 0.62f),
-                                        unfocusedPlaceholderColor = Color.White.copy(alpha = 0.62f),
-                                        focusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
-                                        unfocusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
-                                        focusedTrailingIconColor = Color.White.copy(alpha = 0.82f),
-                                        unfocusedTrailingIconColor = Color.White.copy(alpha = 0.82f)
+                                        focusedTextColor = Color(0xFF172036),
+                                        unfocusedTextColor = Color(0xFF172036),
+                                        disabledTextColor = Color(0xFF94A3B8),
+                                        cursorColor = Color(0xFF4F46E5),
+                                        focusedBorderColor = Color(0xFF7C5CE7),
+                                        unfocusedBorderColor = Color(0xFFCBD8EA),
+                                        focusedContainerColor = Color.White,
+                                        unfocusedContainerColor = Color.White,
+                                        disabledContainerColor = Color(0xFFF8FAFC),
+                                        focusedPlaceholderColor = Color(0xFF7C879B),
+                                        unfocusedPlaceholderColor = Color(0xFF7C879B),
+                                        focusedLeadingIconColor = Color(0xFF64748B),
+                                        unfocusedLeadingIconColor = Color(0xFF64748B),
+                                        focusedTrailingIconColor = Color(0xFF64748B),
+                                        unfocusedTrailingIconColor = Color(0xFF64748B)
                                     ),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -2858,7 +2863,7 @@ fun CoachTraineesScreen(
                                                 "לא אותרו סניף או קבוצה עבור המאמן.",
                                                 "No branch or group was found for this coach."
                                             ),
-                                            color = Color(0xFFFCA5A5),
+                                            color = Color(0xFFB42318),
                                             textAlign = screenTextAlign,
                                             style = MaterialTheme.typography.bodySmall,
                                             modifier = Modifier.fillMaxWidth()
@@ -2881,7 +2886,7 @@ fun CoachTraineesScreen(
                                                     "טוען מתאמנים מהשרת...",
                                                     "Loading trainees from the server..."
                                                 ),
-                                                color = Color.White.copy(alpha = 0.88f),
+                                                color = Color(0xFF334155),
                                                 textAlign = TextAlign.Center,
                                                 style = MaterialTheme.typography.bodyMedium.copy(
                                                     fontSize = 15.sp,
@@ -2896,7 +2901,7 @@ fun CoachTraineesScreen(
                                                     "מסדר את נתוני הסניף והקבוצה",
                                                     "Preparing branch and group data"
                                                 ),
-                                                color = Color.White.copy(alpha = 0.60f),
+                                                color = Color(0xFF64748B),
                                                 textAlign = TextAlign.Center,
                                                 style = MaterialTheme.typography.labelSmall.copy(
                                                     fontSize = 11.sp,
@@ -2914,7 +2919,7 @@ fun CoachTraineesScreen(
                                                 "לא נמצאו מתאמנים פעילים לסניף ולקבוצה שנבחרו.",
                                                 "No active trainees were found for the selected branch and group."
                                             ),
-                                            color = Color.White.copy(alpha = 0.72f),
+                                            color = Color(0xFF64748B),
                                             textAlign = screenTextAlign,
                                             style = MaterialTheme.typography.bodySmall,
                                             modifier = Modifier.fillMaxWidth()
@@ -2931,15 +2936,27 @@ fun CoachTraineesScreen(
 
                                                 Surface(
                                                     color = if (isSelected) {
-                                                        Color.White.copy(alpha = 0.18f)
+                                                        Color(0xFFF0EEFF)
                                                     } else {
-                                                        Color.White.copy(alpha = 0.08f)
+                                                        Color.White
                                                     },
                                                     shape = RoundedCornerShape(16.dp),
-                                                    border = if (isSelected) {
-                                                        BorderStroke(1.dp, Color.White.copy(alpha = 0.45f))
+                                                    shadowElevation = if (isSelected) {
+                                                        3.dp
                                                     } else {
-                                                        BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+                                                        1.dp
+                                                    },
+                                                    tonalElevation = 0.dp,
+                                                    border = if (isSelected) {
+                                                        BorderStroke(
+                                                            width = 1.5.dp,
+                                                            color = Color(0xFF8B6DE9)
+                                                        )
+                                                    } else {
+                                                        BorderStroke(
+                                                            width = 1.dp,
+                                                            color = Color(0xFFD6E0EE)
+                                                        )
                                                     },
                                                     modifier = Modifier
                                                         .fillMaxWidth()
@@ -2961,7 +2978,7 @@ fun CoachTraineesScreen(
                                                             Icon(
                                                                 imageVector = Icons.Default.CheckCircle,
                                                                 contentDescription = null,
-                                                                tint = Color(0xFF86EFAC),
+                                                                tint = Color(0xFF16A34A),
                                                                 modifier = Modifier.size(18.dp)
                                                             )
                                                         } else {
@@ -2977,7 +2994,11 @@ fun CoachTraineesScreen(
                                                                 lineHeight = 17.sp
                                                             ),
                                                             fontWeight = FontWeight.ExtraBold,
-                                                            color = Color.White,
+                                                            color = if (isSelected) {
+                                                                Color(0xFF4B369D)
+                                                            } else {
+                                                                Color(0xFF172036)
+                                                            },
                                                             textAlign = screenTextAlign,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis,
@@ -2998,7 +3019,7 @@ fun CoachTraineesScreen(
                                                         fontSize = 11.sp,
                                                         lineHeight = 13.sp
                                                     ),
-                                                    color = Color.White.copy(alpha = 0.62f),
+                                                    color = Color(0xFF64748B),
                                                     textAlign = screenTextAlign,
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
@@ -3015,12 +3036,13 @@ fun CoachTraineesScreen(
                     item {
                         // כרטיס פרטי מתאמן
                         Surface(
-                            color = Color.Transparent,
+                            color = Color(0xFFF4F8FF),
                             shape = RoundedCornerShape(26.dp),
-                            shadowElevation = 8.dp,
+                            shadowElevation = 7.dp,
+                            tonalElevation = 0.dp,
                             border = BorderStroke(
-                                1.dp,
-                                Color.White.copy(alpha = 0.10f)
+                                width = 1.dp,
+                                color = Color(0xFFD8E4F4)
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -3030,9 +3052,9 @@ fun CoachTraineesScreen(
                                     .background(
                                         brush = Brush.verticalGradient(
                                             colors = listOf(
-                                                Color(0xFF0B1730),
-                                                Color(0xFF132A52),
-                                                Color(0xFF1E4B86)
+                                                Color(0xFFF9FBFF),
+                                                Color(0xFFF1F6FD),
+                                                Color(0xFFEAF2FC)
                                             )
                                         ),
                                         shape = RoundedCornerShape(26.dp)
@@ -3071,7 +3093,7 @@ fun CoachTraineesScreen(
                                                 lineHeight = 27.sp,
                                                 fontWeight = FontWeight.ExtraBold
                                             ),
-                                            color = Color.White,
+                                            color = Color(0xFF172036),
                                             textAlign = screenTextAlign,
                                             modifier = Modifier.fillMaxWidth()
                                         )
@@ -3087,13 +3109,13 @@ fun CoachTraineesScreen(
                                                 lineHeight = 14.sp,
                                                 fontWeight = FontWeight.SemiBold
                                             ),
-                                            color = Color.White.copy(alpha = 0.68f),
+                                            color = Color(0xFF64748B),
                                             textAlign = screenTextAlign,
                                             modifier = Modifier.fillMaxWidth()
                                         )
 
                                         Divider(
-                                            color = Color.White.copy(alpha = 0.12f)
+                                            color = Color(0xFFD8E4F4)
                                         )
 
                                         Column(
@@ -3163,7 +3185,7 @@ fun CoachTraineesScreen(
                                         }
 
                                         Divider(
-                                            color = Color.White.copy(alpha = 0.12f)
+                                            color = Color(0xFFD8E4F4)
                                         )
 
                                         Column(
@@ -4284,12 +4306,13 @@ private fun LabeledField(
     }
 
     Surface(
-        color = Color(0xFFF4F7FB),
+        color = Color.White,
         shape = RoundedCornerShape(20.dp),
-        shadowElevation = 3.dp,
+        shadowElevation = 2.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
-            1.dp,
-            Color(0xFFD7E2F0)
+            width = 1.dp,
+            color = Color(0xFFD6E0EE)
         ),
         modifier = modifier.heightIn(min = 78.dp)
     ) {
@@ -4299,9 +4322,9 @@ private fun LabeledField(
                 .background(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF3FF),
-                            Color(0xFFF8FBFF)
+                            Color.White,
+                            Color(0xFFFAFCFF),
+                            Color(0xFFF3F7FD)
                         )
                     )
                 )
@@ -4313,7 +4336,7 @@ private fun LabeledField(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFE2E8F0)),
+                        .background(Color(0xFFF0EEFF)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -4367,7 +4390,7 @@ private fun LabeledField(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFE2E8F0)),
+                        .background(Color(0xFFF0EEFF)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

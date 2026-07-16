@@ -961,12 +961,11 @@ private fun AndroidAppRoot(
             when {
                 !initialLanguageSelected -> "language"
 
-                // ✅ לחיצה על התראת פורום / הודעת מאמן צריכה להכניס ל-MainApp
+                // לחיצה על התראת פורום / הודעת מאמן נכנסת ישירות ליעד המבוקש.
                 hasPendingForumPush || hasPendingCoachBroadcastPush -> "main"
 
-                // ✅ משתמש מוכר שכבר התחבר בעבר לא צריך ללחוץ שוב על Google / כניסה רגילה.
-                shouldSkipIntroForKnownUser -> "startup_loading_after_intro"
-
+                // בכל פתיחה רגילה מציגים תחילה את המסך הראשוני,
+                // גם כאשר המשתמש כבר מוכר ומחובר.
                 else -> "intro"
             }
         )
@@ -976,7 +975,6 @@ private fun AndroidAppRoot(
         hasPendingForumPush,
         hasPendingCoachBroadcastPush,
         initialLanguageSelected,
-        shouldSkipIntroForKnownUser,
         currentScreen
     ) {
         if (
@@ -986,16 +984,6 @@ private fun AndroidAppRoot(
         ) {
             startRoute = Route.Home.route
             currentScreen = "main"
-            return@LaunchedEffect
-        }
-
-        if (
-            shouldSkipIntroForKnownUser &&
-            initialLanguageSelected &&
-            currentScreen == "intro"
-        ) {
-            startRoute = Route.Home.route
-            currentScreen = "startup_loading_after_intro"
             return@LaunchedEffect
         }
     }
@@ -1014,13 +1002,26 @@ private fun AndroidAppRoot(
 
         "intro" -> {
             IntroScreen(
-                // כניסה רגילה / רישום בדרך הרגילה
+                /*
+                 * משתמש מוכר ומחובר ממשיך למסך טעינת הנתונים.
+                 * משתמש שאינו מוכר ממשיך למסך לקוח חדש / קיים.
+                 */
                 onContinue = {
-                    // ✅ כניסה רגילה תמיד מובילה למסך הבחירה:
-                    // משתמש חדש / משתמש קיים.
-                    // גם אם יש נתוני משתמש שמורים, לא מדלגים לבית.
-                    startRoute = null
-                    currentScreen = "register"
+                    if (shouldSkipIntroForKnownUser) {
+                        userSp.edit()
+                            .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                            .commit()
+
+                        sp.edit()
+                            .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+                            .commit()
+
+                        startRoute = Route.Home.route
+                        currentScreen = "startup_loading_after_intro"
+                    } else {
+                        startRoute = null
+                        currentScreen = "register"
+                    }
                 },
 
                 // Google Login הצליח והפרופיל מלא

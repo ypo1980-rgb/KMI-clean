@@ -2823,24 +2823,30 @@ private fun VoiceCommandsAttachedHandle(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    color = Color.White,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFF8F7FF),
+                            Color(0xFFF0EEFF),
+                            Color(0xFFE6E2FF)
+                        )
+                    ),
                     shape = handleShape
                 )
                 .border(
                     width = 1.dp,
-                    color = Color(0x33000000),
+                    color = Color(0xFFB7AEF5),
                     shape = handleShape
                 )
                 .drawBehind {
                     drawLine(
-                        color = Color(0x22000000),
+                        color = Color(0x66FFFFFF),
                         start = androidx.compose.ui.geometry.Offset(
                             x = 0f,
-                            y = 0f
+                            y = 1.dp.toPx()
                         ),
                         end = androidx.compose.ui.geometry.Offset(
                             x = size.width,
-                            y = 0f
+                            y = 1.dp.toPx()
                         ),
                         strokeWidth = 1.dp.toPx()
                     )
@@ -2928,23 +2934,29 @@ private fun IconsRailAttachedHandle(
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFFFFFFF),
-                            Color(0xFFF2F2F4),
-                            Color(0xFFE2E2E6)
+                            Color(0xFFF8F7FF),
+                            Color(0xFFF0EEFF),
+                            Color(0xFFE6E2FF)
                         )
                     ),
                     shape = handleShape
                 )
                 .border(
                     width = 1.dp,
-                    color = Color(0x33000000),
+                    color = Color(0xFFB7AEF5),
                     shape = handleShape
                 )
                 .drawBehind {
                     drawLine(
-                        color = Color(0x22000000),
-                        start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                        end = androidx.compose.ui.geometry.Offset(size.width, 0f),
+                        color = Color(0x66FFFFFF),
+                        start = androidx.compose.ui.geometry.Offset(
+                            x = 0f,
+                            y = 1.dp.toPx()
+                        ),
+                        end = androidx.compose.ui.geometry.Offset(
+                            x = size.width,
+                            y = 1.dp.toPx()
+                        ),
                         strokeWidth = 1.dp.toPx()
                     )
                 },
@@ -2952,7 +2964,12 @@ private fun IconsRailAttachedHandle(
         ) {
             Icon(
                 imageVector = Icons.Rounded.KeyboardArrowDown,
-                contentDescription = if (expanded) "סגור סרגל אייקונים" else "פתח סרגל אייקונים",
+                contentDescription =
+                    if (expanded) {
+                        "סגור סרגל אייקונים"
+                    } else {
+                        "פתח סרגל אייקונים"
+                    },
                 tint = Color(0xFF4B478F),
                 modifier = Modifier
                     .size(22.dp)
