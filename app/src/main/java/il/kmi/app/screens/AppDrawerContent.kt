@@ -70,6 +70,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.WorkspacePremium
 import il.kmi.shared.localization.AppLanguage
+import il.kmi.app.voicecommands.VoiceDrawerDestination
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -77,6 +78,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 //===========================================================================
 
 private const val FORUM_UNREAD_LIMIT = 100L
+
+/**
+ * מאפשר למנגנון הפקודות הקוליות להפעיל את אותן פעולות
+ * שמופעלות בלחיצה על פריטי AppDrawerContent.
+ */
+object DrawerVoiceActionsBridge {
+
+    private var handler: ((VoiceDrawerDestination) -> Boolean)? = null
+
+    fun bind(
+        newHandler: ((VoiceDrawerDestination) -> Boolean)?
+    ) {
+        handler = newHandler
+    }
+
+    fun perform(
+        destination: VoiceDrawerDestination
+    ): Boolean {
+        return handler?.invoke(destination) ?: false
+    }
+}
 
 private fun forumLastReadKey(branch: String): String =
     "forum_last_read_at_${branch.trim()}"
@@ -396,11 +418,124 @@ fun AppDrawerContent(
     val effectiveIsAdmin = isAdmin || resolvedIsAdmin == true
 
     // 🎬 דיאלוג סרטוני הדגמה
-    var showDemoVideos by rememberSaveable { mutableStateOf(false) }
+    var showDemoVideos by rememberSaveable {
+        mutableStateOf(false)
+    }
 
     // 📄💳 טפסים ותשלומים
-    var showFormsPaymentsDialog by rememberSaveable { mutableStateOf(false) }
-    var showFormsListDialog by rememberSaveable { mutableStateOf(false) }
+    var showFormsPaymentsDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var showFormsListDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    /*
+     * התנתקות קולית אינה מתבצעת מיד.
+     * המשתמש חייב לאשר אותה בדיאלוג.
+     */
+    var showVoiceLogoutConfirmation by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    DisposableEffect(
+        isEnglish,
+        onOpenMyProfile,
+        onOpenAboutAvi,
+        onOpenAboutNetworkCoaches,
+        onOpenAboutMethod,
+        onOpenContactUs,
+        onOpenForum,
+        onOpenSubscriptions,
+        onOpenRateUs,
+        onLanguageChanged,
+        onLogout,
+        onClose
+    ) {
+        DrawerVoiceActionsBridge.bind { destination ->
+            when (destination) {
+                VoiceDrawerDestination.MY_PROFILE -> {
+                    onClose()
+                    onOpenMyProfile()
+                    true
+                }
+
+                VoiceDrawerDestination.ABOUT_AVI -> {
+                    onClose()
+                    onOpenAboutAvi()
+                    true
+                }
+
+                VoiceDrawerDestination.NETWORK_COACHES -> {
+                    onClose()
+                    onOpenAboutNetworkCoaches()
+                    true
+                }
+
+                VoiceDrawerDestination.ABOUT_METHOD -> {
+                    onClose()
+                    onOpenAboutMethod()
+                    true
+                }
+
+                VoiceDrawerDestination.EXERCISES_DEMO -> {
+                    showDemoVideos = true
+                    true
+                }
+
+                VoiceDrawerDestination.FORMS_AND_PAYMENTS -> {
+                    showFormsPaymentsDialog = true
+                    true
+                }
+
+                VoiceDrawerDestination.CONTACT_US -> {
+                    onClose()
+                    onOpenContactUs()
+                    true
+                }
+
+                VoiceDrawerDestination.BRANCH_FORUM -> {
+                    onClose()
+                    onOpenForum()
+                    true
+                }
+
+                VoiceDrawerDestination.LANGUAGE -> {
+                    val newLanguage = if (isEnglish) {
+                        AppLanguage.HEBREW
+                    } else {
+                        AppLanguage.ENGLISH
+                    }
+
+                    onLanguageChanged(newLanguage)
+                    onClose()
+                    true
+                }
+
+                VoiceDrawerDestination.MANAGE_SUBSCRIPTION -> {
+                    onClose()
+                    onOpenSubscriptions()
+                    true
+                }
+
+                VoiceDrawerDestination.RATE_US -> {
+                    onClose()
+                    onOpenRateUs()
+                    true
+                }
+
+                VoiceDrawerDestination.LOGOUT -> {
+                    showVoiceLogoutConfirmation = true
+                    true
+                }
+            }
+        }
+
+        onDispose {
+            DrawerVoiceActionsBridge.bind(null)
+        }
+    }
 
     LaunchedEffect(authUid, isAdmin) {
         if (isAdmin) {
@@ -1794,6 +1929,66 @@ fun AppDrawerContent(
                         containerColor = Color(0xFF0E1630),
                         titleContentColor = Color.White,
                         textContentColor = Color.White
+                    )
+                }
+
+                // ─────────────────────────────────────────────
+                // 🔐 אישור התנתקות שהופעלה בפקודה קולית
+                // ─────────────────────────────────────────────
+                if (showVoiceLogoutConfirmation) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            showVoiceLogoutConfirmation = false
+                        },
+                        title = {
+                            Text(
+                                text = tr(
+                                    "אישור התנתקות",
+                                    "Confirm logout"
+                                ),
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = tr(
+                                    "האם אתה בטוח שברצונך להתנתק מהחשבון?",
+                                    "Are you sure you want to log out?"
+                                )
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showVoiceLogoutConfirmation = false
+                                    onClose()
+                                    onLogout()
+                                }
+                            ) {
+                                Text(
+                                    text = tr(
+                                        "התנתק",
+                                        "Log out"
+                                    ),
+                                    color = Color(0xFFDC2626),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    showVoiceLogoutConfirmation = false
+                                }
+                            ) {
+                                Text(
+                                    text = tr(
+                                        "ביטול",
+                                        "Cancel"
+                                    )
+                                )
+                            }
+                        }
                     )
                 }
 

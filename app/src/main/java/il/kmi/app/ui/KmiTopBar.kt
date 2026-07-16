@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -80,6 +81,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.app.voicecommands.VoiceCommandsBridge
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
@@ -139,6 +141,28 @@ data class UiSearchResult(
     val title: String,
     val subtitle: String?
 )
+
+/**
+ * גשר גלובלי לפתיחת הסבר על תרגיל באמצעות פקודה קולית.
+ *
+ * KmiTopBar מחזיק את דיאלוג ההסבר ולכן הוא גם מבצע
+ * את החיפוש ופותח את הדיאלוג בפועל.
+ */
+object VoiceExerciseExplanationBridge {
+
+    private var handler: ((String) -> Boolean)? = null
+
+    fun bind(
+        newHandler: ((String) -> Boolean)?
+    ) {
+        handler = newHandler
+    }
+
+    fun openExplanation(query: String): Boolean {
+        val activeHandler = handler ?: return false
+        return activeHandler(query.trim())
+    }
+}
 
 /**
  * גשר גלובלי לפתיחת מסך ההדרכה מתוך סרגל האייקונים.
@@ -288,7 +312,39 @@ fun KmiTopBar(
     }
 
     // מצב משתמש
-    val spUser = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
+    val spUser = remember {
+        ctx.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    val spSettings = remember {
+        ctx.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    /*
+     * icon = אייקון מיקרופון
+     * long_press = לחיצה ארוכה על חיפוש
+     * both = שתי האפשרויות
+     * off = כבוי
+     */
+    var voiceCommandsActivationMode by remember {
+        mutableStateOf(
+            spSettings.getString(
+                "voice_commands_activation_mode",
+                "icon"
+            ) ?: "icon"
+        )
+    }
+
+    val showVoiceCommandsIcon =
+        voiceCommandsActivationMode == "icon" ||
+                voiceCommandsActivationMode == "both"
+
     // SharedPreferences ברירת־מחדל
     val defaultPrefsName = remember { ctx.packageName + "_preferences" }
     val spDefault = remember { ctx.getSharedPreferences(defaultPrefsName, Context.MODE_PRIVATE) }
@@ -319,11 +375,23 @@ fun KmiTopBar(
     var isRegistered by remember { mutableStateOf(computeIsRegistered()) }
 
     // האזנה לשינויים בשני ה-Prefs
-    DisposableEffect(spUser, spDefault) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+    DisposableEffect(spUser, spDefault, spSettings) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { source, key ->
+            if (
+                source === spSettings &&
+                key == "voice_commands_activation_mode"
+            ) {
+                voiceCommandsActivationMode =
+                    spSettings.getString(
+                        "voice_commands_activation_mode",
+                        "icon"
+                    ) ?: "icon"
+            }
+
             if (key == "user_role") {
                 userRole =
-                    spUser.getString("user_role", null) ?: spDefault.getString("user_role", null)
+                    spUser.getString("user_role", null)
+                        ?: spDefault.getString("user_role", null)
             }
             if (key == null || key in setOf(
                     "is_registered",
@@ -338,9 +406,12 @@ fun KmiTopBar(
         }
         spUser.registerOnSharedPreferenceChangeListener(listener)
         spDefault.registerOnSharedPreferenceChangeListener(listener)
+        spSettings.registerOnSharedPreferenceChangeListener(listener)
+
         onDispose {
             spUser.unregisterOnSharedPreferenceChangeListener(listener)
             spDefault.unregisterOnSharedPreferenceChangeListener(listener)
+            spSettings.unregisterOnSharedPreferenceChangeListener(listener)
         }
     }
 
@@ -432,10 +503,156 @@ fun KmiTopBar(
 
 
     // עזר לזיהוי מאמן
-    fun isCoach(role: String?): Boolean = role?.equals("coach", ignoreCase = true) == true
+    fun isCoach(role: String?): Boolean =
+        role?.equals("coach", ignoreCase = true) == true
+
     val effectiveIsRegistered = isRegistered
     val userIsCoach = isCoach(userRole)
     val isCoachForPill = modePillIsCoach ?: userIsCoach
+
+    fun openVoiceExerciseExplanation(
+        query: String
+    ): Boolean {
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) return false
+
+        val hit = KmiSearchBridge
+            .search(cleanQuery)
+            .firstOrNull()
+            ?: return false
+
+        val hitTopic = hit.topic
+            .orEmpty()
+            .trim()
+
+        val hitItem = hit.item
+            .orEmpty()
+            .trim()
+
+        if (hitItem.isBlank()) {
+            return false
+        }
+
+        val stableKey = listOf(
+            hit.belt.id,
+            hitTopic,
+            hitItem
+        ).joinToString("::")
+
+        val defaultExplanation = Explanations.get(
+            belt = hit.belt,
+            item = hitItem,
+            exerciseId = stableKey
+        ).trim()
+
+        if (defaultExplanation.isBlank()) {
+            return false
+        }
+
+        val editedExplanation = ctx
+            .getSharedPreferences(
+                "kmi_explanation_overrides",
+                Context.MODE_PRIVATE
+            )
+            .getString(stableKey, null)
+            ?.trim()
+            .orEmpty()
+
+        val favoritesSet = ctx
+            .getSharedPreferences(
+                "kmi_global_favorites",
+                Context.MODE_PRIVATE
+            )
+            .getStringSet(
+                "favorite_exercises",
+                emptySet()
+            )
+            ?: emptySet()
+
+        val noteRoleKey =
+            if (userIsCoach) "coach" else "trainee"
+
+        val notePrefsKey =
+            "$stableKey::$noteRoleKey"
+
+        val savedUserNote = ctx
+            .getSharedPreferences(
+                "kmi_exercise_user_notes",
+                Context.MODE_PRIVATE
+            )
+            .getString(notePrefsKey, "")
+            ?.trim()
+            .orEmpty()
+
+        premiumExerciseTitle = hitItem
+
+        premiumExerciseBeltName = when (hit.belt) {
+            il.kmi.shared.domain.Belt.WHITE ->
+                if (isEnglish) "White belt" else "חגורה לבנה"
+
+            il.kmi.shared.domain.Belt.YELLOW ->
+                if (isEnglish) "Yellow belt" else "חגורה צהובה"
+
+            il.kmi.shared.domain.Belt.ORANGE ->
+                if (isEnglish) "Orange belt" else "חגורה כתומה"
+
+            il.kmi.shared.domain.Belt.GREEN ->
+                if (isEnglish) "Green belt" else "חגורה ירוקה"
+
+            il.kmi.shared.domain.Belt.BLUE ->
+                if (isEnglish) "Blue belt" else "חגורה כחולה"
+
+            il.kmi.shared.domain.Belt.BROWN ->
+                if (isEnglish) "Brown belt" else "חגורה חומה"
+
+            il.kmi.shared.domain.Belt.BLACK ->
+                if (isEnglish) "Black belt" else "חגורה שחורה"
+        }
+
+        premiumExerciseExplanation =
+            editedExplanation.ifBlank {
+                defaultExplanation
+            }
+
+        premiumExerciseStableKey = stableKey
+        premiumExerciseIsFavorite =
+            stableKey in favoritesSet
+
+        premiumExerciseUserNote = savedUserNote
+        premiumExerciseUserNoteTitle =
+            if (userIsCoach) {
+                if (isEnglish) {
+                    "Coach notes"
+                } else {
+                    "הערות המאמן"
+                }
+            } else {
+                if (isEnglish) {
+                    "Trainee notes"
+                } else {
+                    "הערות המתאמן"
+                }
+            }
+
+        showGlobalSearch = false
+        globalSearchQuery = ""
+        showPremiumExerciseDialog = true
+
+        return true
+    }
+
+    DisposableEffect(
+        isEnglish,
+        userIsCoach
+    ) {
+        VoiceExerciseExplanationBridge.bind { query ->
+            openVoiceExerciseExplanation(query)
+        }
+
+        onDispose {
+            VoiceExerciseExplanationBridge.bind(null)
+        }
+    }
 
     // הגדרות זמינות תמיד
     val showSettingsAllowed = showSettings
@@ -563,7 +780,8 @@ fun KmiTopBar(
                             contentAlignment = Alignment.Center
                         ) {
                             PremiumMenuImageIcon(
-                                contentDescription = if (isEnglish) "Menu" else "תפריט",
+                                contentDescription =
+                                    if (isEnglish) "Menu" else "תפריט",
                                 onClick = { openDrawerClick() }
                             )
                         }
@@ -746,6 +964,45 @@ fun KmiTopBar(
             }
         }
 
+        if (showVoiceCommandsIcon && !hideBottomForShare) {
+            Popup(
+                alignment = AbsoluteAlignment.TopLeft,
+                offset = IntOffset(
+                    x = with(density) { (-8).dp.roundToPx() },
+                    y = with(density) { (topBarHeight - 1.dp).roundToPx() }
+                ),
+                properties = PopupProperties(
+                    focusable = false,
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false,
+                    clippingEnabled = false
+                )
+            ) {
+                VoiceCommandsAttachedHandle(
+                    isEnglish = isEnglish,
+                    onClick = {
+                        quickActionsExpanded = false
+                        focusManager.clearFocus(force = true)
+
+                        val opened =
+                            VoiceCommandsBridge.open()
+
+                        if (!opened) {
+                            android.widget.Toast.makeText(
+                                ctx,
+                                if (isEnglish) {
+                                    "Voice commands are not connected yet"
+                                } else {
+                                    "הפקודות הקוליות עדיין אינן מחוברות"
+                                },
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                )
+            }
+        }
+
         if (showQuickActions && quickActionsExpanded) {
             Popup(
                 alignment = AbsoluteAlignment.TopRight,
@@ -894,6 +1151,8 @@ fun KmiTopBar(
                                             }
                                         }
                                     )
+
+
 
                                     if (showBottomHelp) {
                                         VerticalQuickActionItem(
@@ -2499,6 +2758,107 @@ private class IconsRailAttachedTabShape : Shape {
         }
 
         return Outline.Generic(path)
+    }
+}
+
+@Composable
+private fun VoiceCommandsAttachedHandle(
+    isEnglish: Boolean,
+    onClick: () -> Unit
+) {
+    var pressed by remember {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(110)
+            pressed = false
+        }
+    }
+
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.94f else 1f,
+        animationSpec = spring(
+            dampingRatio = 0.40f,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "voiceCommandsAttachedHandlePress"
+    )
+
+    val handleShape = RoundedCornerShape(
+        topStart = 0.dp,
+        topEnd = 0.dp,
+        bottomStart = 18.dp,
+        bottomEnd = 18.dp
+    )
+
+    Surface(
+        modifier = Modifier
+            .size(
+                width = 48.dp,
+                height = 28.dp
+            )
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clip(handleShape)
+            .clickable(
+                interactionSource = remember {
+                    MutableInteractionSource()
+                },
+                indication = null
+            ) {
+                pressed = true
+                onClick()
+            },
+        shape = handleShape,
+        color = Color.Transparent,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = null
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    color = Color.White,
+                    shape = handleShape
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color(0x33000000),
+                    shape = handleShape
+                )
+                .drawBehind {
+                    drawLine(
+                        color = Color(0x22000000),
+                        start = androidx.compose.ui.geometry.Offset(
+                            x = 0f,
+                            y = 0f
+                        ),
+                        end = androidx.compose.ui.geometry.Offset(
+                            x = size.width,
+                            y = 0f
+                        ),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Mic,
+                contentDescription =
+                    if (isEnglish) {
+                        "Voice commands"
+                    } else {
+                        "פקודות קוליות"
+                    },
+                tint = Color(0xFF4B478F),
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 

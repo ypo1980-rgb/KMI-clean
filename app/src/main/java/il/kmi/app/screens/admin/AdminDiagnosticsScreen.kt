@@ -108,6 +108,7 @@ private enum class AdminDiagnosticsType(
 ) {
     All("all", "הכל", "All"),
     Errors("error", "שגיאות", "Errors"),
+    Voice("voice", "פקודות קוליות", "Voice commands"),
     Login("login", "כניסות", "Login"),
     Search("search", "חיפוש", "Search"),
     Payments("payment", "תשלומים", "Payments"),
@@ -1352,6 +1353,8 @@ fun AdminDiagnosticsScreen(
     val resetCutoffsByGroup = remember(resetVersion) {
         mapOf(
             "errors" to resetSp.getLong(resetKeyForGroup("errors"), 0L),
+            "voice_commands" to
+                    resetSp.getLong(resetKeyForGroup("voice_commands"), 0L),
             "google_auth" to resetSp.getLong(resetKeyForGroup("google_auth"), 0L),
             "login" to resetSp.getLong(resetKeyForGroup("login"), 0L),
             "search" to resetSp.getLong(resetKeyForGroup("search"), 0L),
@@ -1361,7 +1364,22 @@ fun AdminDiagnosticsScreen(
     }
 
     fun logGroupKey(log: AdminDiagnosticLog): String {
+        val diagnosticText = buildString {
+            append(log.type)
+            append('\n')
+            append(log.area)
+            append('\n')
+            append(log.title)
+            append('\n')
+            append(log.message)
+        }
+
         return when {
+            diagnosticText.contains("voice_command", ignoreCase = true) ||
+                    diagnosticText.contains("voice_assistant", ignoreCase = true) ||
+                    diagnosticText.contains("speech_recognition", ignoreCase = true) ->
+                "voice_commands"
+
             log.severity.equals("error", ignoreCase = true) ||
                     log.type.contains("error", ignoreCase = true) ||
                     log.type.contains("failed", ignoreCase = true) ||
@@ -1390,6 +1408,8 @@ fun AdminDiagnosticsScreen(
     fun logGroupTitle(key: String): String {
         return when (key) {
             "screen_views" -> tr("צפיות במסכים", "Screen views")
+            "voice_commands" ->
+                tr("פקודות קוליות שלא בוצעו", "Unresolved voice commands")
             "google_auth" -> tr("אירועי אבחון Google", "Google diagnostics")
             "login" -> tr("אירועי כניסה", "Login events")
             "errors" -> tr("שגיאות ותקלות", "Errors and issues")
@@ -1401,6 +1421,7 @@ fun AdminDiagnosticsScreen(
     fun logGroupColor(key: String): Color {
         return when (key) {
             "screen_views" -> Color(0xFF0284C7)
+            "voice_commands" -> Color(0xFFEA580C)
             "google_auth" -> Color(0xFF7C3AED)
             "login" -> Color(0xFF16A34A)
             "errors" -> Color(0xFFE11D48)
@@ -1421,6 +1442,7 @@ fun AdminDiagnosticsScreen(
 
     val groupedLogs = remember(visibleLogs) {
         val order = listOf(
+            "voice_commands",
             "errors",
             "google_auth",
             "login",

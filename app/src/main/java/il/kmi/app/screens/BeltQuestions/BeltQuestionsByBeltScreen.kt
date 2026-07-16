@@ -516,57 +516,99 @@ internal fun BeltPangoLayout(
     // ✅ state לתפריט הצף (נשלט מהמסך)
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
-    val belts = remember { Belt.order.filter { it != Belt.WHITE } }
-    var topicsViewMode by rememberSaveable { mutableStateOf(TopicsViewMode.BY_BELT) }
-
-    val initialBelt: Belt = remember(belts, kmiPrefs, userSp) {
-        val regId =
-            kmiPrefs.getStringCompat("current_belt")
-                ?: kmiPrefs.getStringCompat("belt_current")
-                ?: userSp.getString("current_belt", null)
-                ?: userSp.getString("belt_current", null)
-                ?: userSp.getString("currentBelt", null)
-                ?: userSp.getString("belt", null)
-
-        val cleanRegId = regId?.trim().orEmpty()
-        val regBelt = cleanRegId.takeIf { it.isNotBlank() }?.let { Belt.fromId(it) }
-
-        val next = when {
-            // אם המשתמש לא נרשם עם אף חגורה — ברירת מחדל כתומה
-            cleanRegId.isBlank() || regBelt == null -> Belt.ORANGE
-
-            // אם המשתמש נרשם עם לבנה — החגורה הבאה היא צהובה
-            regBelt == Belt.WHITE -> Belt.YELLOW
-
-            // בכל שאר החגורות — עוברים לחגורה הבאה בתור
-            else -> {
-                val idx = belts.indexOf(regBelt)
-                if (idx >= 0 && idx < belts.lastIndex) {
-                    belts[idx + 1]
-                } else {
-                    regBelt
-                }
-            }
-        }
-
-        if (next in belts) next else Belt.ORANGE
+    val belts = remember {
+        Belt.order.filter { it != Belt.WHITE }
     }
 
-    var currentIndex by rememberSaveable {
+    var topicsViewMode by rememberSaveable {
+        mutableStateOf(TopicsViewMode.BY_BELT)
+    }
+
+    /*
+     * חגורה שנבחרה לפני פתיחת המסך, למשל באמצעות
+     * הפקודה הקולית "חגורה שחורה".
+     */
+    val requestedBelt by vm.selectedBelt.collectAsState()
+
+    val initialBelt: Belt = remember(
+        belts,
+        kmiPrefs,
+        userSp,
+        requestedBelt
+    ) {
+        /*
+         * בחירה מפורשת מה־ViewModel מקבלת קדימות על פני
+         * חגורת הרישום וברירות המחדל של המסך.
+         */
+        requestedBelt
+            ?.takeIf { it in belts }
+            ?: run {
+                val regId =
+                    kmiPrefs.getStringCompat("current_belt")
+                        ?: kmiPrefs.getStringCompat("belt_current")
+                        ?: userSp.getString("current_belt", null)
+                        ?: userSp.getString("belt_current", null)
+                        ?: userSp.getString("currentBelt", null)
+                        ?: userSp.getString("belt", null)
+
+                val cleanRegId = regId?.trim().orEmpty()
+                val regBelt = cleanRegId
+                    .takeIf { it.isNotBlank() }
+                    ?.let { Belt.fromId(it) }
+
+                val nextBelt = when {
+                    cleanRegId.isBlank() || regBelt == null ->
+                        Belt.ORANGE
+
+                    regBelt == Belt.WHITE ->
+                        Belt.YELLOW
+
+                    else -> {
+                        val index = belts.indexOf(regBelt)
+
+                        if (index >= 0 && index < belts.lastIndex) {
+                            belts[index + 1]
+                        } else {
+                            regBelt
+                        }
+                    }
+                }
+
+                nextBelt.takeIf { it in belts }
+                    ?: Belt.ORANGE
+            }
+    }
+
+    /*
+     * המפתח initialBelt.id גורם לביטול מצב שמור ישן
+     * כאשר מגיעה פקודה קולית עם חגורה אחרת.
+     */
+    var currentIndex by rememberSaveable(initialBelt.id) {
         mutableIntStateOf(
             belts.indexOf(initialBelt)
-                .let { if (it >= 0) it else belts.indexOf(Belt.ORANGE).coerceAtLeast(0) }
+                .takeIf { it >= 0 }
+                ?: belts.indexOf(Belt.ORANGE)
+                    .coerceAtLeast(0)
         )
     }
 
-    currentIndex = currentIndex.coerceIn(0, belts.lastIndex)
+    currentIndex = currentIndex.coerceIn(
+        minimumValue = 0,
+        maximumValue = belts.lastIndex
+    )
 
-    val currentBelt = remember(currentIndex, belts, initialBelt) {
+    val currentBelt = remember(
+        currentIndex,
+        belts,
+        initialBelt
+    ) {
         belts.getOrNull(currentIndex) ?: initialBelt
     }
 
     LaunchedEffect(currentBelt) {
-        vm.setSelectedBelt(currentBelt)
+        if (vm.selectedBelt.value != currentBelt) {
+            vm.setSelectedBelt(currentBelt)
+        }
     }
 
     // ✅ shared-only: app SubjectTopic -> shared SubjectTopic

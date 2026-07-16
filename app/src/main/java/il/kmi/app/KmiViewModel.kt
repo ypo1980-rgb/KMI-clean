@@ -55,22 +55,43 @@ class KmiViewModel(
     val marksVersion: StateFlow<Long> = _marksVersion.asStateFlow()
 
     fun setSelectedBelt(belt: Belt) {
+        /*
+         * מעדכנים מיד את המצב בזיכרון כדי שמסך שנפתח
+         * מיד לאחר הקריאה יקבל את החגורה הנכונה.
+         */
+        _selectedBelt.value = belt
+
+        /*
+         * השמירה הקבועה מתבצעת ברקע ואינה מעכבת ניווט.
+         */
         viewModelScope.launch {
             ds.saveSelectedBelt(belt)
-            _selectedBelt.value = belt
         }
     }
 
     fun clearSelectedBelt() {
+        /*
+         * גם בניקוי מעדכנים תחילה את ה־UI,
+         * ורק לאחר מכן מנקים את האחסון ברקע.
+         */
+        _selectedBelt.value = null
+
         viewModelScope.launch {
             ds.clearSelectedBelt()
-            _selectedBelt.value = null
         }
     }
 
     fun loadPersistedBelt() {
+        /*
+         * קוראים את הערך השמור, אבל לא דורסים בחירה שכבר
+         * בוצעה בזיכרון — למשל באמצעות פקודה קולית.
+         */
         viewModelScope.launch {
-            _selectedBelt.value = ds.readSelectedBelt()
+            val persistedBelt = ds.readSelectedBelt()
+
+            if (_selectedBelt.value == null) {
+                _selectedBelt.value = persistedBelt
+            }
         }
     }
 

@@ -2,8 +2,10 @@ package il.kmi.app.navigation
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import il.kmi.app.screens.SmsVerifyScreen
+import il.kmi.shared.domain.Belt
 import androidx.compose.runtime.remember
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -54,6 +56,7 @@ import il.kmi.app.screens.admin.AdminDiagnosticsScreen
 import il.kmi.app.screens.payments.PaymentScreen
 import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.screens.InitialLanguageScreen
+import il.kmi.app.screens.drawer.DrawerVoiceActionsBridge
 import com.google.firebase.auth.FirebaseAuth
 import il.kmi.app.screens.registration.RegistrationFormScreen
 import il.kmi.app.analytics.KmiUsageTracker
@@ -61,6 +64,11 @@ import il.kmi.app.onboarding.OnboardingPreferences
 import il.kmi.app.onboarding.onboardingNavGraph
 import il.kmi.app.onboarding.OnboardingRoute
 import il.kmi.app.ui.OnboardingBridge
+import il.kmi.app.ui.VoiceExerciseExplanationBridge
+import il.kmi.app.voicecommands.PushToTalkVoiceDialog
+import il.kmi.app.voicecommands.VoiceAppCommand
+import il.kmi.app.voicecommands.VoiceCommandDiagnosticsLogger
+import il.kmi.app.voicecommands.VoiceCommandsBridge
 
 private const val APP_ENTRY_ROUTE = "app_entry"
 private const val GOOGLE_PROFILE_COMPLETION_ROUTE = "google_profile_completion"
@@ -105,6 +113,105 @@ private fun markInitialLanguageSelected(sp: SharedPreferences) {
         .putBoolean("initial_language_selected_v3", true)
         .putBoolean("initial_language_selected_v4", true)
         .commit()
+}
+
+fun resolveVoiceBelt(query: String): Belt? {
+    val normalized = query.trim().lowercase()
+
+    return when {
+        normalized.contains("לבנ") ||
+                normalized.contains("white") ->
+            Belt.WHITE
+
+        normalized.contains("צהוב") ||
+                normalized.contains("yellow") ->
+            Belt.YELLOW
+
+        normalized.contains("כתומ") ||
+                normalized.contains("orange") ->
+            Belt.ORANGE
+
+        normalized.contains("ירוק") ||
+                normalized.contains("green") ->
+            Belt.GREEN
+
+        normalized.contains("כחול") ||
+                normalized.contains("blue") ->
+            Belt.BLUE
+
+        normalized.contains("חומ") ||
+                normalized.contains("brown") ->
+            Belt.BROWN
+
+        normalized.contains("שחור") ||
+                normalized.contains("black") ->
+            Belt.BLACK
+
+        else -> null
+    }
+}
+
+fun resolveVoiceTopicId(query: String): String? {
+    val normalized = query
+        .trim()
+        .lowercase()
+        .replace("-", " ")
+        .replace(Regex("\\s+"), " ")
+
+    return when {
+        normalized.contains("בעיט") ||
+                normalized.contains("kick") ->
+            "kicks"
+
+        normalized.contains("אגרופ") ||
+                normalized.contains("מכות יד") ||
+                normalized.contains("punch") ||
+                normalized.contains("hand strike") ->
+            "hands_strikes"
+
+        normalized.contains("מרפק") ||
+                normalized.contains("elbow") ->
+            "hands_elbows"
+
+        normalized.contains("שחרור") ||
+                normalized.contains("release") ->
+            "releases"
+
+        normalized.contains("סכין") ||
+                normalized.contains("knife") ->
+            "knife_defense"
+
+        normalized.contains("אקדח") ||
+                normalized.contains("gun") ||
+                normalized.contains("pistol") ->
+            "gun_threat_defense"
+
+        normalized.contains("מקל") ||
+                normalized.contains("stick") ->
+            "stick_defense"
+
+        normalized.contains("מספר תוקפים") ||
+                normalized.contains("תוקפים מרובים") ||
+                normalized.contains("multiple attackers") ->
+            "multiple_attackers_defense"
+
+        normalized.contains("נפילות") ||
+                normalized.contains("גלגולים") ||
+                normalized.contains("breakfall") ||
+                normalized.contains("rolls") ->
+            "topic_breakfalls_rolls"
+
+        normalized.contains("עמידת מוצא") ||
+                normalized.contains("עמידת קרב") ||
+                normalized.contains("ready stance") ->
+            "topic_ready_stance"
+
+        normalized.contains("קרקע") ||
+                normalized.contains("ground") ->
+            "topic_ground_prep"
+
+        else -> null
+    }
 }
 
 /**
@@ -218,6 +325,14 @@ fun MainNavHost(
         langManager.getCurrentLanguage() ==
                 il.kmi.shared.localization.AppLanguage.ENGLISH
 
+    /*
+     * חייב להיות מוגדר לפני חיבור VoiceCommandsBridge,
+     * משום שה־Bridge משנה את הערך הזה.
+     */
+    var showVoiceCommands by remember {
+        mutableStateOf(false)
+    }
+
     DisposableEffect(nav) {
         OnboardingBridge.bind {
             val currentRoute =
@@ -251,6 +366,20 @@ fun MainNavHost(
 
         onDispose {
             OnboardingBridge.bind(null)
+        }
+    }
+
+    /*
+     * כל KmiTopBar יכול לבקש לפתוח פקודה קולית,
+     * אך ההאזנה עצמה מנוהלת כאן פעם אחת בלבד.
+     */
+    DisposableEffect(nav) {
+        VoiceCommandsBridge.bind {
+            showVoiceCommands = true
+        }
+
+        onDispose {
+            VoiceCommandsBridge.bind(null)
         }
     }
 
@@ -358,10 +487,12 @@ fun MainNavHost(
     val allExercises = remember { emptyList<il.kmi.app.ui.training.ExercisePickItem>() }
 
 
-    // 🔊 שליטה בפתיחת העוזר הקולי מכל מסך
-    var showAssistant by remember { mutableStateOf(false) }
+    // 🔊 שליטה בפתיחת עוזר ה־AI הקיים
+    var showAssistant by remember {
+        mutableStateOf(false)
+    }
 
-    // ⚙️ FEATURE FLAG – כרגע מכובה כדי לא להכביד על המכשיר
+    // ⚙️ FEATURE FLAG – נשאר כבוי: אין האזנה רציפה
     val enableWakeWord = false
 
     // מפעילים / מכבים האזנה ל-"יובל שומע" לפי הדגל
@@ -1267,6 +1398,449 @@ fun MainNavHost(
                 )
             }
         }   // <-- NavHost
+
+        if (showVoiceCommands) {
+            PushToTalkVoiceDialog(
+                onDismiss = {
+                    showVoiceCommands = false
+                },
+                onCommand = { command, spokenText ->
+                    showVoiceCommands = false
+
+                    VoiceCommandDiagnosticsLogger.logTrace(
+                        context = ctx,
+                        stage = "command_received_by_navigation",
+                        spokenText = spokenText,
+                        resolvedCommand =
+                            command::class.simpleName ?: command.toString(),
+                        screenName = nav.currentBackStackEntry
+                            ?.destination
+                            ?.route
+                    )
+
+                    when (command) {
+                        VoiceAppCommand.OpenHome -> {
+                            nav.navigate(Route.Home.route) {
+                                launchSingleTop = true
+                                restoreState = true
+
+                                popUpTo(nav.graph.startDestinationId) {
+                                    inclusive = false
+                                }
+                            }
+                        }
+
+                        VoiceAppCommand.GoBack -> {
+                            nav.popBackStack()
+                        }
+
+                        VoiceAppCommand.OpenSettings -> {
+                            DrawerBridge.openSettings()
+                        }
+
+                        VoiceAppCommand.OpenProgress -> {
+                            DrawerBridge.openProgress()
+                        }
+
+                        VoiceAppCommand.OpenTrainings -> {
+                            VoiceCommandDiagnosticsLogger.logTrace(
+                                context = ctx,
+                                stage = "navigation_requested",
+                                spokenText = spokenText,
+                                resolvedCommand = "OpenTrainings",
+                                target = Route.MonthlyCalendar.route,
+                                screenName = nav.currentBackStackEntry
+                                    ?.destination
+                                    ?.route
+                            )
+
+                            nav.navigate(Route.MonthlyCalendar.route) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+
+                        VoiceAppCommand.OpenTopics -> {
+                            VoiceCommandDiagnosticsLogger.logTrace(
+                                context = ctx,
+                                stage = "navigation_requested",
+                                spokenText = spokenText,
+                                resolvedCommand = "OpenTopics",
+                                target = Route.Topics.route,
+                                screenName = nav.currentBackStackEntry
+                                    ?.destination
+                                    ?.route
+                            )
+
+                            runCatching {
+                                nav.navigate(Route.Topics.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }.onFailure { throwable ->
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason = "command_execution_failed",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "command=OpenTopics",
+                                        "target=${Route.Topics.route}",
+                                        "error=${throwable.message.orEmpty()}"
+                                    ),
+                                    screenName = nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                                )
+
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) {
+                                        "Unable to open the topics screen"
+                                    } else {
+                                        "לא ניתן לפתוח את מסך הנושאים"
+                                    },
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+
+                        is VoiceAppCommand.OpenBelt -> {
+                            val belt = resolveVoiceBelt(
+                                command.beltQuery
+                            )
+
+                            if (belt != null) {
+                                /*
+                                 * BeltQuestionsByBeltScreen קורא את החגורה
+                                 * הנבחרת מתוך KmiViewModel.
+                                 */
+                                vm.setSelectedBelt(belt)
+
+                                val targetRoute = Route.BeltQ.route
+
+                                VoiceCommandDiagnosticsLogger.logTrace(
+                                    context = ctx,
+                                    stage = "navigation_requested",
+                                    spokenText = spokenText,
+                                    resolvedCommand = "OpenBelt",
+                                    target = targetRoute,
+                                    screenName = nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                                )
+
+                                nav.navigate(targetRoute) {
+                                    launchSingleTop = true
+
+                                    /*
+                                     * לא משחזרים מצב ניווט ישן של מסך החגורות,
+                                     * כדי שיוצג המידע של החגורה שנבחרה כעת.
+                                     */
+                                    restoreState = false
+                                }
+                            } else {
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason = "belt_not_resolved",
+                                    spokenText = spokenText,
+                                    screenName = nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                                )
+
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) {
+                                        "I couldn't identify the belt"
+                                    } else {
+                                        "לא הצלחתי לזהות את החגורה"
+                                    },
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+
+                        is VoiceAppCommand.OpenTopic -> {
+                            val topicQuery =
+                                command.topicQuery.trim()
+
+                            val topicId =
+                                resolveVoiceTopicId(topicQuery)
+
+                            val requestedBelt =
+                                resolveVoiceBelt(topicQuery)
+
+                            val selectedBelt =
+                                requestedBelt
+                                    ?: vm.selectedBelt.value
+                                    ?: Belt.GREEN
+
+                            if (topicId != null) {
+                                /*
+                                 * משתמשים בדיוק באותו מסלול שמפעילה לחיצה רגילה
+                                 * על נושא במסך BeltQuestionsByTopicScreen.
+                                 */
+                                vm.setSelectedBelt(selectedBelt)
+
+                                val targetRoute =
+                                    "hard_subject/${Uri.encode(topicId)}"
+
+                                VoiceCommandDiagnosticsLogger.logTrace(
+                                    context = ctx,
+                                    stage = "navigation_requested",
+                                    spokenText = spokenText,
+                                    resolvedCommand = "OpenTopic",
+                                    target = targetRoute,
+                                    screenName = nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                                )
+
+                                runCatching {
+                                    nav.navigate(targetRoute) {
+                                        launchSingleTop = true
+                                        restoreState = false
+                                    }
+                                }.onSuccess {
+                                    VoiceCommandDiagnosticsLogger.logTrace(
+                                        context = ctx,
+                                        stage = "topic_navigation_succeeded",
+                                        spokenText = spokenText,
+                                        resolvedCommand = "OpenTopic",
+                                        target = targetRoute,
+                                        screenName = nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                    )
+                                }.onFailure { throwable ->
+                                    VoiceCommandDiagnosticsLogger.logFailure(
+                                        context = ctx,
+                                        source = "main_navigation",
+                                        reason = "topic_navigation_failed",
+                                        spokenText = spokenText,
+                                        alternatives = listOf(
+                                            "command=OpenTopic",
+                                            "topicQuery=$topicQuery",
+                                            "topicId=$topicId",
+                                            "beltId=${selectedBelt.id}",
+                                            "target=$targetRoute",
+                                            "error=${throwable.message.orEmpty()}"
+                                        ),
+                                        screenName = nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                    )
+
+                                    Toast.makeText(
+                                        ctx,
+                                        if (isEnglish) {
+                                            "Unable to open the requested topic"
+                                        } else {
+                                            "לא ניתן לפתוח את הנושא המבוקש"
+                                        },
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } else {
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason = "topic_not_resolved",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "topicQuery=$topicQuery",
+                                        "beltId=${selectedBelt.id}"
+                                    ),
+                                    screenName = nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                                )
+
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) {
+                                        "I couldn't identify the topic"
+                                    } else {
+                                        "לא הצלחתי לזהות את הנושא"
+                                    },
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+
+                        is VoiceAppCommand.OpenDrawerItem -> {
+                            val destinationName =
+                                command.destination.name
+
+                            VoiceCommandDiagnosticsLogger.logTrace(
+                                context = ctx,
+                                stage = "drawer_action_requested",
+                                spokenText = spokenText,
+                                resolvedCommand = "OpenDrawerItem",
+                                target = destinationName,
+                                screenName = nav.currentBackStackEntry
+                                    ?.destination
+                                    ?.route
+                            )
+
+                            val performed =
+                                DrawerVoiceActionsBridge.perform(
+                                    command.destination
+                                )
+
+                            if (performed) {
+                                VoiceCommandDiagnosticsLogger.logTrace(
+                                    context = ctx,
+                                    stage = "drawer_action_dispatched",
+                                    spokenText = spokenText,
+                                    resolvedCommand = "OpenDrawerItem",
+                                    target = destinationName,
+                                    screenName = nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                                )
+                            } else {
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason = "drawer_action_not_connected",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "destination=$destinationName"
+                                    ),
+                                    screenName = nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                                )
+
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) {
+                                        "This voice action is not available yet"
+                                    } else {
+                                        "הפעולה הקולית עדיין אינה זמינה"
+                                    },
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+
+                        VoiceAppCommand.OpenBelts -> {
+                            nav.navigate(Route.BeltQ.route) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+
+                        VoiceAppCommand.OpenSearch -> {
+                            Toast.makeText(
+                                ctx,
+                                if (isEnglish) {
+                                    "Voice search will be connected in the next step"
+                                } else {
+                                    "החיפוש הקולי יחובר בשלב הבא"
+                                },
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        is VoiceAppCommand.ExplainExercise -> {
+                            val exerciseQuery =
+                                command.query.trim()
+
+                            val explanationOpened =
+                                runCatching {
+                                    VoiceExerciseExplanationBridge.openExplanation(
+                                        exerciseQuery
+                                    )
+                                }.getOrElse { throwable ->
+                                    VoiceCommandDiagnosticsLogger.logFailure(
+                                        context = ctx,
+                                        source = "main_navigation",
+                                        reason = "exercise_explanation_bridge_failed",
+                                        spokenText = spokenText,
+                                        alternatives = listOf(
+                                            "command=ExplainExercise",
+                                            "exerciseQuery=$exerciseQuery",
+                                            "error=${throwable.message.orEmpty()}"
+                                        ),
+                                        screenName = nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                    )
+
+                                    false
+                                }
+
+                            if (explanationOpened) {
+                                VoiceCommandDiagnosticsLogger.logTrace(
+                                    context = ctx,
+                                    stage = "exercise_explanation_opened",
+                                    spokenText = spokenText,
+                                    resolvedCommand = "ExplainExercise",
+                                    target = exerciseQuery,
+                                    screenName = nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                                )
+                            } else {
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason = "exercise_explanation_not_opened",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "command=ExplainExercise",
+                                        "exerciseQuery=$exerciseQuery",
+                                        "bridgeHandlerAvailable=false_or_exercise_not_found"
+                                    ),
+                                    screenName = nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                                )
+
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) {
+                                        "I couldn't find an explanation for that exercise"
+                                    } else {
+                                        "לא הצלחתי למצוא הסבר לתרגיל"
+                                    },
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+
+                        is VoiceAppCommand.FindAndOpen,
+                        is VoiceAppCommand.Search -> {
+                            Toast.makeText(
+                                ctx,
+                                if (isEnglish) {
+                                    "Recognized: $spokenText"
+                                } else {
+                                    "זוהתה הפקודה: $spokenText"
+                                },
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        is VoiceAppCommand.Unknown -> {
+                            Toast.makeText(
+                                ctx,
+                                if (isEnglish) {
+                                    "I couldn't understand the command"
+                                } else {
+                                    "לא הצלחתי להבין את הפקודה"
+                                },
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+            )
+        }
     }       // <-- PinLockGate
 }           // <-- MainNavHost
 
