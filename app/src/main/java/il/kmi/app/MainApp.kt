@@ -397,17 +397,14 @@ fun MainApp(
                                 drawerContainerColor = Color.Transparent,
                                 modifier = Modifier.fillMaxWidth(0.86f)
                             ) {
-                                val shouldRenderDrawerContent =
-                                    drawerState.currentValue == DrawerValue.Open ||
-                                            drawerState.targetValue == DrawerValue.Open
-
-                                if (!shouldRenderDrawerContent) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                    return@ModalDrawerSheet
-                                }
-
+                                /*
+                                 * משאירים את תוכן המגירה מחובר ל-Composition גם
+                                 * כשהמגירה סגורה. כך DrawerVoiceActionsBridge
+                                 * נשאר זמין תמיד לפקודות קוליות.
+                                 *
+                                 * המגירה עצמה עדיין מוסתרת ומוצגת רק באמצעות
+                                 * drawerState; אין שינוי בהתנהגות החזותית שלה.
+                                 */
                                 val ctxInner = LocalContext.current
                                 val spUser = remember {
                                     ctxInner.getSharedPreferences(

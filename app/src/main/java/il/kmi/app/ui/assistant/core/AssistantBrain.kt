@@ -13,26 +13,36 @@ object AssistantBrain {
         isEnglish: Boolean
     ): String {
         return when (AssistantIntentDetector.detect(question)) {
-            AssistantIntent.EXERCISE ->
+
+            AssistantIntent.EXERCISE,
+            AssistantIntent.EXPLAIN_EXERCISE,
+            AssistantIntent.SEARCH_EXERCISE ->
                 ExerciseAssistantEngine.answer(
                     question = question,
                     preferredBelt = preferredBelt,
                     isEnglish = isEnglish
                 )
 
-            AssistantIntent.MATERIAL ->
+            AssistantIntent.MATERIAL,
+            AssistantIntent.SEARCH_MATERIAL,
+            AssistantIntent.LIST_EXERCISES,
+            AssistantIntent.LIST_TOPICS ->
                 MaterialAssistantEngine.answer(
                     question = question,
                     preferredBelt = preferredBelt,
                     isEnglish = isEnglish
                 )
 
-            AssistantIntent.TRAININGS ->
+            AssistantIntent.TRAININGS,
+            AssistantIntent.NEXT_TRAINING,
+            AssistantIntent.LIST_TRAININGS,
+            AssistantIntent.USER_TRAINING_DETAILS ->
                 TrainingsAssistantEngine.answer(
                     question = question,
                     isEnglish = isEnglish
                 )
 
+            AssistantIntent.NAVIGATION,
             AssistantIntent.UNKNOWN ->
                 if (isEnglish) {
                     "I’m not sure what you are asking. Try asking about an exercise, KAMI material, or training."

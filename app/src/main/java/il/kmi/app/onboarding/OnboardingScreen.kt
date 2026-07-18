@@ -316,40 +316,40 @@ private fun onboardingImageForStep(
 ): Int? {
     return when (step.id) {
         "welcome" ->
-            R.drawable.onboarding_welcome
+            R.drawable.onboarding_home
+
+        "roles" ->
+            R.drawable.onboarding_roles
 
         "belts" ->
             R.drawable.onboarding_belts
 
-        "drawer" ->
-            R.drawable.onboarding_drawer
-
-        "subjects" ->
-            R.drawable.onboarding_subjects
-
-        "categories" ->
-            R.drawable.onboarding_categories
-
         "knowledge_status" ->
-            R.drawable.onboarding_progress
+            R.drawable.onboarding_exercises
 
-        "exercise_cards" ->
-            R.drawable.onboarding_categories
+        "topics" ->
+            R.drawable.onboarding_topics
+
+        "internal_exam" ->
+            R.drawable.onboarding_internal_exam
+
+        "payments_report" ->
+            R.drawable.onboarding_payments_report
 
         "pdf" ->
             R.drawable.onboarding_pdf
 
-        "tools" ->
-            R.drawable.onboarding_toolbar
+        "summary" ->
+            R.drawable.onboarding_summary
 
         "ai" ->
-            R.drawable.onboarding_ai
+            R.drawable.onboarding_personal_assistant
 
-        "internal_exam" ->
-            R.drawable.onboarding_exam
+        "progress" ->
+            R.drawable.onboarding_progress
 
         else ->
-            null
+            step.imageRes
     }
 }
 
@@ -401,67 +401,14 @@ private fun OnboardingStepCard(
                         .height(316.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Surface(
+                    Image(
+                        painter = painterResource(imageRes),
+                        contentDescription = step.title(isEnglish),
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier
-                            .width(188.dp)
+                            .width(164.dp)
                             .height(316.dp)
-                            .shadow(
-                                elevation = 18.dp,
-                                shape = RoundedCornerShape(30.dp),
-                                clip = false
-                            ),
-                        shape = RoundedCornerShape(30.dp),
-                        color = Color(0xFF090D18),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        border = androidx.compose.foundation.BorderStroke(
-                            width = 2.dp,
-                            color = step.accentColor.copy(alpha = 0.38f)
-                        )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(6.dp)
-                                .clip(RoundedCornerShape(25.dp))
-                                .background(Color.Black)
-                        ) {
-                            Image(
-                                painter = painterResource(imageRes),
-                                contentDescription = step.title(isEnglish),
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.White)
-                            )
-
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .padding(top = 5.dp)
-                                    .width(58.dp)
-                                    .height(16.dp)
-                                    .clip(RoundedCornerShape(999.dp))
-                                    .background(Color(0xFF070A12))
-                            )
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .width(110.dp)
-                            .height(12.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color.Transparent,
-                                        step.accentColor.copy(alpha = 0.30f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
+                            .clip(RoundedCornerShape(12.dp))
                     )
                 }
 

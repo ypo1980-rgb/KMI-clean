@@ -80,6 +80,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.voicecommands.VoiceCommandsBridge
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -1235,17 +1237,42 @@ fun KmiTopBar(
         }
     }
 
-    // === דיאלוג עוזר חכם (AI) ===
+    // === עוזר אישי בחלון מלא ===
     if (showAiDialog) {
-        AiAssistantDialog(
-            onDismiss = {
+        Dialog(
+            onDismissRequest = {
                 showAiDialog = false
             },
-            onOpenDrawer = {
-                showAiDialog = false
-                DrawerBridge.open()
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+
+                /*
+                 * שומר את תוכן העוזר מתחת לשורת המצב,
+                 * באותו גובה כמו כל שאר מסכי האפליקציה.
+                 */
+                decorFitsSystemWindows = true,
+
+                dismissOnBackPress = true,
+                dismissOnClickOutside = false
+            )
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = Color(0xFFF4F0FA),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
+            ) {
+                AiAssistantDialog(
+                    onDismiss = {
+                        showAiDialog = false
+                    },
+                    onOpenDrawer = {
+                        showAiDialog = false
+                        DrawerBridge.open()
+                    }
+                )
             }
-        )
+        }
     }
 
     // === חיפוש גלובאלי מתפריט האייקונים הצדדי ===

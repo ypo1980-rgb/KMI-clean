@@ -15,13 +15,13 @@ object OnboardingContent {
             descriptionEn = """
         Your upcoming training sessions, coach messages, progress summary and monthly schedule — all in one place.
     """.trimIndent(),
-            imageRes = il.kmi.app.R.drawable.onboarding_welcome,
+            imageRes = il.kmi.app.R.drawable.onboarding_home,
             accentColor = Color(0xFF6D4ED8)
         ),
         OnboardingStep(
-            id = "belts",
-            titleHe = "תפריט צד",
-            titleEn = "Side menu",
+            id = "roles",
+            titleHe = "אזור המאמן ואזור המתאמן",
+            titleEn = "Coach and trainee areas",
             descriptionHe = """
         תפריט הצד מרכז במקום אחד את כל האזורים החשובים באפליקציה.
 
@@ -32,10 +32,11 @@ object OnboardingContent {
 
         From here you can open your profile, trainee list, exams, exercises, payments, contact options, the forum, language settings and additional management tools.
     """.trimIndent(),
+            imageRes = il.kmi.app.R.drawable.onboarding_roles,
             accentColor = Color(0xFFF59E0B)
         ),
         OnboardingStep(
-            id = "subjects",
+            id = "belts",
             titleHe = "תרגילים לפי חגורה",
             titleEn = "Exercises by Belt",
             descriptionHe = """
@@ -48,6 +49,7 @@ object OnboardingContent {
 
         The exercises are organized by topics and subtopics, making it easy to find the learning material relevant to your level.
     """.trimIndent(),
+            imageRes = il.kmi.app.R.drawable.onboarding_belts,
             accentColor = Color(0xFF0EA5E9)
         ),
         OnboardingStep(
@@ -72,10 +74,11 @@ object OnboardingContent {
 
         These classifications are saved and used for summaries, focused practice sessions and PDF reports.
     """.trimIndent(),
+            imageRes = il.kmi.app.R.drawable.onboarding_exercises,
             accentColor = Color(0xFF16A34A)
         ),
         OnboardingStep(
-            id = "exercise_cards",
+            id = "topics",
             titleHe = "תרגילים לפי נושא",
             titleEn = "Exercises by Topic",
             descriptionHe = """
@@ -88,6 +91,7 @@ object OnboardingContent {
 
         You can open a detailed explanation, save a personal note and start a practice session from the active list.
     """.trimIndent(),
+            imageRes = il.kmi.app.R.drawable.onboarding_topics,
             accentColor = Color(0xFF7C3AED)
         ),
         OnboardingStep(
@@ -99,12 +103,30 @@ object OnboardingContent {
                 
                 בסיום ניתן ליצור דוח PDF הכולל את פרטי המבחן והציונים.
             """.trimIndent(),
+            imageRes = il.kmi.app.R.drawable.onboarding_internal_exam,
             descriptionEn = """
                 The internal exam lets you select a trainee, enter scores and save an organized result.
                 
                 At the end, you can create a PDF report containing the exam details and scores.
             """.trimIndent(),
             accentColor = Color(0xFFDB2777)
+        ),
+        OnboardingStep(
+            id = "payments_report",
+            titleHe = "דוח תשלומים",
+            titleEn = "Payments report",
+            descriptionHe = """
+        דוח התשלומים מרכז את מצב הגבייה של המתאמנים ומציג מי שילם ומי עדיין לא שילם.
+
+        ניתן לסנן לפי סניף, לחפש מתאמן ולצפות באחוז הגבייה העדכני.
+    """.trimIndent(),
+            descriptionEn = """
+        The payments report summarizes trainee payments and shows who has paid and who has not.
+
+        You can filter by branch, search for a trainee and view the current collection rate.
+    """.trimIndent(),
+            imageRes = il.kmi.app.R.drawable.onboarding_payments_report,
+            accentColor = Color(0xFF10B981)
         ),
         OnboardingStep(
             id = "pdf",
@@ -120,10 +142,11 @@ object OnboardingContent {
                 
                 Once generated, the file can be opened, saved or shared using apps installed on the device.
             """.trimIndent(),
+            imageRes = il.kmi.app.R.drawable.onboarding_pdf,
             accentColor = Color(0xFFEC4899)
         ),
         OnboardingStep(
-            id = "tools",
+            id = "summary",
             titleHe = "סרגל האייקונים וכלי האפליקציה",
             titleEn = "Icon rail and app tools",
             descriptionHe = """
@@ -137,6 +160,23 @@ object OnboardingContent {
                 You will always be able to reopen this tour using the help action in the rail.
             """.trimIndent(),
             accentColor = Color(0xFF2563EB)
-        )
+        ),
+        OnboardingStep(
+            id = "ai",
+            titleHe = "יובל – העוזר האישי",
+            titleEn = "Yuval – Personal Assistant",
+            descriptionHe = """
+        העוזר האישי מאפשר לקבל מידע על תרגילים, אימונים וחומר ק.מ.י.
+
+        ניתן לבחור נושא מתוך האפשרויות המוצגות ולהפעיל פקודות קוליות בלחיצה על אייקון המיקרופון.
+    """.trimIndent(),
+            descriptionEn = """
+        The personal assistant provides information about exercises, training sessions and K.M.I. material.
+
+        Select one of the displayed topics or activate voice commands by tapping the microphone icon.
+    """.trimIndent(),
+            imageRes = il.kmi.app.R.drawable.onboarding_personal_assistant,
+            accentColor = Color(0xFF7C3AED)
+        ),
     )
 }

@@ -19,9 +19,12 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.MenuBook
@@ -39,11 +42,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -86,6 +91,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -99,25 +105,29 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import il.kmi.shared.domain.Belt
+import il.kmi.app.R
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.assistant.core.AssistantBrain
+import il.kmi.app.ui.assistant.core.AssistantKnowledgeSource
+import il.kmi.app.ui.assistant.core.AssistantMatchQuality
+import il.kmi.app.ui.assistant.core.AssistantMemory
+import il.kmi.app.ui.assistant.core.AssistantOrchestrator
+import il.kmi.app.ui.assistant.core.AssistantResult
+import il.kmi.app.ui.assistant.core.contextResults
+import il.kmi.app.ui.assistant.core.matchQuality
+import il.kmi.app.ui.assistant.core.primaryText
 import il.kmi.app.ui.assistant.exercise.ExerciseAssistantEngine
 import il.kmi.app.ui.assistant.material.MaterialAssistantEngine
 import il.kmi.app.ui.assistant.trainings.TrainingsAssistantEngine
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
-import il.kmi.app.ui.assistant.core.AssistantMemory
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 
 
 //======================================================
@@ -140,6 +150,33 @@ private data class AiMessage(
     val relatedQuestion: String? = null,
     val feedback: Feedback = Feedback.NONE
 )
+
+private data class SpeechAlternative(
+    val text: String,
+    val confidence: Float,
+    val relevanceScore: Float
+)
+
+private data class AssistantSuggestion(
+    val label: String,
+    val query: String
+)
+
+private enum class AssistantResultQuality {
+    EXACT,
+    RELEVANT,
+    NEEDS_CLARIFICATION,
+    ERROR
+}
+
+private enum class AssistantLogStatus {
+    SUCCESS,
+    NOT_RECOGNIZED,
+    ALTERNATIVES_SHOWN,
+    SUGGESTION_SELECTED,
+    NOT_EXECUTED,
+    PROCESSING_ERROR
+}
 
 // 🔹 פקודות ניווט בקול
 sealed class VoiceNavCommand {
@@ -959,22 +996,24 @@ fun AiAssistantDialog(
     val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
-    val graniteBrush = Brush.linearGradient(
+    val graniteBrush = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFFF6F2F8),
-            Color(0xFFECE4F1),
-            Color(0xFFE4DCEB),
-            Color(0xFFF5F1F8)
+            Color(0xFFF8FAFF),
+            Color(0xFFF1EDFF),
+            Color(0xFFE8E2F7),
+            Color(0xFFE3ECFA),
+            Color(0xFFF7F9FF)
         )
     )
 
-    val premiumCardBrush = Brush.linearGradient(
+    val premiumCardBrush = Brush.horizontalGradient(
         colors = listOf(
-            Color(0xFF7B61FF),
+            Color(0xFF4F46E5),
+            Color(0xFF7C3AED),
             Color(0xFF8B5CF6),
-            Color(0xFF5B7CFA)
+            Color(0xFF2563EB)
         )
-    )    // ✅ Focus Sink: גורם ל-TextField לאבד פוקוס באמת בתוך AlertDialog
+    )   // ✅ Focus Sink: גורם ל-TextField לאבד פוקוס באמת בתוך AlertDialog
     val focusSinkRequester = remember { FocusRequester() }
     var focusSinkTick by remember { mutableStateOf(0) }
 
@@ -1025,6 +1064,10 @@ fun AiAssistantDialog(
 
     val assistantMemoryLocal = remember(spAssistantMemory) {
         AssistantMemory(spAssistantMemory)
+    }
+
+    val assistantOrchestrator = remember {
+        AssistantOrchestrator()
     }
 
     LaunchedEffect(assistantMemoryLocal, spAssistantMemory, spUser) {
@@ -1104,6 +1147,28 @@ fun AiAssistantDialog(
     var isThinking by remember { mutableStateOf(false) }
     var lastAiAnswer by remember { mutableStateOf<String?>(null) }
     var speechStatusMessage by remember { mutableStateOf<String?>(null) }
+
+    // הצעות המשך שנוצרות בהתאם למצב ולתשובה האחרונה.
+    var followUpSuggestions by remember {
+        mutableStateOf<List<AssistantSuggestion>>(emptyList())
+    }
+
+    var resultQuality by remember {
+        mutableStateOf<AssistantResultQuality?>(null)
+    }
+
+    // חלופות מוצגות רק כאשר מנוע הדיבור אינו בטוח מספיק.
+    var speechAlternatives by remember {
+        mutableStateOf<List<SpeechAlternative>>(emptyList())
+    }
+
+    var speechNeedsConfirmation by remember {
+        mutableStateOf(false)
+    }
+
+    var speechCanRetry by remember {
+        mutableStateOf(false)
+    }
 
     // ✅ חדש: בקשה לשליחה שמגיעה מה-STT (כדי לא לקרוא ל-sendQuestion מתוך onResults)
     var pendingSendFromStt by remember { mutableStateOf<String?>(null) }
@@ -1300,9 +1365,48 @@ fun AiAssistantDialog(
         hideKeyboardHard()
     }
 
+    fun saveAssistantCommandLog(
+        rawCommand: String,
+        status: AssistantLogStatus,
+        alternatives: List<String> = emptyList(),
+        answer: String? = null,
+        errorCode: Int? = null
+    ) {
+        val command = rawCommand.trim()
+
+        try {
+            val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+
+            val data = hashMapOf<String, Any?>(
+                "rawCommand" to command,
+                "normalizedCommand" to normalizeExerciseQuery(command),
+                "status" to status.name,
+                "assistantMode" to (assistantMode?.name ?: "UNKNOWN"),
+                "language" to resolvedLang,
+                "alternatives" to alternatives.take(5),
+                "answer" to answer.orEmpty().take(2_000),
+                "errorCode" to errorCode,
+                "source" to "android_ai_assistant",
+                "userUid" to uid,
+                "createdAt" to Timestamp.now(),
+                "createdAtMillis" to System.currentTimeMillis()
+            )
+
+            Firebase.firestore
+                .collection("assistantCommandLogs")
+                .add(data)
+        } catch (_: Throwable) {
+            // כשל בשמירת לוג אינו עוצר את פעולת העוזר.
+        }
+    }
+
     fun startSpeechToTextInternal() {
 
         if (isListening) return
+
+        speechAlternatives = emptyList()
+        speechNeedsConfirmation = false
+        speechCanRetry = false
 
         stopSpeaking()
         hideKeyboardHard()
@@ -1329,6 +1433,102 @@ fun AiAssistantDialog(
         isListening = true
         speechStatusMessage = null
 
+        fun speechCandidateScore(
+            candidate: String,
+            confidence: Float
+        ): Float {
+            val text = candidate.trim()
+            val normalized = text.lowercase()
+
+            var score = when {
+                confidence in 0f..1f -> confidence * 100f
+                else -> 0f
+            }
+
+            // תוצאה מלאה וברורה עדיפה על מילה בודדת.
+            score += minOf(text.length, 60) * 0.15f
+
+            when (assistantMode) {
+                AssistantMode.EXERCISE -> {
+                    val exerciseQuery =
+                        extractExerciseNameFromQuestion(text).orEmpty()
+
+                    if (
+                        findPartialExerciseCandidates(
+                            query = exerciseQuery,
+                            isEnglish = isEnglish
+                        ).isNotEmpty()
+                    ) {
+                        score += 90f
+                    }
+
+                    val exerciseWords = listOf(
+                        "בעיטה",
+                        "הגנה",
+                        "אגרוף",
+                        "חניקה",
+                        "דקירה",
+                        "תרגיל",
+                        "kick",
+                        "defense",
+                        "punch",
+                        "exercise"
+                    )
+
+                    if (exerciseWords.any { it in normalized }) {
+                        score += 35f
+                    }
+                }
+
+                AssistantMode.TRAININGS -> {
+                    val trainingWords = listOf(
+                        "אימון",
+                        "אימונים",
+                        "קבוצה",
+                        "סניף",
+                        "מאמן",
+                        "שעה",
+                        "training",
+                        "trainings",
+                        "branch",
+                        "coach",
+                        "schedule"
+                    )
+
+                    if (trainingWords.any { it in normalized }) {
+                        score += 60f
+                    }
+                }
+
+                AssistantMode.KMI_MATERIAL -> {
+                    val materialWords = listOf(
+                        "חגורה",
+                        "נושא",
+                        "תרגילים",
+                        "חומר",
+                        "קמי",
+                        "belt",
+                        "topic",
+                        "exercises",
+                        "material",
+                        "kami"
+                    )
+
+                    if (materialWords.any { it in normalized }) {
+                        score += 60f
+                    }
+                }
+
+                null -> {
+                    if (parseVoiceNavCommand(text) != null) {
+                        score += 70f
+                    }
+                }
+            }
+
+            return score
+        }
+
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(
@@ -1340,16 +1540,24 @@ fun AiAssistantDialog(
                 RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,
                 if (isEnglish) "en-US" else "he-IL"
             )
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // מבקשים מספר חלופות ולא מסתמכים רק על התוצאה הראשונה.
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, ctx.packageName)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
 
-// יותר סבלני להפסקות טבעיות בדיבור
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
-
-// אפשר להוסיף גם:
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 2500L)
+// מאפשר משפט טבעי בלי לסיים את ההאזנה מוקדם מדי.
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                2200L
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                1400L
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
+                1200L
+            )
         }
 
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
@@ -1383,57 +1591,223 @@ fun AiAssistantDialog(
 
             override fun onError(error: Int) {
                 isListening = false
+                speechNeedsConfirmation = false
+                speechAlternatives = emptyList()
 
                 val message = when (error) {
                     SpeechRecognizer.ERROR_AUDIO ->
-                        tr("יש בעיית שמע במיקרופון", "There is an audio issue with the microphone")
+                        tr(
+                            "לא הצלחתי לשמוע היטב. בדוק שהמיקרופון אינו חסום ונסה שוב.",
+                            "I couldn't hear clearly. Check that the microphone is not blocked and try again."
+                        )
 
                     SpeechRecognizer.ERROR_CLIENT ->
                         ""
 
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
-                        tr("חסרה הרשאת מיקרופון", "Microphone permission is missing")
+                        tr(
+                            "אין הרשאת מיקרופון. אפשר לאשר אותה בהגדרות האפליקציה.",
+                            "Microphone permission is missing. You can enable it in the app settings."
+                        )
 
                     SpeechRecognizer.ERROR_NETWORK,
                     SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
-                        tr("יש בעיית רשת בזיהוי הדיבור", "There is a network issue with speech recognition")
+                        tr(
+                            "החיבור לזיהוי הדיבור נכשל. בדוק את החיבור לאינטרנט ונסה שוב.",
+                            "Speech recognition could not connect. Check your internet connection and try again."
+                        )
 
-                    SpeechRecognizer.ERROR_NO_MATCH,
+                    SpeechRecognizer.ERROR_NO_MATCH ->
+                        tr(
+                            "לא הצלחתי להבין את הבקשה. נסה לומר שם תרגיל או נושא בצורה קצרה.",
+                            "I couldn't understand the request. Try saying a short exercise or topic name."
+                        )
+
                     SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
-                        tr("לא זוהה דיבור", "No speech detected")
+                        tr(
+                            "לא שמעתי דיבור. לחץ על המיקרופון ונסה שוב.",
+                            "I didn't hear any speech. Tap the microphone and try again."
+                        )
 
                     SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
-                        tr("מנוע הדיבור עסוק כרגע", "Speech recognizer is busy right now")
+                        tr(
+                            "מנוע הדיבור עדיין עסוק. המתן רגע ונסה שוב.",
+                            "The speech recognizer is still busy. Wait a moment and try again."
+                        )
 
                     SpeechRecognizer.ERROR_SERVER ->
-                        tr("שרת זיהוי הדיבור לא זמין כרגע", "Speech recognition server is currently unavailable")
+                        tr(
+                            "שירות זיהוי הדיבור אינו זמין כרגע. אפשר לכתוב את הבקשה בשדה למטה.",
+                            "Speech recognition is currently unavailable. You can type your request below."
+                        )
 
                     else ->
-                        tr("זיהוי הדיבור נכשל", "Speech recognition failed")
+                        tr(
+                            "זיהוי הדיבור נכשל. אפשר לנסות שוב או לכתוב את הבקשה.",
+                            "Speech recognition failed. Try again or type your request."
+                        )
                 }
+
+                speechCanRetry =
+                    error != SpeechRecognizer.ERROR_CLIENT &&
+                            error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS
 
                 speechStatusMessage = message.takeIf { it.isNotBlank() }
 
-                if (speechStatusMessage != null) {
-                    mainHandler.postDelayed({
-                        if (speechStatusMessage == message) {
-                            speechStatusMessage = null
-                        }
-                    }, 2200L)
+                if (error != SpeechRecognizer.ERROR_CLIENT) {
+                    saveAssistantCommandLog(
+                        rawCommand = input,
+                        status = AssistantLogStatus.NOT_RECOGNIZED,
+                        errorCode = error
+                    )
                 }
             }
 
             override fun onResults(results: Bundle) {
                 isListening = false
                 speechStatusMessage = null
+                speechCanRetry = false
 
-                val spoken = results
-                    .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: return
+                val rawAlternatives = results
+                    .getStringArrayList(
+                        SpeechRecognizer.RESULTS_RECOGNITION
+                    )
+                    .orEmpty()
+                    .map { it.trim() }
+                    .filter { it.length > 1 }
+                    .distinctBy { normalizeExerciseQuery(it) }
 
+                if (rawAlternatives.isEmpty()) {
+                    speechNeedsConfirmation = false
+                    speechAlternatives = emptyList()
+                    speechCanRetry = true
+
+                    speechStatusMessage = tr(
+                        "לא הצלחתי לזהות בקשה ברורה. נסה לומר רק את שם התרגיל או הנושא.",
+                        "I couldn't recognize a clear request. Try saying only the exercise or topic name."
+                    )
+
+                    saveAssistantCommandLog(
+                        rawCommand = input,
+                        status = AssistantLogStatus.NOT_RECOGNIZED
+                    )
+                    return
+                }
+
+                val confidenceScores = results.getFloatArray(
+                    SpeechRecognizer.CONFIDENCE_SCORES
+                )
+
+                val rankedAlternatives = rawAlternatives
+                    .mapIndexed { index, candidate ->
+                        val confidence =
+                            confidenceScores?.getOrNull(index) ?: -1f
+
+                        SpeechAlternative(
+                            text = candidate,
+                            confidence = confidence,
+                            relevanceScore = speechCandidateScore(
+                                candidate = candidate,
+                                confidence = confidence
+                            )
+                        )
+                    }
+                    .sortedByDescending { it.relevanceScore }
+
+                val best = rankedAlternatives.first()
+                val second = rankedAlternatives.getOrNull(1)
+
+                val bestConfidenceIsLow =
+                    best.confidence in 0f..0.54f
+
+                val resultsAreClose =
+                    second != null &&
+                            best.relevanceScore - second.relevanceScore < 18f
+
+                val bestHasRelevantMatch = when (assistantMode) {
+                    AssistantMode.EXERCISE -> {
+                        val query = extractExerciseNameFromQuestion(best.text)
+                            .orEmpty()
+
+                        findPartialExerciseCandidates(
+                            query = query,
+                            isEnglish = isEnglish
+                        ).isNotEmpty()
+                    }
+
+                    AssistantMode.TRAININGS -> {
+                        val normalized = best.text.lowercase()
+
+                        listOf(
+                            "אימון",
+                            "אימונים",
+                            "קבוצה",
+                            "סניף",
+                            "מאמן",
+                            "training",
+                            "workout",
+                            "branch",
+                            "coach"
+                        ).any { it in normalized }
+                    }
+
+                    AssistantMode.KMI_MATERIAL -> {
+                        val normalized = best.text.lowercase()
+
+                        listOf(
+                            "חגורה",
+                            "נושא",
+                            "תרגיל",
+                            "חומר",
+                            "קמי",
+                            "belt",
+                            "topic",
+                            "exercise",
+                            "material",
+                            "kami"
+                        ).any { it in normalized }
+                    }
+
+                    null ->
+                        parseVoiceNavCommand(best.text) != null
+                }
+
+                val shouldAskForConfirmation =
+                    rankedAlternatives.size > 1 &&
+                            (
+                                    bestConfidenceIsLow ||
+                                            resultsAreClose ||
+                                            !bestHasRelevantMatch
+                                    )
+
+                if (shouldAskForConfirmation) {
+                    val choices = rankedAlternatives
+                        .take(3)
+                        .distinctBy { normalizeExerciseQuery(it.text) }
+
+                    speechAlternatives = choices
+                    speechNeedsConfirmation = true
+                    speechCanRetry = true
+                    input = best.text
+
+                    speechStatusMessage = tr(
+                        "לא הייתי בטוח למה התכוונת. בחר את האפשרות המתאימה:",
+                        "I wasn't certain what you meant. Choose the correct option:"
+                    )
+
+                    saveAssistantCommandLog(
+                        rawCommand = best.text,
+                        status = AssistantLogStatus.ALTERNATIVES_SHOWN,
+                        alternatives = choices.map { it.text }
+                    )
+
+                    return
+                }
+
+                speechAlternatives = emptyList()
+                speechNeedsConfirmation = false
+
+                val spoken = best.text
                 val navCommand = parseVoiceNavCommand(spoken)
 
                 if (navCommand != null) {
@@ -1533,9 +1907,18 @@ fun AiAssistantDialog(
         // reset שיחה
         messages = emptyList()
         lastAiAnswer = null
+        followUpSuggestions = emptyList()
+        resultQuality = null
         isThinking = false
         pendingNavAfterSpeak = null
+        pendingSendFromStt = null
+        speechAlternatives = emptyList()
+        speechNeedsConfirmation = false
+        speechCanRetry = false
+        speechStatusMessage = null
         input = ""
+
+        assistantOrchestrator.reset()
 
         stopSpeaking()
         stopListeningHard()
@@ -1546,130 +1929,190 @@ fun AiAssistantDialog(
         stopListeningHard()
         stopSpeaking()
         requestHideKeyboard = true
+        assistantOrchestrator.reset()
 
         assistantMode = null
         messages = emptyList()
         lastAiAnswer = null
+        followUpSuggestions = emptyList()
+        resultQuality = null
         isThinking = false
         pendingNavAfterSpeak = null
+        pendingSendFromStt = null
+        speechAlternatives = emptyList()
+        speechNeedsConfirmation = false
+        speechCanRetry = false
+        speechStatusMessage = null
         input = ""
     }
 
     fun sendQuestion(q: String) {
         val question = q.trim()
-        if (question.isEmpty()) return
+        if (question.isBlank() || isThinking) return
 
-        val memoryExercise = assistantMemory.getLastExercise()
-        val lastQuestion = assistantMemory.getLastQuestion()
-
-        val followUpWords = listOf(
-            "אותו",
-            "אותה",
-            "אותם",
-            "אותן",
-            "again",
-            "it",
-            "this exercise"
-        )
-
-        val isFollowUp = followUpWords.any {
-            question.contains(it, ignoreCase = true)
+        parseVoiceNavCommand(question)?.let { command ->
+            stopListeningHard()
+            stopSpeaking()
+            pendingNavAfterSpeak = null
+            onVoiceCommand?.invoke(command)
+            return
         }
 
-        val resolvedQuestion =
-            when {
-                isFollowUp && memoryExercise != null ->
-                    "$memoryExercise $question"
-
-                isFollowUp && lastQuestion != null ->
-                    "$lastQuestion $question"
-
-                else ->
-                    question
-            }
-
-        // ✅ תמיד לסגור STT + מקלדת לפני עיבוד תשובה
         stopListeningHard()
         requestHideKeyboard = true
+        input = ""
+        followUpSuggestions = emptyList()
+        resultQuality = null
+        speechStatusMessage = null
+        isThinking = true
 
-        // UI: הודעת משתמש
         messages = if (
             assistantMode == AssistantMode.EXERCISE ||
             assistantMode == AssistantMode.KMI_MATERIAL
         ) {
             listOf(
-                AiMessage(fromUser = true, text = question)
+                AiMessage(
+                    fromUser = true,
+                    text = question
+                )
             )
         } else {
-            messages + AiMessage(fromUser = true, text = question)
+            messages + AiMessage(
+                fromUser = true,
+                text = question
+            )
         }
 
-        // שמירת התרגיל האחרון בזיכרון העוזר
-        assistantMemory.saveLastQuestion(question)
+        assistantMemoryLocal.saveLastQuestion(question)
 
-        extractExerciseNameFromQuestion(question)?.let {
-            assistantMemory.saveLastExercise(it)
+        val response = try {
+            assistantOrchestrator.process(
+                question = question,
+                isEnglish = isEnglish
+            )
+        } catch (error: Throwable) {
+            null
         }
 
-        input = ""
-        isThinking = true
+        if (response == null) {
+            val errorAnswer = tr(
+                "אירעה תקלה רגעית בעיבוד הבקשה. אפשר לנסות שוב.",
+                "A temporary issue occurred while processing the request. Please try again."
+            )
 
-        if (assistantMode == AssistantMode.EXERCISE) {
-            scrollToTop()
-        } else {
-            scrollToBottom()
+            isThinking = false
+            resultQuality = AssistantResultQuality.ERROR
+            lastAiAnswer = errorAnswer
+
+            messages = messages + AiMessage(
+                fromUser = false,
+                text = errorAnswer,
+                relatedQuestion = question
+            )
+
+            followUpSuggestions = listOf(
+                AssistantSuggestion(
+                    label = tr("נסה שוב", "Try again"),
+                    query = question
+                )
+            )
+
+            saveAssistantCommandLog(
+                rawCommand = question,
+                status = AssistantLogStatus.PROCESSING_ERROR,
+                answer = errorAnswer
+            )
+
+            speakBest(errorAnswer)
+            return
         }
 
-        val preferredBelt = detectBeltEnum(resolvedQuestion)
-        val answer: String = try {
-            when (assistantMode) {
+        val assistantResult = response.result
+        val finalAnswer = assistantResult.primaryText()
+            .ifBlank {
+                tr(
+                    "לא התקבלה תשובה מהמאגר. נסה לנסח את הבקשה בצורה אחרת.",
+                    "No answer was returned. Try phrasing the request differently."
+                )
+            }
 
-                null -> {
-                    AssistantBrain.answer(
-                        question = resolvedQuestion,
-                        preferredBelt = preferredBelt,
-                        isEnglish = isEnglish
-                    )
-                }
+        assistantMode = when (assistantResult.source) {
+            AssistantKnowledgeSource.EXERCISES ->
+                AssistantMode.EXERCISE
 
-                AssistantMode.TRAININGS -> {
-                    TrainingsAssistantEngine.answer(
-                        question = resolvedQuestion,
-                        isEnglish = isEnglish
-                    )
-                }
+            AssistantKnowledgeSource.TRAININGS,
+            AssistantKnowledgeSource.USER_PROFILE ->
+                AssistantMode.TRAININGS
 
-                AssistantMode.EXERCISE -> {
-                    getExerciseAnswerWithFallback(
-                        question = resolvedQuestion,
-                        preferredBelt = preferredBelt,
-                        isEnglish = isEnglish
-                    )
-                }
+            AssistantKnowledgeSource.MATERIAL ->
+                AssistantMode.KMI_MATERIAL
 
-                AssistantMode.KMI_MATERIAL -> {
-                    MaterialAssistantEngine.answer(
-                        question = resolvedQuestion,
-                        preferredBelt = preferredBelt,
-                        isEnglish = isEnglish
-                    )
+            AssistantKnowledgeSource.NAVIGATION,
+            AssistantKnowledgeSource.UNKNOWN ->
+                assistantMode
+        }
+
+        response.context.exerciseName
+            ?.takeIf { it.isNotBlank() }
+            ?.let { exerciseName ->
+                assistantMemoryLocal.saveLastExercise(exerciseName)
+            }
+
+        resultQuality = when (assistantResult) {
+            is AssistantResult.Error ->
+                AssistantResultQuality.ERROR
+
+            is AssistantResult.NotFound,
+            is AssistantResult.MissingInformation,
+            is AssistantResult.Clarification ->
+                AssistantResultQuality.NEEDS_CLARIFICATION
+
+            else -> {
+                when (assistantResult.matchQuality()) {
+                    AssistantMatchQuality.EXACT,
+                    AssistantMatchQuality.HIGH ->
+                        AssistantResultQuality.EXACT
+
+                    AssistantMatchQuality.MEDIUM ->
+                        AssistantResultQuality.RELEVANT
+
+                    AssistantMatchQuality.LOW,
+                    AssistantMatchQuality.NONE ->
+                        AssistantResultQuality.NEEDS_CLARIFICATION
                 }
             }
-        } catch (_: Throwable) {
-            tr(
-                "יש תקלה רגעית בעיבוד הבקשה. נסה שוב בעוד רגע.",
-                "There is a temporary issue processing the request. Please try again in a moment."
-            )
         }
 
-        val finalAnswer = when (assistantMode) {
-            AssistantMode.TRAININGS -> answer
-            AssistantMode.EXERCISE -> answer.trim()
-            AssistantMode.KMI_MATERIAL -> answer.trim()
-            else -> answer.trimEnd() + "\n\n" + tr("אני יכול לעזור לך בעוד משהו?", "Can I help you with anything else?")
-        }
+        val resultSuggestions =
+            assistantResult.suggestedActions.map { action ->
+                AssistantSuggestion(
+                    label = action.label(isEnglish),
+                    query = action.query(isEnglish)
+                )
+            }
 
-        isThinking = false
+        val clarificationSuggestions =
+            if (assistantResult is AssistantResult.Clarification) {
+                assistantResult.options.map { option ->
+                    AssistantSuggestion(
+                        label = option.title,
+                        query = option.title
+                    )
+                }
+            } else {
+                emptyList()
+            }
+
+        followUpSuggestions =
+            (clarificationSuggestions + resultSuggestions)
+                .filter {
+                    it.label.isNotBlank() &&
+                            it.query.isNotBlank()
+                }
+                .distinctBy {
+                    normalizeExerciseQuery(it.query)
+                }
+                .take(5)
 
         val aiMessage = AiMessage(
             fromUser = false,
@@ -1682,7 +2125,10 @@ fun AiAssistantDialog(
             assistantMode == AssistantMode.KMI_MATERIAL
         ) {
             listOf(
-                AiMessage(fromUser = true, text = question),
+                AiMessage(
+                    fromUser = true,
+                    text = question
+                ),
                 aiMessage
             )
         } else {
@@ -1690,6 +2136,32 @@ fun AiAssistantDialog(
         }
 
         lastAiAnswer = finalAnswer
+        isThinking = false
+
+        val logStatus = when (assistantResult) {
+            is AssistantResult.Error ->
+                AssistantLogStatus.PROCESSING_ERROR
+
+            is AssistantResult.NotFound,
+            is AssistantResult.MissingInformation ->
+                AssistantLogStatus.NOT_EXECUTED
+
+            is AssistantResult.Clarification ->
+                AssistantLogStatus.ALTERNATIVES_SHOWN
+
+            is AssistantResult.Answer,
+            is AssistantResult.ResultList ->
+                AssistantLogStatus.SUCCESS
+        }
+
+        saveAssistantCommandLog(
+            rawCommand = question,
+            status = logStatus,
+            alternatives = followUpSuggestions.map {
+                it.query
+            },
+            answer = finalAnswer
+        )
 
         if (
             assistantMode == AssistantMode.EXERCISE ||
@@ -1700,35 +2172,32 @@ fun AiAssistantDialog(
             scrollToBottom()
         }
 
-        // ✅ חשוב:
-        // במסכים עם רשימות ארוכות לא מקריאים את כל התוכן.
-        // מציגים את הכל על המסך, ומקריאים רק הודעה קצרה.
-        val spokenAnswer = when (assistantMode) {
-            AssistantMode.KMI_MATERIAL -> {
-                shortMaterialSpeech(isEnglish)
-            }
-
-            AssistantMode.TRAININGS -> {
-                shortTrainingSpeech(
-                    question = question,
-                    answer = finalAnswer,
-                    isEnglish = isEnglish
-                )
-            }
-
-            AssistantMode.EXERCISE -> {
+        val spokenAnswer = when (assistantResult) {
+            is AssistantResult.Clarification ->
                 sanitizeAssistantTextForSpeech(
                     text = finalAnswer,
                     isEnglish = isEnglish
                 )
-            }
 
-            null -> {
+            is AssistantResult.ResultList ->
+                if (
+                    assistantResult.source ==
+                    AssistantKnowledgeSource.TRAININGS
+                ) {
+                    shortTrainingSpeech(
+                        question = question,
+                        answer = finalAnswer,
+                        isEnglish = isEnglish
+                    )
+                } else {
+                    shortMaterialSpeech(isEnglish)
+                }
+
+            else ->
                 sanitizeAssistantTextForSpeech(
                     text = finalAnswer,
                     isEnglish = isEnglish
                 )
-            }
         }
 
         speakBest(spokenAnswer)
@@ -1739,15 +2208,8 @@ fun AiAssistantDialog(
         val q = pendingSendFromStt ?: return@LaunchedEffect
         pendingSendFromStt = null
 
-        // במסך הראשי בוחרים מצב בלבד.
-        // לא שולחים שאלה קולית לפני שנבחר מצב, כדי למנוע בלבול.
-        if (assistantMode == null) {
-            input = ""
-            stopListeningHard()
-            requestHideKeyboard = true
-            return@LaunchedEffect
-        }
-
+        // מנהל השיחה החדש מזהה בעצמו אם מדובר
+        // בתרגיל, חומר ק.מ.י או מידע על אימונים.
         sendQuestion(q)
     }
 
@@ -1789,13 +2251,22 @@ fun AiAssistantDialog(
                 ) {
 
                     KmiTopBar(
-                        title = if (isEnglish) "Yuval – Personal Assistant" else "יובל – העוזר האישי",
+                        title = if (isEnglish) {
+                            "Yuval – Personal Assistant"
+                        } else {
+                            "יובל – העוזר האישי"
+                        },
                         currentLang = resolvedLang,
                         showMenu = true,
                         showFontQuick = false,
                         showRoleStatus = true,
-                        showSettings = true,
+                        showSettings = false,
+
+// מציג את סרגל האייקונים, ללא כפתורי המסך התחתונים.
                         showBottomActions = true,
+                        showBottomHelp = true,
+                        showBottomShare = true,
+
                         showModePill = true,
                         showRoleBadge = true,
                         showTopHome = false,
@@ -1849,66 +2320,62 @@ fun AiAssistantDialog(
                         homeDisabledToast = null
                     )
 
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 10.dp, top = 2.dp, bottom = 2.dp),
-                            horizontalArrangement = Arrangement.Start
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(38.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFF5B4BB7).copy(alpha = 0.92f),
-                                shadowElevation = 4.dp,
-                                tonalElevation = 0.dp
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        stopListeningHard()
-                                        stopSpeaking()
-                                        onDismiss()
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Close,
-                                        contentDescription = if (isEnglish) "Close" else "סגור",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(4.dp))
+                    /*
+                     * כפתור ה־X הוסר לחלוטין.
+                     * הכרטיס הראשי מופיע מיד אחרי הכותרת ולכן
+                     * כל תוכן העוזר עולה כלפי מעלה.
+                     */
+                    val assistantHeroShape =
+                        RoundedCornerShape(
+                            topStart = 32.dp,
+                            topEnd = 32.dp,
+                            bottomStart = 24.dp,
+                            bottomEnd = 24.dp
+                        )
 
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp),
-                        shape = RoundedCornerShape(22.dp),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 8.dp,
-                    color = Color.Transparent
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(premiumCardBrush, RoundedCornerShape(22.dp))
-                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                            .padding(horizontal = 14.dp)
+                            .border(
+                                width = 1.dp,
+                                color = Color.White.copy(alpha = 0.62f),
+                                shape = assistantHeroShape
+                            ),
+                        shape = assistantHeroShape,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 18.dp,
+                        color = Color.Transparent
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    brush = premiumCardBrush,
+                                    shape = assistantHeroShape
+                                )
+                                .padding(
+                                    horizontal = 18.dp,
+                                    vertical = 18.dp
+                                )
+                        ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = Color.White.copy(alpha = 0.18f)
+                                modifier = Modifier.size(50.dp),
+                                shape = RoundedCornerShape(17.dp),
+                                color = Color.White.copy(alpha = 0.20f),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 8.dp,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = 1.dp,
+                                    color = Color.White.copy(alpha = 0.34f)
+                                )
                             ) {
                                 Box(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    modifier = Modifier.fillMaxSize(),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -1924,7 +2391,8 @@ fun AiAssistantDialog(
                                             AssistantMode.KMI_MATERIAL -> tr("מצב חומר ק.מ.י", "KAMI material mode")
                                             null -> tr("בחירת מצב עוזר", "Assistant mode selection")
                                         },
-                                        tint = Color.White
+                                        tint = Color.White,
+                                        modifier = Modifier.size(26.dp)
                                     )
                                 }
                             }
@@ -1956,18 +2424,39 @@ fun AiAssistantDialog(
                     }
                 }
 
-                if (assistantMode == null) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        tonalElevation = 1.dp
-                    ) {
-                        Column(
+                    if (assistantMode == null) {
+                        val modePickerShape = RoundedCornerShape(30.dp)
+
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(horizontal = 12.dp),
+                            shape = modePickerShape,
+                            color = Color.Transparent,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 12.dp
                         ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.White.copy(alpha = 0.94f),
+                                                Color(0xFFF7F3FF).copy(alpha = 0.96f),
+                                                Color(0xFFEEF4FF).copy(alpha = 0.94f)
+                                            )
+                                        ),
+                                        shape = modePickerShape
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = Color.White.copy(alpha = 0.92f),
+                                        shape = modePickerShape
+                                    )
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
 
                             @Composable
                             fun ModeButton(
@@ -1977,34 +2466,51 @@ fun AiAssistantDialog(
                                 iconDescription: String,
                                 onClick: () -> Unit
                             ) {
-                                val shape = RoundedCornerShape(18.dp)
+                                val shape = RoundedCornerShape(24.dp)
+
                                 val outlineColor =
-                                    if (selected) Color(0xFF7B61FF)
-                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                                    if (selected) {
+                                        Color(0xFF7C3AED)
+                                    } else {
+                                        Color(0xFFB8A9E8).copy(alpha = 0.55f)
+                                    }
 
                                 Surface(
                                     onClick = onClick,
                                     shape = shape,
                                     tonalElevation = 0.dp,
-                                    shadowElevation = if (selected) 8.dp else 3.dp,
-                                    color = if (selected) Color.Transparent else Color.White.copy(alpha = 0.68f),
+                                    shadowElevation =
+                                        if (selected) 14.dp else 7.dp,
+                                    color = Color.Transparent,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .border(1.dp, outlineColor, shape)
+                                        .border(
+                                            width = 1.dp,
+                                            color = outlineColor,
+                                            shape = shape
+                                        )
                                 ) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .background(
-                                                if (selected) premiumCardBrush else Brush.linearGradient(
-                                                    colors = listOf(
-                                                        Color.White.copy(alpha = 0.82f),
-                                                        Color(0xFFF3EDF7).copy(alpha = 0.82f)
+                                                brush = if (selected) {
+                                                    premiumCardBrush
+                                                } else {
+                                                    Brush.horizontalGradient(
+                                                        colors = listOf(
+                                                            Color.White,
+                                                            Color(0xFFF7F3FF),
+                                                            Color(0xFFEEF5FF)
+                                                        )
                                                     )
-                                                ),
-                                                shape
+                                                },
+                                                shape = shape
                                             )
-                                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                                            .padding(
+                                                horizontal = 16.dp,
+                                                vertical = 15.dp
+                                            )
                                     ) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -2013,17 +2519,29 @@ fun AiAssistantDialog(
                                         ) {
                                             if (isEnglish) {
                                                 Surface(
-                                                    shape = RoundedCornerShape(12.dp),
-                                                    color = if (selected) Color.White.copy(alpha = 0.18f) else Color(0xFFEEE7FB)
+                                                    modifier = Modifier.size(46.dp),
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    color = if (selected) {
+                                                        Color.White.copy(alpha = 0.20f)
+                                                    } else {
+                                                        Color(0xFFECE5FF)
+                                                    },
+                                                    tonalElevation = 0.dp,
+                                                    shadowElevation = 5.dp
                                                 ) {
                                                     Box(
-                                                        modifier = Modifier.padding(8.dp),
+                                                        modifier = Modifier.fillMaxSize(),
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         Icon(
                                                             imageVector = icon,
                                                             contentDescription = iconDescription,
-                                                            tint = if (selected) Color.White else Color(0xFF7B61FF)
+                                                            tint = if (selected) {
+                                                                Color.White
+                                                            } else {
+                                                                Color(0xFF6D4DE8)
+                                                            },
+                                                            modifier = Modifier.size(24.dp)
                                                         )
                                                     }
                                                 }
@@ -2035,26 +2553,43 @@ fun AiAssistantDialog(
                                                 text = title,
                                                 modifier = Modifier.weight(1f),
                                                 textAlign = textAlignPrimary,
-                                                fontSize = 14.sp,
-                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-                                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface
+                                                fontSize = 16.sp,
+                                                lineHeight = 21.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = if (selected) {
+                                                    Color.White
+                                                } else {
+                                                    Color(0xFF172033)
+                                                }
                                             )
 
                                             if (!isEnglish) {
                                                 Spacer(Modifier.width(10.dp))
 
                                                 Surface(
-                                                    shape = RoundedCornerShape(12.dp),
-                                                    color = if (selected) Color.White.copy(alpha = 0.18f) else Color(0xFFEEE7FB)
+                                                    modifier = Modifier.size(46.dp),
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    color = if (selected) {
+                                                        Color.White.copy(alpha = 0.20f)
+                                                    } else {
+                                                        Color(0xFFECE5FF)
+                                                    },
+                                                    tonalElevation = 0.dp,
+                                                    shadowElevation = 5.dp
                                                 ) {
                                                     Box(
-                                                        modifier = Modifier.padding(8.dp),
+                                                        modifier = Modifier.fillMaxSize(),
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         Icon(
                                                             imageVector = icon,
                                                             contentDescription = iconDescription,
-                                                            tint = if (selected) Color.White else Color(0xFF7B61FF)
+                                                            tint = if (selected) {
+                                                                Color.White
+                                                            } else {
+                                                                Color(0xFF6D4DE8)
+                                                            },
+                                                            modifier = Modifier.size(24.dp)
                                                         )
                                                     }
                                                 }
@@ -2100,28 +2635,121 @@ fun AiAssistantDialog(
                                 }
                             )
 
-                            ModeButton(
-                                title = tr("חומר ק.מ.י", "KAMI material"),
-                                icon = Icons.Filled.MenuBook,
-                                iconDescription = tr("חומר ק.מ.י", "KAMI material"),
-                                selected = assistantMode == AssistantMode.KMI_MATERIAL,
-                                onClick = {
-                                    setAssistantMode(AssistantMode.KMI_MATERIAL)
-                                    stopSpeaking()
-                                    pendingNavAfterSpeak = null
-                                    speak(
-                                        tr(
-                                            "מעולה. מצב חומר ק.מ.י פעיל. תגיד נושא או שם תרגיל ואני אחפש לך במאגר.",
-                                            "Great. KAMI material mode is active. Say a topic or exercise name and I will search it in the database."
+                                ModeButton(
+                                    title = tr("חומר ק.מ.י", "KAMI material"),
+                                    icon = Icons.Filled.MenuBook,
+                                    iconDescription = tr("חומר ק.מ.י", "KAMI material"),
+                                    selected = assistantMode == AssistantMode.KMI_MATERIAL,
+                                    onClick = {
+                                        setAssistantMode(AssistantMode.KMI_MATERIAL)
+                                        stopSpeaking()
+                                        pendingNavAfterSpeak = null
+                                        speak(
+                                            tr(
+                                                "מעולה. מצב חומר ק.מ.י פעיל. תגיד נושא או שם תרגיל ואני אחפש לך במאגר.",
+                                                "Great. KAMI material mode is active. Say a topic or exercise name and I will search it in the database."
+                                            )
                                         )
+                                    }
+                                )
+                            }
+                        }
+
+                        val logoTransition =
+                            rememberInfiniteTransition(label = "kamiLogoPulse")
+
+                        val logoScale by logoTransition.animateFloat(
+                            initialValue = 0.97f,
+                            targetValue = 1.04f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(1800),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "kamiLogoScale"
+                        )
+
+                        Column(
+                            modifier = Modifier
+                                .weight(1f, fill = true)
+                                .fillMaxWidth()
+                                .padding(top = 44.dp, bottom = 2.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier.requiredSize(102.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .requiredSize(100.dp)
+                                        .scale(logoScale)
+                                        .background(
+                                            brush = Brush.radialGradient(
+                                                colors = listOf(
+                                                    Color(0x558B5CF6),
+                                                    Color(0x225B7CFA),
+                                                    Color.Transparent
+                                                )
+                                            ),
+                                            shape = CircleShape
+                                        )
+                                )
+
+                                Surface(
+                                    modifier = Modifier
+                                        .requiredSize(84.dp)
+                                        .scale(logoScale)
+                                        .border(
+                                            width = 2.dp,
+                                            color = Color(0xFF7C3AED),
+                                            shape = CircleShape
+                                        ),
+                                    shape = CircleShape,
+                                    color = Color.White,
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 14.dp
+                                ) {
+                                    Image(
+                                        painter = painterResource(
+                                            R.drawable.kami_logo
+                                        ),
+                                        contentDescription =
+                                            tr("לוגו ק.מ.י", "K.A.M.I logo"),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(5.dp)
                                     )
                                 }
+                            }
+
+                            Spacer(Modifier.height(6.dp))
+
+                            Text(
+                                text = tr(
+                                    "העוזר האישי של ק.מ.י",
+                                    "K.A.M.I Personal Assistant"
+                                ),
+                                color = Color(0xFF172033),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+
+                            Spacer(Modifier.height(3.dp))
+
+                            Text(
+                                text = tr(
+                                    "המיקרופון פועל רק לאחר לחיצה",
+                                    "Microphone activates only when tapped"
+                                ),
+                                color = Color(0xFF667085),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
+                    } else {
+                        // אזור השיחה מוצג לאחר בחירת מצב.
                     }
-                } else {
-                    // (השארת ה-else כמו שהיה אצלך)
-                }
 
                     val shouldShowMessagesCard =
                         assistantMode != null || messages.isNotEmpty() || isThinking
@@ -2138,18 +2766,121 @@ fun AiAssistantDialog(
                             color = Color(0xFFF6F3FA)
                         ) {
                             if (messages.isEmpty() && !isThinking) {
-                                Box(
+                                Column(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                                    contentAlignment = if (isEnglish) Alignment.TopStart else Alignment.TopEnd
+                                        .padding(horizontal = 18.dp, vertical = 20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
+                                    Surface(
+                                        modifier = Modifier.size(64.dp),
+                                        shape = CircleShape,
+                                        color = Color(0xFFEDE9FE),
+                                        shadowElevation = 8.dp
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = when (assistantMode) {
+                                                    AssistantMode.EXERCISE ->
+                                                        Icons.Filled.FitnessCenter
+
+                                                    AssistantMode.TRAININGS ->
+                                                        Icons.Filled.RecordVoiceOver
+
+                                                    AssistantMode.KMI_MATERIAL ->
+                                                        Icons.Filled.MenuBook
+
+                                                    null ->
+                                                        Icons.Filled.AutoAwesome
+                                                },
+                                                contentDescription = null,
+                                                tint = Color(0xFF6D4AFF),
+                                                modifier = Modifier.size(30.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Text(
+                                        text = when (assistantMode) {
+                                            AssistantMode.EXERCISE ->
+                                                tr(
+                                                    "איזה תרגיל תרצה להכיר?",
+                                                    "Which exercise would you like to explore?"
+                                                )
+
+                                            AssistantMode.TRAININGS ->
+                                                tr(
+                                                    "מה תרצה לדעת על האימונים?",
+                                                    "What would you like to know about training?"
+                                                )
+
+                                            AssistantMode.KMI_MATERIAL ->
+                                                tr(
+                                                    "איזה חומר ק.מ.י נחפש?",
+                                                    "Which KAMI material should we find?"
+                                                )
+
+                                            null ->
+                                                tr(
+                                                    "איך אוכל לעזור?",
+                                                    "How can I help?"
+                                                )
+                                        },
+                                        color = Color(0xFF172033),
+                                        fontSize = 19.sp,
+                                        lineHeight = 24.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        textAlign = TextAlign.Center
+                                    )
+
                                     Text(
                                         text = emptyStateText,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = textAlignPrimary
+                                        color = Color(0xFF667085),
+                                        fontSize = 14.sp,
+                                        lineHeight = 21.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        textAlign = TextAlign.Center
                                     )
+
+                                    Surface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = Color(0xFFF0EDFF),
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            width = 1.dp,
+                                            color = Color(0xFFDDD6FE)
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(
+                                                horizontal = 14.dp,
+                                                vertical = 10.dp
+                                            ),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = Color(0xFF6D4AFF),
+                                                modifier = Modifier.size(17.dp)
+                                            )
+
+                                            Spacer(Modifier.width(7.dp))
+
+                                            Text(
+                                                text = tr(
+                                                    "אפשר לדבר באופן טבעי — יובל יבין את ההקשר",
+                                                    "Speak naturally — Yuval will understand the context"
+                                                ),
+                                                color = Color(0xFF6246B5),
+                                                fontSize = 12.sp,
+                                                lineHeight = 17.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
                                 }
 
                             } else if (showPremiumAnswerLayout) {
@@ -2250,15 +2981,472 @@ fun AiAssistantDialog(
                                                 }
 
                                                 if (answerText.isNotBlank()) {
-                                                    Text(
-                                                        text = answerText,
+                                                    val answerAccentColor =
+                                                        when (assistantMode) {
+                                                            AssistantMode.EXERCISE ->
+                                                                Color(0xFF6D4AFF)
+
+                                                            AssistantMode.TRAININGS ->
+                                                                Color(0xFF0F88A8)
+
+                                                            AssistantMode.KMI_MATERIAL ->
+                                                                Color(0xFF2563EB)
+
+                                                            null ->
+                                                                Color(0xFF6D4AFF)
+                                                        }
+
+                                                    val answerBackgroundColor =
+                                                        when (assistantMode) {
+                                                            AssistantMode.EXERCISE ->
+                                                                Color(0xFFFCFAFF)
+
+                                                            AssistantMode.TRAININGS ->
+                                                                Color(0xFFF6FCFE)
+
+                                                            AssistantMode.KMI_MATERIAL ->
+                                                                Color(0xFFF7FAFF)
+
+                                                            null ->
+                                                                Color.White
+                                                        }
+
+                                                    Surface(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .border(
+                                                                width = 1.dp,
+                                                                color =
+                                                                    answerAccentColor.copy(
+                                                                        alpha = 0.28f
+                                                                    ),
+                                                                shape =
+                                                                    RoundedCornerShape(22.dp)
+                                                            ),
+                                                        shape = RoundedCornerShape(22.dp),
+                                                        color = answerBackgroundColor,
+                                                        tonalElevation = 0.dp,
+                                                        shadowElevation = 9.dp
+                                                    ) {
+                                                        Column(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(
+                                                                    horizontal = 15.dp,
+                                                                    vertical = 14.dp
+                                                                ),
+                                                            verticalArrangement =
+                                                                Arrangement.spacedBy(11.dp)
+                                                        ) {
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                verticalAlignment =
+                                                                    Alignment.CenterVertically,
+                                                                horizontalArrangement =
+                                                                    if (isEnglish) {
+                                                                        Arrangement.Start
+                                                                    } else {
+                                                                        Arrangement.End
+                                                                    }
+                                                            ) {
+                                                                if (isEnglish) {
+                                                                    Surface(
+                                                                        modifier = Modifier.size(32.dp),
+                                                                        shape = RoundedCornerShape(11.dp),
+                                                                        color = Color(0xFFEDE9FE)
+                                                                    ) {
+                                                                        Box(
+                                                                            contentAlignment =
+                                                                                Alignment.Center
+                                                                        ) {
+                                                                            Icon(
+                                                                                imageVector =
+                                                                                    Icons.Filled.AutoAwesome,
+                                                                                contentDescription = null,
+                                                                                tint = Color(0xFF6D4AFF),
+                                                                                modifier =
+                                                                                    Modifier.size(18.dp)
+                                                                            )
+                                                                        }
+                                                                    }
+
+                                                                    Spacer(Modifier.width(9.dp))
+                                                                }
+
+                                                                Text(
+                                                                    text = when (assistantMode) {
+                                                                        AssistantMode.EXERCISE ->
+                                                                            tr(
+                                                                                "הסבר לתרגיל",
+                                                                                "Exercise explanation"
+                                                                            )
+
+                                                                        AssistantMode.KMI_MATERIAL ->
+                                                                            tr(
+                                                                                "תוצאה מהמאגר",
+                                                                                "Database result"
+                                                                            )
+
+                                                                        else ->
+                                                                            tr(
+                                                                                "התשובה של יובל",
+                                                                                "Yuval's answer"
+                                                                            )
+                                                                    },
+                                                                    modifier = Modifier.weight(1f),
+                                                                    color = Color(0xFF302553),
+                                                                    fontSize = 14.sp,
+                                                                    lineHeight = 18.sp,
+                                                                    fontWeight = FontWeight.ExtraBold,
+                                                                    textAlign = textAlignPrimary
+                                                                )
+
+                                                                if (!isEnglish) {
+                                                                    Spacer(Modifier.width(9.dp))
+
+                                                                    Surface(
+                                                                        modifier = Modifier.size(32.dp),
+                                                                        shape = RoundedCornerShape(11.dp),
+                                                                        color = Color(0xFFEDE9FE)
+                                                                    ) {
+                                                                        Box(
+                                                                            contentAlignment =
+                                                                                Alignment.Center
+                                                                        ) {
+                                                                            Icon(
+                                                                                imageVector =
+                                                                                    Icons.Filled.AutoAwesome,
+                                                                                contentDescription = null,
+                                                                                tint = Color(0xFF6D4AFF),
+                                                                                modifier =
+                                                                                    Modifier.size(18.dp)
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .height(1.dp)
+                                                                    .background(
+                                                                        Color(0xFFE9E4F5)
+                                                                    )
+                                                            )
+
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                verticalAlignment =
+                                                                    Alignment.CenterVertically,
+                                                                horizontalArrangement =
+                                                                    if (isEnglish) {
+                                                                        Arrangement.Start
+                                                                    } else {
+                                                                        Arrangement.End
+                                                                    }
+                                                            ) {
+                                                                Surface(
+                                                                    shape = RoundedCornerShape(14.dp),
+                                                                    color = answerAccentColor.copy(
+                                                                        alpha = 0.09f
+                                                                    ),
+                                                                    border =
+                                                                        androidx.compose.foundation.BorderStroke(
+                                                                            width = 1.dp,
+                                                                            color =
+                                                                                answerAccentColor.copy(
+                                                                                    alpha = 0.20f
+                                                                                )
+                                                                        )
+                                                                ) {
+                                                                    Row(
+                                                                        modifier = Modifier.padding(
+                                                                            horizontal = 9.dp,
+                                                                            vertical = 6.dp
+                                                                        ),
+                                                                        verticalAlignment =
+                                                                            Alignment.CenterVertically
+                                                                    ) {
+                                                                        Icon(
+                                                                            imageVector =
+                                                                                Icons.Filled.AutoAwesome,
+                                                                            contentDescription = null,
+                                                                            tint = answerAccentColor,
+                                                                            modifier =
+                                                                                Modifier.size(14.dp)
+                                                                        )
+
+                                                                        Spacer(Modifier.width(5.dp))
+
+                                                                        Text(
+                                                                            text = tr(
+                                                                                "מבוסס על מאגר ק.מ.י",
+                                                                                "Based on the KAMI database"
+                                                                            ),
+                                                                            color = answerAccentColor,
+                                                                            fontSize = 10.sp,
+                                                                            lineHeight = 14.sp,
+                                                                            fontWeight =
+                                                                                FontWeight.Bold
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            resultQuality?.let { quality ->
+                                                                val qualityText = when (quality) {
+                                                                    AssistantResultQuality.EXACT ->
+                                                                        tr(
+                                                                            "נמצאה התאמה מדויקת",
+                                                                            "Exact match found"
+                                                                        )
+
+                                                                    AssistantResultQuality.RELEVANT ->
+                                                                        tr(
+                                                                            "נמצאה תוצאה רלוונטית",
+                                                                            "Relevant result found"
+                                                                        )
+
+                                                                    AssistantResultQuality.NEEDS_CLARIFICATION ->
+                                                                        tr(
+                                                                            "נדרש חידוד קצר",
+                                                                            "A little clarification is needed"
+                                                                        )
+
+                                                                    AssistantResultQuality.ERROR ->
+                                                                        tr(
+                                                                            "לא ניתן להשלים כרגע",
+                                                                            "Unable to complete right now"
+                                                                        )
+                                                                }
+
+                                                                val qualityColor = when (quality) {
+                                                                    AssistantResultQuality.EXACT ->
+                                                                        Color(0xFF15803D)
+
+                                                                    AssistantResultQuality.RELEVANT ->
+                                                                        Color(0xFF4F46E5)
+
+                                                                    AssistantResultQuality.NEEDS_CLARIFICATION ->
+                                                                        Color(0xFFB45309)
+
+                                                                    AssistantResultQuality.ERROR ->
+                                                                        Color(0xFFB42318)
+                                                                }
+
+                                                                Surface(
+                                                                    shape = RoundedCornerShape(14.dp),
+                                                                    color = qualityColor.copy(alpha = 0.10f),
+                                                                    border =
+                                                                        androidx.compose.foundation.BorderStroke(
+                                                                            width = 1.dp,
+                                                                            color = qualityColor.copy(
+                                                                                alpha = 0.25f
+                                                                            )
+                                                                        )
+                                                                ) {
+                                                                    Text(
+                                                                        text = qualityText,
+                                                                        modifier = Modifier.padding(
+                                                                            horizontal = 10.dp,
+                                                                            vertical = 6.dp
+                                                                        ),
+                                                                        color = qualityColor,
+                                                                        fontSize = 11.sp,
+                                                                        lineHeight = 15.sp,
+                                                                        fontWeight = FontWeight.Bold
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            Text(
+                                                                text = answerText,
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                color = Color(0xFF232333),
+                                                                textAlign = textAlignPrimary,
+                                                                fontSize = 14.sp,
+                                                                lineHeight = 21.sp,
+                                                                fontWeight = FontWeight.Normal
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                if (
+                                                    answerText.isNotBlank() &&
+                                                    latestUserMessage != null
+                                                ) {
+                                                    Column(
                                                         modifier = Modifier.fillMaxWidth(),
-                                                        color = MaterialTheme.colorScheme.onSurface,
-                                                        textAlign = textAlignPrimary,
-                                                        fontSize = 10.sp,
-                                                        lineHeight = 14.sp,
-                                                        fontWeight = FontWeight.Normal
-                                                    )
+                                                        verticalArrangement =
+                                                            Arrangement.spacedBy(9.dp)
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement =
+                                                                if (isEnglish) {
+                                                                    Arrangement.Start
+                                                                } else {
+                                                                    Arrangement.End
+                                                                },
+                                                            verticalAlignment =
+                                                                Alignment.CenterVertically
+                                                        ) {
+                                                            Surface(
+                                                                onClick = {
+                                                                    speakBest(
+                                                                        sanitizeAssistantTextForSpeech(
+                                                                            text = answerText,
+                                                                            isEnglish = isEnglish
+                                                                        )
+                                                                    )
+                                                                },
+                                                                shape = RoundedCornerShape(16.dp),
+                                                                color = Color(0xFFEDE9FE),
+                                                                border =
+                                                                    androidx.compose.foundation.BorderStroke(
+                                                                        width = 1.dp,
+                                                                        color = Color(0xFFD8CFFD)
+                                                                    )
+                                                            ) {
+                                                                Text(
+                                                                    text = tr(
+                                                                        "הקרא שוב",
+                                                                        "Read again"
+                                                                    ),
+                                                                    modifier = Modifier.padding(
+                                                                        horizontal = 12.dp,
+                                                                        vertical = 8.dp
+                                                                    ),
+                                                                    color = Color(0xFF5B43B4),
+                                                                    fontSize = 12.sp,
+                                                                    fontWeight = FontWeight.Bold
+                                                                )
+                                                            }
+
+                                                            Spacer(Modifier.width(8.dp))
+
+                                                            Surface(
+                                                                onClick = {
+                                                                    input = tr(
+                                                                        "בהמשך לתשובה, ",
+                                                                        "About this answer, "
+                                                                    )
+
+                                                                    scope.launch {
+                                                                        bringIntoViewRequester
+                                                                            .bringIntoView()
+                                                                    }
+                                                                },
+                                                                shape = RoundedCornerShape(16.dp),
+                                                                color = Color.White,
+                                                                border =
+                                                                    androidx.compose.foundation.BorderStroke(
+                                                                        width = 1.dp,
+                                                                        color = Color(0xFFD8CFFD)
+                                                                    )
+                                                            ) {
+                                                                Text(
+                                                                    text = tr(
+                                                                        "שאלת המשך",
+                                                                        "Follow-up question"
+                                                                    ),
+                                                                    modifier = Modifier.padding(
+                                                                        horizontal = 12.dp,
+                                                                        vertical = 8.dp
+                                                                    ),
+                                                                    color = Color(0xFF5B43B4),
+                                                                    fontSize = 12.sp,
+                                                                    fontWeight = FontWeight.Bold
+                                                                )
+                                                            }
+                                                        }
+
+                                                        if (followUpSuggestions.isNotEmpty()) {
+                                                            Text(
+                                                                text = tr(
+                                                                    "אפשר להמשיך מכאן:",
+                                                                    "You can continue from here:"
+                                                                ),
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                color = Color(0xFF667085),
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                textAlign = textAlignPrimary
+                                                            )
+
+                                                            FlowRow(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement =
+                                                                    Arrangement.spacedBy(7.dp),
+                                                                verticalArrangement =
+                                                                    Arrangement.spacedBy(7.dp)
+                                                            ) {
+                                                                followUpSuggestions.forEach {
+                                                                        suggestion ->
+                                                                    Surface(
+                                                                        onClick = {
+                                                                            saveAssistantCommandLog(
+                                                                                rawCommand =
+                                                                                    suggestion.query,
+                                                                                status =
+                                                                                    AssistantLogStatus
+                                                                                        .SUGGESTION_SELECTED,
+                                                                                alternatives =
+                                                                                    followUpSuggestions
+                                                                                        .map {
+                                                                                            it.query
+                                                                                        },
+                                                                                answer =
+                                                                                    lastAiAnswer
+                                                                            )
+
+                                                                            input = ""
+                                                                            sendQuestion(
+                                                                                suggestion.query
+                                                                            )
+                                                                        },
+                                                                        shape =
+                                                                            RoundedCornerShape(
+                                                                                17.dp
+                                                                            ),
+                                                                        color =
+                                                                            Color(0xFFF7F5FF),
+                                                                        border =
+                                                                            androidx.compose.foundation.BorderStroke(
+                                                                                width = 1.dp,
+                                                                                color =
+                                                                                    Color(
+                                                                                        0xFFCFC4F5
+                                                                                    )
+                                                                            ),
+                                                                        shadowElevation = 2.dp
+                                                                    ) {
+                                                                        Text(
+                                                                            text =
+                                                                                suggestion.label,
+                                                                            modifier =
+                                                                                Modifier.padding(
+                                                                                    horizontal =
+                                                                                        11.dp,
+                                                                                    vertical =
+                                                                                        8.dp
+                                                                                ),
+                                                                            color =
+                                                                                Color(
+                                                                                    0xFF4C3A80
+                                                                                ),
+                                                                            fontSize = 12.sp,
+                                                                            lineHeight = 16.sp,
+                                                                            fontWeight =
+                                                                                FontWeight.Bold
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
                                                 }
 
                                                 if (answerIndex >= 0) {
@@ -2637,55 +3825,312 @@ fun AiAssistantDialog(
                     )
 
                     val liveAssistantStatus = when {
-                        // ✅ בזמן דיבור כבר יש Equalizer מעל שדה ההקלדה,
-                        // לכן לא מציגים שוב מלבן נוסף עם "מדבר..."
-                        isThinking -> tr("מעבד…", "Processing…")
-                        isListening -> tr("מקשיב…", "Listening…")
-                        else -> speechStatusMessage
+                        isThinking && assistantMode == AssistantMode.EXERCISE ->
+                            tr(
+                                "מאתר את התרגיל ובודק את ההסבר המתאים…",
+                                "Finding the exercise and checking the best explanation…"
+                            )
+
+                        isThinking && assistantMode == AssistantMode.KMI_MATERIAL ->
+                            tr(
+                                "מחפש בחומר ק.מ.י ומדרג את התוצאות…",
+                                "Searching KAMI material and ranking the results…"
+                            )
+
+                        isThinking && assistantMode == AssistantMode.TRAININGS ->
+                            tr(
+                                "בודק את פרטי המשתמש והאימונים הקרובים…",
+                                "Checking your profile and upcoming trainings…"
+                            )
+
+                        isThinking ->
+                            tr(
+                                "מבין את הבקשה ומכין תשובה…",
+                                "Understanding your request and preparing an answer…"
+                            )
+
+                        isListening ->
+                            tr(
+                                "מקשיב — אפשר לדבר באופן טבעי…",
+                                "Listening — you can speak naturally…"
+                            )
+
+                        else ->
+                            speechStatusMessage
                     }
 
                     if (!liveAssistantStatus.isNullOrBlank()) {
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 2.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                                .padding(horizontal = 12.dp, vertical = 3.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            color = when {
+                                speechNeedsConfirmation ->
+                                    Color(0xFFFFF8E7)
+
+                                speechStatusMessage != null ->
+                                    Color(0xFFFFF1F2)
+
+                                isListening ->
+                                    Color(0xFFF0EDFF)
+
+                                else ->
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
+                            },
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = 1.dp,
+                                color = when {
+                                    speechNeedsConfirmation ->
+                                        Color(0xFFF2C94C).copy(alpha = 0.65f)
+
+                                    speechStatusMessage != null ->
+                                        Color(0xFFFCA5A5).copy(alpha = 0.75f)
+
+                                    else ->
+                                        Color(0xFFDDD6FE)
+                                }
+                            ),
                             tonalElevation = 0.dp,
-                            shadowElevation = 2.dp
+                            shadowElevation = 4.dp
                         ) {
-                            Text(
-                                text = liveAssistantStatus,
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                color = when {
-                                    speechStatusMessage != null -> MaterialTheme.colorScheme.error
-                                    isListening -> MaterialTheme.colorScheme.primary
-                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                textAlign = textAlignPrimary
-                            )
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement =
+                                        if (isEnglish) {
+                                            Arrangement.Start
+                                        } else {
+                                            Arrangement.End
+                                        }
+                                ) {
+                                    if (isEnglish) {
+                                        Surface(
+                                            modifier = Modifier.size(30.dp),
+                                            shape = CircleShape,
+                                            color = Color(0xFFEDE9FE)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector =
+                                                        Icons.Filled.AutoAwesome,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF6D4AFF),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(Modifier.width(9.dp))
+                                    }
+
+                                    Text(
+                                        text = liveAssistantStatus,
+                                        modifier = Modifier.weight(1f),
+                                        color = when {
+                                            speechNeedsConfirmation ->
+                                                Color(0xFF8A5A00)
+
+                                            speechStatusMessage != null ->
+                                                Color(0xFFB42318)
+
+                                            isListening ->
+                                                Color(0xFF6246B5)
+
+                                            else ->
+                                                MaterialTheme.colorScheme
+                                                    .onSurfaceVariant
+                                        },
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = textAlignPrimary
+                                    )
+
+                                    if (isThinking || isListening) {
+                                        Spacer(Modifier.width(8.dp))
+
+                                        val statusTransition =
+                                            rememberInfiniteTransition(
+                                                label = "assistantStatusDots"
+                                            )
+
+                                        val statusDotAlpha by
+                                        statusTransition.animateFloat(
+                                            initialValue = 0.30f,
+                                            targetValue = 1f,
+                                            animationSpec = infiniteRepeatable(
+                                                animation = tween(550),
+                                                repeatMode = RepeatMode.Reverse
+                                            ),
+                                            label = "assistantStatusDotAlpha"
+                                        )
+
+                                        Row(
+                                            verticalAlignment =
+                                                Alignment.CenterVertically
+                                        ) {
+                                            repeat(3) { index ->
+                                                Box(
+                                                    modifier = Modifier
+                                                        .padding(horizontal = 2.dp)
+                                                        .size((5 + index).dp)
+                                                        .background(
+                                                            color =
+                                                                Color(0xFF6D4AFF).copy(
+                                                                    alpha =
+                                                                        if (index == 1) {
+                                                                            statusDotAlpha
+                                                                        } else {
+                                                                            0.45f
+                                                                        }
+                                                                ),
+                                                            shape = CircleShape
+                                                        )
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (!isEnglish) {
+                                        Spacer(Modifier.width(9.dp))
+
+                                        Surface(
+                                            modifier = Modifier.size(30.dp),
+                                            shape = CircleShape,
+                                            color = Color(0xFFEDE9FE)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector =
+                                                        Icons.Filled.AutoAwesome,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF6D4AFF),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (
+                                    speechNeedsConfirmation &&
+                                    speechAlternatives.isNotEmpty()
+                                ) {
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                                    ) {
+                                        speechAlternatives.forEach { alternative ->
+                                            Surface(
+                                                modifier = Modifier.clickable {
+                                                    val selectedText =
+                                                        alternative.text.trim()
+
+                                                    speechAlternatives = emptyList()
+                                                    speechNeedsConfirmation = false
+                                                    speechCanRetry = false
+                                                    speechStatusMessage = null
+                                                    input = selectedText
+                                                    pendingSendFromStt = selectedText
+                                                },
+                                                shape = RoundedCornerShape(16.dp),
+                                                color = Color.White,
+                                                border = androidx.compose.foundation.BorderStroke(
+                                                    width = 1.dp,
+                                                    color = Color(0xFFB8A9E8)
+                                                ),
+                                                shadowElevation = 2.dp
+                                            ) {
+                                                Text(
+                                                    text = alternative.text,
+                                                    modifier = Modifier.padding(
+                                                        horizontal = 11.dp,
+                                                        vertical = 8.dp
+                                                    ),
+                                                    color = Color(0xFF4C3A80),
+                                                    fontSize = 12.sp,
+                                                    lineHeight = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = textAlignPrimary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (speechCanRetry && !isListening) {
+                                    Surface(
+                                        onClick = {
+                                            speechAlternatives = emptyList()
+                                            speechNeedsConfirmation = false
+                                            speechCanRetry = false
+                                            speechStatusMessage = null
+                                            pendingSendFromStt = null
+
+                                            if (hasRecordAudioPermission()) {
+                                                pendingStartStt = true
+                                            } else {
+                                                recordAudioPermissionLauncher.launch(
+                                                    Manifest.permission.RECORD_AUDIO
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier.align(
+                                            if (isEnglish) {
+                                                Alignment.Start
+                                            } else {
+                                                Alignment.End
+                                            }
+                                        ),
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = Color(0xFF6D4AFF)
+                                    ) {
+                                        Text(
+                                            text = tr(
+                                                "נסה שוב עם המיקרופון",
+                                                "Try again with the microphone"
+                                            ),
+                                            modifier = Modifier.padding(
+                                                horizontal = 13.dp,
+                                                vertical = 8.dp
+                                            ),
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
                     if (assistantMode != null) {
                         val inputEnabled = !isThinking
-                        val inputScrollState = rememberScrollState()
+                        val inputShape = RoundedCornerShape(26.dp)
 
                         Surface(
-                            shape = RoundedCornerShape(999.dp),
+                            shape = inputShape,
                             tonalElevation = 0.dp,
-                            shadowElevation = 10.dp,
-                            color = Color.White.copy(alpha = 0.96f),
+                            shadowElevation = 12.dp,
+                            color = Color.White.copy(alpha = 0.97f),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                                 .border(
                                     width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
-                                    shape = RoundedCornerShape(999.dp)
+                                    color = when {
+                                        isListening -> Color(0xFF8B5CF6)
+                                        isThinking -> Color(0xFFC4B5FD)
+                                        else -> Color(0xFFDDD6FE)
+                                    },
+                                    shape = inputShape
                                 )
                         ) {
                         Row(
@@ -2780,26 +4225,22 @@ fun AiAssistantDialog(
                                 value = input,
                                 onValueChange = {
                                     if (!inputEnabled) return@TextField
-
                                     input = it
-                                    scope.launch {
-                                        inputScrollState.scrollTo(inputScrollState.maxValue)
-                                    }
                                 },
                                 enabled = inputEnabled,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .heightIn(min = 44.dp, max = 68.dp)
-                                    .verticalScroll(inputScrollState)
+                                    .heightIn(min = 52.dp, max = 118.dp)
                                     .bringIntoViewRequester(bringIntoViewRequester)
-                                    .onFocusEvent { f ->
-                                        if (f.isFocused) {
+                                    .onFocusEvent { focusState ->
+                                        if (focusState.isFocused) {
                                             scope.launch {
                                                 bringIntoViewRequester.bringIntoView()
                                             }
                                         }
                                     },
-                                maxLines = 2,
+                                minLines = 1,
+                                maxLines = 4,
                                 singleLine = false,
                                 placeholder = {
                                     Text(

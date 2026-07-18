@@ -1,5 +1,16 @@
 package il.kmi.app.ui.assistant.core
 
+/**
+ * ציון פנימי של כוונה אפשרית.
+ *
+ * המחלקה פרטית לקובץ משום שהיא משמשת רק
+ * להשוואה בין תרגילים, חומר ואימונים.
+ */
+private data class AssistantIntentScore(
+    val intent: AssistantIntent,
+    val score: Int
+)
+
 object AssistantIntentDetector {
 
     private fun normalize(text: String): String {
