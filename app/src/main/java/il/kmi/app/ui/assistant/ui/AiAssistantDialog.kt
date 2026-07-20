@@ -1235,8 +1235,11 @@ fun AiAssistantDialog(
     var pendingStartStt by remember { mutableStateOf(false) }
     var currentListeningSessionId by remember { mutableStateOf(0L) }
 
-// מאפשר שיחה קולית רציפה כמו ChatGPT
-    val autoVoiceConversation = true
+    /*
+     * המיקרופון מופעל רק בלחיצה מפורשת של המשתמש.
+     * לאחר סיום הדיבור או הקראת התשובה הוא נשאר כבוי.
+     */
+    val autoVoiceConversation = false
 
     val dynamicInputPlaceholder = remember(assistantMode, isEnglish, isListening, isSpeaking) {
         when {
@@ -1360,8 +1363,22 @@ fun AiAssistantDialog(
     }
 
     fun stopListeningHard() {
+        /*
+         * מבטלים גם בקשת הפעלה שעדיין ממתינה, למשל לאחר
+         * קבלת הרשאת מיקרופון או לאחר סיום הקראת תשובה.
+         */
+        pendingStartStt = false
         isListening = false
+
+        /*
+         * שינוי המזהה מבטל גם את משימת פסק הזמן
+         * של סשן ההאזנה הקודם.
+         */
+        currentListeningSessionId += 1L
+
+        runCatching { speechRecognizer?.stopListening() }
         runCatching { speechRecognizer?.cancel() }
+
         hideKeyboardHard()
     }
 
@@ -1583,14 +1600,32 @@ fun AiAssistantDialog(
             override fun onEvent(eventType: Int, params: Bundle?) {}
 
             override fun onEndOfSpeech() {
+                /*
+                 * מפסיקים את הקלט מיד כשהמנוע מזהה שהמשתמש
+                 * סיים לדבר. לא משתמשים כאן ב-cancel כדי
+                 * לא לאבד את התוצאות שמגיעות לאחר מכן.
+                 */
                 isListening = false
-                try {
+
+                runCatching {
                     speechRecognizer?.stopListening()
-                } catch (_: Throwable) {}
+                }
             }
 
             override fun onError(error: Int) {
+                pendingStartStt = false
                 isListening = false
+                currentListeningSessionId += 1L
+
+                /*
+                 * לאחר שגיאה אין סיבה להשאיר סשן הקלט פעיל.
+                 * ERROR_CLIENT יכול להיווצר בעצמו מפעולת ביטול,
+                 * ולכן לא מבטלים פעם נוספת במקרה הזה.
+                 */
+                if (error != SpeechRecognizer.ERROR_CLIENT) {
+                    runCatching { speechRecognizer?.cancel() }
+                }
+
                 speechNeedsConfirmation = false
                 speechAlternatives = emptyList()
 
@@ -1664,7 +1699,15 @@ fun AiAssistantDialog(
             }
 
             override fun onResults(results: Bundle) {
+                /*
+                 * התוצאות התקבלו ולכן ניתן לסגור לחלוטין
+                 * את סשן ההאזנה בלי לסכן את המלל שזוהה.
+                 */
+                pendingStartStt = false
                 isListening = false
+                currentListeningSessionId += 1L
+                runCatching { speechRecognizer?.cancel() }
+
                 speechStatusMessage = null
                 speechCanRetry = false
 
@@ -1824,10 +1867,17 @@ fun AiAssistantDialog(
         runCatching {
             speechRecognizer?.startListening(intent)
         }.onFailure {
+            pendingStartStt = false
             isListening = false
+            currentListeningSessionId += 1L
+            runCatching { speechRecognizer?.cancel() }
+
             Toast.makeText(
                 ctx,
-                tr("לא ניתן להפעיל את המיקרופון כרגע", "Unable to start microphone right now"),
+                tr(
+                    "לא ניתן להפעיל את המיקרופון כרגע",
+                    "Unable to start microphone right now"
+                ),
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -1835,9 +1885,17 @@ fun AiAssistantDialog(
         val listeningSessionId = currentListeningSessionId
 
         mainHandler.postDelayed({
-            if (isListening && currentListeningSessionId == listeningSessionId) {
-                isListening = false
-                runCatching { speechRecognizer?.cancel() }
+            if (
+                isListening &&
+                currentListeningSessionId == listeningSessionId
+            ) {
+                stopListeningHard()
+
+                speechCanRetry = true
+                speechStatusMessage = tr(
+                    "ההאזנה הסתיימה אוטומטית. אפשר ללחוץ על המיקרופון ולנסות שוב.",
+                    "Listening stopped automatically. Tap the microphone to try again."
+                )
             }
         }, 12_000L)
     }

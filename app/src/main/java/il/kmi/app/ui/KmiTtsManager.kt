@@ -66,8 +66,18 @@ object KmiTtsManager {
     // ✅ state פנימי
     @Volatile private var appCtx: Context? = null
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     private var inFlightJob: kotlinx.coroutines.Job? = null
+
+    /*
+     * מזהה חד־ערכי של ההקראה הפעילה.
+     * הוא מונע מהקראה ישנה שהופסקה לסגור בטעות
+     * את אנימציית הדיבור של הקראה חדשה.
+     */
+    @Volatile
+    private var speechGeneration: Long = 0L
 
     // ✅ ExoPlayer
     private var exo: ExoPlayer? = null
@@ -119,10 +129,19 @@ object KmiTtsManager {
     }
 
     fun stop() {
+        /*
+         * מבטלים את תוקף ההקראה הקודמת לפני עצירת הנגן.
+         * כך callback מאוחר שלה לא ישפיע על הקראה חדשה.
+         */
+        speechGeneration += 1L
+
         val job = inFlightJob
         inFlightJob = null
+
         if (job != null) {
-            scope.launch { runCatching { job.cancelAndJoin() } }
+            scope.launch {
+                runCatching { job.cancelAndJoin() }
+            }
         }
 
         runCatching { exo?.stop() }
@@ -133,20 +152,50 @@ object KmiTtsManager {
     }
 
     fun speak(text: String) {
-        val ctx = appCtx ?: return
+        /*
+         * שומרים את ה-listener לפני stop().
+         * stop() מנקה את ה-listener הגלובלי ולכן בלי השמירה
+         * הזאת המסך לא מקבל הודעת סיום.
+         */
+        val completionCallback = onSpeechCompleted
+        onSpeechCompleted = null
 
-        val clean = normalizeForTts(text).trim()
-        if (clean.isBlank()) return
-
-        val now = android.os.SystemClock.elapsedRealtime()
-        val h = clean.hashCode()
-        if (h == lastSpeakHash && (now - lastSpeakAtMs) <= DUP_WINDOW_MS) {
+        val ctx = appCtx
+        if (ctx == null) {
+            completionCallback?.invoke()
             return
         }
-        lastSpeakHash = h
+
+        val clean = normalizeForTts(text).trim()
+        if (clean.isBlank()) {
+            completionCallback?.invoke()
+            return
+        }
+
+        val now = android.os.SystemClock.elapsedRealtime()
+        val hash = clean.hashCode()
+
+        if (
+            hash == lastSpeakHash &&
+            now - lastSpeakAtMs <= DUP_WINDOW_MS
+        ) {
+            /*
+             * גם במקרה של מניעת דיבור כפול חייבים להודיע
+             * למסך שהפעולה הסתיימה.
+             */
+            completionCallback?.invoke()
+            return
+        }
+
+        lastSpeakHash = hash
         lastSpeakAtMs = now
 
         stop()
+
+        /*
+         * לאחר stop() זהו המזהה של ההקראה החדשה.
+         */
+        val requestGeneration = speechGeneration
 
         val voice = currentVoiceKey(ctx)
         val speakingRate = defaultSpeakingRate
@@ -155,7 +204,12 @@ object KmiTtsManager {
         inFlightJob = scope.launch {
             try {
                 chunks.forEachIndexed { index, chunk ->
-                    val mp3 = fetchOrGetCachedMp3(ctx, chunk, voice, speakingRate)
+                    val mp3 = fetchOrGetCachedMp3(
+                        ctx = ctx,
+                        text = chunk,
+                        voice = voice,
+                        speakingRate = speakingRate
+                    )
 
                     playMp3Await(mp3)
 
@@ -166,16 +220,27 @@ object KmiTtsManager {
                             chunk.endsWith(".") -> 140L
                             else -> 80L
                         }
+
                         delay(pause)
                     }
                 }
-
-                val callback = onSpeechCompleted
-                onSpeechCompleted = null
-                callback?.invoke()
-
             } catch (_: Throwable) {
-                // TTS failure should not crash or block the app.
+                /*
+                 * גם כשל בהורדה או בניגון צריך לסיים
+                 * מיד את מצב "מדבר..." במסך.
+                 */
+            } finally {
+                val isCurrentRequest =
+                    requestGeneration == speechGeneration
+
+                if (isCurrentRequest) {
+                    inFlightJob = null
+
+                    runCatching { exo?.release() }
+                    exo = null
+
+                    completionCallback?.invoke()
+                }
             }
         }
     }
@@ -375,8 +440,24 @@ object KmiTtsManager {
     }
 
     private fun normalizeForTts(text: String): String {
-        return text
-            .replace(Regex("""(?m)^\s*\d+\.\s*"""), "")
+        if (text.isBlank()) return ""
+
+        val containsHebrew =
+            Regex("[\\u0590-\\u05FF]").containsMatchIn(text)
+
+        var result = removeTechnicalContent(text)
+
+        if (containsHebrew) {
+            /*
+             * ממירים קודם תאריכים ורק לאחר מכן שעות,
+             * לפני שמחליפים נקודתיים וסימני פיסוק.
+             */
+            result = replaceHebrewDates(result)
+            result = replaceHebrewTimes(result)
+        }
+
+        return result
+            .replace(Regex("""(?m)^\s*\d+[.)]\s*"""), "")
             .replace("שלום,", "שַלוֹם,")
             .replace("יובל", "יוּבָל")
             .replace("•", ". ")
@@ -390,7 +471,411 @@ object KmiTtsManager {
             .replace("K.M.I", "KAMI", ignoreCase = true)
             .replace("K M I", "KAMI", ignoreCase = true)
             .replace("קמי", "קָמִי")
+            .replace(Regex("\\.{2,}"), ". ")
             .replace(Regex("\\s+"), " ")
             .trim()
+    }
+
+    /*
+     * מסיר מידע טכני שאינו מיועד להקראה:
+     * Markdown, קוד, JSON, כתובות אינטרנט ותגיות HTML.
+     */
+    private fun removeTechnicalContent(text: String): String {
+        var cleaned = text
+            // בלוקי קוד Markdown מלאים.
+            .replace(
+                Regex(
+                    pattern = "```[\\s\\S]*?```",
+                    option = RegexOption.IGNORE_CASE
+                ),
+                " "
+            )
+            // קוד קצר שמופיע בין backticks.
+            .replace(Regex("`[^`\\n]+`"), " ")
+            // קישורי Markdown: שומרים רק את הכותרת.
+            .replace(
+                Regex("\\[([^\\]]+)]\\([^)]*\\)")
+            ) { match ->
+                match.groupValues.getOrNull(1).orEmpty()
+            }
+            // כתובות אינטרנט אינן שימושיות בהקראה קולית.
+            .replace(
+                Regex(
+                    "https?://\\S+|www\\.\\S+",
+                    RegexOption.IGNORE_CASE
+                ),
+                " "
+            )
+            // תגיות HTML.
+            .replace(Regex("<[^>]+>"), " ")
+
+        cleaned = cleaned
+            .lineSequence()
+            .filterNot { line -> looksLikeCodeLine(line) }
+            .joinToString("\n")
+
+        return cleaned.trim()
+    }
+
+    private fun looksLikeCodeLine(rawLine: String): Boolean {
+        val line = rawLine.trim()
+
+        if (line.isBlank()) return false
+
+        val lowercaseLine = line.lowercase(Locale.ROOT)
+
+        val codePrefixes = listOf(
+            "package ",
+            "import ",
+            "class ",
+            "object ",
+            "interface ",
+            "enum class ",
+            "fun ",
+            "private fun ",
+            "public fun ",
+            "internal fun ",
+            "protected fun ",
+            "override fun ",
+            "val ",
+            "var ",
+            "const val ",
+            "private val ",
+            "private var ",
+            "return ",
+            "when (",
+            "if (",
+            "else {",
+            "try {",
+            "catch (",
+            "@composable",
+            "@override"
+        )
+
+        if (codePrefixes.any { lowercaseLine.startsWith(it) }) {
+            return true
+        }
+
+        if (
+            line == "{" ||
+            line == "}" ||
+            line == "}," ||
+            line == "]," ||
+            line == ");" ||
+            line == ") {"
+        ) {
+            return true
+        }
+
+        val looksLikeJsonProperty =
+            Regex("""^["'][^"']+["']\s*:\s*.+[,}]?$""")
+                .matches(line)
+
+        if (looksLikeJsonProperty) return true
+
+        val hasCodeAssignment =
+            Regex("""\b(val|var|const)\s+\w+\s*=""")
+                .containsMatchIn(line)
+
+        if (hasCodeAssignment) return true
+
+        val hasFunctionCallSyntax =
+            line.contains("(") &&
+                    line.contains(")") &&
+                    (
+                            line.endsWith("{") ||
+                                    line.endsWith(";") ||
+                                    line.contains("?.") ||
+                                    line.contains("::")
+                            )
+
+        return hasFunctionCallSyntax
+    }
+
+    // ------------------------------------------------------------
+    // Natural Hebrew dates
+    // ------------------------------------------------------------
+
+    private fun replaceHebrewDates(text: String): String {
+        var result = text
+
+        /*
+         * תאריך ישראלי:
+         * 20/07/2026
+         * 20-07-2026
+         * 20.07.2026
+         */
+        result = result.replace(
+            Regex(
+                """(?<!\d)(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?!\d)"""
+            )
+        ) { match ->
+            val day = match.groupValues[1].toIntOrNull()
+            val month = match.groupValues[2].toIntOrNull()
+            val year = match.groupValues[3].toIntOrNull()
+
+            buildHebrewDate(
+                day = day,
+                month = month,
+                year = year,
+                original = match.value
+            )
+        }
+
+        /*
+         * תאריך ISO:
+         * 2026-07-20
+         */
+        result = result.replace(
+            Regex(
+                """(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)"""
+            )
+        ) { match ->
+            val year = match.groupValues[1].toIntOrNull()
+            val month = match.groupValues[2].toIntOrNull()
+            val day = match.groupValues[3].toIntOrNull()
+
+            buildHebrewDate(
+                day = day,
+                month = month,
+                year = year,
+                original = match.value
+            )
+        }
+
+        return result
+    }
+
+    private fun buildHebrewDate(
+        day: Int?,
+        month: Int?,
+        year: Int?,
+        original: String
+    ): String {
+        if (
+            day == null ||
+            month == null ||
+            year == null ||
+            day !in 1..31 ||
+            month !in 1..12
+        ) {
+            return original
+        }
+
+        val monthName = hebrewGregorianMonth(month)
+            ?: return original
+
+        val spokenDay = hebrewCardinalNumber(day)
+        val spokenYear = hebrewCardinalNumber(year)
+
+        return "$spokenDay ב$monthName, $spokenYear"
+    }
+
+    private fun hebrewGregorianMonth(month: Int): String? {
+        return when (month) {
+            1 -> "ינואר"
+            2 -> "פברואר"
+            3 -> "מרץ"
+            4 -> "אפריל"
+            5 -> "מאי"
+            6 -> "יוני"
+            7 -> "יולי"
+            8 -> "אוגוסט"
+            9 -> "ספטמבר"
+            10 -> "אוקטובר"
+            11 -> "נובמבר"
+            12 -> "דצמבר"
+            else -> null
+        }
+    }
+
+    // ------------------------------------------------------------
+    // Natural Hebrew times
+    // ------------------------------------------------------------
+
+    private fun replaceHebrewTimes(text: String): String {
+        return text.replace(
+            Regex(
+                """(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?!\d)"""
+            )
+        ) { match ->
+            val hour = match.groupValues[1].toIntOrNull()
+            val minute = match.groupValues[2].toIntOrNull()
+
+            if (hour == null || minute == null) {
+                match.value
+            } else {
+                buildNaturalHebrewTime(
+                    hour24 = hour,
+                    minute = minute
+                )
+            }
+        }
+    }
+
+    private fun buildNaturalHebrewTime(
+        hour24: Int,
+        minute: Int
+    ): String {
+        val hour12 = when {
+            hour24 == 0 -> 12
+            hour24 > 12 -> hour24 - 12
+            else -> hour24
+        }
+
+        val spokenHour = hebrewHour(hour12)
+
+        val spokenMinute = when (minute) {
+            0 -> ""
+            15 -> " ורבע"
+            30 -> " וחצי"
+            else -> {
+                val minuteText = hebrewCardinalNumber(minute)
+                " ו$minuteText דקות"
+            }
+        }
+
+        val period = when (hour24) {
+            in 0..4 -> "בלילה"
+            in 5..11 -> "בבוקר"
+            in 12..16 -> "בצהריים"
+            in 17..20 -> "בערב"
+            else -> "בלילה"
+        }
+
+        return "$spokenHour$spokenMinute $period"
+    }
+
+    /*
+     * שעות בעברית נאמרות בלשון נקבה:
+     * אחת, שתיים, שלוש וכן הלאה.
+     */
+    private fun hebrewHour(hour: Int): String {
+        return when (hour) {
+            1 -> "אחת"
+            2 -> "שתיים"
+            3 -> "שלוש"
+            4 -> "ארבע"
+            5 -> "חמש"
+            6 -> "שש"
+            7 -> "שבע"
+            8 -> "שמונה"
+            9 -> "תשע"
+            10 -> "עשר"
+            11 -> "אחת עשרה"
+            12 -> "שתים עשרה"
+            else -> hour.toString()
+        }
+    }
+
+    // ------------------------------------------------------------
+    // Hebrew numbers
+    // ------------------------------------------------------------
+
+    private fun hebrewCardinalNumber(number: Int): String {
+        if (number < 0) {
+            return "מינוס ${hebrewCardinalNumber(-number)}"
+        }
+
+        if (number == 0) return "אפס"
+
+        if (number < 100) {
+            return hebrewNumberBelowOneHundred(number)
+        }
+
+        if (number < 1_000) {
+            val hundreds = number / 100
+            val remainder = number % 100
+
+            val hundredsText = when (hundreds) {
+                1 -> "מאה"
+                2 -> "מאתיים"
+                3 -> "שלוש מאות"
+                4 -> "ארבע מאות"
+                5 -> "חמש מאות"
+                6 -> "שש מאות"
+                7 -> "שבע מאות"
+                8 -> "שמונה מאות"
+                9 -> "תשע מאות"
+                else -> ""
+            }
+
+            return if (remainder == 0) {
+                hundredsText
+            } else {
+                "$hundredsText ו${hebrewNumberBelowOneHundred(remainder)}"
+            }
+        }
+
+        if (number < 10_000) {
+            val thousands = number / 1_000
+            val remainder = number % 1_000
+
+            val thousandsText = when (thousands) {
+                1 -> "אלף"
+                2 -> "אלפיים"
+                3 -> "שלושת אלפים"
+                4 -> "ארבעת אלפים"
+                5 -> "חמשת אלפים"
+                6 -> "ששת אלפים"
+                7 -> "שבעת אלפים"
+                8 -> "שמונת אלפים"
+                9 -> "תשעת אלפים"
+                else -> ""
+            }
+
+            return if (remainder == 0) {
+                thousandsText
+            } else {
+                "$thousandsText ו${hebrewCardinalNumber(remainder)}"
+            }
+        }
+
+        return number.toString()
+    }
+
+    private fun hebrewNumberBelowOneHundred(number: Int): String {
+        if (number !in 0..99) return number.toString()
+
+        val directNumbers = mapOf(
+            0 to "אפס",
+            1 to "אחד",
+            2 to "שניים",
+            3 to "שלושה",
+            4 to "ארבעה",
+            5 to "חמישה",
+            6 to "שישה",
+            7 to "שבעה",
+            8 to "שמונה",
+            9 to "תשעה",
+            10 to "עשרה",
+            11 to "אחד עשר",
+            12 to "שנים עשר",
+            13 to "שלושה עשר",
+            14 to "ארבעה עשר",
+            15 to "חמישה עשר",
+            16 to "שישה עשר",
+            17 to "שבעה עשר",
+            18 to "שמונה עשר",
+            19 to "תשעה עשר",
+            20 to "עשרים",
+            30 to "שלושים",
+            40 to "ארבעים",
+            50 to "חמישים",
+            60 to "שישים",
+            70 to "שבעים",
+            80 to "שמונים",
+            90 to "תשעים"
+        )
+
+        directNumbers[number]?.let { return it }
+
+        val tens = number / 10 * 10
+        val units = number % 10
+
+        val tensText = directNumbers[tens].orEmpty()
+        val unitsText = directNumbers[units].orEmpty()
+
+        return "$tensText ו$unitsText"
     }
 }

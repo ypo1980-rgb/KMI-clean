@@ -5,6 +5,7 @@ import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.ui.assistant.utils.HebrewNormalize
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 import kotlin.math.min
 
@@ -18,43 +19,112 @@ import kotlin.math.min
 
 class AssistantMemory(private val sp: SharedPreferences) {
 
-    fun setLastBranch(v: String?) =
-        sp.edit().putString("branch", v).apply()
+    /**
+     * פרטי הרישום האמיתיים של המשתמש.
+     * העוזר רשאי לקרוא אותם, אך לעולם אינו כותב אליהם.
+     */
+    fun getRegisteredBranch(): String? =
+        listOf(
+            "branch",
+            "branch_name",
+            "selected_branch",
+            "user_branch",
+            "training_branch"
+        )
+            .firstNotNullOfOrNull { key ->
+                sp.getString(key, null)
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+            }
+
+    fun getRegisteredGroup(): String? =
+        listOf(
+            "group",
+            "group_name",
+            "selected_group",
+            "user_group",
+            "training_group"
+        )
+            .firstNotNullOfOrNull { key ->
+                sp.getString(key, null)
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+            }
+
+    /**
+     * זיכרון שיחה נפרד. הוא אינו משנה את פרופיל המשתמש.
+     */
+    fun setLastBranch(v: String?) {
+        sp.edit()
+            .putString(
+                "assistant_context_branch",
+                v?.trim()?.takeIf { it.isNotBlank() }
+            )
+            .apply()
+    }
 
     fun getLastBranch(): String? =
-        sp.getString("branch", null)
-            ?: sp.getString("branch_name", null)
-            ?: sp.getString("selected_branch", null)
-            ?: sp.getString("user_branch", null)
-            ?: sp.getString("training_branch", null)
+        sp.getString("assistant_context_branch", null)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: getRegisteredBranch()
 
-    fun setLastGroup(v: String?) =
-        sp.edit().putString("group", v).apply()
+    fun setLastGroup(v: String?) {
+        sp.edit()
+            .putString(
+                "assistant_context_group",
+                v?.trim()?.takeIf { it.isNotBlank() }
+            )
+            .apply()
+    }
 
     fun getLastGroup(): String? =
-        sp.getString("group", null)
-            ?: sp.getString("group_name", null)
-            ?: sp.getString("selected_group", null)
-            ?: sp.getString("user_group", null)
-            ?: sp.getString("training_group", null)
+        sp.getString("assistant_context_group", null)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: getRegisteredGroup()
 
-    fun setLastDay(v: String?) =
-        sp.edit().putString("day", v).apply()
+    fun setLastDay(v: String?) {
+        sp.edit()
+            .putString(
+                "assistant_context_day",
+                v?.trim()?.takeIf { it.isNotBlank() }
+            )
+            .apply()
+    }
 
     fun getLastDay(): String? =
-        sp.getString("day", null)
+        sp.getString("assistant_context_day", null)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
 
-    // פונקציה ישנה שהוסרה — נשמרת כדי לא לשבור קוד קיים
-    fun getLastRegion(): String? = null
+    fun getLastRegion(): String? =
+        listOf(
+            "region",
+            "region_name",
+            "user_region",
+            "selected_region"
+        )
+            .firstNotNullOfOrNull { key ->
+                sp.getString(key, null)
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+            }
 
-    fun setLastIntent(v: String?) =
-        sp.edit().putString("assistant_last_intent", v).apply()
+    fun setLastIntent(v: String?) {
+        sp.edit()
+            .putString("assistant_last_intent", v)
+            .apply()
+    }
 
     fun getLastIntent(): String? =
         sp.getString("assistant_last_intent", null)
 
-    fun setLastAnswerContext(v: String?) =
-        sp.edit().putString("assistant_last_answer", v).apply()
+    fun setLastAnswerContext(v: String?) {
+        sp.edit()
+            .putString("assistant_last_answer", v)
+            .apply()
+    }
 
     fun getLastAnswerContext(): String? =
         sp.getString("assistant_last_answer", null)
@@ -63,9 +133,9 @@ class AssistantMemory(private val sp: SharedPreferences) {
         sp.edit()
             .remove("assistant_last_intent")
             .remove("assistant_last_answer")
-            .remove("branch")
-            .remove("group")
-            .remove("day")
+            .remove("assistant_context_branch")
+            .remove("assistant_context_group")
+            .remove("assistant_context_day")
             .apply()
     }
 }
@@ -141,6 +211,7 @@ enum class AssistantIntent {
     ASK_LOCATION,
     ASK_DURATION,
     ASK_EQUIPMENT,
+    ASK_GROUPS_AND_LEVELS,
     ASK_GENERAL,
     ASK_WEEKLY_COUNT,
     ASK_SPECIAL_WEEK,
@@ -256,33 +327,295 @@ object IntentDetector {
     )
 
     fun detectIntent(norm: String): AssistantIntent {
-        // ✅ "מתי האימון הבא" / "when is the next training" => NEXT_TRAINING
-        val asksWhen = ("מתי" in norm) ||
-                ("באיזו שעה" in norm) ||
-                ("שעה" in norm) ||
-                ("when" in norm) ||
-                ("what time" in norm)
+        val q = norm.trim()
 
-        val asksNext = ("האימון הבא" in norm) ||
-                ("אימון הבא" in norm) ||
-                (("אימון" in norm) && ("הבא" in norm)) ||
-                ("next training" in norm) ||
-                ("upcoming training" in norm) ||
-                (("training" in norm) && ("next" in norm))
-
-        if (asksWhen && asksNext) return AssistantIntent.ASK_NEXT_TRAINING
-
-        for ((intent, keys) in intentPatterns) {
-            if (keys.any { it in norm }) return intent
+        fun containsAny(vararg values: String): Boolean {
+            return values.any { value -> value in q }
         }
 
-        if ("אימון" in norm ||
-            "אימונים" in norm ||
-            "training" in norm ||
-            "trainings" in norm ||
-            "class" in norm ||
-            "classes" in norm ||
-            "workout" in norm
+        val asksNext = containsAny(
+            "האימון הבא",
+            "אימון הבא",
+            "האימון הקרוב",
+            "אימון קרוב",
+            "האימונים הבאים",
+            "אימונים הבאים",
+            "האימונים הקרובים",
+            "אימונים קרובים",
+            "הבא שלי",
+            "הבאים שלי",
+            "הקרוב שלי",
+            "הקרובים שלי",
+            "מתי אני מתאמן",
+            "מתי האימונים הבאים שלי",
+            "next training",
+            "next trainings",
+            "next workout",
+            "next workouts",
+            "upcoming training",
+            "upcoming trainings",
+            "upcoming class",
+            "upcoming classes",
+            "nearest training",
+            "when do i train next",
+            "my next trainings",
+            "my upcoming trainings"
+        ) || (
+                containsAny(
+                    "אימון",
+                    "אימונים",
+                    "training",
+                    "trainings",
+                    "workout",
+                    "workouts",
+                    "class",
+                    "classes"
+                ) &&
+                        containsAny(
+                            "הבא",
+                            "הבאים",
+                            "קרוב",
+                            "קרובים",
+                            "next",
+                            "upcoming"
+                        )
+                )
+
+        if (asksNext) {
+            return AssistantIntent.ASK_NEXT_TRAINING
+        }
+
+        if (
+            containsAny(
+                "מה יש היום",
+                "איזה אימון יש היום",
+                "אילו אימונים יש היום",
+                "יש לי היום",
+                "האימון היום",
+                "אימון היום",
+                "היום יש",
+                "today's training",
+                "training today",
+                "trainings today",
+                "classes today",
+                "what is today",
+                "what do i have today",
+                "do i train today"
+            )
+        ) {
+            return AssistantIntent.ASK_WHAT_TODAY
+        }
+
+        if (
+            containsAny(
+                "מי המאמן",
+                "מי המדריך",
+                "מי מעביר",
+                "מי מלמד",
+                "שם המאמן",
+                "איזה מאמן",
+                "who is the coach",
+                "which coach",
+                "coach name",
+                "instructor",
+                "who teaches",
+                "who runs the training"
+            )
+        ) {
+            return AssistantIntent.ASK_COACH
+        }
+
+        if (
+            containsAny(
+                "איפה",
+                "היכן",
+                "כתובת",
+                "רחוב",
+                "מיקום",
+                "אולם",
+                "איך מגיעים",
+                "where",
+                "address",
+                "location",
+                "venue",
+                "hall",
+                "how do i get"
+            )
+        ) {
+            return AssistantIntent.ASK_LOCATION
+        }
+
+        if (
+            containsAny(
+                "כמה זמן",
+                "משך האימון",
+                "כמה נמשך",
+                "מתי מסתיים",
+                "שעת סיום",
+                "עד איזו שעה",
+                "how long",
+                "duration",
+                "when does it end",
+                "end time",
+                "what time does it finish"
+            )
+        ) {
+            return AssistantIntent.ASK_DURATION
+        }
+
+        if (
+            containsAny(
+                "ציוד",
+                "מה להביא",
+                "מה צריך",
+                "לבוש",
+                "איך להתלבש",
+                "כפפות",
+                "מגנים",
+                "מגן שיניים",
+                "אימון ראשון",
+                "פעם ראשונה",
+                "equipment",
+                "what to bring",
+                "what do i need",
+                "what to wear",
+                "clothing",
+                "gloves",
+                "protective gear",
+                "mouth guard",
+                "first training",
+                "first class"
+            )
+        ) {
+            return AssistantIntent.ASK_EQUIPMENT
+        }
+
+        if (
+            containsAny(
+                "איזה קבוצות",
+                "אילו קבוצות",
+                "רשימת קבוצות",
+                "קבוצות בסניף",
+                "לפי גיל",
+                "לפי גילאים",
+                "איזה גילאים",
+                "קבוצת גיל",
+                "מתחילים",
+                "מתקדמים",
+                "רמות אימון",
+                "מתאים לילדים",
+                "מתאים לנוער",
+                "מתאים למבוגרים",
+                "which groups",
+                "group list",
+                "groups at",
+                "age groups",
+                "which ages",
+                "beginners",
+                "advanced",
+                "training levels",
+                "for children",
+                "for youth",
+                "for adults"
+            )
+        ) {
+            return AssistantIntent.ASK_GROUPS_AND_LEVELS
+        }
+
+        if (
+            containsAny(
+                "כמה אימונים בשבוע",
+                "כמה פעמים בשבוע",
+                "מספר אימונים",
+                "כמות אימונים",
+                "how many trainings",
+                "how many classes",
+                "how many times a week",
+                "weekly count"
+            )
+        ) {
+            return AssistantIntent.ASK_WEEKLY_COUNT
+        }
+
+        if (
+            containsAny(
+                "אימון מיוחד",
+                "אימון פתוח",
+                "אימון חגורה",
+                "אירוע השבוע",
+                "special training",
+                "special class",
+                "open training",
+                "belt training"
+            )
+        ) {
+            return AssistantIntent.ASK_SPECIAL_WEEK
+        }
+
+        if (
+            containsAny(
+                "מתי",
+                "באיזו שעה",
+                "איזו שעה",
+                "שעת האימון",
+                "שעות אימון",
+                "ימים ושעות",
+                "when",
+                "what time",
+                "at what time",
+                "training time",
+                "class time",
+                "days and times"
+            )
+        ) {
+            return AssistantIntent.ASK_TIME
+        }
+
+        if (
+            containsAny(
+                "לוח אימונים",
+                "לוח",
+                "לו\"ז",
+                "לוז",
+                "רשימת אימונים",
+                "כל האימונים",
+                "אילו אימונים",
+                "איזה אימונים",
+                "תראה אימונים",
+                "הצג אימונים",
+                "השבוע",
+                "שבוע הבא",
+                "schedule",
+                "training schedule",
+                "class schedule",
+                "training list",
+                "all trainings",
+                "all classes",
+                "show trainings",
+                "show classes",
+                "this week",
+                "next week"
+            )
+        ) {
+            return AssistantIntent.ASK_SCHEDULE
+        }
+
+        if (
+            containsAny(
+                "אימון",
+                "אימונים",
+                "קבוצה",
+                "סניף",
+                "מאמן",
+                "training",
+                "trainings",
+                "workout",
+                "class",
+                "classes",
+                "group",
+                "branch",
+                "coach"
+            )
         ) {
             return AssistantIntent.ASK_GENERAL
         }
@@ -391,13 +724,102 @@ object EntityExtractor {
     fun branchCity(branch: String): String =
         branch.substringBefore("–").substringBefore("-").trim()
 
-    // ✅ "השבוע" / "בשבוע הקרוב" / "בשבוע הזה" → חלון 7 ימים קדימה
-    fun wantsThisWeek(norm: String): Boolean {
+    fun wantsNextWeek(norm: String): Boolean {
         val keys = listOf(
-            "השבוע", "בשבוע הזה", "בשבוע הקרוב", "שבוע קרוב", "שבוע הבא",
-            "this week", "coming week", "upcoming week", "next week"
+            "שבוע הבא",
+            "בשבוע הבא",
+            "לשבוע הבא",
+            "של שבוע הבא",
+            "האימונים בשבוע הבא",
+            "האימונים שלי בשבוע הבא",
+            "האימונים שלי לשבוע הבא",
+            "next week",
+            "for next week",
+            "during next week",
+            "trainings next week",
+            "my trainings next week",
+            "classes next week",
+            "my classes next week"
         )
+
         return keys.any { it in norm }
+    }
+
+    fun wantsThisWeek(norm: String): Boolean {
+        if (wantsNextWeek(norm)) return false
+
+        val keys = listOf(
+            "השבוע",
+            "בשבוע הזה",
+            "השבוע הנוכחי",
+            "במהלך השבוע",
+            "בשבוע הקרוב",
+            "שבוע קרוב",
+            "this week",
+            "current week",
+            "coming week",
+            "upcoming week"
+        )
+
+        return keys.any { it in norm }
+    }
+
+    fun requestedTrainingCount(norm: String): Int? {
+        val hasUpcomingListContext = listOf(
+            "רשימה",
+            "תן",
+            "תני",
+            "תראה",
+            "הצג",
+            "אימונים הבאים",
+            "האימונים הבאים",
+            "אימונים קרובים",
+            "האימונים הקרובים",
+            "list",
+            "give",
+            "show",
+            "next trainings",
+            "upcoming trainings",
+            "next classes",
+            "upcoming classes"
+        ).any { it in norm }
+
+        if (!hasUpcomingListContext) return null
+
+        val numericCount = Regex(
+            """(?<!\d)(10|[1-9])(?!\d)"""
+        )
+            .find(norm)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+
+        if (numericCount != null) {
+            return numericCount.coerceIn(1, 10)
+        }
+
+        val countWords = linkedMapOf(
+            10 to listOf("עשרה", "עשר", "ten"),
+            9 to listOf("תשעה", "תשע", "nine"),
+            8 to listOf("שמונה", "eight"),
+            7 to listOf("שבעה", "שבע", "seven"),
+            6 to listOf("שישה", "שש", "six"),
+            5 to listOf("חמישה", "חמש", "five"),
+            4 to listOf("ארבעה", "ארבע", "four"),
+            3 to listOf("שלושה", "שלוש", "three"),
+            2 to listOf("שני", "שניים", "שתיים", "two"),
+            1 to listOf("אחד", "אחת", "one")
+        )
+
+        return countWords.entries
+            .firstOrNull { (_, words) ->
+                words.any { word ->
+                    Regex(
+                        "(^|\\s)${Regex.escape(word)}(?=\\s|$)"
+                    ).containsMatchIn(norm)
+                }
+            }
+            ?.key
     }
 
     fun detectBranch(norm: String): String? {
@@ -506,15 +928,45 @@ data class TrainingRow(
                         val trainings = TrainingCatalog.trainingsFor(branch, groupRaw)
 
                         trainings.forEach { td ->
-                            rows += TrainingRow(
-                                branchName = branch,
-                                groupName = normGroup,
-                                dayName = dayFormatter.format(td.cal.time),
-                                timeRange = "${td.start}–${td.end}",
-                                location = TrainingCatalog.placeFor(branch),
-                                coachName = td.coach,
-                                startAtMillis = td.cal.timeInMillis
-                            )
+                            /*
+                             * נתוני הקטלוג מייצגים אימון שבועי קבוע.
+                             * יוצרים מופעים לארבעת השבועות הקרובים כדי
+                             * לתמוך בשאלות על השבוע הבא ורשימות עתידיות.
+                             */
+                            val firstOccurrence =
+                                (td.cal.clone() as Calendar).apply {
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
+
+                                    while (
+                                        timeInMillis <
+                                        System.currentTimeMillis()
+                                    ) {
+                                        add(Calendar.DAY_OF_YEAR, 7)
+                                    }
+                                }
+
+                            repeat(5) { weekOffset ->
+                                val occurrence =
+                                    (firstOccurrence.clone() as Calendar).apply {
+                                        add(
+                                            Calendar.DAY_OF_YEAR,
+                                            weekOffset * 7
+                                        )
+                                    }
+
+                                rows += TrainingRow(
+                                    branchName = branch,
+                                    groupName = normGroup,
+                                    dayName = dayFormatter.format(
+                                        occurrence.time
+                                    ),
+                                    timeRange = "${td.start}–${td.end}",
+                                    location = TrainingCatalog.placeFor(branch),
+                                    coachName = td.coach,
+                                    startAtMillis = occurrence.timeInMillis
+                                )
+                            }
                         }
                     }
                 }
@@ -613,14 +1065,24 @@ In addition, a groin guard is strongly recommended for maximum safety during tra
         isEnglish: Boolean = false
     ): String {
 
-        val sorted = list.sortedWith(
-            compareBy<TrainingRow> {
-                val dayShort = it.dayName.replace("יום ", "").trim()
-                EntityExtractor.getDayIndex(dayShort) ?: 99
-            }.thenBy {
-                EntityExtractor.parseStartMinutes(it.timeRange) ?: Int.MAX_VALUE
+        val safeLimit = limit.coerceIn(1, 10)
+
+        /*
+         * startAtMillis כולל את התאריך והשעה בפועל.
+         * מיון לפי שם יום עלול להציג את יום ראשון לפני
+         * אימון קרוב יותר שמתקיים בסוף השבוע הנוכחי.
+         */
+        val sorted = list
+            .filter { it.startAtMillis >= System.currentTimeMillis() }
+            .distinctBy { training ->
+                listOf(
+                    training.branchName,
+                    TrainingCatalog.normalizeGroupName(training.groupName),
+                    training.startAtMillis
+                ).joinToString("|")
             }
-        ).take(limit)
+            .sortedBy { it.startAtMillis }
+            .take(safeLimit)
 
         if (sorted.isEmpty()) {
             return tr(isEnglish, "לא מצאתי אימונים קרובים.", "I could not find upcoming trainings.")
@@ -644,11 +1106,32 @@ In addition, a groin guard is strongly recommended for maximum safety during tra
 
         return buildString {
             append(title).append('\n')
-            sorted.forEach { r ->
+            val dateFormatter = SimpleDateFormat(
+                "dd/MM/yyyy",
+                if (isEnglish) Locale.US else Locale("he", "IL")
+            )
+
+            sorted.forEach { training ->
+                val dateText = dateFormatter.format(
+                    Date(training.startAtMillis)
+                )
+
                 if (isEnglish) {
-                    append("• ${r.dayName} – ${r.timeRange} – ${r.branchName} – Coach: ${r.coachName}\n")
+                    append(
+                        "• ${training.dayName}, $dateText – " +
+                                "${training.timeRange} – " +
+                                "${training.branchName} – " +
+                                "${training.groupName} – " +
+                                "Coach: ${training.coachName}\n"
+                    )
                 } else {
-                    append("• ${r.dayName} – ${r.timeRange} – ${r.branchName} – מאמן: ${r.coachName}\n")
+                    append(
+                        "• ${training.dayName}, $dateText – " +
+                                "${training.timeRange} – " +
+                                "${training.branchName} – " +
+                                "${training.groupName} – " +
+                                "מאמן: ${training.coachName}\n"
+                    )
                 }
             }
 
@@ -993,6 +1476,82 @@ Try asking in another way:
         }.trim()
     }
 
+    fun buildGroupsAndLevels(
+        branch: String?,
+        isEnglish: Boolean = false
+    ): String {
+        val groupsByBranch = if (!branch.isNullOrBlank()) {
+            val groups = TrainingCatalog.ageGroupsByBranch[branch]
+                .orEmpty()
+                .map { TrainingCatalog.normalizeGroupName(it) }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+            mapOf(branch to groups)
+        } else {
+            TrainingCatalog.ageGroupsByBranch
+                .mapValues { (_, groups) ->
+                    groups
+                        .map { TrainingCatalog.normalizeGroupName(it) }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                }
+                .filterValues { it.isNotEmpty() }
+        }
+
+        if (groupsByBranch.isEmpty()) {
+            return tr(
+                isEnglish,
+                "לא נמצאו קבוצות במאגר האימונים המעודכן.",
+                "No groups were found in the current training database."
+            )
+        }
+
+        return buildString {
+            append(
+                if (isEnglish) {
+                    if (branch != null) {
+                        "Groups currently listed at $branch:"
+                    } else {
+                        "Groups currently listed in the training database:"
+                    }
+                } else {
+                    if (branch != null) {
+                        "הקבוצות המופיעות כרגע בסניף $branch:"
+                    } else {
+                        "הקבוצות המופיעות כרגע במאגר האימונים:"
+                    }
+                }
+            )
+
+            append("\n\n")
+
+            groupsByBranch.forEach { (branchName, groups) ->
+                if (branch == null) {
+                    append(
+                        if (isEnglish) {
+                            "• $branchName:\n"
+                        } else {
+                            "• $branchName:\n"
+                        }
+                    )
+                }
+
+                groups.forEach { groupName ->
+                    append("  • $groupName\n")
+                }
+            }
+
+            append(
+                if (isEnglish) {
+                    "\nThe list is based on the groups currently configured in the app. Suitability for a specific level should be confirmed with the coach."
+                } else {
+                    "\nהרשימה מבוססת על הקבוצות המוגדרות כרגע באפליקציה. התאמה לרמה מסוימת מומלץ לאשר מול המאמן."
+                }
+            )
+        }.trim()
+    }
+
     fun buildSpecialWeekAnswer(isEnglish: Boolean = false): String {
         return tr(
             isEnglish,
@@ -1009,9 +1568,12 @@ Try asking in another way:
 
 object AssistantTrainingKnowledge {
 
-    private val allTrainings: List<TrainingRow> by lazy {
-        TrainingTableBuilder.build()
-    }
+    /**
+     * בנייה מחדש בכל בקשה מבטיחה שהעוזר משתמש
+     * בנתוני TrainingCatalog העדכניים.
+     */
+    private val allTrainings: List<TrainingRow>
+        get() = TrainingTableBuilder.build()
 
     fun generateAnswer(
         question: String,
@@ -1025,7 +1587,44 @@ object AssistantTrainingKnowledge {
 
         val lastIntent = memory.getLastIntent()
 
-        if (intent == AssistantIntent.UNKNOWN && lastIntent != null) {
+        val looksLikeFollowUp = listOf(
+            "ומה",
+            "ומה לגבי",
+            "ומה עם",
+            "ושם",
+            "ומתי",
+            "באיזה יום",
+            "באיזו שעה",
+            "מי המאמן",
+            "איפה זה",
+            "כמה זמן",
+            "אותו",
+            "אותה",
+            "הבא",
+            "אחריו",
+            "עוד",
+            "and what",
+            "what about",
+            "and there",
+            "and when",
+            "which day",
+            "what time",
+            "who is the coach",
+            "where is it",
+            "how long",
+            "same one",
+            "next one",
+            "after that",
+            "more"
+        ).any { marker ->
+            marker in norm
+        }
+
+        if (
+            intent == AssistantIntent.UNKNOWN &&
+            looksLikeFollowUp &&
+            lastIntent != null
+        ) {
             intent = runCatching {
                 AssistantIntent.valueOf(lastIntent)
             }.getOrDefault(AssistantIntent.UNKNOWN)
@@ -1033,20 +1632,78 @@ object AssistantTrainingKnowledge {
 
         memory.setLastIntent(intent.name)
 
-        val wantsNearest  = EntityExtractor.wantsNearest(norm)
+        val wantsNearest = EntityExtractor.wantsNearest(norm)
         val wantsUpcoming = EntityExtractor.wantsUpcoming(norm)
         val wantsThisWeek = EntityExtractor.wantsThisWeek(norm)
+        val wantsNextWeek = EntityExtractor.wantsNextWeek(norm)
+
+        /*
+         * ברירת המחדל היא עד חמישה אימונים.
+         * אם המשתמש ביקש 2, 3 או 4 – מחזירים בדיוק
+         * את הכמות שביקש, ככל שקיימים מספיק אימונים.
+         */
+        val requestedTrainingCount =
+            EntityExtractor.requestedTrainingCount(norm) ?: 5
 
         // ישויות מפורשות מהשאלה
         val explicitBranch = EntityExtractor.detectBranch(norm)
-        val explicitGroup  = EntityExtractor.detectGroup(norm)
-        val explicitDay    = EntityExtractor.detectDay(norm)
-        val timeRange      = EntityExtractor.detectTimeRange(norm)
+        val explicitGroup = EntityExtractor.detectGroup(norm)
+        val explicitDay = EntityExtractor.detectDay(norm)
+        val timeRange = EntityExtractor.detectTimeRange(norm)
 
-        // ישויות בפועל (עם זיכרון)
-        var branch = explicitBranch ?: memory.getLastBranch()
-        var group  = explicitGroup  ?: memory.getLastGroup()
-        var day    = explicitDay    ?: memory.getLastDay()
+        val isPersonalQuestion =
+            isMyTrainingQuestion(norm) ||
+                    intent == AssistantIntent.ASK_NEXT_TRAINING ||
+                    intent == AssistantIntent.ASK_WHAT_TODAY ||
+                    (
+                            wantsNextWeek &&
+                                    (
+                                            "שלי" in norm ||
+                                                    "my " in norm
+                                            )
+                            )
+
+        val registeredBranch = memory.getRegisteredBranch()
+        val registeredGroup = memory.getRegisteredGroup()
+
+        if (
+            isPersonalQuestion &&
+            explicitBranch == null &&
+            registeredBranch.isNullOrBlank()
+        ) {
+            return if (isEnglish) {
+                "Your branch is missing from your profile. Update your branch before asking about your personal trainings."
+            } else {
+                "לא מוגדר סניף בפרופיל שלך. יש לעדכן את הסניף לפני שאפשר להציג את האימונים האישיים שלך."
+            }
+        }
+
+        if (
+            isPersonalQuestion &&
+            explicitGroup == null &&
+            registeredGroup.isNullOrBlank()
+        ) {
+            return if (isEnglish) {
+                "Your group is missing from your profile. Update your group before asking about your personal trainings."
+            } else {
+                "לא מוגדרת קבוצה בפרופיל שלך. יש לעדכן את הקבוצה לפני שאפשר להציג את האימונים האישיים שלך."
+            }
+        }
+
+        // בשאלה אישית משתמשים בפרופיל האמיתי ולא בזיכרון מתשובה קודמת.
+        var branch = explicitBranch ?: if (isPersonalQuestion) {
+            registeredBranch
+        } else {
+            memory.getLastBranch()
+        }
+
+        var group = explicitGroup ?: if (isPersonalQuestion) {
+            registeredGroup
+        } else {
+            memory.getLastGroup()
+        }
+
+        var day = explicitDay ?: memory.getLastDay()
 
         // ✅ חשוב: בשאלות "לוז/לוח אימונים" (כמו: "מה הלוז לאימונים בסוקולוב")
         // אם המשתמש לא ציין קבוצה/יום מפורש — לא ננעל על הקבוצה/יום מהזיכרון
@@ -1058,8 +1715,13 @@ object AssistantTrainingKnowledge {
             (intent == AssistantIntent.ASK_NEXT_TRAINING) || wantsUpcoming
 
         if (isNextOrUpcoming || isScheduleQuestion) {
-            if (explicitGroup == null) group = null
-            if (explicitDay == null) day = null
+            if (!isPersonalQuestion && explicitGroup == null) {
+                group = null
+            }
+
+            if (explicitDay == null) {
+                day = null
+            }
         }
 
         // אם ביקש "הכי קרוב אליי" ואין סניף מפורש — נעדיף את הסניף האחרון בזיכרון
@@ -1068,11 +1730,41 @@ object AssistantTrainingKnowledge {
         }
 
         // סינון אימונים
+        val nowMillis = System.currentTimeMillis()
         var seq = allTrainings.asSequence()
 
-        branch?.let { b -> seq = seq.filter { it.branchName == b } }
-        group?.let  { g -> seq = seq.filter { it.groupName == g } }
-        day?.let    { d -> seq = seq.filter { it.dayName.contains(d) } }
+        if (
+            isNextOrUpcoming ||
+            isPersonalQuestion ||
+            wantsThisWeek ||
+            wantsNextWeek
+        ) {
+            seq = seq.filter { training ->
+                training.startAtMillis >= nowMillis
+            }
+        }
+
+        branch?.let { expectedBranch ->
+            seq = seq.filter { training ->
+                training.branchName == expectedBranch
+            }
+        }
+
+        group?.let { expectedGroup ->
+            seq = seq.filter { training ->
+                TrainingCatalog.normalizeGroupName(
+                    training.groupName
+                ) == TrainingCatalog.normalizeGroupName(
+                    expectedGroup
+                )
+            }
+        }
+
+        day?.let { expectedDay ->
+            seq = seq.filter { training ->
+                training.dayName.contains(expectedDay)
+            }
+        }
 
         timeRange?.let { rng ->
             seq = seq.filter { tr ->
@@ -1080,43 +1772,76 @@ object AssistantTrainingKnowledge {
             }
         }
 
-        // ✅ פילטר "השבוע" — 7 ימים קדימה (בעיקר לשאלות לוז/זמנים)
+        /*
+         * “השבוע” – שבעת הימים הקרובים.
+         */
         if (wantsThisWeek) {
             val now = System.currentTimeMillis()
-            val weekAhead = now + 7L * 24L * 60L * 60L * 1000L
-            seq = seq.filter { it.startAtMillis in now..weekAhead }
+            val weekAhead =
+                now + 7L * 24L * 60L * 60L * 1000L
+
+            seq = seq.filter { training ->
+                training.startAtMillis in now until weekAhead
+            }
+        }
+
+        /*
+         * “שבוע הבא” – השבוע הקלנדרי הבא:
+         * מיום ראשון בשעה 00:00 ועד יום ראשון שאחריו.
+         */
+        if (wantsNextWeek) {
+            val startOfNextWeek = Calendar.getInstance(
+                Locale("he", "IL")
+            ).apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+
+                val daysUntilNextSunday =
+                    (Calendar.SUNDAY - get(Calendar.DAY_OF_WEEK) + 7) % 7
+
+                add(
+                    Calendar.DAY_OF_YEAR,
+                    if (daysUntilNextSunday == 0) 7
+                    else daysUntilNextSunday
+                )
+            }
+
+            val endOfNextWeek =
+                (startOfNextWeek.clone() as Calendar).apply {
+                    add(Calendar.DAY_OF_YEAR, 7)
+                }
+
+            val startMillis = startOfNextWeek.timeInMillis
+            val endMillis = endOfNextWeek.timeInMillis
+
+            seq = seq.filter { training ->
+                training.startAtMillis in startMillis until endMillis
+            }
         }
 
         var results = seq.toList()
 
-        if (isMyTrainingQuestion(norm) && explicitGroup == null) {
+        if (isPersonalQuestion && explicitGroup == null) {
+            val personalGroup = registeredGroup
+                ?.let { TrainingCatalog.normalizeGroupName(it) }
 
-            val groups = userGroups(memory)
-
-            val filtered = results.filter { r ->
-                groups.any { g -> r.groupName.contains(g) }
-            }
-
-            if (filtered.isNotEmpty()) {
-                results = filtered
+            if (!personalGroup.isNullOrBlank()) {
+                results = results.filter { training ->
+                    TrainingCatalog.normalizeGroupName(
+                        training.groupName
+                    ) == personalGroup
+                }
             }
         }
 
-        if ((intent == AssistantIntent.ASK_NEXT_TRAINING || wantsUpcoming) &&
-            explicitGroup == null &&
-            isMyTrainingQuestion(norm)
+        if (
+            (intent == AssistantIntent.ASK_NEXT_TRAINING || wantsUpcoming) &&
+            isPersonalQuestion
         ) {
-            val preferred = results
-                .filterNot { isKidsGroup(it.groupName) }
-                .sortedWith(
-                    compareBy<TrainingRow>(
-                        { personalGroupPriority(it.groupName) },
-                        { it.startAtMillis }
-                    )
-                )
-
-            if (preferred.isNotEmpty()) {
-                results = preferred
+            results = results.sortedBy {
+                it.startAtMillis
             }
         }
 
@@ -1125,8 +1850,40 @@ object AssistantTrainingKnowledge {
         explicitGroup ?.let { memory.setLastGroup(it) }
         explicitDay   ?.let { memory.setLastDay(it) }
 
-        // ✅ אם אין תוצאות: נסה חלופה חכמה (היום) או הצע את האימון הקרוב הבא
+        // אם אין תוצאה אישית, אסור להחליף אותה באימון של משתמש אחר.
         if (results.isEmpty()) {
+            if (isPersonalQuestion) {
+                return if (isEnglish) {
+                    buildString {
+                        append("I could not find an upcoming training matching your registered branch and group.")
+
+                        if (!registeredBranch.isNullOrBlank()) {
+                            append("\nBranch: $registeredBranch")
+                        }
+
+                        if (!registeredGroup.isNullOrBlank()) {
+                            append("\nGroup: $registeredGroup")
+                        }
+
+                        append("\nCheck that your profile details and the training schedule are up to date.")
+                    }
+                } else {
+                    buildString {
+                        append("לא נמצא אימון קרוב התואם לסניף ולקבוצה הרשומים בפרופיל שלך.")
+
+                        if (!registeredBranch.isNullOrBlank()) {
+                            append("\nסניף: $registeredBranch")
+                        }
+
+                        if (!registeredGroup.isNullOrBlank()) {
+                            append("\nקבוצה: $registeredGroup")
+                        }
+
+                        append("\nמומלץ לבדוק שפרטי הפרופיל ולוח האימונים מעודכנים.")
+                    }
+                }
+            }
+
             val todayName = SimpleDateFormat("EEEE", Locale("he", "IL"))
                 .format(Calendar.getInstance().time)
 
@@ -1234,7 +1991,7 @@ object AssistantTrainingKnowledge {
                 list = allTrainings,
                 branch = null,
                 group = null,
-                limit = 5,
+                limit = requestedTrainingCount,
                 isEnglish = isEnglish
             )
 
@@ -1277,15 +2034,52 @@ object AssistantTrainingKnowledge {
                     list = results,
                     branch = branch,
                     group = group,
-                    limit = 5,
+                    limit = requestedTrainingCount,
                     isEnglish = isEnglish
                 )
 
             intent == AssistantIntent.ASK_DURATION -> AnswerBuilder.buildDuration(results, isEnglish)
             intent == AssistantIntent.ASK_COACH    -> AnswerBuilder.buildCoach(results, isEnglish)
-            intent == AssistantIntent.ASK_LOCATION -> AnswerBuilder.buildLocation(results, isEnglish)
-            intent == AssistantIntent.ASK_NEXT_TRAINING -> AnswerBuilder.buildNextTraining(results, isEnglish)
-            intent == AssistantIntent.ASK_EQUIPMENT -> AnswerBuilder.buildEquipment(isEnglish)
+            intent == AssistantIntent.ASK_LOCATION ->
+                AnswerBuilder.buildLocation(results, isEnglish)
+
+            intent == AssistantIntent.ASK_NEXT_TRAINING -> {
+                val asksForMultipleTrainings =
+                    wantsUpcoming ||
+                            requestedTrainingCount > 1 ||
+                            listOf(
+                                "האימונים",
+                                "אימונים הבאים",
+                                "אימונים קרובים",
+                                "trainings",
+                                "classes",
+                                "workouts"
+                            ).any { it in norm }
+
+                if (asksForMultipleTrainings) {
+                    AnswerBuilder.buildUpcomingTrainings(
+                        list = results,
+                        branch = branch,
+                        group = group,
+                        limit = requestedTrainingCount,
+                        isEnglish = isEnglish
+                    )
+                } else {
+                    AnswerBuilder.buildNextTraining(
+                        list = results,
+                        isEnglish = isEnglish
+                    )
+                }
+            }
+
+            intent == AssistantIntent.ASK_EQUIPMENT ->
+                AnswerBuilder.buildEquipment(isEnglish)
+
+            intent == AssistantIntent.ASK_GROUPS_AND_LEVELS ->
+                AnswerBuilder.buildGroupsAndLevels(
+                    branch = explicitBranch ?: registeredBranch,
+                    isEnglish = isEnglish
+                )
 
             intent == AssistantIntent.ASK_WHAT_TODAY -> {
                 val todayDay = EntityExtractor.detectDay("היום")
@@ -1320,41 +2114,31 @@ object AssistantTrainingKnowledge {
         memory: AssistantMemory
     ) {
         try {
-            val normAnswer = HebrewNormalize.normalize(answer).lowercase()
+            val normalizedQuestion = HebrewNormalize
+                .normalize(question)
+                .lowercase(Locale("he", "IL"))
 
-            TrainingCatalog.branchesByRegion
-                .flatMap { it.value }
-                .forEach { branch ->
-                    if (normAnswer.contains(branch.lowercase())) {
-                        memory.setLastBranch(branch)
-                    }
+            EntityExtractor.detectBranch(normalizedQuestion)
+                ?.let { explicitBranch ->
+                    memory.setLastBranch(explicitBranch)
                 }
 
-            TrainingCatalog.ageGroupsByBranch.values
-                .flatten()
-                .map { TrainingCatalog.normalizeGroupName(it) }
-                .distinct()
-                .forEach { group ->
-                    if (group.lowercase() in normAnswer) {
-                        memory.setLastGroup(group)
-                    }
+            EntityExtractor.detectGroup(normalizedQuestion)
+                ?.let { explicitGroup ->
+                    memory.setLastGroup(explicitGroup)
                 }
 
-            val days = listOf("ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת")
-            days.forEach { d ->
-                val n = d.lowercase()
-                if (n in normAnswer || "יום $n" in normAnswer) {
-                    memory.setLastDay(d)
+            EntityExtractor.detectDay(normalizedQuestion)
+                ?.let { explicitDay ->
+                    memory.setLastDay(explicitDay)
                 }
-            }
 
-            Regex("""\b([0-2]?[0-9]):([0-5][0-9])""")
-                .find(normAnswer)
-                ?.value
-                ?.let { hhmm ->
-                    memory.setLastAnswerContext("שעה: $hhmm")
-                }
-        } catch (_: Throwable) {}
+            memory.setLastAnswerContext(
+                answer.trim().take(500)
+            )
+        } catch (_: Throwable) {
+            // כשל בזיכרון אינו משפיע על התשובה למשתמש.
+        }
     }
 }
 private fun userGroups(memory: AssistantMemory): List<String> {
@@ -1371,17 +2155,36 @@ private fun userGroups(memory: AssistantMemory): List<String> {
 private fun isMyTrainingQuestion(norm: String): Boolean {
     return listOf(
         "שלי",
+        "עבורי",
+        "בשבילי",
         "לקבוצה שלי",
+        "בסניף שלי",
+        "המאמן שלי",
         "האימון הבא שלי",
         "האימון הקרוב שלי",
+        "מתי אני מתאמן",
+        "איפה אני מתאמן",
+        "יש לי אימון",
+        "האימונים שלי",
+        "הלוז שלי",
+        "לו\"ז שלי",
         "my next training",
         "my upcoming training",
         "my training",
         "my trainings",
         "my class",
         "my classes",
-        "my workout"
-    ).any { it in norm }
+        "my workout",
+        "my schedule",
+        "my group",
+        "my branch",
+        "my coach",
+        "when do i train",
+        "where do i train",
+        "do i have training"
+    ).any { marker ->
+        marker in norm
+    }
 }
 
 private fun isKidsGroup(groupName: String): Boolean {

@@ -2176,9 +2176,14 @@ fun HomeScreen(
 
                         Surface(
                             onClick = {
-                                if (recentCoachMessages.isNotEmpty()) {
-                                    showCoachMessagesDialog = true
-                                }
+                                /*
+                                 * פותחים תמיד את חלון ההודעות.
+                                 * אם טרם התקבלו הודעות, החלון יציג
+                                 * הודעה מתאימה במקום להתעלם מהלחיצה.
+                                 */
+                                clickSound()
+                                haptic(true)
+                                showCoachMessagesDialog = true
                             },
                             modifier = Modifier
                                 .fillMaxWidth()

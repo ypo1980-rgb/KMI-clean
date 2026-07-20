@@ -5,12 +5,7 @@ package il.kmi.app.screens.coach
 import android.app.Application
 import android.content.Context
 import android.content.Intent
-import android.graphics.Paint
-import android.graphics.Typeface
-import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
-import java.io.File
-import java.io.FileOutputStream
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -90,229 +85,12 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
-import kotlin.math.roundToInt
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import il.kmi.app.screens.coach.statistics.NationalStatisticsScreen
 
 //=========================================================================
-
-data class CoachDateEntry(
-    val date: String = "",
-    val description: String = ""
-)
-
-private fun nextCoachDateItemName(
-    sectionTitle: String,
-    index: Int
-): String {
-    return when (sectionTitle) {
-        "השתלמויות" -> "השתלמות $index"
-        "מחנות אימונים" -> "מחנה אימונים $index"
-        "הסמכות" -> "הסמכה $index"
-        else -> "פריט $index"
-    }
-}
-
-data class TraineeProfile(
-    val id: String,
-    val fullName: String,
-    val belt: String,
-    val seniority: String,
-    val age: Int,
-    val attendancePct: Int = 0,
-    val branch: String = "",
-    val groupKey: String = "",
-
-    // ✅ איחוד מתאמנים כפולים לפי מייל / טלפון
-    val email: String = "",
-    val phone: String = "",
-
-    // ✅ מזהה מסמך אמיתי ב-Firestore: users/{userDocId}
-    // כל שמירה של תאריכים / הערות תתבצע לפיו ולא לפי שם.
-    val userDocId: String = "",
-
-    val beltAwardDates: Map<String, String> = emptyMap(),
-
-    // ✅ תיאור חופשי לכל חגורה — נשמר בשרת תחת users/{docId}.beltAwardDescriptions
-    val beltAwardDescriptions: Map<String, String> = emptyMap(),
-
-    // ✅ הערות מאמן — נשמרות בשרת תחת users/{docId}.coachNotes
-    val coachNotes: String = "",
-
-    // ✅ שדות נוספים למילוי ע"י המאמן ונשמרים בשרת: תאריך + תיאור
-    val seminarDates: Map<String, CoachDateEntry> = emptyMap(),
-    val campDates: Map<String, CoachDateEntry> = emptyMap(),
-    val certificationDates: Map<String, CoachDateEntry> = emptyMap()
-)
-
-data class GroupStatsUi(
-    val totalTrainees: Int,
-    val filteredTrainees: Int,
-    val avgAge: Int,
-    val avgAttendance: Int,
-    val beltCounts: Map<String, Int>,
-    val highAttendanceCount: Int,
-    val avgSeniority: Double
-)
-
-private fun parseYearsFromSeniority(value: String): Int? {
-    val digits = Regex("""\d+""").find(value)?.value ?: return null
-    return digits.toIntOrNull()
-}
-
-private fun formatAvgSeniority(value: Double, isEnglish: Boolean): String {
-    if (value <= 0.0) return "—"
-
-    val formatted = String.format(Locale.US, "%.1f", value)
-
-    return if (isEnglish) {
-        "$formatted yrs"
-    } else {
-        "$formatted שנים"
-    }
-}
-
-private fun beltColorForStats(belt: String): Color {
-    val normalized = belt.trim()
-
-    return when {
-        normalized.contains("לבנ") -> Color(0xFFE5E7EB)
-        normalized.contains("צהוב") -> Color(0xFFFACC15)
-        normalized.contains("כתומ") -> Color(0xFFF97316)
-        normalized.contains("ירוק") -> Color(0xFF22C55E)
-        normalized.contains("כחול") -> Color(0xFF3B82F6)
-        normalized.contains("חומ") -> Color(0xFF8B5A2B)
-        normalized.contains("שחור") -> Color(0xFF111111)
-        else -> Color(0xFF7C3AED)
-    }
-}
-
-private fun coachTr(isEnglish: Boolean, he: String, en: String): String =
-    if (isEnglish) en else he
-
-private fun coachTextAlign(isEnglish: Boolean): TextAlign =
-    if (isEnglish) TextAlign.Left else TextAlign.Right
-
-private fun coachHorizontalAlignment(isEnglish: Boolean): Alignment.Horizontal =
-    if (isEnglish) Alignment.Start else Alignment.End
-
-private fun coachBeltNameForUi(
-    beltName: String,
-    isEnglish: Boolean
-): String {
-    if (!isEnglish) return beltName
-
-    return when (beltName.trim()) {
-        "לבנה" -> "White"
-        "צהובה" -> "Yellow"
-        "כתומה" -> "Orange"
-        "ירוקה" -> "Green"
-        "כחולה" -> "Blue"
-        "חומה" -> "Brown"
-        "שחורה" -> "Black"
-        "ללא דרגה" -> "No rank"
-        "חגורה לבנה" -> "White"
-        "חגורה צהובה" -> "Yellow"
-        "חגורה כתומה" -> "Orange"
-        "חגורה ירוקה" -> "Green"
-        "חגורה כחולה" -> "Blue"
-        "חגורה חומה" -> "Brown"
-        "חגורה שחורה" -> "Black"
-        else -> beltName
-    }
-}
-
-private fun coachSectionTitleForUi(
-    title: String,
-    isEnglish: Boolean
-): String {
-    return when (title) {
-        "השתלמויות" -> coachTr(isEnglish, "השתלמויות", "Seminars")
-        "מחנות אימונים" -> coachTr(isEnglish, "מחנות אימונים", "Training camps")
-        "הסמכות" -> coachTr(isEnglish, "הסמכות", "Certifications")
-        else -> title
-    }
-}
-
-private fun coachDateItemNameForUi(
-    itemName: String,
-    isEnglish: Boolean
-): String {
-    if (!isEnglish) return itemName
-
-    val number = Regex("""\d+""").find(itemName)?.value.orEmpty()
-
-    return when {
-        itemName.startsWith("השתלמות") -> "Seminar $number"
-        itemName.startsWith("מחנה אימונים") -> "Training camp $number"
-        itemName.startsWith("הסמכה") -> "Certification $number"
-        else -> itemName
-    }
-}
-
-private fun coachDateSectionIcon(title: String): String {
-    return when (title) {
-        "השתלמויות" -> "🎓"
-        "מחנות אימונים" -> "👥"
-        "הסמכות" -> "🏅"
-        else -> "⌄"
-    }
-}
-
-private fun coachDateSectionAccent(title: String): Color {
-    return when (title) {
-        "השתלמויות" -> Color(0xFF7C3AED)
-        "מחנות אימונים" -> Color(0xFF2563EB)
-        "הסמכות" -> Color(0xFF0891B2)
-        else -> Color(0xFF6D56B8)
-    }
-}
-
-private fun buildGroupStats(profiles: List<TraineeProfile>, filtered: List<TraineeProfile>): GroupStatsUi {
-    val avgAge = filtered
-        .map { it.age }
-        .filter { it > 0 }
-        .average()
-        .takeIf { !it.isNaN() }
-        ?.roundToInt()
-        ?: 0
-
-    val avgAttendance = filtered
-        .map { it.attendancePct }
-        .filter { it > 0 }
-        .average()
-        .takeIf { !it.isNaN() }
-        ?.roundToInt()
-        ?: 0
-
-    val avgSeniority = filtered
-        .mapNotNull { parseYearsFromSeniority(it.seniority)?.toDouble() }
-        .filter { it > 0.0 }
-        .average()
-        .takeIf { !it.isNaN() }
-        ?.let { (it * 10.0).roundToInt() / 10.0 }
-        ?: 0.0
-
-    val beltCounts = filtered
-        .groupingBy { it.belt.ifBlank { "ללא דרגה" } }
-        .eachCount()
-        .toList()
-        .sortedByDescending { it.second }
-        .toMap()
-
-    val highAttendanceCount = filtered.count { it.attendancePct >= 80 }
-
-    return GroupStatsUi(
-        totalTrainees = profiles.size,
-        filteredTrainees = filtered.size,
-        avgAge = avgAge,
-        avgAttendance = avgAttendance,
-        beltCounts = beltCounts,
-        highAttendanceCount = highAttendanceCount,
-        avgSeniority = avgSeniority
-    )
-}
 
 @Composable
 private fun CoachTopStatsCard(
@@ -1140,9 +918,37 @@ fun CoachTraineesScreen(
     }
 
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
-    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val isEnglish =
+        langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
     val screenTextAlign = coachTextAlign(isEnglish)
-    val screenHorizontalAlignment = coachHorizontalAlignment(isEnglish)
+    val screenHorizontalAlignment =
+        coachHorizontalAlignment(isEnglish)
+
+    /*
+     * המסך הארצי מוצג כמסך מלא מתוך מסך המתאמנים,
+     * בלי צורך להוסיף route חדש ל-NavGraph.
+     */
+    var showNationalStatistics by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    androidx.activity.compose.BackHandler(
+        enabled = showNationalStatistics
+    ) {
+        showNationalStatistics = false
+    }
+
+    if (showNationalStatistics) {
+        NationalStatisticsScreen(
+            isEnglish = isEnglish,
+            onBack = {
+                showNationalStatistics = false
+            }
+        )
+
+        return
+    }
 
     // --- branch / groupKey שנעשה בהם שימוש בפועל ---
     var effectiveBranch by remember { mutableStateOf(branch) }
@@ -1988,7 +1794,7 @@ fun CoachTraineesScreen(
                 val campDates = readCoachEntryMap("campDates")
                 val certificationDates = readCoachEntryMap("certificationDates")
 
-                userInfoByName[n] = FireUserInfo(
+                val mergedFireUserInfo = FireUserInfo(
                     userDocId = doc.id,
                     email = email,
                     phone = phone,
@@ -1996,12 +1802,76 @@ fun CoachTraineesScreen(
                     beltHeb = belt,
                     seniority = seniority,
                     beltAwardDates = beltAwardDates,
-                    beltAwardDescriptions = beltAwardDescriptions,
+                    beltAwardDescriptions =
+                        beltAwardDescriptions,
                     coachNotes = coachNotes,
                     seminarDates = seminarDates,
                     campDates = campDates,
-                    certificationDates = certificationDates
+                    certificationDates =
+                        certificationDates
                 )
+
+                val normalizedEmail =
+                    normalizeEmailForMerge(email)
+
+                val normalizedPhone =
+                    normalizePhoneForMerge(phone)
+
+                /*
+                 * mergedUserDocs מכיל רק מסמך ראשי אחד,
+                 * אבל userDocs עדיין מכיל את כל המסמכים
+                 * המקוריים. מאתרים את כל המסמכים השייכים
+                 * לאותו מייל או טלפון ושומרים את המידע
+                 * המאוחד תחת כל שמות הכינוי שלהם.
+                 */
+                val matchingIdentityDocuments =
+                    userDocs.filter { candidate ->
+                        val candidateEmail =
+                            normalizeEmailForMerge(
+                                primaryEmailFromDoc(candidate)
+                            )
+
+                        val candidatePhone =
+                            normalizePhoneForMerge(
+                                primaryPhoneFromDoc(candidate)
+                            )
+
+                        when {
+                            normalizedEmail.isNotBlank() ->
+                                candidateEmail ==
+                                        normalizedEmail
+
+                            normalizedPhone.isNotBlank() ->
+                                candidatePhone ==
+                                        normalizedPhone
+
+                            else ->
+                                candidate.id == doc.id
+                        }
+                    }
+
+                val identityNameKeys =
+                    matchingIdentityDocuments
+                        .mapNotNull { candidate ->
+                            (
+                                    candidate.getString("fullName")
+                                        ?: candidate.getString("name")
+                                        ?: candidate.getString(
+                                            "displayName"
+                                        )
+                                    )
+                                ?.normKey()
+                                ?.takeIf { key ->
+                                    key.isNotBlank()
+                                }
+                        }
+                        .plus(n)
+                        .distinct()
+
+                identityNameKeys.forEach { nameKey ->
+                    userInfoByName[nameKey] =
+                        mergedFireUserInfo
+                }
             }
 
             val builtProfiles = members.map { m ->
@@ -2645,10 +2515,149 @@ fun CoachTraineesScreen(
                     .padding(horizontal = 12.dp),
                 contentPadding = PaddingValues(
                     top = 12.dp,
-                    bottom = if (showStatsSheet || isKeyboardVisible) 8.dp else 24.dp
+                    bottom = if (
+                        showStatsSheet ||
+                        isKeyboardVisible
+                    ) {
+                        8.dp
+                    } else {
+                        24.dp
+                    }
                 ),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement =
+                    Arrangement.spacedBy(8.dp)
             ) {
+                /*
+                 * כניסה לסטטיסטיקה הארצית.
+                 * הרשאות הנתונים עצמן עדיין נאכפות ב-Firestore.
+                 */
+                item(
+                    key = "national_statistics_entry"
+                ) {
+                    Surface(
+                        onClick = {
+                            showStatsSheet = false
+                            showNationalStatistics = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
+                        shape = RoundedCornerShape(22.dp),
+                        color = Color.Transparent,
+                        shadowElevation = 7.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color.White.copy(
+                                alpha = 0.65f
+                            )
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            Color(0xFF4338CA),
+                                            Color(0xFF7C3AED),
+                                            Color(0xFF0284C7)
+                                        )
+                                    )
+                                )
+                                .padding(
+                                    horizontal = 16.dp,
+                                    vertical = 14.dp
+                                ),
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(48.dp),
+                                shape = CircleShape,
+                                color = Color.White.copy(
+                                    alpha = 0.17f
+                                ),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = Color.White.copy(
+                                        alpha = 0.22f
+                                    )
+                                )
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "📊",
+                                        fontSize = 24.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.width(12.dp))
+
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment =
+                                    if (isEnglish) {
+                                        Alignment.Start
+                                    } else {
+                                        Alignment.End
+                                    }
+                            ) {
+                                Text(
+                                    text = coachTr(
+                                        isEnglish,
+                                        "סטטיסטיקה ארצית",
+                                        "National statistics"
+                                    ),
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    textAlign =
+                                        screenTextAlign,
+                                    fontSize = 19.sp,
+                                    lineHeight = 22.sp,
+                                    fontWeight =
+                                        FontWeight.Black,
+                                    color = Color.White
+                                )
+
+                                Spacer(Modifier.height(3.dp))
+
+                                Text(
+                                    text = coachTr(
+                                        isEnglish,
+                                        "כל הסניפים, הגילאים, המינים והחגורות",
+                                        "All branches, ages, genders and belts"
+                                    ),
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    textAlign =
+                                        screenTextAlign,
+                                    fontSize = 12.sp,
+                                    lineHeight = 15.sp,
+                                    fontWeight =
+                                        FontWeight.Medium,
+                                    color = Color.White.copy(
+                                        alpha = 0.82f
+                                    )
+                                )
+                            }
+
+                            Spacer(Modifier.width(8.dp))
+
+                            Text(
+                                text = if (isEnglish) "›" else "‹",
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.Light,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
                 item {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -5387,588 +5396,4 @@ private fun recordStatus(record: Any): AttendanceStatus? {
         }
     }
     return null
-}
-
-private fun createCoachTraineesPdf(
-    context: Context,
-    profiles: List<TraineeProfile>,
-    stats: GroupStatsUi,
-    branch: String,
-    groupKey: String,
-    isEnglish: Boolean
-): File {
-    val pageWidth = 595
-    val pageHeight = 842
-    val margin = 36f
-
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
-
-    val document = PdfDocument()
-
-    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-        textSize = 11.5f
-        color = android.graphics.Color.rgb(15, 23, 42)
-        textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-    }
-
-    val titlePaint = Paint(textPaint).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        textSize = 22f
-        color = android.graphics.Color.WHITE
-    }
-
-    val subtitlePaint = Paint(textPaint).apply {
-        textSize = 10.5f
-        color = android.graphics.Color.rgb(226, 232, 240)
-    }
-
-    val sectionPaint = Paint(textPaint).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        textSize = 15f
-        color = android.graphics.Color.rgb(15, 23, 42)
-    }
-
-    val headerPaint = Paint(textPaint).apply {
-        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        textSize = 10.5f
-        color = android.graphics.Color.WHITE
-    }
-
-    val smallPaint = Paint(textPaint).apply {
-        textSize = 9.5f
-        color = android.graphics.Color.rgb(100, 116, 139)
-    }
-
-    val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.rgb(226, 232, 240)
-        strokeWidth = 1f
-    }
-
-    var pageNumber = 1
-    var page = document.startPage(
-        PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
-    )
-    var canvas = page.canvas
-    var y = margin
-
-    fun xStart(): Float = margin
-    fun xEnd(): Float = pageWidth - margin
-    fun textXStart(): Float = if (isEnglish) xStart() else xEnd()
-    fun textXEnd(): Float = if (isEnglish) xEnd() else xStart()
-
-    fun beltPdfColor(belt: String): Int {
-        val normalized = belt.trim()
-        return when {
-            normalized.contains("לבנ") || normalized.contains("White", true) ->
-                android.graphics.Color.rgb(229, 231, 235)
-            normalized.contains("צהוב") || normalized.contains("Yellow", true) ->
-                android.graphics.Color.rgb(250, 204, 21)
-            normalized.contains("כתומ") || normalized.contains("Orange", true) ->
-                android.graphics.Color.rgb(249, 115, 22)
-            normalized.contains("ירוק") || normalized.contains("Green", true) ->
-                android.graphics.Color.rgb(34, 197, 94)
-            normalized.contains("כחול") || normalized.contains("Blue", true) ->
-                android.graphics.Color.rgb(59, 130, 246)
-            normalized.contains("חומ") || normalized.contains("Brown", true) ->
-                android.graphics.Color.rgb(139, 90, 43)
-            normalized.contains("שחור") || normalized.contains("Black", true) ->
-                android.graphics.Color.rgb(17, 17, 17)
-            else ->
-                android.graphics.Color.rgb(124, 58, 237)
-        }
-    }
-
-    fun drawHeader() {
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        val navy = android.graphics.Color.rgb(2, 43, 74)
-        val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
-        val lightBlue = android.graphics.Color.rgb(128, 183, 220)
-        val mutedText = android.graphics.Color.rgb(100, 116, 139)
-
-        val headerBottom = 122f
-
-        val navyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            style = Paint.Style.FILL
-        }
-
-        val mediumStripePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = mediumBlue
-            style = Paint.Style.FILL
-        }
-
-        val lightStripePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = lightBlue
-            style = Paint.Style.FILL
-        }
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(pageWidth.toFloat(), 0f)
-                lineTo(pageWidth.toFloat(), headerBottom)
-                lineTo(178f, headerBottom)
-                lineTo(238f, 0f)
-                close()
-            },
-            navyPaint
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(208f, headerBottom)
-                lineTo(224f, headerBottom)
-                lineTo(284f, 0f)
-                lineTo(268f, 0f)
-                close()
-            },
-            mediumStripePaint
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(230f, headerBottom)
-                lineTo(238f, headerBottom)
-                lineTo(298f, 0f)
-                lineTo(290f, 0f)
-                close()
-            },
-            lightStripePaint
-        )
-
-        val logoCenterX = 78f
-        val logoCenterY = 58f
-        val logoRadius = 42f
-
-        val logoOuterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            style = Paint.Style.FILL
-        }
-
-        val logoInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            style = Paint.Style.FILL
-        }
-
-        val logoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            typeface = Typeface.create(
-                Typeface.SANS_SERIF,
-                Typeface.BOLD
-            )
-            textSize = logoRadius * 0.62f
-            textAlign = Paint.Align.CENTER
-        }
-
-        canvas.drawCircle(
-            logoCenterX,
-            logoCenterY,
-            logoRadius,
-            logoOuterPaint
-        )
-
-        canvas.drawCircle(
-            logoCenterX,
-            logoCenterY,
-            logoRadius - 4f,
-            logoInnerPaint
-        )
-
-        canvas.drawText(
-            "KAMI",
-            logoCenterX,
-            logoCenterY + logoRadius * 0.22f,
-            logoTextPaint
-        )
-
-        titlePaint.apply {
-            typeface = Typeface.create(
-                Typeface.SANS_SERIF,
-                Typeface.BOLD
-            )
-            textSize = 25f
-            color = android.graphics.Color.WHITE
-            textAlign = if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
-        }
-
-        subtitlePaint.apply {
-            typeface = Typeface.create(
-                Typeface.SANS_SERIF,
-                Typeface.NORMAL
-            )
-            textSize = 12f
-            color = android.graphics.Color.WHITE
-            textAlign = if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
-        }
-
-        val headerTextX = if (isEnglish) {
-            308f
-        } else {
-            pageWidth - 34f
-        }
-
-        canvas.drawText(
-            tr(
-                "דו״ח רשימת מתאמנים",
-                "Trainees List Report"
-            ),
-            headerTextX,
-            50f,
-            titlePaint
-        )
-
-        canvas.drawText(
-            "${tr("סניף", "Branch")}: ${branch.ifBlank { "—" }} · " +
-                    "${tr("קבוצה", "Group")}: ${groupKey.ifBlank { "—" }}",
-            headerTextX,
-            77f,
-            subtitlePaint
-        )
-
-        val generatedDate = java.text.SimpleDateFormat(
-            "dd/MM/yyyy HH:mm",
-            java.util.Locale.getDefault()
-        ).format(java.util.Date())
-
-        smallPaint.apply {
-            color = mutedText
-            textSize = 8.5f
-            textAlign = Paint.Align.RIGHT
-        }
-
-        canvas.drawText(
-            tr(
-                "תאריך הפקה: $generatedDate",
-                "Generated: $generatedDate"
-            ),
-            pageWidth - 34f,
-            142f,
-            smallPaint
-        )
-
-        y = 174f
-    }
-
-    fun drawFooter() {
-        smallPaint.color = android.graphics.Color.rgb(100, 116, 139)
-        smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawLine(margin, pageHeight - 42f, pageWidth - margin, pageHeight - 42f, linePaint)
-        canvas.drawText(
-            tr("עמוד $pageNumber · KAMI", "Page $pageNumber · KAMI"),
-            pageWidth / 2f,
-            pageHeight - 24f,
-            smallPaint
-        )
-    }
-
-    fun newPage() {
-        drawFooter()
-        document.finishPage(page)
-        pageNumber++
-        page = document.startPage(
-            PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
-        )
-        canvas = page.canvas
-        y = margin
-        drawHeader()
-    }
-
-    fun ensureSpace(height: Float) {
-        if (y + height > pageHeight - 58f) {
-            newPage()
-        }
-    }
-
-    fun drawSummaryTile(
-        index: Int,
-        label: String,
-        value: String
-    ) {
-        val gap = 8f
-        val tileWidth = ((pageWidth - margin * 2f) - gap * 2f) / 3f
-        val left = if (isEnglish) {
-            margin + index * (tileWidth + gap)
-        } else {
-            pageWidth - margin - tileWidth - index * (tileWidth + gap)
-        }
-
-        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(248, 251, 255)
-        }
-
-        canvas.drawRoundRect(
-            left,
-            y,
-            left + tileWidth,
-            y + 58f,
-            14f,
-            14f,
-            bg
-        )
-
-        val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(214, 226, 241)
-            style = Paint.Style.STROKE
-            strokeWidth = 1f
-        }
-
-        canvas.drawRoundRect(
-            left,
-            y,
-            left + tileWidth,
-            y + 58f,
-            14f,
-            14f,
-            border
-        )
-
-        val valuePaint = Paint(textPaint).apply {
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-            textSize = 18f
-            color = android.graphics.Color.rgb(15, 23, 42)
-            textAlign = Paint.Align.CENTER
-        }
-
-        val labelPaint = Paint(textPaint).apply {
-            textSize = 9.5f
-            color = android.graphics.Color.rgb(100, 116, 139)
-            textAlign = Paint.Align.CENTER
-        }
-
-        canvas.drawText(value, left + tileWidth / 2f, y + 26f, valuePaint)
-        canvas.drawText(label, left + tileWidth / 2f, y + 44f, labelPaint)
-    }
-
-    fun drawTableHeader() {
-        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(2, 43, 74)
-        }
-
-        canvas.drawRoundRect(
-            margin,
-            y,
-            pageWidth - margin,
-            y + 30f,
-            10f,
-            10f,
-            bg
-        )
-
-        headerPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-
-        val cols = if (isEnglish) {
-            listOf(
-                margin + 14f,
-                margin + 190f,
-                margin + 270f,
-                margin + 330f,
-                margin + 395f,
-                margin + 455f
-            )
-        } else {
-            listOf(
-                pageWidth - margin - 14f,
-                pageWidth - margin - 190f,
-                pageWidth - margin - 270f,
-                pageWidth - margin - 330f,
-                pageWidth - margin - 395f,
-                pageWidth - margin - 455f
-            )
-        }
-
-        listOf(
-            tr("שם", "Name"),
-            tr("דרגה", "Rank"),
-            tr("גיל", "Age"),
-            tr("ותק", "Seniority"),
-            tr("נוכחות", "Attendance"),
-            tr("טלפון", "Phone")
-        ).forEachIndexed { index, title ->
-            canvas.drawText(title, cols[index], y + 20f, headerPaint)
-        }
-
-        y += 42f
-    }
-
-    fun drawTraineeRow(index: Int, trainee: TraineeProfile) {
-        ensureSpace(38f)
-
-        val rowBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (index % 2 == 0) {
-                android.graphics.Color.rgb(248, 251, 255)
-            } else {
-                android.graphics.Color.rgb(234, 244, 255)
-            }
-        }
-
-        canvas.drawRoundRect(
-            margin,
-            y - 18f,
-            pageWidth - margin,
-            y + 12f,
-            8f,
-            8f,
-            rowBg
-        )
-
-        val beltColor = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = beltPdfColor(trainee.belt)
-        }
-
-        val dotX = if (isEnglish) margin + 8f else pageWidth - margin - 8f
-        canvas.drawCircle(dotX, y - 3f, 4f, beltColor)
-
-        textPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-        textPaint.color = android.graphics.Color.rgb(15, 23, 42)
-        textPaint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-        textPaint.textSize = 10.5f
-
-        val cols = if (isEnglish) {
-            listOf(
-                margin + 18f,
-                margin + 190f,
-                margin + 270f,
-                margin + 330f,
-                margin + 395f,
-                margin + 455f
-            )
-        } else {
-            listOf(
-                pageWidth - margin - 18f,
-                pageWidth - margin - 190f,
-                pageWidth - margin - 270f,
-                pageWidth - margin - 330f,
-                pageWidth - margin - 395f,
-                pageWidth - margin - 455f
-            )
-        }
-
-        val values = listOf(
-            trainee.fullName.ifBlank { "—" }.take(24),
-            coachBeltNameForPdf(trainee.belt.ifBlank { "—" }, isEnglish).take(12),
-            trainee.age.takeIf { it > 0 }?.toString() ?: "—",
-            trainee.seniority.ifBlank { "—" }.take(10),
-            trainee.attendancePct.takeIf { it > 0 }?.let { "$it%" } ?: "—",
-            trainee.phone.ifBlank { "—" }.take(14)
-        )
-
-        values.forEachIndexed { colIndex, value ->
-            canvas.drawText(value, cols[colIndex], y, textPaint)
-        }
-
-        y += 34f
-    }
-
-    drawHeader()
-
-    sectionPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-    canvas.drawText(
-        tr("סיכום קבוצה", "Group Summary"),
-        textXStart(),
-        y,
-        sectionPaint
-    )
-
-    y += 14f
-
-    drawSummaryTile(0, tr("מתאמנים", "Trainees"), stats.totalTrainees.toString())
-    drawSummaryTile(1, tr("נוכחות ממוצעת", "Avg attendance"), if (stats.avgAttendance > 0) "${stats.avgAttendance}%" else "—")
-    drawSummaryTile(2, tr("וותק ממוצע", "Avg seniority"), formatAvgSeniority(stats.avgSeniority, isEnglish))
-
-    y += 82f
-
-    sectionPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-    canvas.drawText(
-        tr("רשימת מתאמנים", "Trainees"),
-        textXStart(),
-        y,
-        sectionPaint
-    )
-
-    y += 16f
-
-    drawTableHeader()
-
-    profiles.forEachIndexed { index, trainee ->
-        drawTraineeRow(index, trainee)
-    }
-
-    y += 18f
-    ensureSpace(90f)
-
-    sectionPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-    canvas.drawText(
-        tr("התפלגות חגורות", "Belt Distribution"),
-        textXStart(),
-        y,
-        sectionPaint
-    )
-
-    y += 22f
-
-    stats.beltCounts.forEach { (belt, count) ->
-        ensureSpace(24f)
-
-        val color = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = beltPdfColor(belt)
-        }
-
-        val dotX = if (isEnglish) margin + 6f else pageWidth - margin - 6f
-        canvas.drawCircle(dotX, y - 4f, 5f, color)
-
-        textPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-        textPaint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        textPaint.color = android.graphics.Color.rgb(15, 23, 42)
-        textPaint.textSize = 11.5f
-
-        canvas.drawText(
-            "${coachBeltNameForPdf(belt, isEnglish)}: $count",
-            if (isEnglish) margin + 20f else pageWidth - margin - 20f,
-            y,
-            textPaint
-        )
-
-        y += 22f
-    }
-
-    drawFooter()
-    document.finishPage(page)
-
-    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-    val file = File(dir, "coach_trainees_${System.currentTimeMillis()}.pdf")
-
-    FileOutputStream(file).use { output ->
-        document.writeTo(output)
-    }
-
-    document.close()
-    return file
-}
-
-private fun coachBeltNameForPdf(
-    beltName: String,
-    isEnglish: Boolean
-): String {
-    if (!isEnglish) return beltName
-
-    return when (beltName.trim()) {
-        "לבנה" -> "White"
-        "צהובה" -> "Yellow"
-        "כתומה" -> "Orange"
-        "ירוקה" -> "Green"
-        "כחולה" -> "Blue"
-        "חומה" -> "Brown"
-        "שחורה" -> "Black"
-        "ללא דרגה" -> "No rank"
-        else -> beltName
-    }
 }

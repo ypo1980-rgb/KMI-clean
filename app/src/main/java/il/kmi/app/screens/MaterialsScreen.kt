@@ -1794,18 +1794,55 @@ fun MaterialsScreen(
 
                                             Text(
                                                 text = displayName,
-                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                modifier = Modifier.fillMaxWidth(),
+                                                textAlign = if (isEnglish) {
+                                                    TextAlign.Left
+                                                } else {
+                                                    TextAlign.Right
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        /*
+                                                         * משתמשים באותו מנגנון הסבר
+                                                         * של כפתור המידע הקיים.
+                                                         */
+                                                        pressed = true
+
+                                                        explainTriple = Triple(
+                                                            belt,
+                                                            materialRootTopic,
+                                                            item
+                                                        )
+
+                                                        scope.launch {
+                                                            kotlinx.coroutines.delay(150)
+                                                            pressed = false
+                                                        }
+                                                    }
+                                                    .padding(
+                                                        vertical = 4.dp
+                                                    ),
                                                 color = when {
-                                                    isExcluded -> Color.Gray
-                                                    isHighlighted -> belt.color.copy(alpha = 0.95f)
-                                                    else -> Color(0xFF111827)
+                                                    isExcluded ->
+                                                        Color.Gray
+
+                                                    isHighlighted ->
+                                                        belt.color.copy(
+                                                            alpha = 0.95f
+                                                        )
+
+                                                    else ->
+                                                        Color(0xFF111827)
                                                 },
                                                 style = MaterialTheme.typography.bodySmall.copy(
                                                     fontSize = 11.sp,
                                                     lineHeight = 13.sp
                                                 ),
-                                                fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold,
+                                                fontWeight = if (isHighlighted) {
+                                                    FontWeight.Bold
+                                                } else {
+                                                    FontWeight.SemiBold
+                                                },
                                                 maxLines = 3,
                                                 overflow = TextOverflow.Ellipsis
                                             )
