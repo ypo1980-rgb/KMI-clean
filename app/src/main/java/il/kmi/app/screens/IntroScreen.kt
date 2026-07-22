@@ -493,8 +493,11 @@ private fun IntroWelcomeImageScreen(
     greeting: String,
     rank: IntroRankDisplay?,
     isGoogleLoading: Boolean,
+    isProfileStatusLoading: Boolean,
+    canContinueWithoutLogin: Boolean,
     googleError: String?,
     onGoogleClick: () -> Unit,
+    onContinueClick: () -> Unit,
     onRegularClick: () -> Unit
 ) {
     BoxWithConstraints(
@@ -657,19 +660,35 @@ private fun IntroWelcomeImageScreen(
                             )
                         )
                     )
-                    .clickable(enabled = !isGoogleLoading) {
-                        onGoogleClick()
+                    .clickable(
+                        enabled =
+                            !isGoogleLoading &&
+                                    !isProfileStatusLoading
+                    ) {
+                        if (canContinueWithoutLogin) {
+                            onContinueClick()
+                        } else {
+                            onGoogleClick()
+                        }
                     },
                 contentAlignment = Alignment.Center
             ) {
-                if (isGoogleLoading) {
+                if (isGoogleLoading || isProfileStatusLoading) {
                     PremiumIntroButtonLoading()
                 } else {
                     Text(
-                        text = if (isEnglish) {
-                            "★ Continue with Google"
-                        } else {
-                            "התחברות עם Google ★"
+                        text = when {
+                            canContinueWithoutLogin && isEnglish ->
+                                "Continue"
+
+                            canContinueWithoutLogin ->
+                                "המשך"
+
+                            isEnglish ->
+                                "★ Continue with Google"
+
+                            else ->
+                                "התחברות עם Google ★"
                         },
                         color = Color.White,
                         fontWeight = FontWeight.SemiBold,
@@ -680,31 +699,41 @@ private fun IntroWelcomeImageScreen(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            /*
+             * כניסה או רישום מוצגים רק כאשר אין למשתמש
+             * פרופיל מלא שניתן להמשיך באמצעותו.
+             */
+            if (!canContinueWithoutLogin) {
+                Spacer(Modifier.height(8.dp))
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.90f)
-                    .height(if (isCompactHeight) 32.dp else 36.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color.White.copy(alpha = 0.88f))
-                    .clickable(enabled = !isGoogleLoading) {
-                        onRegularClick()
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (isEnglish) {
-                        "Existing login / regular registration"
-                    } else {
-                        "כניסה / רישום בדרך הרגילה"
-                    },
-                    color = Color(0xFF172033),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = if (isCompactHeight) 12.sp else 14.sp,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.90f)
+                        .height(if (isCompactHeight) 32.dp else 36.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = 0.88f))
+                        .clickable(
+                            enabled =
+                                !isGoogleLoading &&
+                                        !isProfileStatusLoading
+                        ) {
+                            onRegularClick()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isEnglish) {
+                            "Existing login / regular registration"
+                        } else {
+                            "כניסה / רישום בדרך הרגילה"
+                        },
+                        color = Color(0xFF172033),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = if (isCompactHeight) 12.sp else 14.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
             }
 
             if (!googleError.isNullOrBlank()) {
@@ -825,6 +854,21 @@ fun IntroScreen(
     var isGoogleLoading by remember { mutableStateOf(false) }
     var googleError by remember { mutableStateOf<String?>(null) }
 
+    /*
+     * משתמש חוזר יקבל כפתור "המשך" רק לאחר שבדיקת
+     * הפרופיל אישרה שכל פרטי החובה קיימים.
+     */
+    var canContinueWithoutLogin by remember {
+        mutableStateOf(false)
+    }
+
+    var isProfileStatusLoading by remember {
+        mutableStateOf(
+            FirebaseAuth.getInstance().currentUser
+                ?.takeIf { !it.isAnonymous } != null
+        )
+    }
+
     // מונע הפעלה כפולה של Google Login בגלל לחיצה כפולה / recomposition
     var googleFlowLocked by remember { mutableStateOf(false) }
 
@@ -834,10 +878,61 @@ fun IntroScreen(
     val currentLang = langManager.getCurrentLanguage()
     val isEnglish = currentLang == AppLanguage.ENGLISH
 
-    val userSp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
+    val userSp = remember {
+        ctx.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
+    }
 
     // הקובץ השני שבו נשמרים חלק מהדגלים הישנים של האפליקציה.
-    val legacySp = remember { ctx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
+    val legacySp = remember {
+        ctx.getSharedPreferences(
+            "kmi_prefs",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    /*
+     * בדיקה אוטומטית של משתמש שכבר התחבר בעבר.
+     * משתמש לא מחובר או אנונימי נשאר בזרימת הכניסה הקיימת.
+     */
+    LaunchedEffect(Unit) {
+        val existingFirebaseUser =
+            FirebaseAuth.getInstance().currentUser
+                ?.takeIf { !it.isAnonymous }
+
+        if (existingFirebaseUser == null) {
+            canContinueWithoutLogin = false
+            isProfileStatusLoading = false
+        } else {
+            isProfileStatusLoading = true
+
+            val profileStatus = runCatching {
+                UserProfileCompletion
+                    .checkAndPersistProfileStatus(ctx)
+            }.getOrNull()
+
+            canContinueWithoutLogin =
+                profileStatus?.canEnterApp == true
+
+            isProfileStatusLoading = false
+
+            GoogleAuthManager.logUiStage(
+                context = ctx,
+                stage = "intro_existing_user_profile_checked",
+                message =
+                    "uid=${existingFirebaseUser.uid}, " +
+                            "canContinue=$canContinueWithoutLogin, " +
+                            "isComplete=${profileStatus?.isComplete}, " +
+                            "missingFields=" +
+                            profileStatus
+                                ?.missingFields
+                                .orEmpty()
+                                .joinToString("|")
+            )
+        }
+    }
 
     val classicGoogleLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -1097,13 +1192,47 @@ fun IntroScreen(
         onContinue()
     }
 
+    val continueExistingUser: () -> Unit = {
+        if (canContinueWithoutLogin) {
+            userSp.edit()
+                .putBoolean(
+                    SUPPRESS_NEXT_DRAWER_OPEN_KEY,
+                    true
+                )
+                .apply()
+
+            legacySp.edit()
+                .putBoolean(
+                    SUPPRESS_NEXT_DRAWER_OPEN_KEY,
+                    true
+                )
+                .apply()
+
+            GoogleAuthManager.logUiStage(
+                context = ctx,
+                stage = "intro_existing_user_continue_clicked",
+                message =
+                    "uid=" +
+                            FirebaseAuth.getInstance()
+                                .currentUser
+                                ?.uid
+                                .orEmpty()
+            )
+
+            onProfileComplete()
+        }
+    }
+
     IntroWelcomeImageScreen(
         isEnglish = isEnglish,
         greeting = dynamicGreeting,
         rank = traineeRankOrNull,
         isGoogleLoading = isGoogleLoading,
+        isProfileStatusLoading = isProfileStatusLoading,
+        canContinueWithoutLogin = canContinueWithoutLogin,
         googleError = googleError,
         onGoogleClick = startGoogleLogin,
+        onContinueClick = continueExistingUser,
         onRegularClick = openRegularLogin
     )
 }
