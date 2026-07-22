@@ -269,6 +269,52 @@ private fun buildExplanationWithStanceHighlight(
 }
 
 // ───────────────────────────────
+// ניקוי תגיות עיצוב פנימיות לפני הצגה
+// ───────────────────────────────
+private fun sanitizeAssistantMarkup(
+    source: String
+): String {
+    return source
+        .replace(
+            Regex(
+                pattern = """\[\[\s*/?\s*RED_BOLD\s*]]""",
+                option = RegexOption.IGNORE_CASE
+            ),
+            ""
+        )
+        .replace(
+            Regex(
+                pattern = """\[\s*/?\s*RED_BOLD\s*]""",
+                option = RegexOption.IGNORE_CASE
+            ),
+            ""
+        )
+        .replace(
+            Regex(
+                pattern = """\[\[\s*/?\s*BOLD\s*]]""",
+                option = RegexOption.IGNORE_CASE
+            ),
+            ""
+        )
+        .replace(
+            Regex(
+                pattern = """\[\[\s*/?\s*RED\s*]]""",
+                option = RegexOption.IGNORE_CASE
+            ),
+            ""
+        )
+        .replace(
+            Regex("""[ \t]+\n"""),
+            "\n"
+        )
+        .replace(
+            Regex("""\n{3,}"""),
+            "\n\n"
+        )
+        .trim()
+}
+
+// ───────────────────────────────
 // מציאת הסבר מתוך Explanations
 // ───────────────────────────────
 private fun findExplanationForHit(
@@ -1855,50 +1901,42 @@ fun AiAssistantDialog(
                         parseVoiceNavCommand(best.text) != null
                 }
 
-                val shouldAskForConfirmation =
-                    rankedAlternatives.size > 1 &&
-                            (
-                                    bestConfidenceIsLow ||
-                                            resultsAreClose ||
-                                            !bestHasRelevantMatch
-                                    )
+                /*
+      * בסיום זיהוי הדיבור שולחים אוטומטית את
+      * התוצאה המדורגת במקום להמתין ללחיצה נוספת.
+      */
+                speechAlternatives = emptyList()
+                speechNeedsConfirmation = false
+                speechCanRetry = false
+                speechStatusMessage = null
 
-                if (shouldAskForConfirmation) {
-                    val choices = rankedAlternatives
-                        .take(3)
-                        .distinctBy { normalizeExerciseQuery(it.text) }
+                val spoken = best.text.trim()
 
-                    speechAlternatives = choices
-                    speechNeedsConfirmation = true
+                if (spoken.isBlank()) {
                     speechCanRetry = true
-                    input = best.text
 
                     speechStatusMessage = tr(
-                        "לא הייתי בטוח למה התכוונת. בחר את האפשרות המתאימה:",
-                        "I wasn't certain what you meant. Choose the correct option:"
-                    )
-
-                    saveAssistantCommandLog(
-                        rawCommand = best.text,
-                        status = AssistantLogStatus.ALTERNATIVES_SHOWN,
-                        alternatives = choices.map { it.text }
+                        "לא הצלחתי לזהות בקשה ברורה. נסה שוב.",
+                        "I couldn't recognize a clear request. Please try again."
                     )
 
                     return
                 }
 
-                speechAlternatives = emptyList()
-                speechNeedsConfirmation = false
-
-                val spoken = best.text
                 val navCommand = parseVoiceNavCommand(spoken)
 
                 if (navCommand != null) {
                     pendingNavAfterSpeak = null
+                    input = ""
                     onVoiceCommand?.invoke(navCommand)
                     return
                 }
 
+                /*
+                 * העדכון של input מציג למשתמש מה זוהה.
+                 * pendingSendFromStt מפעיל את sendQuestion
+                 * דרך ה-LaunchedEffect שכבר קיים בקובץ.
+                 */
                 input = spoken
                 pendingSendFromStt = spoken
             }
@@ -2230,13 +2268,42 @@ fun AiAssistantDialog(
         }
 
         val assistantResult = response.result
-        val finalAnswer = assistantResult.primaryText()
-            .ifBlank {
-                tr(
-                    "לא התקבלה תשובה מהמאגר. נסה לנסח את הבקשה בצורה אחרת.",
-                    "No answer was returned. Try phrasing the request differently."
+
+        /*
+   * במצב הסבר תרגיל, הטקסט נשלף דרך
+   * ExerciseAssistantEngine ולא ישירות מתוצאת החיפוש המקורב.
+   */
+        val preferredBelt =
+            detectBeltEnum(question)
+                ?: detectBeltEnum(registeredBeltText.orEmpty())
+
+        val exerciseAnswer =
+            if (
+                assistantMode == AssistantMode.EXERCISE ||
+                assistantResult.source == AssistantKnowledgeSource.EXERCISES
+            ) {
+                getExerciseAnswerWithFallback(
+                    question = question,
+                    preferredBelt = preferredBelt,
+                    isEnglish = isEnglish
                 )
+                    .trim()
+                    .takeIf { it.isNotBlank() }
+            } else {
+                null
             }
+
+        val finalAnswer =
+            sanitizeAssistantMarkup(
+                exerciseAnswer
+                    ?: assistantResult.primaryText()
+            )
+                .ifBlank {
+                    tr(
+                        "לא התקבלה תשובה מהמאגר. נסה לנסח את הבקשה בצורה אחרת.",
+                        "No answer was returned. Try phrasing the request differently."
+                    )
+                }
 
         assistantMode = when (assistantResult.source) {
             AssistantKnowledgeSource.EXERCISES ->

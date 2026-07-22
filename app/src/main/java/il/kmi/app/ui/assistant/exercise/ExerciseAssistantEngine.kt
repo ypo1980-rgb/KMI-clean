@@ -1,8 +1,10 @@
 package il.kmi.app.ui.assistant.exercise
 
+import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.ExplanationSearchIndex
 import il.kmi.app.ui.assistant.search.ExerciseSearchService
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.Explanations
 
 object ExerciseAssistantEngine {
 
@@ -25,12 +27,35 @@ object ExerciseAssistantEngine {
             val exerciseName = cleanExerciseName(cleanQuestion)
 
             /*
+ * התאמה חד־משמעית לפני החיפוש המקורב.
+ * מונעת בלבול עם תרגילים דומים של איום סכין לבטן.
+ */
+            val normalizedExerciseName = exerciseName
+                .replace("–", "-")
+                .replace("—", "-")
+                .replace("־", "-")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+            val isLowerAbdomenKnifeThreat =
+                normalizedExerciseName.contains("איום סכין") &&
+                        normalizedExerciseName.contains("חוד") &&
+                        (
+                                normalizedExerciseName.contains("לבטן התחתונה") ||
+                                        normalizedExerciseName.contains("לבטן תחתונה")
+                                )
+
+            if (!isEnglish && isLowerAbdomenKnifeThreat) {
+                return "ביד שמאל תפיסת שרש כף יד הסכין תוך דחיפת יד התוקף למטה ושמאלה להרחקת הסכין ואגרוף ימין לפנים. במידה והאיום צמוד: נגיחה ולהמשיך התקפות. (יש ללמד גם בשמאל)"
+            }
+
+            /*
              * חיפוש ישיר במאגר ההסברים קודם לכל מנגנון אחר.
              * אם שם התרגיל קיים ומתקבלת התאמה טובה,
              * מחזירים מיד את ההסבר ולא שאלת הבהרה כללית.
              */
             if (exerciseName.isNotBlank()) {
-                val exactExplanation =
+                val matchedExercise =
                     ExplanationSearchIndex.findBest(
                         query = exerciseName,
                         preferredBelt = preferredBelt
@@ -40,13 +65,82 @@ object ExerciseAssistantEngine {
                             preferredBelt = null
                         )
 
-                exactExplanation
-                    ?.explanation
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { explanation ->
-                        return explanation
+                if (matchedExercise != null) {
+                    /*
+                     * תוצאת החיפוש משמשת רק לזיהוי התרגיל והחגורה.
+                     * את ההסבר עצמו שולפים ממאגר ההסברים המקורי
+                     * לפי השם שהמשתמש ביקש.
+                     */
+                    /*
+     * קודם פונים ישירות לקובץ Explanations.
+     * כך ExerciseIdentityRegistry לא יכול להחליף את התרגיל
+     * בתרגיל דומה בעל הסבר אחר.
+     */
+                    val directExplanation =
+                        if (!isEnglish) {
+                            Explanations.get(
+                                belt = matchedExercise.belt,
+                                item = exerciseName
+                            ).trim()
+                        } else {
+                            ""
+                        }
+
+                    val directIsFallback =
+                        directExplanation.isBlank() ||
+                                directExplanation.startsWith("הסבר מפורט על") ||
+                                directExplanation.startsWith("אין כרגע")
+
+                    if (!directIsFallback) {
+                        return directExplanation
                     }
+
+                    val resolvedExplanation =
+                        ExerciseExplanationResolver.get(
+                            belt = matchedExercise.belt,
+                            topic = "",
+                            item = exerciseName,
+                            isEnglish = isEnglish
+                        ).trim()
+
+                    val isFallback =
+                        resolvedExplanation.isBlank() ||
+                                resolvedExplanation.startsWith("הסבר מפורט על") ||
+                                resolvedExplanation.startsWith("אין כרגע") ||
+                                resolvedExplanation.startsWith("Detailed explanation for:") ||
+                                resolvedExplanation.startsWith(
+                                    "There is currently no explanation"
+                                )
+
+                    if (!isFallback) {
+                        return resolvedExplanation
+                    }
+
+                    /*
+                     * אם השם שנאמר הוא כינוי, מנסים שוב עם הכותרת
+                     * הקנונית שנמצאה באינדקס.
+                     */
+                    val canonicalExplanation =
+                        ExerciseExplanationResolver.get(
+                            belt = matchedExercise.belt,
+                            topic = "",
+                            item = matchedExercise.title,
+                            isEnglish = isEnglish
+                        ).trim()
+
+                    val isCanonicalFallback =
+                        canonicalExplanation.isBlank() ||
+                                canonicalExplanation.startsWith("הסבר מפורט על") ||
+                                canonicalExplanation.startsWith("אין כרגע") ||
+                                canonicalExplanation.startsWith("Detailed explanation for:") ||
+                                canonicalExplanation.startsWith(
+                                    "There is currently no explanation"
+                                )
+
+                    if (!isCanonicalFallback) {
+                        return canonicalExplanation
+                    }
+                }
             }
 
             /*

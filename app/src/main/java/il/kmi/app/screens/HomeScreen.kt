@@ -1680,87 +1680,262 @@ fun HomeScreen(
                 fun java.util.Calendar.toLocalDate(): java.time.LocalDate =
                     this.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate()
 
-                val holidayDates: Set<java.time.LocalDate> = remember {
-                    runCatching {
-                        val input = ctx.assets.open("holidays_hebrew_2024_2026.json")
-                        val text = input.bufferedReader().use { it.readText() }
+                data class HolidayCancellationReason(
+                    val he: String,
+                    val en: String
+                )
 
-                        val root = org.json.JSONObject(text)
-                        val arr = root.getJSONArray("items")
-
-                        val set = mutableSetOf<java.time.LocalDate>()
-
-                        fun isTrainingBlockingHoliday(obj: org.json.JSONObject): Boolean {
-                            val title = listOf(
-                                obj.optString("title", ""),
-                                obj.optString("title_he", ""),
-                                obj.optString("hebrew", ""),
-                                obj.optString("name", ""),
-                                obj.optString("category", ""),
-                                obj.optString("subcat", "")
-                            )
-                                .joinToString(" ")
-                                .trim()
-
-                            if (title.isBlank()) return false
-
-                            val clean = title.lowercase(java.util.Locale("he", "IL"))
-
-                            val blockingKeywords = listOf(
-                                "ראש השנה",
-                                "יום כיפור",
-                                "כיפור",
-                                "סוכות",
-                                "שמחת תורה",
-                                "פסח",
-                                "חול המועד פסח",
-                                "שבועות",
-                                "תשעה באב"
+                val holidaysByDate:
+                        Map<java.time.LocalDate, HolidayCancellationReason> =
+                    remember {
+                        runCatching {
+                            val input = ctx.assets.open(
+                                "holidays_hebrew_2024_2026.json"
                             )
 
-                            val nonBlockingKeywords = listOf(
-                                "ראש חודש",
-                                "ספירת העומר",
-                                "לג בעומר",
-                                "ט״ו בשבט",
-                                "טו בשבט",
-                                "יום העצמאות",
-                                "יום הזיכרון",
-                                "יום השואה",
-                                "פורים קטן",
-                                "שושן פורים",
-                                "חנוכה",
-                                "צום",
-                                "תענית",
-                                "ערב"
-                            )
+                            val text = input
+                                .bufferedReader()
+                                .use { it.readText() }
 
-                            if (nonBlockingKeywords.any { clean.contains(it) }) {
-                                return false
+                            val root = org.json.JSONObject(text)
+                            val items = root.getJSONArray("items")
+
+                            val result = mutableMapOf<
+                                    java.time.LocalDate,
+                                    HolidayCancellationReason
+                                    >()
+
+                            fun reasonFor(
+                                obj: org.json.JSONObject
+                            ): HolidayCancellationReason? {
+                                val title = listOf(
+                                    obj.optString("title", ""),
+                                    obj.optString("title_he", ""),
+                                    obj.optString("hebrew", ""),
+                                    obj.optString("name", ""),
+                                    obj.optString("category", ""),
+                                    obj.optString("subcat", "")
+                                )
+                                    .joinToString(" ")
+                                    .trim()
+
+                                if (title.isBlank()) {
+                                    return null
+                                }
+
+                                val clean = title
+                                    .lowercase(java.util.Locale("he", "IL"))
+                                    .replace("׳", "'")
+                                    .replace("״", "\"")
+
+                                val isEve =
+                                    clean.contains("ערב") ||
+                                            clean.contains("erev")
+
+                                /*
+                                 * תשעה באב הוא צום שחוסם אימון,
+                                 * אף על פי שהמילה "צום" בדרך כלל
+                                 * אינה גורמת לביטול אוטומטי.
+                                 */
+                                if (
+                                    clean.contains("תשעה באב") ||
+                                    clean.contains("ט' באב") ||
+                                    clean.contains("ט באב") ||
+                                    clean.contains("tisha b'av") ||
+                                    clean.contains("tisha bav")
+                                ) {
+                                    return HolidayCancellationReason(
+                                        he = "צום תשעה באב",
+                                        en = "Tisha B’Av fast"
+                                    )
+                                }
+
+                                if (clean.contains("ראש השנה")) {
+                                    return HolidayCancellationReason(
+                                        he = if (isEve) {
+                                            "ערב ראש השנה"
+                                        } else {
+                                            "ראש השנה"
+                                        },
+                                        en = if (isEve) {
+                                            "Rosh Hashanah Eve"
+                                        } else {
+                                            "Rosh Hashanah"
+                                        }
+                                    )
+                                }
+
+                                if (
+                                    clean.contains("יום כיפור") ||
+                                    clean.contains("יום הכיפורים") ||
+                                    clean.contains("yom kippur")
+                                ) {
+                                    return HolidayCancellationReason(
+                                        he = if (isEve) {
+                                            "ערב יום כיפור"
+                                        } else {
+                                            "יום כיפור"
+                                        },
+                                        en = if (isEve) {
+                                            "Yom Kippur Eve"
+                                        } else {
+                                            "Yom Kippur"
+                                        }
+                                    )
+                                }
+
+                                if (clean.contains("שמחת תורה")) {
+                                    return HolidayCancellationReason(
+                                        he = if (isEve) {
+                                            "ערב שמחת תורה"
+                                        } else {
+                                            "שמחת תורה"
+                                        },
+                                        en = if (isEve) {
+                                            "Simchat Torah Eve"
+                                        } else {
+                                            "Simchat Torah"
+                                        }
+                                    )
+                                }
+
+                                if (clean.contains("חול המועד סוכות")) {
+                                    return HolidayCancellationReason(
+                                        he = "חול המועד סוכות",
+                                        en = "Sukkot Intermediate Days"
+                                    )
+                                }
+
+                                if (clean.contains("סוכות")) {
+                                    return HolidayCancellationReason(
+                                        he = if (isEve) {
+                                            "ערב סוכות"
+                                        } else {
+                                            "סוכות"
+                                        },
+                                        en = if (isEve) {
+                                            "Sukkot Eve"
+                                        } else {
+                                            "Sukkot"
+                                        }
+                                    )
+                                }
+
+                                if (clean.contains("חול המועד פסח")) {
+                                    return HolidayCancellationReason(
+                                        he = "חול המועד פסח",
+                                        en = "Passover Intermediate Days"
+                                    )
+                                }
+
+                                if (clean.contains("פסח")) {
+                                    return HolidayCancellationReason(
+                                        he = if (isEve) {
+                                            "ערב פסח"
+                                        } else {
+                                            "פסח"
+                                        },
+                                        en = if (isEve) {
+                                            "Passover Eve"
+                                        } else {
+                                            "Passover"
+                                        }
+                                    )
+                                }
+
+                                if (clean.contains("שבועות")) {
+                                    return HolidayCancellationReason(
+                                        he = if (isEve) {
+                                            "ערב שבועות"
+                                        } else {
+                                            "שבועות"
+                                        },
+                                        en = if (isEve) {
+                                            "Shavuot Eve"
+                                        } else {
+                                            "Shavuot"
+                                        }
+                                    )
+                                }
+
+                                /*
+                                 * מועדים שאינם מבטלים אימון.
+                                 * צומות אחרים אינם מבטלים כרגע,
+                                 * אלא אם נוסיף אותם במפורש בהמשך.
+                                 */
+                                val nonBlockingKeywords = listOf(
+                                    "ראש חודש",
+                                    "ספירת העומר",
+                                    "לג בעומר",
+                                    "ט\"ו בשבט",
+                                    "טו בשבט",
+                                    "יום העצמאות",
+                                    "יום הזיכרון",
+                                    "יום השואה",
+                                    "פורים קטן",
+                                    "שושן פורים",
+                                    "פורים",
+                                    "חנוכה",
+                                    "צום",
+                                    "תענית"
+                                )
+
+                                if (
+                                    nonBlockingKeywords.any {
+                                        clean.contains(it)
+                                    }
+                                ) {
+                                    return null
+                                }
+
+                                return null
                             }
 
-                            return blockingKeywords.any { clean.contains(it) }
-                        }
+                            for (index in 0 until items.length()) {
+                                val obj = items.getJSONObject(index)
 
-                        for (i in 0 until arr.length()) {
-                            val obj = arr.getJSONObject(i)
+                                if (!obj.has("date_iso")) {
+                                    continue
+                                }
 
-                            if (
-                                obj.has("date_iso") &&
-                                isTrainingBlockingHoliday(obj)
-                            ) {
-                                val date = java.time.LocalDate.parse(obj.getString("date_iso"))
-                                set.add(date)
+                                val reason = reasonFor(obj) ?: continue
+
+                                val date = runCatching {
+                                    java.time.LocalDate.parse(
+                                        obj.getString("date_iso")
+                                    )
+                                }.getOrNull() ?: continue
+
+                                val existing = result[date]
+
+                                /*
+                                 * אם באותו תאריך מופיעים כמה שמות,
+                                 * תשעה באב מקבל עדיפות על שם כללי.
+                                 */
+                                if (
+                                    existing == null ||
+                                    reason.he == "צום תשעה באב"
+                                ) {
+                                    result[date] = reason
+                                }
                             }
+
+                            result.toMap()
+                        }.getOrElse { error ->
+                            android.util.Log.e(
+                                "KMI_HOLIDAYS",
+                                "Failed reading holiday calendar",
+                                error
+                            )
+
+                            emptyMap()
                         }
+                    }
 
-                        set
-                    }.getOrElse { emptySet() }
-                }
-
-                fun isBlockedHolidayDate(cal: java.util.Calendar): Boolean {
-                    val d = cal.toLocalDate()
-                    return holidayDates.contains(d)
+                fun holidayCancellationReason(
+                    cal: java.util.Calendar
+                ): HolidayCancellationReason? {
+                    return holidaysByDate[cal.toLocalDate()]
                 }
 
                 fun upcomingWindowStartMillis(): Long {
@@ -2035,20 +2210,31 @@ fun HomeScreen(
 
                 data class HomeTrainingUi(
                     val training: TrainingData,
+                    val cancellationReason:
+                    HolidayCancellationReason?
+                ) {
                     val isCancelledByHoliday: Boolean
-                )
-
-                val upcoming: List<HomeTrainingUi> = remember(currentWeekCandidates) {
-                    currentWeekCandidates
-                        .sortedBy { it.cal.timeInMillis }
-                        .take(5)
-                        .map { training ->
-                            HomeTrainingUi(
-                                training = training,
-                                isCancelledByHoliday = isBlockedHolidayDate(training.cal)
-                            )
-                        }
+                        get() = cancellationReason != null
                 }
+
+                val upcoming: List<HomeTrainingUi> =
+                    remember(
+                        currentWeekCandidates,
+                        holidaysByDate
+                    ) {
+                        currentWeekCandidates
+                            .sortedBy { it.cal.timeInMillis }
+                            .take(5)
+                            .map { training ->
+                                HomeTrainingUi(
+                                    training = training,
+                                    cancellationReason =
+                                        holidayCancellationReason(
+                                            training.cal
+                                        )
+                                )
+                            }
+                    }
 
                 LaunchedEffect(upcoming, isEnglish) {
                     val locale = if (isEnglish) {
@@ -2071,7 +2257,11 @@ fun HomeScreen(
                             day = dayFmt.format(training.cal.time),
                             date = dateFmt.format(training.cal.time),
                             time = timeFmt.format(training.cal.time),
-                            cancelledByHoliday = item.isCancelledByHoliday
+                            cancellationReason = if (isEnglish) {
+                                item.cancellationReason?.en
+                            } else {
+                                item.cancellationReason?.he
+                            }
                         )
                     }
                 }
@@ -2143,7 +2333,11 @@ fun HomeScreen(
                             TrainingCardCompact(
                                 training = item.training,
                                 isEnglish = isEnglish,
-                                isCancelledByHoliday = item.isCancelledByHoliday
+                                cancellationReason = if (isEnglish) {
+                                    item.cancellationReason?.en
+                                } else {
+                                    item.cancellationReason?.he
+                                }
                             )
                         }
                         item { Spacer(Modifier.height(6.dp)) }
@@ -3493,7 +3687,7 @@ private fun buildExplanationWithStanceHighlight(
 private fun TrainingCardCompact(
     training: TrainingData,
     isEnglish: Boolean,
-    isCancelledByHoliday: Boolean = false
+    cancellationReason: String? = null
 ) {
     val ctx = LocalContext.current
     val haptic = rememberHapticsGlobal()
@@ -3739,7 +3933,7 @@ private fun TrainingCardCompact(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            if (isCancelledByHoliday) {
+            if (!cancellationReason.isNullOrBlank()) {
                 Spacer(Modifier.height(4.dp))
 
                 Surface(
@@ -3748,18 +3942,22 @@ private fun TrainingCardCompact(
                     color = Color(0xFFFFF7ED),
                     border = androidx.compose.foundation.BorderStroke(
                         width = 1.dp,
-                        color = Color(0xFFF97316).copy(alpha = 0.35f)
+                        color = Color(0xFFF97316)
+                            .copy(alpha = 0.35f)
                     )
                 ) {
                     Text(
                         text = if (isEnglish) {
-                            "Training cancelled due to holiday"
+                            "Training cancelled due to $cancellationReason"
                         } else {
-                            "האימון מבוטל עקב חג"
+                            "האימון מבוטל עקב $cancellationReason"
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                            .padding(
+                                horizontal = 10.dp,
+                                vertical = 7.dp
+                            ),
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
@@ -4106,8 +4304,11 @@ private data class HomePdfTraining(
     val day: String,
     val date: String,
     val time: String,
+    val cancellationReason: String?
+) {
     val cancelledByHoliday: Boolean
-)
+        get() = !cancellationReason.isNullOrBlank()
+}
 
 private fun shareHomePdf(
     context: Context,
@@ -4504,7 +4705,15 @@ private fun createHomePdf(
             labelPaint.textAlign = Paint.Align.CENTER
             labelPaint.color = orange
             canvas.drawText(
-                tr("האימון מבוטל עקב חג", "Training cancelled due to holiday"),
+                if (isEnglish) {
+                    "Training cancelled due to ${
+                        training.cancellationReason.orEmpty()
+                    }"
+                } else {
+                    "האימון מבוטל עקב ${
+                        training.cancellationReason.orEmpty()
+                    }"
+                },
                 pageWidth / 2f,
                 bottom - 14f,
                 labelPaint
