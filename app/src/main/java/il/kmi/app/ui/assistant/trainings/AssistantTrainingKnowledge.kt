@@ -1638,12 +1638,15 @@ object AssistantTrainingKnowledge {
         val wantsNextWeek = EntityExtractor.wantsNextWeek(norm)
 
         /*
-         * ברירת המחדל היא עד חמישה אימונים.
-         * אם המשתמש ביקש 2, 3 או 4 – מחזירים בדיוק
-         * את הכמות שביקש, ככל שקיימים מספיק אימונים.
+         * שומרים בנפרד אם המשתמש ביקש מספר אימונים מפורש.
+         * ברירת המחדל 5 משמשת רק כאשר באמת נדרשת רשימה,
+         * ואינה הופכת שאלה על אימון יחיד לבקשת רשימה.
          */
+        val explicitlyRequestedTrainingCount =
+            EntityExtractor.requestedTrainingCount(norm)
+
         val requestedTrainingCount =
-            EntityExtractor.requestedTrainingCount(norm) ?: 5
+            explicitlyRequestedTrainingCount ?: 5
 
         // ישויות מפורשות מהשאלה
         val explicitBranch = EntityExtractor.detectBranch(norm)
@@ -1744,9 +1747,41 @@ object AssistantTrainingKnowledge {
             }
         }
 
+        /*
+         * בפרופיל יכולים להישמר כמה סניפים באותה מחרוזת,
+         * למשל: "סניף א, סניף ב".
+         * כל ערך מושווה בנפרד לסניף שב־TrainingCatalog.
+         */
         branch?.let { expectedBranch ->
-            seq = seq.filter { training ->
-                training.branchName == expectedBranch
+
+            fun normalizeBranchName(value: String): String {
+                return value
+                    .replace("–", "-")
+                    .replace("—", "-")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+            }
+
+            val expectedBranches = expectedBranch
+                .split(
+                    ',',
+                    ';',
+                    '|',
+                    '\n'
+                )
+                .map(::normalizeBranchName)
+                .filter { it.isNotBlank() }
+                .distinct()
+
+            if (expectedBranches.isNotEmpty()) {
+                seq = seq.filter { training ->
+                    val trainingBranch =
+                        normalizeBranchName(training.branchName)
+
+                    expectedBranches.any { registeredBranch ->
+                        trainingBranch == registeredBranch
+                    }
+                }
             }
         }
 
@@ -2045,15 +2080,17 @@ object AssistantTrainingKnowledge {
 
             intent == AssistantIntent.ASK_NEXT_TRAINING -> {
                 val asksForMultipleTrainings =
-                    wantsUpcoming ||
-                            requestedTrainingCount > 1 ||
+                    explicitlyRequestedTrainingCount != null ||
                             listOf(
-                                "האימונים",
+                                "האימונים הבאים",
                                 "אימונים הבאים",
+                                "האימונים הקרובים",
                                 "אימונים קרובים",
-                                "trainings",
-                                "classes",
-                                "workouts"
+                                "next trainings",
+                                "upcoming trainings",
+                                "upcoming classes",
+                                "next classes",
+                                "next workouts"
                             ).any { it in norm }
 
                 if (asksForMultipleTrainings) {

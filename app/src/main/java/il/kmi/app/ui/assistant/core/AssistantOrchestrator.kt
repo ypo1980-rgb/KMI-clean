@@ -76,10 +76,92 @@ class AssistantOrchestrator(
             return clarificationResponse
         }
 
-        val resolution = AssistantIntentResolver.resolve(
+        val detectedResolution = AssistantIntentResolver.resolve(
             question = cleanQuestion,
             context = conversationContext
         )
+
+        val normalizedQuestion = cleanQuestion
+            .lowercase()
+            .replace("־", " ")
+            .replace("–", " ")
+            .replace("-", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        /*
+         * שאלת אימונים שמכילה גם ביטוי של זמן היא בקשה ברורה.
+         * גם אם ה־Resolver מתלבט בין "האימון הבא",
+         * "רשימת אימונים" או "אימוני השבוע הבא" —
+         * כל האפשרויות מופנות לאותו מנוע אימונים,
+         * ולכן אין צורך לשאול את המשתמש למה התכוון.
+         */
+        val hasTrainingMarker = listOf(
+            "אימון",
+            "אימונים",
+            "האימון",
+            "האימונים",
+            "training",
+            "trainings",
+            "workout",
+            "workouts",
+            "class",
+            "classes"
+        ).any { marker ->
+            marker in normalizedQuestion
+        }
+
+        val hasTrainingTimeMarker = listOf(
+            "מתי",
+            "הבא",
+            "הבאים",
+            "קרוב",
+            "קרובים",
+            "השבוע",
+            "שבוע הבא",
+            "היום",
+            "מחר",
+            "באיזה יום",
+            "באיזו שעה",
+            "when",
+            "next",
+            "upcoming",
+            "this week",
+            "next week",
+            "today",
+            "tomorrow",
+            "what time",
+            "which day"
+        ).any { marker ->
+            marker in normalizedQuestion
+        }
+
+        val resolution =
+            if (hasTrainingMarker && hasTrainingTimeMarker) {
+                detectedResolution.copy(
+                    intent = when {
+                        "שבוע הבא" in normalizedQuestion ||
+                                "next week" in normalizedQuestion ||
+                                "האימונים" in normalizedQuestion ||
+                                "אימונים" in normalizedQuestion ||
+                                "trainings" in normalizedQuestion ||
+                                "classes" in normalizedQuestion ->
+                            AssistantIntent.LIST_TRAININGS
+
+                        else ->
+                            AssistantIntent.NEXT_TRAINING
+                    },
+                    source = AssistantKnowledgeSource.TRAININGS,
+                    confidence = maxOf(
+                        detectedResolution.confidence,
+                        0.95f
+                    ),
+                    alternatives = emptyList(),
+                    requiresClarification = false
+                )
+            } else {
+                detectedResolution
+            }
 
         conversationContext =
             conversationContext.withDetectedRequest(
