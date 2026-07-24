@@ -114,6 +114,36 @@ object ExerciseSearchService {
             }
         }
 
+        /*
+         * בקשה כללית על איום סכין צריכה להחזיר את כל
+         * תרגילי איום הסכין ולא רק התאמה יחידה לביטוי המלא.
+         */
+        val normalizedForVariants =
+            q.lowercase()
+                .replace("־", " ")
+                .replace("–", " ")
+                .replace("—", " ")
+                .replace("-", " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+        if (
+            normalizedForVariants.contains("איום") &&
+            normalizedForVariants.contains("סכין")
+        ) {
+            variants += "איום סכין"
+            variants += "הגנה מאיום סכין"
+        }
+
+        if (
+            normalizedForVariants.contains("knife") &&
+            normalizedForVariants.contains("threat")
+        ) {
+            variants += "knife threat"
+            variants += "defence against a knife threat"
+            variants += "defense against a knife threat"
+        }
+
         if (" על " in q) {
             variants += q.substringAfter(" על ").trim()
         }
@@ -131,6 +161,123 @@ object ExerciseSearchService {
             .filter { it.isNotBlank() }
             .distinct()
             .sortedBy { it.length }
+    }
+
+    fun findAmbiguousExerciseHits(
+        question: String,
+        hits: List<SearchHit>,
+        maxItems: Int = 8
+    ): List<SearchHit> {
+        val normalizedQuestion =
+            normalizeForAmbiguity(question)
+
+        if (
+            normalizedQuestion.isBlank() ||
+            hits.size < 2
+        ) {
+            return emptyList()
+        }
+
+        val meaningfulTokens =
+            normalizedQuestion
+                .split(" ")
+                .map { it.trim() }
+                .filter { token ->
+                    token.length >= 2 &&
+                            token !in setOf(
+                        "את",
+                        "של",
+                        "על",
+                        "עם",
+                        "תרגיל",
+                        "תרגילים"
+                    )
+                }
+                .distinct()
+
+        val isGenericKnifeThreatQuestion =
+            (
+                    normalizedQuestion.contains("איום") &&
+                            normalizedQuestion.contains("סכין")
+                    ) || (
+                    normalizedQuestion.contains("knife") &&
+                            normalizedQuestion.contains("threat")
+                    )
+
+        val relatedHits =
+            hits
+                .filter { hit ->
+                    !hit.item.isNullOrBlank()
+                }
+                .filter { hit ->
+                    val itemText =
+                        normalizeForAmbiguity(
+                            displayNameForHit(
+                                rawItem =
+                                    hit.item.orEmpty(),
+                                fallbackTopic =
+                                    hit.topic
+                            )
+                        )
+
+                    if (isGenericKnifeThreatQuestion) {
+                        /*
+                         * במקרה של בקשה כללית לאיום סכין,
+                         * כל תרגיל ששמו כולל איום וסכין
+                         * הוא אפשרות שהמשתמש צריך לבחור.
+                         */
+                        (
+                                itemText.contains("איום") &&
+                                        itemText.contains("סכין")
+                                ) || (
+                                itemText.contains("knife") &&
+                                        itemText.contains("threat")
+                                )
+                    } else {
+                        itemText.contains(
+                            normalizedQuestion
+                        ) || (
+                                meaningfulTokens.isNotEmpty() &&
+                                        meaningfulTokens.all { token ->
+                                            token in itemText
+                                        }
+                                )
+                    }
+                }
+                .distinctBy { hit ->
+                    listOf(
+                        hit.belt.name,
+                        normalizeForAmbiguity(
+                            hit.item.orEmpty()
+                        )
+                    ).joinToString("|")
+                }
+                .take(maxItems)
+
+        return if (relatedHits.size >= 2) {
+            relatedHits
+        } else {
+            emptyList()
+        }
+    }
+
+    private fun normalizeForAmbiguity(
+        text: String
+    ): String {
+        return text
+            .lowercase()
+            .replace("־", " ")
+            .replace("–", " ")
+            .replace("—", " ")
+            .replace("-", " ")
+            .replace("\"", " ")
+            .replace("'", " ")
+            .replace("?", " ")
+            .replace("!", " ")
+            .replace("(", " ")
+            .replace(")", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
     }
 
     fun formatHitsAsExerciseList(

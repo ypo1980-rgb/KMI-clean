@@ -152,6 +152,8 @@ private data class AiMessage(
     val relatedQuestion: String? = null,
     val feedback: Feedback = Feedback.NONE,
     val trainingItems:
+    List<AssistantResultItem> = emptyList(),
+    val materialItems:
     List<AssistantResultItem> = emptyList()
 )
 
@@ -387,6 +389,144 @@ private fun AssistantTrainingCard(
                             vertical = 6.dp
                         )
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AssistantMaterialCard(
+    item: AssistantResultItem,
+    index: Int,
+    isEnglish: Boolean
+) {
+    val secondaryText =
+        item.subtitle
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: item.topicName
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = Color(0xFF2563EB).copy(
+                    alpha = 0.25f
+                ),
+                shape = RoundedCornerShape(18.dp)
+            ),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White,
+        tonalElevation = 0.dp,
+        shadowElevation = 3.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = 11.dp
+                ),
+            horizontalArrangement =
+                Arrangement.spacedBy(10.dp),
+            verticalAlignment =
+                Alignment.Top
+        ) {
+            if (isEnglish) {
+                Surface(
+                    modifier = Modifier.size(30.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFEFF6FF)
+                ) {
+                    Box(
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        Text(
+                            text = (index + 1).toString(),
+                            color = Color(0xFF2563EB),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement =
+                    Arrangement.spacedBy(5.dp)
+            ) {
+                Text(
+                    text = item.title,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFF172033),
+                    fontSize = 14.5.sp,
+                    lineHeight = 19.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = if (isEnglish) {
+                        TextAlign.Left
+                    } else {
+                        TextAlign.Right
+                    }
+                )
+
+                secondaryText?.let { details ->
+                    Text(
+                        text = details,
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFF526079),
+                        fontSize = 12.5.sp,
+                        lineHeight = 17.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        }
+                    )
+                }
+
+                item.description
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { description ->
+                        Text(
+                            text = description,
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Color(0xFF64748B),
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            textAlign = if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            }
+                        )
+                    }
+            }
+
+            if (!isEnglish) {
+                Surface(
+                    modifier = Modifier.size(30.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFEFF6FF)
+                ) {
+                    Box(
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        Text(
+                            text = (index + 1).toString(),
+                            color = Color(0xFF2563EB),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
                 }
             }
         }
@@ -2648,11 +2788,24 @@ fun AiAssistantDialog(
                 emptyList()
             }
 
+        val materialItems =
+            if (
+                assistantResult is
+                        AssistantResult.ResultList &&
+                assistantResult.source ==
+                AssistantKnowledgeSource.MATERIAL
+            ) {
+                assistantResult.items
+            } else {
+                emptyList()
+            }
+
         val aiMessage = AiMessage(
             fromUser = false,
             text = finalAnswer,
             relatedQuestion = question,
-            trainingItems = trainingItems
+            trainingItems = trainingItems,
+            materialItems = materialItems
         )
 
         messages = if (
@@ -3445,9 +3598,21 @@ fun AiAssistantDialog(
                                 }
 
                             } else if (showPremiumAnswerLayout) {
-                                val answerText = latestAssistantMessage?.text?.trim().orEmpty()
+                                val answerText =
+                                    latestAssistantMessage
+                                        ?.text
+                                        ?.trim()
+                                        .orEmpty()
+
+                                val materialItems =
+                                    latestAssistantMessage
+                                        ?.materialItems
+                                        .orEmpty()
+
                                 val answerIndex =
-                                    latestAssistantMessage?.let { messages.indexOf(it) } ?: -1
+                                    latestAssistantMessage
+                                        ?.let { messages.indexOf(it) }
+                                        ?: -1
                                 val answerFeedback =
                                     latestAssistantMessage?.feedback ?: Feedback.NONE
 
@@ -3703,15 +3868,62 @@ fun AiAssistantDialog(
                                                                 }
                                                             }
 
-                                                            Text(
-                                                                text = answerText,
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                color = Color(0xFF232333),
-                                                                textAlign = textAlignPrimary,
-                                                                fontSize = 14.sp,
-                                                                lineHeight = 21.sp,
-                                                                fontWeight = FontWeight.Normal
-                                                            )
+                                                            if (
+                                                                showMaterialAnswerLayout &&
+                                                                materialItems.isNotEmpty()
+                                                            ) {
+                                                                Column(
+                                                                    modifier =
+                                                                        Modifier.fillMaxWidth(),
+                                                                    verticalArrangement =
+                                                                        Arrangement.spacedBy(
+                                                                            9.dp
+                                                                        )
+                                                                ) {
+                                                                    Text(
+                                                                        text = tr(
+                                                                            "נמצאו ${materialItems.size} תוצאות",
+                                                                            "${materialItems.size} results found"
+                                                                        ),
+                                                                        modifier =
+                                                                            Modifier.fillMaxWidth(),
+                                                                        color =
+                                                                            Color(0xFF1D4ED8),
+                                                                        textAlign =
+                                                                            textAlignPrimary,
+                                                                        fontSize = 13.sp,
+                                                                        lineHeight = 18.sp,
+                                                                        fontWeight =
+                                                                            FontWeight.Bold
+                                                                    )
+
+                                                                    materialItems
+                                                                        .forEachIndexed {
+                                                                                index,
+                                                                                item ->
+                                                                            AssistantMaterialCard(
+                                                                                item = item,
+                                                                                index = index,
+                                                                                isEnglish =
+                                                                                    isEnglish
+                                                                            )
+                                                                        }
+                                                                }
+                                                            } else {
+                                                                Text(
+                                                                    text = answerText,
+                                                                    modifier =
+                                                                        Modifier.fillMaxWidth(),
+                                                                    color =
+                                                                        Color(0xFF232333),
+                                                                    textAlign =
+                                                                        textAlignPrimary,
+                                                                    fontSize = 14.sp,
+                                                                    lineHeight = 21.sp,
+                                                                    fontWeight =
+                                                                        FontWeight.Normal
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }

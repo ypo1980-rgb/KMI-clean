@@ -152,11 +152,102 @@ object AssistantKnowledgeRepository {
         request: AssistantKnowledgeRequest,
         resolvedQuestion: String
     ): AssistantResult {
-        val rawAnswer = MaterialAssistantEngine.answer(
-            question = resolvedQuestion,
-            preferredBelt = request.preferredBelt,
-            isEnglish = request.isEnglish
-        ).trim()
+        /*
+         * גם כאשר המשתמש נמצא במצב "חומר ק.מ.י",
+         * בקשת הסבר על תרגיל צריכה לעבור למקור ההסברים
+         * המרכזי ולא להישלח שוב למנוע רשימות החומר.
+         *
+         * resolvedQuestion עשויה כבר להכיל את שמו של
+         * התרגיל שנבחר מתוך הרשימה.
+         */
+        val explanationRequested =
+            isExerciseExplanationRequest(
+                question = request.originalQuestion
+            ) ||
+                    isExerciseExplanationRequest(
+                        question = resolvedQuestion
+                    )
+
+        if (explanationRequested) {
+            return queryExercise(
+                request = request.copy(
+                    resolvedQuestion = resolvedQuestion,
+                    intent =
+                        AssistantIntent.EXPLAIN_EXERCISE
+                ),
+                resolvedQuestion = resolvedQuestion
+            )
+        }
+
+        val rawAnswer =
+            MaterialAssistantEngine.answer(
+                question = resolvedQuestion,
+                preferredBelt = request.preferredBelt,
+                isEnglish = request.isEnglish
+            ).trim()
+
+        /*
+         * לפני יצירת ResultList מטפלים בתשובות שגיאה,
+         * מידע חסר או תוצאה שלא נמצאה.
+         */
+        if (
+            rawAnswer.isBlank() ||
+            looksLikeMissingInformation(rawAnswer) ||
+            looksLikeNotFound(rawAnswer)
+        ) {
+            return resultFromText(
+                request = request,
+                answer = rawAnswer,
+                intent = request.intent,
+                source = AssistantKnowledgeSource.MATERIAL,
+                successTitle = text(
+                    isEnglish = request.isEnglish,
+                    he = "תוצאה מחומר ק.מ.י",
+                    en = "KAMI material result"
+                ),
+                suggestedActions = materialActions(
+                    question = request.originalQuestion,
+                    isEnglish = request.isEnglish
+                )
+            )
+        }
+
+        val parsedMaterial =
+            parseMaterialResult(rawAnswer)
+
+        /*
+         * שתי תוצאות ומעלה מוצגות כרשימה מובנית.
+         * תשובות קצרות, ספירות והבהרות נשארות Answer.
+         */
+        if (parsedMaterial.items.size >= 2) {
+            return AssistantResult.ResultList(
+                originalQuestion =
+                    request.originalQuestion,
+                resolvedQuestion =
+                    resolvedQuestion,
+                intent = request.intent,
+                source =
+                    AssistantKnowledgeSource.MATERIAL,
+                title = text(
+                    isEnglish = request.isEnglish,
+                    he = "חומר ק.מ.י שמצאתי",
+                    en = "KAMI material I found"
+                ),
+                introduction =
+                    parsedMaterial.introduction,
+                items =
+                    parsedMaterial.items,
+                matchQuality =
+                    AssistantMatchQuality.HIGH,
+                suggestedActions =
+                    materialActions(
+                        question =
+                            request.originalQuestion,
+                        isEnglish =
+                            request.isEnglish
+                    )
+            )
+        }
 
         return resultFromText(
             request = request,
@@ -172,6 +263,262 @@ object AssistantKnowledgeRepository {
                 question = request.originalQuestion,
                 isEnglish = request.isEnglish
             )
+        )
+    }
+
+    private data class ParsedMaterialResult(
+        val introduction: String?,
+        val items: List<AssistantResultItem>
+    )
+
+    /**
+     * ממיר רשימות הטקסט שמוחזרות ממנוע חומר ק.מ.י
+     * לפריטים מובנים. אין שינוי בתוכן המקורי של המאגר.
+     */
+    private fun parseMaterialResult(
+        rawAnswer: String
+    ): ParsedMaterialResult {
+        /*
+         * כותרת נושא בחומר מלא:
+         * 1. הגנות (12)
+         *
+         * אין להפוך שורה כזאת לתרגיל.
+         */
+        val topicHeaderLine =
+            Regex("""^(\d+)\.\s+(.+?)\s+\((\d+)\)\s*$""")
+
+        /*
+         * תרגיל ממוספר. קבוצת הלכידה הראשונה שומרת
+         * את ההזחה כדי להבדיל בין כותרת לבין תרגיל פנימי.
+         */
+        val numberedLine =
+            Regex("""^(\s*)(\d+)\.\s+(.+?)\s*$""")
+
+        /*
+         * כותרת תת־נושא:
+         * • הגנות פנימיות
+         */
+        val sectionHeaderLine =
+            Regex("""^\s*•\s+(.+?)\s*$""")
+
+        val lines =
+            rawAnswer
+                .lines()
+                .map { line ->
+                    line.trimEnd()
+                }
+
+        /*
+         * רשימת נושאים בלבד אינה רשימת תרגילים.
+         * במקרה כזה משאירים את התשובה כטקסט רגיל.
+         */
+        val normalizedAnswer =
+            rawAnswer.lowercase()
+
+        val isTopicOnlyList =
+            normalizedAnswer.contains("הנושאים ב") ||
+                    normalizedAnswer.contains(
+                        "כמה נושאים אפשריים"
+                    ) ||
+                    normalizedAnswer.contains(
+                        "לאיזה מהם התכוונת"
+                    ) ||
+                    normalizedAnswer.contains(
+                        "topics in"
+                    ) ||
+                    normalizedAnswer.contains(
+                        "possible topics"
+                    )
+
+        if (isTopicOnlyList) {
+            return ParsedMaterialResult(
+                introduction = rawAnswer.trim(),
+                items = emptyList()
+            )
+        }
+
+        val firstStructuredLineIndex =
+            lines.indexOfFirst { line ->
+                topicHeaderLine.matches(line) ||
+                        sectionHeaderLine.matches(line) ||
+                        numberedLine.matches(line)
+            }
+
+        val introduction =
+            if (firstStructuredLineIndex > 0) {
+                lines
+                    .take(firstStructuredLineIndex)
+                    .map { line ->
+                        line.trim()
+                    }
+                    .filter { line ->
+                        line.isNotBlank()
+                    }
+                    .joinToString("\n")
+                    .takeIf { it.isNotBlank() }
+            } else {
+                null
+            }
+
+        val parsedItems =
+            mutableListOf<AssistantResultItem>()
+
+        var currentTopic: String? = null
+        var currentSection: String? = null
+
+        lines.forEach { line ->
+            /*
+             * כותרת נושא מעדכנת את הקבוצה הנוכחית בלבד.
+             * היא אינה נוספת לרשימת התרגילים.
+             */
+            val topicHeaderMatch =
+                topicHeaderLine.matchEntire(line)
+
+            if (topicHeaderMatch != null) {
+                currentTopic =
+                    topicHeaderMatch
+                        .groupValues[2]
+                        .trim()
+
+                currentSection = null
+                return@forEach
+            }
+
+            /*
+             * גם תת־נושא הוא כותרת קבוצה בלבד.
+             */
+            val sectionHeaderMatch =
+                sectionHeaderLine.matchEntire(line)
+
+            if (sectionHeaderMatch != null) {
+                currentSection =
+                    sectionHeaderMatch
+                        .groupValues[1]
+                        .trim()
+
+                return@forEach
+            }
+
+            val numberedMatch =
+                numberedLine.matchEntire(line)
+                    ?: return@forEach
+
+            val rawContent =
+                numberedMatch
+                    .groupValues[3]
+                    .trim()
+
+            if (rawContent.isBlank()) {
+                return@forEach
+            }
+
+            /*
+             * הגנה נוספת: תוכן שמסתיים בספירת פריטים
+             * ונמצא ללא הזחה הוא כנראה כותרת נושא.
+             */
+            val looksLikeTopicHeader =
+                numberedMatch.groupValues[1].isBlank() &&
+                        Regex(""".+\s+\(\d+\)$""")
+                            .matches(rawContent)
+
+            if (looksLikeTopicHeader) {
+                currentTopic =
+                    rawContent
+                        .replace(
+                            Regex("""\s+\(\d+\)$"""),
+                            ""
+                        )
+                        .trim()
+
+                currentSection = null
+                return@forEach
+            }
+
+            val title =
+                rawContent
+                    .substringBefore(" — ")
+                    .trim()
+
+            if (title.isBlank()) {
+                return@forEach
+            }
+
+            val explicitDetails =
+                rawContent
+                    .substringAfter(
+                        " — ",
+                        missingDelimiterValue = ""
+                    )
+                    .trim()
+                    .takeIf { it.isNotBlank() }
+
+            /*
+             * תת־נושא מקבל עדיפות; אם אין תת־נושא
+             * משתמשים בשם הנושא הראשי.
+             */
+            val groupTitle =
+                currentSection
+                    ?.takeIf { it.isNotBlank() }
+                    ?: currentTopic
+                        ?.takeIf { it.isNotBlank() }
+
+            val subtitle =
+                explicitDetails ?: groupTitle
+
+            val stableKey =
+                listOf(
+                    currentTopic.orEmpty()
+                        .lowercase()
+                        .trim(),
+                    currentSection.orEmpty()
+                        .lowercase()
+                        .trim(),
+                    title.lowercase().trim()
+                )
+                    .joinToString("|")
+                    .hashCode()
+                    .toUInt()
+                    .toString(16)
+
+            parsedItems +=
+                AssistantResultItem(
+                    id = "material_$stableKey",
+                    title = title,
+                    subtitle = subtitle,
+                    description =
+                        currentTopic
+                            ?.takeIf { topic ->
+                                topic.isNotBlank() &&
+                                        topic != subtitle
+                            },
+                    source =
+                        AssistantKnowledgeSource.MATERIAL,
+                    topicName = groupTitle,
+                    matchQuality =
+                        AssistantMatchQuality.HIGH
+                )
+        }
+
+        val distinctItems =
+            parsedItems
+                .distinctBy { item ->
+                    listOf(
+                        item.description.orEmpty()
+                            .lowercase()
+                            .trim(),
+                        item.subtitle.orEmpty()
+                            .lowercase()
+                            .trim(),
+                        item.title
+                            .lowercase()
+                            .trim()
+                    ).joinToString("|")
+                }
+                .take(60)
+
+        return ParsedMaterialResult(
+            introduction = introduction,
+            items = distinctItems
         )
     }
 
@@ -384,6 +731,126 @@ object AssistantKnowledgeRepository {
                 )
             }
         }
+    }
+
+    /**
+     * מזהה בקשה להסבר על תרגיל גם כאשר הכוונה הראשית
+     * של המסך נשארה MATERIAL.
+     */
+    private fun isExerciseExplanationRequest(
+        question: String
+    ): Boolean {
+        val normalized =
+            question
+                .lowercase()
+                .replace("־", " ")
+                .replace("–", " ")
+                .replace("—", " ")
+                .replace("-", " ")
+                .replace("?", " ")
+                .replace("!", " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+        if (normalized.isBlank()) {
+            return false
+        }
+
+        val hasExplanationExpression =
+            listOf(
+                "הסבר",
+                "תסביר",
+                "תסבירי",
+                "איך עושים",
+                "איך מבצעים",
+                "איך לבצע",
+                "תן פירוט",
+                "תני פירוט",
+                "פרט על",
+                "תפרט",
+                "explain",
+                "how to do",
+                "how do i do",
+                "how to perform",
+                "how is it performed",
+                "give details"
+            ).any { expression ->
+                normalized.contains(expression)
+            }
+
+        if (!hasExplanationExpression) {
+            return false
+        }
+
+        /*
+         * בקשה להסבר על השוואה, חגורה או חומר מלא
+         * נשארת במנוע חומר ק.מ.י.
+         */
+        val isClearlyMaterialQuestion =
+            listOf(
+                "מה ההבדל",
+                "השווה",
+                "השוואה",
+                "לעומת",
+                "כל החומר",
+                "חומר מלא",
+                "כמה תרגילים",
+                "כמה נושאים",
+                "difference between",
+                "compare",
+                "comparison",
+                "full material",
+                "all material",
+                "how many exercises",
+                "how many topics"
+            ).any { expression ->
+                normalized.contains(expression)
+            }
+
+        if (isClearlyMaterialQuestion) {
+            return false
+        }
+
+        /*
+         * מספר מתוך הרשימה או שם תרגיל לאחר מילת הסבר
+         * נחשבים בקשת הסבר לתרגיל.
+         */
+        val referencesListItem =
+            Regex(
+                pattern =
+                    """(?:מספר|תרגיל|פריט|אפשרות)\s*\d+"""
+            ).containsMatchIn(normalized) ||
+                    Regex(
+                        pattern =
+                            """(?:number|exercise|item|option)\s*\d+"""
+                    ).containsMatchIn(normalized)
+
+        val wordsAfterExplanation =
+            normalized
+                .replace("תן לי הסבר על", " ")
+                .replace("תני לי הסבר על", " ")
+                .replace("תן הסבר על", " ")
+                .replace("תני הסבר על", " ")
+                .replace("תסביר לי על", " ")
+                .replace("תסביר על", " ")
+                .replace("הסבר על", " ")
+                .replace("הסבר", " ")
+                .replace("איך עושים את", " ")
+                .replace("איך עושים", " ")
+                .replace("איך מבצעים את", " ")
+                .replace("איך מבצעים", " ")
+                .replace(
+                    "explain the exercise",
+                    " "
+                )
+                .replace("explain", " ")
+                .replace("how to perform", " ")
+                .replace("how to do", " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+        return referencesListItem ||
+                wordsAfterExplanation.isNotBlank()
     }
 
     private fun resultFromText(
@@ -611,20 +1078,31 @@ object AssistantKnowledgeRepository {
     ): List<AssistantSuggestedAction> {
         return listOf(
             AssistantSuggestedAction(
-                id = "material_more",
-                labelHe = "עוד בנושא",
-                labelEn = "More on this topic",
-                queryHe = "$question הצג עוד",
-                queryEn = "$question show more",
-                targetMode = AssistantIntent.SEARCH_MATERIAL
+                id = "material_full_belt",
+                labelHe = "כל חומר החגורה",
+                labelEn = "Full belt material",
+                queryHe = "תן לי את כל החומר בחגורה שלי",
+                queryEn = "Show me all material for my belt",
+                targetMode =
+                    AssistantIntent.SEARCH_MATERIAL
             ),
             AssistantSuggestedAction(
-                id = "material_by_belt",
-                labelHe = "חיפוש לפי חגורה",
-                labelEn = "Search by belt",
-                queryHe = "$question לפי חגורה",
-                queryEn = "$question by belt",
-                targetMode = AssistantIntent.SEARCH_MATERIAL
+                id = "material_count",
+                labelHe = "כמה תרגילים?",
+                labelEn = "How many exercises?",
+                queryHe = "כמה תרגילים יש בחגורה שלי?",
+                queryEn = "How many exercises are in my belt?",
+                targetMode =
+                    AssistantIntent.SEARCH_MATERIAL
+            ),
+            AssistantSuggestedAction(
+                id = "material_locate",
+                labelHe = "איתור תרגיל",
+                labelEn = "Locate exercise",
+                queryHe = "באיזו חגורה נמצא התרגיל $question?",
+                queryEn = "Which belt contains the exercise $question?",
+                targetMode =
+                    AssistantIntent.SEARCH_MATERIAL
             )
         )
     }

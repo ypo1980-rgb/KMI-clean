@@ -205,6 +205,119 @@ object ContentRepo {
     ): String? =
         SharedContentRepo.findSubTopicTitleForItem(belt, topicTitle, itemTitle)
 
+    /**
+     * תרגיל שנאסף ישירות ממאגר התוכן המרכזי.
+     */
+    data class ExerciseOption(
+        val belt: Belt,
+        val topicTitle: String,
+        val subTopicTitle: String?,
+        val itemTitle: String
+    )
+
+    /**
+     * מחזיר את כל התרגילים ששמם מכיל את כל מילות החיפוש.
+     *
+     * החיפוש מתבצע ישירות במקור האמת ואינו תלוי
+     * בדירוג או בתוצאה הראשונה של מנגנון החיפוש.
+     */
+    fun findExerciseOptionsContainingAll(
+        requiredTerms: List<String>
+    ): List<ExerciseOption> {
+        initIfNeeded()
+
+        val cleanTerms =
+            requiredTerms
+                .map { term ->
+                    normalizeExerciseSearchText(term)
+                }
+                .filter { term ->
+                    term.isNotBlank()
+                }
+                .distinct()
+
+        if (cleanTerms.isEmpty()) {
+            return emptyList()
+        }
+
+        return buildList {
+            listBeltsInOrder().forEach { belt ->
+                listTopicTitles(belt).forEach { topicTitle ->
+                    /*
+                     * קוראים גם את פריטי הנושא הראשי וגם את
+                     * הפריטים שנמצאים בכל אחד מתתי־הנושאים.
+                     */
+                    val subTopics =
+                        listOf<String?>(null) +
+                                listSubTopicTitles(
+                                    belt = belt,
+                                    topicTitle = topicTitle
+                                )
+
+                    subTopics
+                        .distinct()
+                        .forEach { subTopicTitle ->
+                            listItemTitles(
+                                belt = belt,
+                                topicTitle = topicTitle,
+                                subTopicTitle = subTopicTitle
+                            )
+                                .forEach { itemTitle ->
+                                    val normalizedItem =
+                                        normalizeExerciseSearchText(
+                                            itemTitle
+                                        )
+
+                                    val containsAllTerms =
+                                        cleanTerms.all { term ->
+                                            normalizedItem.contains(term)
+                                        }
+
+                                    if (containsAllTerms) {
+                                        add(
+                                            ExerciseOption(
+                                                belt = belt,
+                                                topicTitle = topicTitle,
+                                                subTopicTitle =
+                                                    subTopicTitle,
+                                                itemTitle = itemTitle
+                                            )
+                                        )
+                                    }
+                                }
+                        }
+                }
+            }
+        }
+            .distinctBy { option ->
+                listOf(
+                    option.belt.name,
+                    option.topicTitle,
+                    option.subTopicTitle.orEmpty(),
+                    option.itemTitle
+                ).joinToString("|")
+            }
+    }
+
+    private fun normalizeExerciseSearchText(
+        text: String
+    ): String {
+        return text
+            .lowercase()
+            .replace("־", " ")
+            .replace("–", " ")
+            .replace("—", " ")
+            .replace("-", " ")
+            .replace("\"", " ")
+            .replace("'", " ")
+            .replace("?", " ")
+            .replace("!", " ")
+            .replace("(", " ")
+            .replace(")", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
     private fun readStringProperty(
         target: Any?,
         names: List<String>

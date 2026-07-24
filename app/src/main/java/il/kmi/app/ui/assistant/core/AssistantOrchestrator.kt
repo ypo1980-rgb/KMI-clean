@@ -76,6 +76,18 @@ class AssistantOrchestrator(
             return clarificationResponse
         }
 
+        /*
+         * ResultList רגיל אינו מסומן כ־awaitingClarification.
+         * לכן בודקים בנפרד אם המשתמש ביקש הסבר על פריט
+         * מתוך הרשימה האחרונה.
+         */
+        resolvePreviousResultReference(
+            question = cleanQuestion,
+            isEnglish = isEnglish
+        )?.let { resultResponse ->
+            return resultResponse
+        }
+
         val detectedResolution = AssistantIntentResolver.resolve(
             question = cleanQuestion,
             context = conversationContext
@@ -285,6 +297,129 @@ class AssistantOrchestrator(
         )
     }
 
+    /**
+     * פותר בקשת הסבר על פריט מתוך ResultList קודם.
+     *
+     * לדוגמה:
+     * "תסביר את תרגיל 3"
+     * "הסבר על מספר 2"
+     * "תסביר את בעיטת המגל"
+     */
+    private fun resolvePreviousResultReference(
+        question: String,
+        isEnglish: Boolean
+    ): AssistantOrchestratorResponse? {
+        if (conversationContext.lastResults.isEmpty()) {
+            return null
+        }
+
+        val normalized =
+            normalizeSelectionText(question)
+
+        val explanationRequested =
+            listOf(
+                "הסבר",
+                "תסביר",
+                "תסבירי",
+                "איך עושים",
+                "איך מבצעים",
+                "איך לבצע",
+                "פרט",
+                "תפרט",
+                "explain",
+                "how to do",
+                "how do i do",
+                "how to perform",
+                "give details"
+            ).any { marker ->
+                normalized.contains(marker)
+            }
+
+        if (!explanationRequested) {
+            return null
+        }
+
+        /*
+         * ניסיון ראשון: בחירה לפי מספר או מילת מיקום.
+         */
+        val selectedByPosition =
+            parseSelectionPosition(question)
+                ?.let { position ->
+                    conversationContext.resultAt(position)
+                }
+
+        if (selectedByPosition != null) {
+            return processSelectedContextResult(
+                selected = selectedByPosition,
+                isEnglish = isEnglish,
+                forcedIntent =
+                    AssistantIntent.EXPLAIN_EXERCISE
+            )
+        }
+
+        /*
+         * ניסיון שני: מסירים את ביטויי ההסבר ומשווים
+         * את הטקסט שנותר לשמות הפריטים ברשימה.
+         */
+        val requestedItemText =
+            normalized
+                .replace("תן לי הסבר על", " ")
+                .replace("תני לי הסבר על", " ")
+                .replace("תן הסבר על", " ")
+                .replace("תני הסבר על", " ")
+                .replace("תסביר לי על", " ")
+                .replace("תסבירי לי על", " ")
+                .replace("תסביר את", " ")
+                .replace("תסבירי את", " ")
+                .replace("תסביר על", " ")
+                .replace("תסבירי על", " ")
+                .replace("הסבר על", " ")
+                .replace("הסבר", " ")
+                .replace("איך עושים את", " ")
+                .replace("איך עושים", " ")
+                .replace("איך מבצעים את", " ")
+                .replace("איך מבצעים", " ")
+                .replace("explain the exercise", " ")
+                .replace("explain exercise", " ")
+                .replace("explain", " ")
+                .replace("how to perform", " ")
+                .replace("how to do", " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+        if (requestedItemText.isBlank()) {
+            return null
+        }
+
+        val selectedByName =
+            conversationContext.lastResults
+                .map { result ->
+                    result to textSimilarity(
+                        requestedItemText,
+                        normalizeSelectionText(result.title)
+                    )
+                }
+                .filter { (_, similarity) ->
+                    similarity >=
+                            MIN_SELECTION_SIMILARITY
+                }
+                .maxByOrNull { (_, similarity) ->
+                    similarity
+                }
+                ?.first
+
+        if (selectedByName != null) {
+            return processSelectedContextResult(
+                selected = selectedByName,
+                isEnglish = isEnglish,
+                forcedIntent =
+                    AssistantIntent.EXPLAIN_EXERCISE
+            )
+        }
+
+        return null
+    }
+
     private fun resolvePreviousClarification(
         answer: String,
         isEnglish: Boolean
@@ -330,10 +465,16 @@ class AssistantOrchestrator(
 
     private fun processSelectedContextResult(
         selected: AssistantContextResult,
-        isEnglish: Boolean
+        isEnglish: Boolean,
+        forcedIntent: AssistantIntent? = null
     ): AssistantOrchestratorResponse {
+        /*
+         * פריט שמקורו MATERIAL נשאר פריט חומר בדרך כלל.
+         * כאשר המשתמש ביקש הסבר, כופים EXPLAIN_EXERCISE.
+         */
         val selectedIntent =
-            intentForSource(selected.source)
+            forcedIntent
+                ?: intentForSource(selected.source)
 
         val selectedQuestion = buildSelectedQuestion(
             selected = selected,
@@ -526,10 +667,49 @@ class AssistantOrchestrator(
         val normalized =
             normalizeSelectionText(answer)
 
-        normalized.toIntOrNull()?.let {
-            return it.takeIf { value ->
-                value in 1..MAX_CLARIFICATION_OPTIONS
+        normalized.toIntOrNull()?.let { value ->
+            return value.takeIf {
+                it in 1..MAX_RESULT_SELECTION_OPTIONS
             }
+        }
+
+        /*
+         * תומך במשפטים מלאים:
+         * "תרגיל 3", "מספר 4", "הסבר על אפשרות 2".
+         */
+        val explicitNumber =
+            Regex(
+                """(?:מספר|תרגיל|פריט|אפשרות|number|exercise|item|option)\s*(\d+)"""
+            )
+                .find(normalized)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toIntOrNull()
+
+        if (
+            explicitNumber != null &&
+            explicitNumber in
+            1..MAX_RESULT_SELECTION_OPTIONS
+        ) {
+            return explicitNumber
+        }
+
+        /*
+         * תומך גם ב"הסבר על 3".
+         */
+        val standaloneNumber =
+            Regex("""(?:^|\s)(\d+)(?:\s|$)""")
+                .find(normalized)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toIntOrNull()
+
+        if (
+            standaloneNumber != null &&
+            standaloneNumber in
+            1..MAX_RESULT_SELECTION_OPTIONS
+        ) {
+            return standaloneNumber
         }
 
         val positionWords = linkedMapOf(
@@ -878,6 +1058,13 @@ class AssistantOrchestrator(
     companion object {
         private const val MAX_INTENT_OPTIONS = 3
         private const val MAX_CLARIFICATION_OPTIONS = 5
+
+        /*
+         * רשימות חומר ק.מ.י עשויות להכיל הרבה יותר
+         * מחמש אפשרויות.
+         */
+        private const val MAX_RESULT_SELECTION_OPTIONS = 100
+
         private const val MIN_SELECTION_SIMILARITY = 0.42f
     }
 }
