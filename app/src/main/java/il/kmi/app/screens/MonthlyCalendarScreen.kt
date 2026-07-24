@@ -5,24 +5,18 @@ package il.kmi.app.screens
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.graphics.Brush
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,16 +33,14 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.graphicsLayer
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
-import il.kmi.app.ui.rememberHapticsGlobal
+import il.kmi.app.halacha.HolidayCalendarRepository
+import il.kmi.app.ui.calendar.KmiCalendarMarkers
+import il.kmi.app.ui.calendar.KmiCalendarMonth
 import il.kmi.shared.prefs.KmiPrefs
-import java.io.BufferedReader
 import java.time.*
 import java.util.Locale
 
@@ -151,12 +143,50 @@ fun MonthlyCalendarScreen(
             }
         }
 
-        // חגים לחודש הנבחר
         val ctx = LocalContext.current
-        val holidaysByDate: Map<LocalDate, String> = remember(ym, ctx) {
-            JewishHolidays.forMonth(ym, ctx = ctx)
+
+        /*
+         * מקור אמת יחיד לכל נתוני החגים בחודש:
+         * שמות להצגה והחלטה אם החג מבטל אימון.
+         */
+        val holidayInfoByDate = remember(
+            ym,
+            ctx
+        ) {
+            HolidayCalendarRepository.holidaysForMonth(
+                context = ctx,
+                yearMonth = ym
+            )
         }
-        val holidayDates: Set<LocalDate> = remember(holidaysByDate) { holidaysByDate.keys }
+
+        val holidaysByDate: Map<LocalDate, String> =
+            remember(
+                holidayInfoByDate,
+                isEnglish
+            ) {
+                holidayInfoByDate.mapValues { (_, holidays) ->
+                    holidays
+                        .map { holiday ->
+                            holiday.displayName(isEnglish)
+                        }
+                        .filter { name ->
+                            name.isNotBlank()
+                        }
+                        .distinct()
+                        .joinToString(" · ")
+                }
+            }
+
+        val cancelledTrainingDates: Set<LocalDate> =
+            remember(holidayInfoByDate) {
+                holidayInfoByDate
+                    .filterValues { holidays ->
+                        holidays.any { holiday ->
+                            holiday.cancelsTraining
+                        }
+                    }
+                    .keys
+            }
 
         // ✅ SharedPreferences של הסיכומים
         val summarySp = remember(ctx) {
@@ -194,12 +224,14 @@ fun MonthlyCalendarScreen(
                 .toSet()
         }
 
-// ✅ האם יש חגים בחודש הזה?
-        val hasHolidaysThisMonth = remember(holidaysByDate) { holidaysByDate.isNotEmpty() }
-
 // אימונים מאוחדים לחודש — קודם branches.json, ואם אין נתונים אז fallback ל־TrainingCatalog
         val trainingsCountByDate: Map<LocalDate, Int> = remember(
-            ym, ctx, region, normBranchKeys, normGroupKeys, holidayDates
+            ym,
+            ctx,
+            region,
+            normBranchKeys,
+            normGroupKeys,
+            cancelledTrainingDates
         ) {
             if (region.isBlank() || normBranchKeys.isEmpty() || normGroupKeys.isEmpty()) {
                 emptyMap()
@@ -209,7 +241,7 @@ fun MonthlyCalendarScreen(
                     ym = ym,
                     branches = normBranchKeys,
                     groups = normGroupKeys,
-                    skipDates = holidayDates
+                    skipDates = cancelledTrainingDates
                 )
 
                 if (fromDatabase.isNotEmpty()) {
@@ -221,7 +253,7 @@ fun MonthlyCalendarScreen(
                         ym = ym,
                         branches = normBranchKeys,
                         groups = normGroupKeys,
-                        skipDates = holidayDates
+                        skipDates = cancelledTrainingDates
                     )
                 }
             }
@@ -229,7 +261,12 @@ fun MonthlyCalendarScreen(
 
         // פירוט אימונים לפי תאריך — קודם branches.json, ואם אין נתונים אז fallback ל־TrainingCatalog
         val trainingsByDate: Map<LocalDate, List<CalendarTrainingItem>> = remember(
-            ym, ctx, region, normBranchKeys, normGroupKeys, holidayDates
+            ym,
+            ctx,
+            region,
+            normBranchKeys,
+            normGroupKeys,
+            cancelledTrainingDates
         ) {
             if (region.isBlank() || normBranchKeys.isEmpty() || normGroupKeys.isEmpty()) {
                 emptyMap()
@@ -239,7 +276,7 @@ fun MonthlyCalendarScreen(
                     ym = ym,
                     branches = normBranchKeys,
                     groups = normGroupKeys,
-                    skipDates = holidayDates
+                    skipDates = cancelledTrainingDates
                 )
 
                 if (fromDatabase.isNotEmpty()) {
@@ -251,7 +288,7 @@ fun MonthlyCalendarScreen(
                         ym = ym,
                         branches = normBranchKeys,
                         groups = normGroupKeys,
-                        skipDates = holidayDates
+                        skipDates = cancelledTrainingDates
                     )
                 }
             }
@@ -288,13 +325,6 @@ fun MonthlyCalendarScreen(
         Scaffold(
             containerColor = Color(0xFF08142C),
             topBar = {
-                val monthTitle = ym.month.getDisplayName(
-                    java.time.format.TextStyle.FULL,
-                    screenLocale
-                ).replaceFirstChar { ch ->
-                    if (ch.isLowerCase()) ch.titlecase(screenLocale) else ch.toString()
-                }
-
                 Surface(
                     color = Color.Transparent,
                     modifier = Modifier.fillMaxWidth()
@@ -311,125 +341,65 @@ fun MonthlyCalendarScreen(
                                     )
                                 )
                             )
-                            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 16.dp)
+                            .padding(
+                                start = 12.dp,
+                                end = 12.dp,
+                                top = 12.dp,
+                                bottom = 10.dp
+                            )
                     ) {
                         Surface(
                             shape = RoundedCornerShape(28.dp),
                             color = Color.White.copy(alpha = 0.08f),
                             shadowElevation = 14.dp,
                             border = BorderStroke(
-                                1.dp,
-                                Color.White.copy(alpha = 0.10f)
+                                width = 1.dp,
+                                color = Color.White.copy(alpha = 0.10f)
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.08f),
-                                                Color.White.copy(alpha = 0.03f)
-                                            )
-                                        )
+                                    .padding(
+                                        horizontal = 12.dp,
+                                        vertical = 14.dp
                                     )
-                                    .padding(horizontal = 10.dp, vertical = 12.dp)
                             ) {
+                                Text(
+                                    text = tr(
+                                        "לוח אימונים חודשי",
+                                        "Monthly calendar"
+                                    ),
+                                    style =
+                                        MaterialTheme.typography.titleMedium,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 38.dp)
+                                )
+
                                 Box(
                                     modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .size(28.dp)
-                                        .clickable { onBack() },
+                                        .align(Alignment.CenterEnd)
+                                        .size(30.dp)
+                                        .clickable {
+                                            onBack()
+                                        },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Close,
-                                        contentDescription = tr("סגור", "Close"),
-                                        tint = Color.White.copy(alpha = 0.92f),
-                                        modifier = Modifier.size(16.dp)
+                                        contentDescription = tr(
+                                            "סגור",
+                                            "Close"
+                                        ),
+                                        tint =
+                                            Color.White.copy(alpha = 0.92f),
+                                        modifier = Modifier.size(17.dp)
                                     )
-                                }
-
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 4.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = tr("לוח אימונים חודשי", "Monthly calendar"),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Color(0xFFC7BAFF),
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1
-                                    )
-
-                                    Spacer(Modifier.height(8.dp))
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Surface(
-                                            onClick = { ym = ym.minusMonths(1) },
-                                            shape = CircleShape,
-                                            color = Color.White.copy(alpha = 0.09f),
-                                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
-                                        ) {
-                                            Box(
-                                                modifier = Modifier.size(36.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (isEnglish) Icons.Filled.ChevronLeft else Icons.Filled.ChevronRight,
-                                                    contentDescription = tr("חודש קודם", "Previous month"),
-                                                    tint = Color.White
-                                                )
-                                            }
-                                        }
-
-                                        Spacer(Modifier.width(10.dp))
-
-                                        Surface(
-                                            shape = RoundedCornerShape(24.dp),
-                                            color = Color(0xFF8C74FF).copy(alpha = 0.18f),
-                                            border = BorderStroke(
-                                                1.dp,
-                                                Color.White.copy(alpha = 0.10f)
-                                            ),
-                                            shadowElevation = 2.dp
-                                        ) {
-                                            Text(
-                                                text = "$monthTitle ${ym.year}",
-                                                modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = Color.White,
-                                                maxLines = 1
-                                            )
-                                        }
-
-                                        Spacer(Modifier.width(10.dp))
-
-                                        Surface(
-                                            onClick = { ym = ym.plusMonths(1) },
-                                            shape = CircleShape,
-                                            color = Color.White.copy(alpha = 0.09f),
-                                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
-                                        ) {
-                                            Box(
-                                                modifier = Modifier.size(36.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (isEnglish) Icons.Filled.ChevronRight else Icons.Filled.ChevronLeft,
-                                                    contentDescription = tr("חודש הבא", "Next month"),
-                                                    tint = Color.White
-                                                )
-                                            }
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -483,76 +453,6 @@ fun MonthlyCalendarScreen(
                             .padding(bottom = 28.dp)
                     ) {
 
-                        // כותרות ימי השבוע
-                        val days = listOf(
-                            DayOfWeek.SUNDAY, DayOfWeek.MONDAY, DayOfWeek.TUESDAY,
-                            DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY
-                        )
-
-                        fun shortWeekdayLabel(dow: DayOfWeek): String {
-                            return if (isEnglish) {
-                                when (dow) {
-                                    DayOfWeek.SUNDAY -> "Sun"
-                                    DayOfWeek.MONDAY -> "Mon"
-                                    DayOfWeek.TUESDAY -> "Tue"
-                                    DayOfWeek.WEDNESDAY -> "Wed"
-                                    DayOfWeek.THURSDAY -> "Thu"
-                                    DayOfWeek.FRIDAY -> "Fri"
-                                    DayOfWeek.SATURDAY -> "Sat"
-                                }
-                            } else {
-                                when (dow) {
-                                    DayOfWeek.SUNDAY -> "א׳"
-                                    DayOfWeek.MONDAY -> "ב׳"
-                                    DayOfWeek.TUESDAY -> "ג׳"
-                                    DayOfWeek.WEDNESDAY -> "ד׳"
-                                    DayOfWeek.THURSDAY -> "ה׳"
-                                    DayOfWeek.FRIDAY -> "ו׳"
-                                    DayOfWeek.SATURDAY -> "שבת"
-                                }
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = Color.White.copy(alpha = 0.10f),
-                            shadowElevation = 8.dp,
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.06f),
-                                                Color.White.copy(alpha = 0.12f),
-                                                Color.White.copy(alpha = 0.06f)
-                                            )
-                                        )
-                                    )
-                                    .padding(horizontal = 8.dp, vertical = 10.dp)
-                            ) {
-                                days.forEach { dow ->
-                                    Text(
-                                        text = shortWeekdayLabel(dow),
-                                        modifier = Modifier.weight(1f),
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        style = MaterialTheme.typography.labelMedium.copy(
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = if (isEnglish) 12.sp else 14.sp
-                                        ),
-                                        color = Color.White.copy(alpha = 0.92f)
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(6.dp))
-
                         // הודעה נקייה למשתמש אם חסרים פרטי סניף / אזור / קבוצה.
                         // לא מציגים יותר באנר דיאגנוסטיקה במסך עצמו.
                         if (missingReason != null) {
@@ -581,50 +481,41 @@ fun MonthlyCalendarScreen(
                             }
                         }
 
-                        // גריד החודש
-                        val firstOfMonth = animatedYm.atDay(1)
-                        val firstWeekdayIndex = (firstOfMonth.dayOfWeek.value % 7)
-                        val daysInMonth = animatedYm.lengthOfMonth()
-                        val totalCells = firstWeekdayIndex + daysInMonth
-                        val rows = (totalCells + 6) / 7
-
-                        Column(Modifier.fillMaxWidth()) {
-                            var day = 1
-                            repeat(rows) { rowIdx ->
-                                Row(
-                                    Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    repeat(7) { col ->
-                                        val idx = rowIdx * 7 + col
-                                        if (idx < firstWeekdayIndex || day > daysInMonth) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .aspectRatio(1f)
-                                            )
-                                        } else {
-                                            val date = animatedYm.atDay(day)
-                                            val trainingCount = trainingsCountByDate[date] ?: 0
-                                            val holidayName = holidaysByDate[date]
-
-                                            DayCell(
-                                                date = date,
-                                                isToday = date == today,
-                                                isSelected = (selectedDate == date),
-                                                trainingCount = trainingCount,
-                                                holidayName = holidayName,
-                                                hasSummary = date in summaryDatesThisMonth,
-                                                modifier = Modifier.weight(1f),
-                                                onClick = {
-                                                    selectedDate = date
-                                                }
-                                            )
-                                            day++
+                        // לוח השנה המרכזי המשותף לכל מסכי האפליקציה.
+                        val calendarMarkers = remember(
+                            trainingsCountByDate,
+                            holidaysByDate,
+                            summaryDatesThisMonth
+                        ) {
+                            KmiCalendarMarkers(
+                                trainingDates =
+                                    trainingsCountByDate
+                                        .filterValues { count ->
+                                            count > 0
                                         }
-                                    }
-                                }
-                            }
+                                        .keys,
+                                holidayDates =
+                                    holidaysByDate.keys,
+                                summaryDates =
+                                    summaryDatesThisMonth
+                            )
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            KmiCalendarMonth(
+                                visibleMonth = animatedYm,
+                                selectedDate = selectedDate,
+                                isEnglish = isEnglish,
+                                onVisibleMonthChange = { newMonth ->
+                                    ym = newMonth
+                                },
+                                onDateSelected = { date ->
+                                    selectedDate = date
+                                },
+                                markers = calendarMarkers
+                            )
 
                             Spacer(Modifier.height(4.dp))
 
@@ -1142,425 +1033,5 @@ private fun anyToLocalDate(v: Any?): LocalDate? {
                 }.getOrNull()
         }
         else -> null
-    }
-}
-
-/* -------------------------------------------------------------------------- */
-/*                             UI bits                                        */
-/* -------------------------------------------------------------------------- */
-
-@Composable
-private fun SummaryBadge(
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .size(18.dp)
-            .shadow(
-                elevation = 8.dp,
-                shape = CircleShape,
-                clip = false
-            )
-            .background(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFFCBB8FF),
-                        Color(0xFF9A7BFF),
-                        Color(0xFF7C4DFF)
-                    )
-                ),
-                shape = CircleShape
-            )
-            .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.28f),
-                shape = CircleShape
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Surface(
-            modifier = Modifier
-                .width(9.dp)
-                .height(11.dp),
-            shape = RoundedCornerShape(2.5.dp),
-            color = Color.White.copy(alpha = 0.98f),
-            tonalElevation = 0.dp
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                // "קיפול" קטן של הדף
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .size(3.dp)
-                        .background(
-                            Color(0xFFDCD2FF),
-                            shape = RoundedCornerShape(bottomStart = 2.dp)
-                        )
-                )
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 1.5.dp, vertical = 2.dp),
-                    verticalArrangement = Arrangement.spacedBy(1.dp, Alignment.CenterVertically),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    repeat(2) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(
-                                    Color(0xFF8B5CF6).copy(alpha = 0.78f),
-                                    RoundedCornerShape(99.dp)
-                                )
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DayCell(
-    date: LocalDate,
-    isToday: Boolean,
-    isSelected: Boolean,
-    trainingCount: Int,
-    holidayName: String?,
-    hasSummary: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null
-) {
-    val trainingColor = Color(0xFF3FA7FF)
-    val holidayColor = Color(0xFFFF4D6D)
-    val todayRingColor = Color(0xFF9A7BFF)
-    val summaryBadgeColor = Color(0xFF8B5CF6)
-    val summaryGlowOuter = Color(0xFFC4AEFF)
-    val summaryGlowInner = Color(0xFF8B5CF6)
-
-    val haptics = rememberHapticsGlobal()
-    val interactionSource = remember { MutableInteractionSource() }
-
-    val cellBgTop: Color
-    val cellBgBottom: Color
-    when {
-        holidayName != null && trainingCount > 0 -> {
-            cellBgTop = Color(0xFF6D63D9).copy(alpha = 0.96f)
-            cellBgBottom = Color(0xFF4B7EF6).copy(alpha = 0.96f)
-        }
-        holidayName != null -> {
-            cellBgTop = Color(0xFF5B5FCF).copy(alpha = 0.94f)
-            cellBgBottom = Color(0xFF415FC4).copy(alpha = 0.94f)
-        }
-        trainingCount > 0 -> {
-            cellBgTop = Color(0xFF5E96FF)
-            cellBgBottom = Color(0xFF3F6EE8)
-        }
-        else -> {
-            cellBgTop = Color.White.copy(alpha = 0.14f)
-            cellBgBottom = Color.White.copy(alpha = 0.06f)
-        }
-    }
-
-    val borderColor = when {
-        isSelected -> Color.White.copy(alpha = 0.90f)
-        hasSummary -> summaryGlowOuter.copy(alpha = 0.88f)
-        holidayName != null || trainingCount > 0 -> Color.White.copy(alpha = 0.14f)
-        else -> Color.White.copy(alpha = 0.08f)
-    }
-
-    val dayTextColor = Color.White
-    val targetScale = when {
-        isSelected -> 0.92f
-        else -> 1f
-    }
-    val scale by animateFloatAsState(
-        targetValue = targetScale,
-        animationSpec = spring(
-            dampingRatio = 0.6f,
-            stiffness = 300f
-        ),
-        label = "day-scale"
-    )
-
-    Box(
-        modifier = modifier
-            .aspectRatio(0.74f)
-            .padding(2.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .shadow(
-                elevation = when {
-                    isSelected -> 12.dp
-                    hasSummary -> 11.dp
-                    trainingCount > 0 -> 8.dp
-                    else -> 4.dp
-                },
-                shape = RoundedCornerShape(14.dp),
-                clip = false
-            )
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        cellBgTop,
-                        cellBgBottom,
-                        Color.White.copy(alpha = 0.05f)
-                    )
-                ),
-                shape = RoundedCornerShape(14.dp)
-            )
-
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.10f),
-                        Color.Transparent
-                    )
-                ),
-                shape = RoundedCornerShape(14.dp)
-            )
-            .border(
-                width = when {
-                    isSelected -> 1.4.dp
-                    hasSummary -> 1.25.dp
-                    else -> 0.8.dp
-                },
-                color = borderColor,
-                shape = RoundedCornerShape(14.dp)
-            )
-            .let { base ->
-                if (onClick != null) {
-                    base.clickable(
-                        interactionSource = interactionSource,
-                        indication = null
-                    ) {
-                        haptics(false)
-                        onClick()
-                    }
-                } else base
-            }
-    ) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.10f),
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.08f)
-                        )
-                    ),
-                    shape = RoundedCornerShape(14.dp)
-                )
-        )
-
-        if (hasSummary) {
-            // ✅ inner glow עדין – מסגרת פנימית זוהרת
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .padding(1.4.dp)
-                    .border(
-                        width = 1.15.dp,
-                        color = summaryGlowInner.copy(alpha = 0.42f),
-                        shape = RoundedCornerShape(13.dp)
-                    )
-            )
-
-            // ✅ אייקון מסמך קטן בפינה העליונה
-            SummaryBadge(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 5.dp, top = 5.dp)
-            )
-        }
-
-        if (isToday) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(5.dp)
-                    .size(18.dp)
-                    .shadow(
-                        elevation = 8.dp,
-                        shape = CircleShape,
-                        clip = false
-                    )
-                    .background(
-                        color = todayRingColor,
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .background(Color.White, CircleShape)
-                )
-            }
-        }
-
-        Text(
-            text = date.dayOfMonth.toString(),
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            color = dayTextColor,
-            modifier = Modifier.align(Alignment.Center)
-        )
-
-        if (holidayName != null || trainingCount > 0) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (trainingCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .background(trainingColor, CircleShape)
-                    )
-                }
-
-                if (trainingCount > 0 && holidayName != null) {
-                    Spacer(Modifier.width(4.dp))
-                }
-
-                if (holidayName != null) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .background(holidayColor, CircleShape)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PillBadge(
-    text: String,
-    tint: Color,
-    modifier: Modifier = Modifier
-) {
-    // אפשר להשאיר לפיצ'רים עתידיים – כרגע לא משתמשים יותר
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = tint
-        )
-    }
-}
-
-/* -------------------------------------------------------------------------- */
-/*                         Holidays provider                                  */
-/* -------------------------------------------------------------------------- */
-
-object JewishHolidays {
-    private const val DEFAULT_ASSET = "holidays_hebrew_2024_2026.json"
-
-    @Volatile private var cache: Map<LocalDate, String>? = null
-    @Volatile private var loadedFrom: String? = null
-
-    // ✅ חדש: מידע דיאגנוסטי לבאנר
-    data class HolidaysDebugInfo(
-        val loadedFrom: String?,
-        val cacheSize: Int,
-        val range: String
-    )
-
-    fun debugInfo(): HolidaysDebugInfo {
-        val m = cache.orEmpty()
-        val min = m.keys.minOrNull()
-        val max = m.keys.maxOrNull()
-        val range = if (min != null && max != null) "$min..$max" else "n/a"
-        return HolidaysDebugInfo(
-            loadedFrom = loadedFrom,
-            cacheSize = m.size,
-            range = range
-        )
-    }
-
-    fun forMonth(
-        ym: YearMonth,
-        ctx: Context,
-        assetFile: String = DEFAULT_ASSET
-    ): Map<LocalDate, String> {
-        cache?.takeIf { loadedFrom == assetFile }?.let { m ->
-            return m.filterKeys { YearMonth.from(it) == ym }
-        }
-
-        val all = runCatching {
-            val json = ctx.assets.open(assetFile)
-                .bufferedReader()
-                .use(BufferedReader::readText)
-            parse(json)
-        }.getOrElse {
-            emptyMap()
-        }
-
-        cache = all
-        loadedFrom = assetFile
-
-        return all.filterKeys { YearMonth.from(it) == ym }
-    }
-
-    private fun parse(json: String): Map<LocalDate, String> {
-        val tok = org.json.JSONTokener(json).nextValue()
-        val items = when (tok) {
-            is org.json.JSONObject -> when {
-                tok.has("items") -> tok.optJSONArray("items")
-                tok.has("data")  -> tok.optJSONArray("data")
-                else             -> null
-            }
-            is org.json.JSONArray -> tok
-            else -> null
-        } ?: return emptyMap()
-
-        val out = HashMap<LocalDate, String>(items.length())
-
-        fun putRange(start: LocalDate, end: LocalDate, name: String) {
-            var d = start
-            while (!d.isAfter(end)) {
-                out.putIfAbsent(d, name)
-                d = d.plusDays(1)
-            }
-        }
-
-        for (i in 0 until items.length()) {
-            val it = items.optJSONObject(i) ?: continue
-            val name = it.optString("name").trim()
-            if (name.isBlank()) continue
-
-            val hasRange = it.has("start_iso") && it.has("end_iso")
-            if (hasRange) {
-                val s = it.optString("start_iso").trim()
-                val e = it.optString("end_iso").trim()
-                val start = runCatching { LocalDate.parse(s.take(10)) }.getOrNull()
-                val end = runCatching { LocalDate.parse(e.take(10)) }.getOrNull()
-                if (start != null && end != null && !end.isBefore(start)) {
-                    putRange(start, end, name)
-                    continue
-                }
-            }
-
-            val dateStr = it.optString("date_iso").trim()
-            val single = runCatching { LocalDate.parse(dateStr.take(10)) }.getOrNull()
-            if (single != null) out.putIfAbsent(single, name)
-        }
-
-        return out
     }
 }

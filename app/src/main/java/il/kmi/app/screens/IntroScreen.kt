@@ -700,10 +700,13 @@ private fun IntroWelcomeImageScreen(
             }
 
             /*
-             * כניסה או רישום מוצגים רק כאשר אין למשתמש
-             * פרופיל מלא שניתן להמשיך באמצעותו.
+             * כניסה או רישום מוצגים רק לאחר שבדיקת המשתמש הסתיימה
+             * ונמצא שאין פרופיל מלא שניתן להמשיך באמצעותו.
              */
-            if (!canContinueWithoutLogin) {
+            if (
+                !isProfileStatusLoading &&
+                !canContinueWithoutLogin
+            ) {
                 Spacer(Modifier.height(8.dp))
 
                 Box(
@@ -862,11 +865,13 @@ fun IntroScreen(
         mutableStateOf(false)
     }
 
+    /*
+     * מתחילים תמיד במצב בדיקה.
+     * FirebaseAuth עשוי להחזיר null בפריים הראשון בזמן שחזור המשתמש,
+     * ולכן אסור להציג לפני סיום הבדיקה את כפתור Google.
+     */
     var isProfileStatusLoading by remember {
-        mutableStateOf(
-            FirebaseAuth.getInstance().currentUser
-                ?.takeIf { !it.isAnonymous } != null
-        )
+        mutableStateOf(true)
     }
 
     // מונע הפעלה כפולה של Google Login בגלל לחיצה כפולה / recomposition

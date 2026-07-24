@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -199,7 +200,8 @@ fun MainApp(
     }
 
     fun isRegistrationOrEntryRoute(route: String?): Boolean {
-        return route == Route.RegistrationLanding.route ||
+        return route == Route.Splash.route ||
+                route == Route.RegistrationLanding.route ||
                 route == Route.Registration.route ||
                 route == Route.NewUserTrainee.route ||
                 route == Route.NewUserCoach.route ||
@@ -356,9 +358,34 @@ fun MainApp(
                 // במסכי האפליקציה הרגילים ה-Drawer עובד בצורה רגילה ונקייה.
                 val drawerState = rememberDrawerState(DrawerValue.Closed)
 
+                /*
+                 * ModalNavigationDrawer צריך להשלים מדידה של רוחב המגירה
+                 * לפני שמציגים את התוכן שלה. אחרת התוכן עלול להופיע
+                 * בפריים הראשון במיקום הפתוח.
+                 */
+                var drawerContentReady by remember {
+                    mutableStateOf(false)
+                }
+
                 LaunchedEffect(drawerState) {
+                    drawerContentReady = false
+                    drawerState.snapTo(DrawerValue.Closed)
+
+                    // פריים ראשון: בניית ModalNavigationDrawer.
+                    withFrameNanos { }
+
+                    // פריים שני: חישוב העוגן הסגור לפי רוחב המגירה.
+                    withFrameNanos { }
+
+                    drawerState.snapTo(DrawerValue.Closed)
+                    drawerContentReady = true
+
                     DrawerBridge.register(
                         onOpenDrawer = {
+                            if (!drawerContentReady) {
+                                return@register
+                            }
+
                             scope.launch {
                                 drawerState.open()
                             }
@@ -395,7 +422,15 @@ fun MainApp(
                         drawerContent = {
                             ModalDrawerSheet(
                                 drawerContainerColor = Color.Transparent,
-                                modifier = Modifier.fillMaxWidth(0.86f)
+                                modifier = Modifier
+                                    .fillMaxWidth(0.86f)
+                                    .alpha(
+                                        if (drawerContentReady) {
+                                            1f
+                                        } else {
+                                            0f
+                                        }
+                                    )
                             ) {
                                 /*
                                  * משאירים את תוכן המגירה מחובר ל-Composition גם
@@ -669,8 +704,10 @@ fun MainApp(
                                 themeMode = themeMode,
                                 onThemeChange = onThemeChange,
                                 onOpenDrawer = {
-                                    scope.launch {
-                                        drawerState.open()
+                                    if (drawerContentReady) {
+                                        scope.launch {
+                                            drawerState.open()
+                                        }
                                     }
                                 },
                                 startDestination = resolvedStartDestination

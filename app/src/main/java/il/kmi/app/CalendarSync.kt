@@ -12,10 +12,16 @@ import android.provider.CalendarContract.Reminders
 import android.text.format.DateUtils
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Calendar
 import java.util.TimeZone
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.training.TrainingStatusEngine
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -29,8 +35,9 @@ fun hasCalendarPermission(ctx: Context): Boolean =
  * אנחנו יוצרים/מעדכנים שלושה אירועים שבועיים (SU/MO/TU) עם RRULE, ומסמנים אותם בתיאור עם TAG ייחודי.
  */
 object KmiCalendarSync {
-    private const val TAG_MARK = "[KMI_SYNC]"   // מזהה פנימי לאירועי סנכרון. לא מוצג למשתמש.
-    private const val TAG_MARK_SELECTED = "[KMI_SYNC_SELECTED]" // מזהה פנימי לאירועי יומן שנבחר.
+    private const val TAG_MARK = "[KMI_SYNC]"
+    private const val TAG_MARK_SELECTED = "[KMI_SYNC_SELECTED]"
+    private const val TIME_ZONE_ID = "Asia/Jerusalem"
 
     private fun tr(context: Context, he: String, en: String): String {
         return if (AppLanguageManager(context).getCurrentLanguage() == AppLanguage.ENGLISH) en else he
@@ -417,22 +424,92 @@ object KmiCalendarSync {
         return out
     }
 
-    /** מחשב את המועד הבא ליום/שעה/דקה נתונים (כ־DTSTART של אירוע חוזר). */
-    private fun nextStartUtcMillis(dayOfWeek: Int, hour: Int, minute: Int): Long {
-        val tz = TimeZone.getDefault()
-        val cal = Calendar.getInstance(tz).apply {
+    /** מחשב את המועד הבא ליום/שעה/דקה לפי שעון ישראל. */
+    private fun nextStartUtcMillis(
+        dayOfWeek: Int,
+        hour: Int,
+        minute: Int
+    ): Long {
+        val timeZone = TimeZone.getTimeZone(TIME_ZONE_ID)
+
+        val candidate = Calendar.getInstance(timeZone).apply {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
             set(Calendar.DAY_OF_WEEK, dayOfWeek)
             set(Calendar.HOUR_OF_DAY, hour)
             set(Calendar.MINUTE, minute)
         }
-        val now = Calendar.getInstance(tz).timeInMillis
-        if (cal.timeInMillis <= now) cal.add(Calendar.WEEK_OF_YEAR, 1)
-        return cal.timeInMillis
+
+        val nowMillis =
+            Calendar.getInstance(timeZone).timeInMillis
+
+        if (candidate.timeInMillis <= nowMillis) {
+            candidate.add(Calendar.WEEK_OF_YEAR, 1)
+        }
+
+        return candidate.timeInMillis
     }
 
-      /** יוצר/מעדכן אירוע שבועי חוזר; מחזיר eventId + האם נוצר חדש. */
+    /**
+     * בונה EXDATE עבור כל המופעים השבועיים שמבוטלים
+     * על ידי TrainingStatusEngine.
+     */
+    private fun buildHolidayExDates(
+        context: Context,
+        firstStartMillis: Long,
+        hour: Int,
+        minute: Int
+    ): String? {
+        val israelZone = ZoneId.of(TIME_ZONE_ID)
+
+        var date = Instant
+            .ofEpochMilli(firstStartMillis)
+            .atZone(israelZone)
+            .toLocalDate()
+
+        /*
+         * טווח קדימה לסנכרון. כאשר קובץ החגים יורחב,
+         * הסנכרון הבא יוסיף אוטומטית את החריגים החדשים.
+         */
+        val endDate = LocalDate
+            .now(israelZone)
+            .plusYears(3)
+
+        val utcFormatter = DateTimeFormatter
+            .ofPattern("yyyyMMdd'T'HHmmss'Z'")
+            .withZone(ZoneOffset.UTC)
+
+        val excludedOccurrences = mutableListOf<String>()
+
+        while (!date.isAfter(endDate)) {
+            val occurrenceMillis = date
+                .atTime(hour, minute)
+                .atZone(israelZone)
+                .toInstant()
+                .toEpochMilli()
+
+            val status = TrainingStatusEngine.evaluate(
+                context = context,
+                trainingStartMillis = occurrenceMillis
+            )
+
+            if (status.isCancelled) {
+                excludedOccurrences += utcFormatter.format(
+                    Instant.ofEpochMilli(
+                        occurrenceMillis
+                    )
+                )
+            }
+
+            date = date.plusWeeks(1)
+        }
+
+        return excludedOccurrences
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(",")
+    }
+
+    /** יוצר/מעדכן אירוע שבועי חוזר; מחזיר eventId + האם נוצר חדש. */
     private data class UpsertResult(val id: Long, val created: Boolean)
 
     /** יוצר/מעדכן אירוע שבועי חוזר; מחזיר UpsertResult או null. */
@@ -449,13 +526,27 @@ object KmiCalendarSync {
         durationMin: Int,
         leadMinutes: Int
     ): UpsertResult? {
-        val cr   = context.contentResolver
-        val start = nextStartUtcMillis(dayOfWeek, hour, minute)
-        val rule  = "FREQ=WEEKLY;BYDAY=${byday(dayOfWeek)};WKST=SU"
-        val dur   = "PT${durationMin}M"
-        val tzId  = TimeZone.getDefault().id
+        val cr = context.contentResolver
+        val start = nextStartUtcMillis(
+            dayOfWeek = dayOfWeek,
+            hour = hour,
+            minute = minute
+        )
 
-        // 🔐 מפתח יציב לכל אירוע – ימנע התנגשות בין שני סוקולוב
+        val rule =
+            "FREQ=WEEKLY;BYDAY=${byday(dayOfWeek)};WKST=SU"
+
+        val duration = "PT${durationMin}M"
+        val timeZoneId = TIME_ZONE_ID
+
+        val holidayExDates = buildHolidayExDates(
+            context = context,
+            firstStartMillis = start,
+            hour = hour,
+            minute = minute
+        )
+
+        // 🔐 מפתח יציב לכל אירוע – ימנע התנגשות בין שני סניפים זהים.
         val eventKey = "$eventKeyPrefix:${byday(dayOfWeek)}_${String.format("%02d%02d", hour, minute)}:${title}"
 
         // חיפוש אירוע קיים לפי CUSTOM_APP_PACKAGE + CUSTOM_APP_URI (יציב ובטוח)
@@ -472,10 +563,17 @@ object KmiCalendarSync {
             put(Events.CALENDAR_ID, calendarId)
             put(Events.TITLE, title)
             put(Events.DESCRIPTION, "$descriptionTag ${DateUtils.formatDateTime(context, start, DateUtils.FORMAT_SHOW_DATE)}")
-            put(Events.EVENT_TIMEZONE, tzId)
+            put(Events.EVENT_TIMEZONE, timeZoneId)
             put(Events.DTSTART, start)
-            put(Events.DURATION, dur)
+            put(Events.DURATION, duration)
             put(Events.RRULE, rule)
+
+            if (holidayExDates.isNullOrBlank()) {
+                putNull(Events.EXDATE)
+            } else {
+                put(Events.EXDATE, holidayExDates)
+            }
+
             put(Events.EVENT_LOCATION, location)
             // ✅ סימון האירוע כשייך לאפליקציה
             put(Events.CUSTOM_APP_PACKAGE, context.packageName)

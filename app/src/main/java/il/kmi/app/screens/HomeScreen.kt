@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import il.kmi.app.R
 import il.kmi.app.training.TrainingData
+import il.kmi.app.training.TrainingStatusEngine
 import java.lang.reflect.AccessibleObject
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +87,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -95,6 +97,7 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.domain.ExerciseExplanationResolver
+import kotlinx.coroutines.delay
 
 //=================================================================================
 
@@ -1661,282 +1664,11 @@ fun HomeScreen(
 
                 Spacer(Modifier.height(10.dp))
 
-                fun rollForwardIfPast(
-                    src: java.util.Calendar,
-                    graceMinutes: Int = 60
-                ): java.util.Calendar {
-                    val now = System.currentTimeMillis() - graceMinutes * 60_000L
-                    val c = src.clone() as java.util.Calendar
-                    while (c.timeInMillis <= now) c.add(java.util.Calendar.DAY_OF_YEAR, 7)
-                    return c
-                }
-
                 fun datesRange(
                     from: java.time.LocalDate,
                     to: java.time.LocalDate
                 ): Sequence<java.time.LocalDate> =
                     generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }
-
-                fun java.util.Calendar.toLocalDate(): java.time.LocalDate =
-                    this.toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-
-                data class HolidayCancellationReason(
-                    val he: String,
-                    val en: String
-                )
-
-                val holidaysByDate:
-                        Map<java.time.LocalDate, HolidayCancellationReason> =
-                    remember {
-                        runCatching {
-                            val input = ctx.assets.open(
-                                "holidays_hebrew_2024_2026.json"
-                            )
-
-                            val text = input
-                                .bufferedReader()
-                                .use { it.readText() }
-
-                            val root = org.json.JSONObject(text)
-                            val items = root.getJSONArray("items")
-
-                            val result = mutableMapOf<
-                                    java.time.LocalDate,
-                                    HolidayCancellationReason
-                                    >()
-
-                            fun reasonFor(
-                                obj: org.json.JSONObject
-                            ): HolidayCancellationReason? {
-                                val title = listOf(
-                                    obj.optString("title", ""),
-                                    obj.optString("title_he", ""),
-                                    obj.optString("hebrew", ""),
-                                    obj.optString("name", ""),
-                                    obj.optString("category", ""),
-                                    obj.optString("subcat", "")
-                                )
-                                    .joinToString(" ")
-                                    .trim()
-
-                                if (title.isBlank()) {
-                                    return null
-                                }
-
-                                val clean = title
-                                    .lowercase(java.util.Locale("he", "IL"))
-                                    .replace("׳", "'")
-                                    .replace("״", "\"")
-
-                                val isEve =
-                                    clean.contains("ערב") ||
-                                            clean.contains("erev")
-
-                                /*
-                                 * תשעה באב הוא צום שחוסם אימון,
-                                 * אף על פי שהמילה "צום" בדרך כלל
-                                 * אינה גורמת לביטול אוטומטי.
-                                 */
-                                if (
-                                    clean.contains("תשעה באב") ||
-                                    clean.contains("ט' באב") ||
-                                    clean.contains("ט באב") ||
-                                    clean.contains("tisha b'av") ||
-                                    clean.contains("tisha bav")
-                                ) {
-                                    return HolidayCancellationReason(
-                                        he = "צום תשעה באב",
-                                        en = "Tisha B’Av fast"
-                                    )
-                                }
-
-                                if (clean.contains("ראש השנה")) {
-                                    return HolidayCancellationReason(
-                                        he = if (isEve) {
-                                            "ערב ראש השנה"
-                                        } else {
-                                            "ראש השנה"
-                                        },
-                                        en = if (isEve) {
-                                            "Rosh Hashanah Eve"
-                                        } else {
-                                            "Rosh Hashanah"
-                                        }
-                                    )
-                                }
-
-                                if (
-                                    clean.contains("יום כיפור") ||
-                                    clean.contains("יום הכיפורים") ||
-                                    clean.contains("yom kippur")
-                                ) {
-                                    return HolidayCancellationReason(
-                                        he = if (isEve) {
-                                            "ערב יום כיפור"
-                                        } else {
-                                            "יום כיפור"
-                                        },
-                                        en = if (isEve) {
-                                            "Yom Kippur Eve"
-                                        } else {
-                                            "Yom Kippur"
-                                        }
-                                    )
-                                }
-
-                                if (clean.contains("שמחת תורה")) {
-                                    return HolidayCancellationReason(
-                                        he = if (isEve) {
-                                            "ערב שמחת תורה"
-                                        } else {
-                                            "שמחת תורה"
-                                        },
-                                        en = if (isEve) {
-                                            "Simchat Torah Eve"
-                                        } else {
-                                            "Simchat Torah"
-                                        }
-                                    )
-                                }
-
-                                if (clean.contains("חול המועד סוכות")) {
-                                    return HolidayCancellationReason(
-                                        he = "חול המועד סוכות",
-                                        en = "Sukkot Intermediate Days"
-                                    )
-                                }
-
-                                if (clean.contains("סוכות")) {
-                                    return HolidayCancellationReason(
-                                        he = if (isEve) {
-                                            "ערב סוכות"
-                                        } else {
-                                            "סוכות"
-                                        },
-                                        en = if (isEve) {
-                                            "Sukkot Eve"
-                                        } else {
-                                            "Sukkot"
-                                        }
-                                    )
-                                }
-
-                                if (clean.contains("חול המועד פסח")) {
-                                    return HolidayCancellationReason(
-                                        he = "חול המועד פסח",
-                                        en = "Passover Intermediate Days"
-                                    )
-                                }
-
-                                if (clean.contains("פסח")) {
-                                    return HolidayCancellationReason(
-                                        he = if (isEve) {
-                                            "ערב פסח"
-                                        } else {
-                                            "פסח"
-                                        },
-                                        en = if (isEve) {
-                                            "Passover Eve"
-                                        } else {
-                                            "Passover"
-                                        }
-                                    )
-                                }
-
-                                if (clean.contains("שבועות")) {
-                                    return HolidayCancellationReason(
-                                        he = if (isEve) {
-                                            "ערב שבועות"
-                                        } else {
-                                            "שבועות"
-                                        },
-                                        en = if (isEve) {
-                                            "Shavuot Eve"
-                                        } else {
-                                            "Shavuot"
-                                        }
-                                    )
-                                }
-
-                                /*
-                                 * מועדים שאינם מבטלים אימון.
-                                 * צומות אחרים אינם מבטלים כרגע,
-                                 * אלא אם נוסיף אותם במפורש בהמשך.
-                                 */
-                                val nonBlockingKeywords = listOf(
-                                    "ראש חודש",
-                                    "ספירת העומר",
-                                    "לג בעומר",
-                                    "ט\"ו בשבט",
-                                    "טו בשבט",
-                                    "יום העצמאות",
-                                    "יום הזיכרון",
-                                    "יום השואה",
-                                    "פורים קטן",
-                                    "שושן פורים",
-                                    "פורים",
-                                    "חנוכה",
-                                    "צום",
-                                    "תענית"
-                                )
-
-                                if (
-                                    nonBlockingKeywords.any {
-                                        clean.contains(it)
-                                    }
-                                ) {
-                                    return null
-                                }
-
-                                return null
-                            }
-
-                            for (index in 0 until items.length()) {
-                                val obj = items.getJSONObject(index)
-
-                                if (!obj.has("date_iso")) {
-                                    continue
-                                }
-
-                                val reason = reasonFor(obj) ?: continue
-
-                                val date = runCatching {
-                                    java.time.LocalDate.parse(
-                                        obj.getString("date_iso")
-                                    )
-                                }.getOrNull() ?: continue
-
-                                val existing = result[date]
-
-                                /*
-                                 * אם באותו תאריך מופיעים כמה שמות,
-                                 * תשעה באב מקבל עדיפות על שם כללי.
-                                 */
-                                if (
-                                    existing == null ||
-                                    reason.he == "צום תשעה באב"
-                                ) {
-                                    result[date] = reason
-                                }
-                            }
-
-                            result.toMap()
-                        }.getOrElse { error ->
-                            android.util.Log.e(
-                                "KMI_HOLIDAYS",
-                                "Failed reading holiday calendar",
-                                error
-                            )
-
-                            emptyMap()
-                        }
-                    }
-
-                fun holidayCancellationReason(
-                    cal: java.util.Calendar
-                ): HolidayCancellationReason? {
-                    return holidaysByDate[cal.toLocalDate()]
-                }
 
                 fun upcomingWindowStartMillis(): Long {
                     return java.util.Calendar.getInstance().timeInMillis
@@ -2118,9 +1850,12 @@ fun HomeScreen(
                                 )
 
                                 if (dbItems.isNotEmpty()) {
-                                    val validDbItems = dbItems
-                                        .map { it.copy(cal = rollForwardIfPast(it.cal, 60)) }
-                                        .filter { isWithinUpcomingSevenDays(it.cal) }
+                                    val validDbItems =
+                                        dbItems.filter { training ->
+                                            isWithinUpcomingSevenDays(
+                                                training.cal
+                                            )
+                                        }
 
                                     all += validDbItems
                                     return@forEach
@@ -2184,9 +1919,12 @@ fun HomeScreen(
                                         )
                                     } ?: emptyList()
 
-                                val validFallbackItems = fallbackItems
-                                    .map { it.copy(cal = rollForwardIfPast(it.cal, 60)) }
-                                    .filter { isWithinUpcomingSevenDays(it.cal) }
+                                val validFallbackItems =
+                                    fallbackItems.filter { training ->
+                                        isWithinUpcomingSevenDays(
+                                            training.cal
+                                        )
+                                    }
 
                                 all += validFallbackItems
                             }
@@ -2210,17 +1948,39 @@ fun HomeScreen(
 
                 data class HomeTrainingUi(
                     val training: TrainingData,
-                    val cancellationReason:
-                    HolidayCancellationReason?
+                    val status: TrainingStatusEngine.Status
                 ) {
                     val isCancelledByHoliday: Boolean
-                        get() = cancellationReason != null
+                        get() =
+                            status.state ==
+                                    TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY
+
+                    fun cancellationReason(
+                        isEnglish: Boolean
+                    ): String? {
+                        return status.reason(isEnglish)
+                    }
+                }
+
+                var trainingStatusNowMillis by remember {
+                    mutableLongStateOf(
+                        System.currentTimeMillis()
+                    )
+                }
+
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        delay(30_000L)
+
+                        trainingStatusNowMillis =
+                            System.currentTimeMillis()
+                    }
                 }
 
                 val upcoming: List<HomeTrainingUi> =
                     remember(
                         currentWeekCandidates,
-                        holidaysByDate
+                        trainingStatusNowMillis
                     ) {
                         currentWeekCandidates
                             .sortedBy { it.cal.timeInMillis }
@@ -2228,13 +1988,16 @@ fun HomeScreen(
                             .map { training ->
                                 HomeTrainingUi(
                                     training = training,
-                                    cancellationReason =
-                                        holidayCancellationReason(
-                                            training.cal
-                                        )
+                                    status = TrainingStatusEngine.evaluate(
+                                        context = ctx,
+                                        training = training,
+                                        nowMillis =
+                                            trainingStatusNowMillis
+                                    )
                                 )
                             }
                     }
+
 
                 LaunchedEffect(upcoming, isEnglish) {
                     val locale = if (isEnglish) {
@@ -2257,11 +2020,8 @@ fun HomeScreen(
                             day = dayFmt.format(training.cal.time),
                             date = dateFmt.format(training.cal.time),
                             time = timeFmt.format(training.cal.time),
-                            cancellationReason = if (isEnglish) {
-                                item.cancellationReason?.en
-                            } else {
-                                item.cancellationReason?.he
-                            }
+                            cancellationReason =
+                                item.cancellationReason(isEnglish)
                         )
                     }
                 }
@@ -2333,11 +2093,7 @@ fun HomeScreen(
                             TrainingCardCompact(
                                 training = item.training,
                                 isEnglish = isEnglish,
-                                cancellationReason = if (isEnglish) {
-                                    item.cancellationReason?.en
-                                } else {
-                                    item.cancellationReason?.he
-                                }
+                                status = item.status
                             )
                         }
                         item { Spacer(Modifier.height(6.dp)) }
@@ -3687,7 +3443,7 @@ private fun buildExplanationWithStanceHighlight(
 private fun TrainingCardCompact(
     training: TrainingData,
     isEnglish: Boolean,
-    cancellationReason: String? = null
+    status: TrainingStatusEngine.Status
 ) {
     val ctx = LocalContext.current
     val haptic = rememberHapticsGlobal()
@@ -3933,25 +3689,61 @@ private fun TrainingCardCompact(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            if (!cancellationReason.isNullOrBlank()) {
+            val statusMessage =
+                status.displayText(isEnglish)
+
+            if (!statusMessage.isNullOrBlank()) {
+                val statusBackgroundColor =
+                    when (status.state) {
+                        TrainingStatusEngine.State.ONGOING ->
+                            Color(0xFFECFDF5)
+
+                        TrainingStatusEngine.State.COMPLETED ->
+                            Color(0xFFF1F5F9)
+
+                        TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
+                            Color(0xFFFFF7ED)
+
+                        TrainingStatusEngine.State.INVALID ->
+                            Color(0xFFFEF2F2)
+
+                        TrainingStatusEngine.State.SCHEDULED ->
+                            Color(0xFFEFF6FF)
+                    }
+
+                val statusContentColor =
+                    when (status.state) {
+                        TrainingStatusEngine.State.ONGOING ->
+                            Color(0xFF047857)
+
+                        TrainingStatusEngine.State.COMPLETED ->
+                            Color(0xFF475569)
+
+                        TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
+                            Color(0xFF9A3412)
+
+                        TrainingStatusEngine.State.INVALID ->
+                            Color(0xFFB91C1C)
+
+                        TrainingStatusEngine.State.SCHEDULED ->
+                            Color(0xFF1D4ED8)
+                    }
+
                 Spacer(Modifier.height(4.dp))
 
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFFFFF7ED),
-                    border = androidx.compose.foundation.BorderStroke(
+                    color = statusBackgroundColor,
+                    border = BorderStroke(
                         width = 1.dp,
-                        color = Color(0xFFF97316)
-                            .copy(alpha = 0.35f)
+                        color = statusContentColor.copy(
+                            alpha = 0.35f
+                        )
                     )
                 ) {
                     Text(
-                        text = if (isEnglish) {
-                            "Training cancelled due to $cancellationReason"
-                        } else {
-                            "האימון מבוטל עקב $cancellationReason"
-                        },
+                        text = statusMessage,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(
@@ -3959,9 +3751,10 @@ private fun TrainingCardCompact(
                                 vertical = 7.dp
                             ),
                         textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.labelMedium,
+                        style =
+                            MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF9A3412)
+                        color = statusContentColor
                     )
                 }
             }

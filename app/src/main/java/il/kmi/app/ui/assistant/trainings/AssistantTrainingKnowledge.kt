@@ -1,6 +1,8 @@
 package il.kmi.app.ui.assistant.trainings
 
+import android.content.Context
 import android.content.SharedPreferences
+import il.kmi.app.training.TrainingStatusEngine
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.ui.assistant.utils.HebrewNormalize
 import java.text.SimpleDateFormat
@@ -764,30 +766,88 @@ object EntityExtractor {
         return keys.any { it in norm }
     }
 
-    fun requestedTrainingCount(norm: String): Int? {
-        val hasUpcomingListContext = listOf(
-            "רשימה",
-            "תן",
-            "תני",
-            "תראה",
-            "הצג",
-            "אימונים הבאים",
-            "האימונים הבאים",
-            "אימונים קרובים",
-            "האימונים הקרובים",
-            "list",
-            "give",
-            "show",
-            "next trainings",
-            "upcoming trainings",
-            "next classes",
-            "upcoming classes"
-        ).any { it in norm }
+    fun wantsTrainingList(
+        norm: String
+    ): Boolean {
+        val hasTrainingWord =
+            listOf(
+                "אימון",
+                "אימונים",
+                "אימוני",
+                "training",
+                "trainings",
+                "workout",
+                "workouts",
+                "class",
+                "classes"
+            ).any { word ->
+                word in norm
+            }
 
-        if (!hasUpcomingListContext) return null
+        if (!hasTrainingWord) {
+            return false
+        }
+
+        val hasListMeaning =
+            listOf(
+                "רשימה",
+                "תן",
+                "תני",
+                "תביא",
+                "תראה",
+                "תציג",
+                "הצג",
+                "ספר לי",
+                "פרט",
+                "כמה אימונים",
+                "אימונים הבאים",
+                "האימונים הבאים",
+                "אימונים קרובים",
+                "האימונים הקרובים",
+                "עוד אימונים",
+                "השבוע",
+                "שבוע קרוב",
+                "שבוע הבא",
+                "בשבוע הבא",
+                "לשבוע הבא",
+                "שבעת הימים הקרובים",
+                "ימים הקרובים",
+                "מה צפוי",
+                "מה מתוכנן",
+                "list",
+                "show",
+                "give",
+                "display",
+                "upcoming",
+                "next trainings",
+                "next classes",
+                "this week",
+                "next week",
+                "coming week",
+                "scheduled"
+            ).any { phrase ->
+                phrase in norm
+            }
+
+        val hasRequestedNumber =
+            Regex(
+                """(?<!\d)(20|1[0-9]|[2-9])(?!\d)"""
+            ).containsMatchIn(norm)
+
+        return hasListMeaning ||
+                hasRequestedNumber
+    }
+
+    fun requestedTrainingCount(norm: String): Int? {
+        val hasUpcomingListContext =
+            wantsTrainingList(norm)
+
+        if (!hasUpcomingListContext) {
+            return null
+        }
 
         val numericCount = Regex(
-            """(?<!\d)(10|[1-9])(?!\d)"""
+            """(?<!\d)(20|1[0-9]|[1-9])(?!\d)"""
         )
             .find(norm)
             ?.groupValues
@@ -795,7 +855,7 @@ object EntityExtractor {
             ?.toIntOrNull()
 
         if (numericCount != null) {
-            return numericCount.coerceIn(1, 10)
+            return numericCount.coerceIn(1, 20)
         }
 
         val countWords = linkedMapOf(
@@ -909,14 +969,43 @@ data class TrainingRow(
     val timeRange: String,
     val location: String,
     val coachName: String,
-    val startAtMillis: Long
+    val startAtMillis: Long,
+    val endAtMillis: Long?
 )
 
-    object TrainingTableBuilder {
+data class TrainingAssistantCard(
+    val id: String,
+    val title: String,
+    val date: String,
+    val startTime: String,
+    val endTime: String?,
+    val branchName: String,
+    val groupName: String,
+    val location: String,
+    val coachName: String,
+    val statusCode: String,
+    val statusHe: String,
+    val statusEn: String
+)
 
-        private val dayFormatter = SimpleDateFormat("EEEE", Locale("he", "IL"))
+object TrainingTableBuilder {
 
-        fun build(): List<TrainingRow> {
+    private val heLocale =
+        Locale("he", "IL")
+
+    private val dayFormatter =
+        SimpleDateFormat(
+            "EEEE",
+            heLocale
+        )
+
+    private val timeFormatter =
+        SimpleDateFormat(
+            "HH:mm",
+            heLocale
+        )
+
+    fun build(): List<TrainingRow> {
             val rows = mutableListOf<TrainingRow>()
 
             TrainingCatalog.branchesByRegion.forEach { (_, branches) ->
@@ -929,19 +1018,37 @@ data class TrainingRow(
 
                         trainings.forEach { td ->
                             /*
-                             * נתוני הקטלוג מייצגים אימון שבועי קבוע.
-                             * יוצרים מופעים לארבעת השבועות הקרובים כדי
-                             * לתמוך בשאלות על השבוע הבא ורשימות עתידיות.
+                             * משך האימון נשמר כדי לזהות אימון
+                             * שמתקיים כעת ולא לקדם אותו מיד לשבוע הבא.
                              */
+                            val durationMillis =
+                                td.endMillis
+                                    ?.minus(td.startMillis)
+                                    ?.takeIf { duration ->
+                                        duration > 0L
+                                    }
+
+                            val nowMillis =
+                                System.currentTimeMillis()
+
                             val firstOccurrence =
                                 (td.cal.clone() as Calendar).apply {
                                     set(Calendar.SECOND, 0)
                                     set(Calendar.MILLISECOND, 0)
 
-                                    while (
-                                        timeInMillis <
-                                        System.currentTimeMillis()
-                                    ) {
+                                    while (true) {
+                                        val effectiveEndMillis =
+                                            durationMillis?.let { duration ->
+                                                timeInMillis + duration
+                                            } ?: timeInMillis
+
+                                        if (
+                                            effectiveEndMillis >
+                                            nowMillis
+                                        ) {
+                                            break
+                                        }
+
                                         add(Calendar.DAY_OF_YEAR, 7)
                                     }
                                 }
@@ -955,16 +1062,54 @@ data class TrainingRow(
                                         )
                                     }
 
+                                val occurrenceStartMillis =
+                                    occurrence.timeInMillis
+
+                                val occurrenceEndMillis =
+                                    durationMillis?.let { duration ->
+                                        occurrenceStartMillis + duration
+                                    }
+
+                                val cleanStartTime =
+                                    timeFormatter.format(
+                                        java.util.Date(
+                                            occurrenceStartMillis
+                                        )
+                                    )
+
+                                val cleanEndTime =
+                                    occurrenceEndMillis?.let { endMillis ->
+                                        timeFormatter.format(
+                                            java.util.Date(endMillis)
+                                        )
+                                    } ?: Regex(
+                                        """(?:[01]\d|2[0-3]):[0-5]\d"""
+                                    )
+                                        .find(td.end)
+                                        ?.value
+                                        .orEmpty()
+
+                                val cleanTimeRange =
+                                    if (cleanEndTime.isNotBlank()) {
+                                        "$cleanStartTime–$cleanEndTime"
+                                    } else {
+                                        cleanStartTime
+                                    }
+
                                 rows += TrainingRow(
                                     branchName = branch,
                                     groupName = normGroup,
                                     dayName = dayFormatter.format(
                                         occurrence.time
                                     ),
-                                    timeRange = "${td.start}–${td.end}",
-                                    location = TrainingCatalog.placeFor(branch),
+                                    timeRange = cleanTimeRange,
+                                    location =
+                                        TrainingCatalog.placeFor(branch),
                                     coachName = td.coach,
-                                    startAtMillis = occurrence.timeInMillis
+                                    startAtMillis =
+                                        occurrenceStartMillis,
+                                    endAtMillis =
+                                        occurrenceEndMillis
                                 )
                             }
                         }
@@ -1061,19 +1206,35 @@ In addition, a groin guard is strongly recommended for maximum safety during tra
         list: List<TrainingRow>,
         branch: String?,
         group: String?,
-        limit: Int = 5,
-        isEnglish: Boolean = false
+        limit: Int = 8,
+        isEnglish: Boolean = false,
+        statusProvider:
+        ((TrainingRow) ->
+        TrainingStatusEngine.Status)? = null
     ): String {
 
-        val safeLimit = limit.coerceIn(1, 10)
+        val safeLimit =
+            limit.coerceIn(1, 20)
+
+        val nowMillis =
+            System.currentTimeMillis()
 
         /*
-         * startAtMillis כולל את התאריך והשעה בפועל.
-         * מיון לפי שם יום עלול להציג את יום ראשון לפני
-         * אימון קרוב יותר שמתקיים בסוף השבוע הנוכחי.
+         * הרשימה כוללת אימון עתידי וגם אימון
+         * שמתקיים כעת ועדיין לא הסתיים.
          */
         val sorted = list
-            .filter { it.startAtMillis >= System.currentTimeMillis() }
+            .filter { training ->
+                val endMillis =
+                    training.endAtMillis
+
+                if (endMillis != null) {
+                    endMillis > nowMillis
+                } else {
+                    training.startAtMillis >=
+                            nowMillis
+                }
+            }
             .distinctBy { training ->
                 listOf(
                     training.branchName,
@@ -1116,22 +1277,52 @@ In addition, a groin guard is strongly recommended for maximum safety during tra
                     Date(training.startAtMillis)
                 )
 
+                val trainingStatus =
+                    statusProvider?.invoke(training)
+
+                val statusText =
+                    trainingStatus?.displayText(
+                        isEnglish
+                    ).orEmpty()
+
                 if (isEnglish) {
-                    append(
-                        "• ${training.dayName}, $dateText – " +
-                                "${training.timeRange} – " +
-                                "${training.branchName} – " +
-                                "${training.groupName} – " +
-                                "Coach: ${training.coachName}\n"
-                    )
+                    append("• ${training.dayName}, $dateText\n")
+                    append("  Time: ${training.timeRange}\n")
+                    append("  Branch: ${training.branchName}\n")
+                    append("  Group: ${training.groupName}\n")
+
+                    if (training.location.isNotBlank()) {
+                        append("  Location: ${training.location}\n")
+                    }
+
+                    if (training.coachName.isNotBlank()) {
+                        append("  Coach: ${training.coachName}\n")
+                    }
+
+                    if (statusText.isNotBlank()) {
+                        append("  Status: $statusText\n")
+                    }
+
+                    append('\n')
                 } else {
-                    append(
-                        "• ${training.dayName}, $dateText – " +
-                                "${training.timeRange} – " +
-                                "${training.branchName} – " +
-                                "${training.groupName} – " +
-                                "מאמן: ${training.coachName}\n"
-                    )
+                    append("• ${training.dayName}, $dateText\n")
+                    append("  שעה: ${training.timeRange}\n")
+                    append("  סניף: ${training.branchName}\n")
+                    append("  קבוצה: ${training.groupName}\n")
+
+                    if (training.location.isNotBlank()) {
+                        append("  מיקום: ${training.location}\n")
+                    }
+
+                    if (training.coachName.isNotBlank()) {
+                        append("  מאמן: ${training.coachName}\n")
+                    }
+
+                    if (statusText.isNotBlank()) {
+                        append("  סטטוס: $statusText\n")
+                    }
+
+                    append('\n')
                 }
             }
 
@@ -1332,14 +1523,90 @@ In addition, a groin guard is strongly recommended for maximum safety during tra
 
     fun buildNextTraining(
         list: List<TrainingRow>,
-        isEnglish: Boolean = false
+        isEnglish: Boolean = false,
+        nowMillis: Long =
+            System.currentTimeMillis()
     ): String {
+        val next =
+            list.minByOrNull {
+                it.startAtMillis
+            } ?: return tr(
+                isEnglish,
+                "לא מצאתי אימון קרוב.",
+                "I could not find an upcoming training."
+            )
 
-        val next = list.minByOrNull { it.startAtMillis }
-            ?: return tr(isEnglish, "לא מצאתי אימון קרוב.", "I could not find an upcoming training.")
+        val isOngoing =
+            next.startAtMillis <= nowMillis &&
+                    next.endAtMillis?.let { endMillis ->
+                        nowMillis < endMillis
+                    } == true
 
-        val spokenTime = next.timeRange.substringBefore("–").substringBefore("-").trim()
-        val dayText = dayPhrase(next.dayName, isEnglish)
+        if (isOngoing) {
+            val endTime =
+                next.endAtMillis?.let { endMillis ->
+                    SimpleDateFormat(
+                        "HH:mm",
+                        if (isEnglish) {
+                            Locale.ENGLISH
+                        } else {
+                            Locale("he", "IL")
+                        }
+                    ).format(
+                        java.util.Date(endMillis)
+                    )
+                }.orEmpty()
+
+            return if (isEnglish) {
+                buildString {
+                    append("Your training is in progress now")
+                    append(" at ${next.branchName}")
+                    append(", for ${next.groupName}.")
+
+                    if (endTime.isNotBlank()) {
+                        append(" It is expected to end at ")
+                        append(endTime)
+                        append(".")
+                    }
+
+                    if (next.coachName.isNotBlank()) {
+                        append(" The coach is ")
+                        append(next.coachName)
+                        append(".")
+                    }
+                }
+            } else {
+                buildString {
+                    append("האימון שלך מתקיים כעת")
+                    append(" בסניף ${next.branchName}")
+                    append(", לקבוצת ${next.groupName}.")
+
+                    if (endTime.isNotBlank()) {
+                        append(" האימון צפוי להסתיים בשעה ")
+                        append(endTime)
+                        append(".")
+                    }
+
+                    if (next.coachName.isNotBlank()) {
+                        append(" המאמן הוא ")
+                        append(next.coachName)
+                        append(".")
+                    }
+                }
+            }
+        }
+
+        val spokenTime =
+            next.timeRange
+                .substringBefore("–")
+                .substringBefore("-")
+                .trim()
+
+        val dayText =
+            dayPhrase(
+                next.dayName,
+                isEnglish
+            )
 
         return if (isEnglish) {
             "The next training is $dayText at $spokenTime, " +
@@ -1576,12 +1843,19 @@ object AssistantTrainingKnowledge {
         get() = TrainingTableBuilder.build()
 
     fun generateAnswer(
+        context: Context,
         question: String,
         memory: AssistantMemory,
-        isEnglish: Boolean = false
+        isEnglish: Boolean = false,
+        onCardsReady:
+            (List<TrainingAssistantCard>) -> Unit = {}
     ): String {
 
-        val norm = HebrewNormalize.normalize(question).lowercase(Locale("he", "IL"))
+        val appContext = context.applicationContext
+
+        val norm = HebrewNormalize
+            .normalize(question)
+            .lowercase(Locale("he", "IL"))
 
         var intent = IntentDetector.detectIntent(norm)
 
@@ -1632,10 +1906,20 @@ object AssistantTrainingKnowledge {
 
         memory.setLastIntent(intent.name)
 
-        val wantsNearest = EntityExtractor.wantsNearest(norm)
-        val wantsUpcoming = EntityExtractor.wantsUpcoming(norm)
-        val wantsThisWeek = EntityExtractor.wantsThisWeek(norm)
-        val wantsNextWeek = EntityExtractor.wantsNextWeek(norm)
+        val wantsNearest =
+            EntityExtractor.wantsNearest(norm)
+
+        val wantsUpcoming =
+            EntityExtractor.wantsUpcoming(norm)
+
+        val wantsThisWeek =
+            EntityExtractor.wantsThisWeek(norm)
+
+        val wantsNextWeek =
+            EntityExtractor.wantsNextWeek(norm)
+
+        val wantsTrainingList =
+            EntityExtractor.wantsTrainingList(norm)
 
         /*
          * שומרים בנפרד אם המשתמש ביקש מספר אימונים מפורש.
@@ -1645,8 +1929,23 @@ object AssistantTrainingKnowledge {
         val explicitlyRequestedTrainingCount =
             EntityExtractor.requestedTrainingCount(norm)
 
+        /*
+         * בקשה על שבוע שלם מקבלת רשימה רחבה.
+         * בקשת רשימה כללית מקבלת עד שמונה אימונים.
+         */
         val requestedTrainingCount =
-            explicitlyRequestedTrainingCount ?: 5
+            explicitlyRequestedTrainingCount
+                ?: when {
+                    wantsThisWeek ||
+                            wantsNextWeek ->
+                        20
+
+                    wantsTrainingList ->
+                        8
+
+                    else ->
+                        5
+                }
 
         // ישויות מפורשות מהשאלה
         val explicitBranch = EntityExtractor.detectBranch(norm)
@@ -1734,6 +2033,47 @@ object AssistantTrainingKnowledge {
 
         // סינון אימונים
         val nowMillis = System.currentTimeMillis()
+
+        /*
+         * מטמון מקומי לבקשה הנוכחית בלבד.
+         * כמה סניפים וקבוצות יכולים להתאמן באותו מועד,
+         * ולכן אין צורך לחשב שוב את מצב החג לאותו זמן.
+         */
+        val statusByTrainingTime =
+            mutableMapOf<
+                    Pair<Long, Long?>,
+                    TrainingStatusEngine.Status
+                    >()
+
+        fun statusFor(
+            training: TrainingRow
+        ): TrainingStatusEngine.Status {
+            val timeKey =
+                training.startAtMillis to
+                        training.endAtMillis
+
+            return statusByTrainingTime.getOrPut(
+                timeKey
+            ) {
+                TrainingStatusEngine.evaluate(
+                    context = appContext,
+                    trainingStartMillis =
+                        training.startAtMillis,
+                    trainingEndMillis =
+                        training.endAtMillis,
+                    nowMillis = nowMillis
+                )
+            }
+        }
+
+        /*
+         * משמש להצעת חלופות בלבד.
+         * אימון מבוטל לעולם לא יוצע כאימון חלופי.
+         */
+        val activeAllTrainings = allTrainings.filter { training ->
+            !statusFor(training).isCancelled
+        }
+
         var seq = allTrainings.asSequence()
 
         if (
@@ -1743,7 +2083,11 @@ object AssistantTrainingKnowledge {
             wantsNextWeek
         ) {
             seq = seq.filter { training ->
-                training.startAtMillis >= nowMillis
+                val status =
+                    statusFor(training)
+
+                status.isScheduled ||
+                        status.isOngoing
             }
         }
 
@@ -1856,20 +2200,40 @@ object AssistantTrainingKnowledge {
             }
         }
 
-        var results = seq.toList()
+        var matchedResults = seq.toList()
 
-        if (isPersonalQuestion && explicitGroup == null) {
+        if (
+            isPersonalQuestion &&
+            explicitGroup == null
+        ) {
             val personalGroup = registeredGroup
-                ?.let { TrainingCatalog.normalizeGroupName(it) }
+                ?.let {
+                    TrainingCatalog.normalizeGroupName(it)
+                }
 
             if (!personalGroup.isNullOrBlank()) {
-                results = results.filter { training ->
-                    TrainingCatalog.normalizeGroupName(
-                        training.groupName
-                    ) == personalGroup
-                }
+                matchedResults =
+                    matchedResults.filter { training ->
+                        TrainingCatalog.normalizeGroupName(
+                            training.groupName
+                        ) == personalGroup
+                    }
             }
         }
+
+        /*
+         * שומרים התאמות מבוטלות כדי להסביר למשתמש
+         * שהאימון קיים בלוח אך אינו מתקיים בגלל חג.
+         */
+        val cancelledResults =
+            matchedResults.filter { training ->
+                statusFor(training).isCancelled
+            }
+
+        var results =
+            matchedResults.filter { training ->
+                !statusFor(training).isCancelled
+            }
 
         if (
             (intent == AssistantIntent.ASK_NEXT_TRAINING || wantsUpcoming) &&
@@ -1887,6 +2251,92 @@ object AssistantTrainingKnowledge {
 
         // אם אין תוצאה אישית, אסור להחליף אותה באימון של משתמש אחר.
         if (results.isEmpty()) {
+            val cancelledTraining =
+                cancelledResults.minByOrNull {
+                    it.startAtMillis
+                }
+
+            if (cancelledTraining != null) {
+                val cancellationStatus =
+                    statusFor(cancelledTraining)
+
+                val cancellationReason =
+                    cancellationStatus
+                        .reason(isEnglish)
+                        .orEmpty()
+
+                val cleanDay =
+                    cancelledTraining.dayName
+                        .replace("יום", "")
+                        .trim()
+
+                val cleanTime =
+                    cancelledTraining.timeRange
+                        .substringBefore("–")
+                        .substringBefore("-")
+                        .trim()
+
+                return if (isEnglish) {
+                    buildString {
+                        append("The scheduled training on ")
+                        append(cleanDay)
+                        append(" at ")
+                        append(cleanTime)
+                        append(" is cancelled")
+
+                        if (cancellationReason.isNotBlank()) {
+                            append(" due to ")
+                            append(cancellationReason)
+                        }
+
+                        append(".")
+                        append("\nBranch: ")
+                        append(cancelledTraining.branchName)
+                        append("\nGroup: ")
+                        append(cancelledTraining.groupName)
+
+                        if (
+                            cancelledTraining.coachName
+                                .isNotBlank()
+                        ) {
+                            append("\nCoach: ")
+                            append(
+                                cancelledTraining.coachName
+                            )
+                        }
+                    }
+                } else {
+                    buildString {
+                        append("האימון המתוכנן ביום ")
+                        append(cleanDay)
+                        append(" בשעה ")
+                        append(cleanTime)
+                        append(" מבוטל")
+
+                        if (cancellationReason.isNotBlank()) {
+                            append(" עקב ")
+                            append(cancellationReason)
+                        }
+
+                        append(".")
+                        append("\nסניף: ")
+                        append(cancelledTraining.branchName)
+                        append("\nקבוצה: ")
+                        append(cancelledTraining.groupName)
+
+                        if (
+                            cancelledTraining.coachName
+                                .isNotBlank()
+                        ) {
+                            append("\nמאמן: ")
+                            append(
+                                cancelledTraining.coachName
+                            )
+                        }
+                    }
+                }
+            }
+
             if (isPersonalQuestion) {
                 return if (isEnglish) {
                     buildString {
@@ -1947,7 +2397,9 @@ object AssistantTrainingKnowledge {
                 }
 
                 val city = branchCity(branch!!)
-                val sameCity = allTrainings.filter { branchCity(it.branchName) == city }
+                val sameCity = activeAllTrainings.filter {
+                    branchCity(it.branchName) == city
+                }
                 val altSameCity = pickEarliestToday(sameCity)
 
                 if (altSameCity != null) {
@@ -1960,7 +2412,8 @@ object AssistantTrainingKnowledge {
                     }
                 }
 
-                val altAnyToday = pickEarliestToday(allTrainings)
+                val altAnyToday =
+                    pickEarliestToday(activeAllTrainings)
                 if (altAnyToday != null) {
                     return if (isEnglish) {
                         "There is no training today at $branch, but there is training at ${altAnyToday.branchName} " +
@@ -1971,7 +2424,8 @@ object AssistantTrainingKnowledge {
                     }
                 }
 
-                val nextAny = nextUpcomingTraining(allTrainings)
+                val nextAny =
+                    nextUpcomingTraining(activeAllTrainings)
                 if (nextAny != null) {
                     return if (isEnglish) {
                         "There is no training today at $branch. " +
@@ -1991,8 +2445,10 @@ object AssistantTrainingKnowledge {
             // לא מציגים "לא מצאתי התאמה" אם בפועל כן נמצא אימון קרוב.
             if (isMyTrainingQuestion(norm)) {
                 val personalNext = nextUpcomingTraining(
-                    allTrainings.filter { row ->
-                        userGroups(memory).any { g -> row.groupName.contains(g) }
+                    activeAllTrainings.filter { row ->
+                        userGroups(memory).any { groupName ->
+                            row.groupName.contains(groupName)
+                        }
                     }
                 )
 
@@ -2021,9 +2477,14 @@ object AssistantTrainingKnowledge {
             }
 
             // 3) "האימונים הבאים" בלי התאמה → החזר מכל הסניפים
-            if (wantsNearest)  return AnswerBuilder.buildNextTraining(allTrainings, isEnglish)
+            if (wantsNearest) {
+                return AnswerBuilder.buildNextTraining(
+                    activeAllTrainings,
+                    isEnglish
+                )
+            }
             if (wantsUpcoming) return AnswerBuilder.buildUpcomingTrainings(
-                list = allTrainings,
+                list = activeAllTrainings,
                 branch = null,
                 group = null,
                 limit = requestedTrainingCount,
@@ -2031,7 +2492,8 @@ object AssistantTrainingKnowledge {
             )
 
             // 4) fallback חכם כללי
-            val nextAny = nextUpcomingTraining(allTrainings)
+            val nextAny =
+                nextUpcomingTraining(activeAllTrainings)
             if (nextAny != null) {
                 val cleanDay = nextAny.dayName
                     .replace("יום", "")
@@ -2058,19 +2520,127 @@ object AssistantTrainingKnowledge {
             return AnswerBuilder.buildNoMatch(branch, group, day, isEnglish)
         }
 
-        // בונה תשובה – ✅ “האימונים הבאים” יקבל רשימה קצרה
+        /*
+   * רשימת כרטיסים מובנית נוצרת מאותו מקור נתונים
+   * שממנו נבנית התשובה הטקסטואלית.
+   */
+        val shouldCreateTrainingCards =
+            wantsTrainingList ||
+                    wantsUpcoming ||
+                    wantsThisWeek ||
+                    wantsNextWeek
+
+        val structuredCards =
+            if (shouldCreateTrainingCards) {
+                val dateFormatter =
+                    SimpleDateFormat(
+                        "dd/MM/yyyy",
+                        Locale("he", "IL")
+                    )
+
+                results
+                    .distinctBy { training ->
+                        listOf(
+                            training.branchName,
+                            training.groupName,
+                            training.startAtMillis
+                        ).joinToString("|")
+                    }
+                    .sortedBy { training ->
+                        training.startAtMillis
+                    }
+                    .take(requestedTrainingCount)
+                    .map { training ->
+                        val status =
+                            statusFor(training)
+
+                        val startTime =
+                            training.timeRange
+                                .substringBefore("–")
+                                .trim()
+
+                        val endTime =
+                            training.timeRange
+                                .substringAfter(
+                                    "–",
+                                    ""
+                                )
+                                .trim()
+                                .takeIf {
+                                    it.isNotBlank()
+                                }
+
+                        TrainingAssistantCard(
+                            id = listOf(
+                                training.branchName,
+                                training.groupName,
+                                training.startAtMillis
+                            ).joinToString("|"),
+                            title = buildString {
+                                append(training.dayName)
+                                append(", ")
+                                append(
+                                    dateFormatter.format(
+                                        Date(
+                                            training.startAtMillis
+                                        )
+                                    )
+                                )
+                            },
+                            date = dateFormatter.format(
+                                Date(
+                                    training.startAtMillis
+                                )
+                            ),
+                            startTime = startTime,
+                            endTime = endTime,
+                            branchName =
+                                training.branchName,
+                            groupName =
+                                training.groupName,
+                            location =
+                                training.location,
+                            coachName =
+                                training.coachName,
+                            statusCode =
+                                status.state.name,
+                            statusHe =
+                                status.displayText(false),
+                            statusEn =
+                                status.displayText(true)
+                        )
+                    }
+            } else {
+                emptyList()
+            }
+
+        onCardsReady(structuredCards)
+
+// בונה תשובה
         val answer = when {
 
-            isTodayTrainingQuestion(norm, isEnglish) ->
-                AnswerBuilder.buildTodayTraining(results, isEnglish)
+            isTodayTrainingQuestion(
+                norm,
+                isEnglish
+            ) ->
+                AnswerBuilder.buildTodayTraining(
+                    results,
+                    isEnglish
+                )
 
-            wantsUpcoming ->
+            wantsTrainingList ||
+                    wantsUpcoming ||
+                    wantsThisWeek ||
+                    wantsNextWeek ->
                 AnswerBuilder.buildUpcomingTrainings(
                     list = results,
                     branch = branch,
                     group = group,
                     limit = requestedTrainingCount,
-                    isEnglish = isEnglish
+                    isEnglish = isEnglish,
+                    statusProvider = { training ->
+                        statusFor(training)
+                    }
                 )
 
             intent == AssistantIntent.ASK_DURATION -> AnswerBuilder.buildDuration(results, isEnglish)
@@ -2080,18 +2650,32 @@ object AssistantTrainingKnowledge {
 
             intent == AssistantIntent.ASK_NEXT_TRAINING -> {
                 val asksForMultipleTrainings =
-                    explicitlyRequestedTrainingCount != null ||
+                    wantsThisWeek ||
+                            wantsNextWeek ||
+                            explicitlyRequestedTrainingCount != null ||
                             listOf(
+                                "רשימת אימונים",
+                                "רשימה של אימונים",
+                                "תן רשימת אימונים",
+                                "תציג אימונים",
                                 "האימונים הבאים",
                                 "אימונים הבאים",
                                 "האימונים הקרובים",
                                 "אימונים קרובים",
+                                "השבוע הקרוב",
+                                "שבוע הבא",
+                                "training list",
+                                "list of trainings",
                                 "next trainings",
                                 "upcoming trainings",
                                 "upcoming classes",
                                 "next classes",
-                                "next workouts"
-                            ).any { it in norm }
+                                "next workouts",
+                                "this week",
+                                "next week"
+                            ).any { phrase ->
+                                phrase in norm
+                            }
 
                 if (asksForMultipleTrainings) {
                     AnswerBuilder.buildUpcomingTrainings(

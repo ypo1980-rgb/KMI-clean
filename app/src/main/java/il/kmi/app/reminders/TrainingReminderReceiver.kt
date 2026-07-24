@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import il.kmi.app.MainActivity
 import il.kmi.app.R
+import il.kmi.app.training.TrainingStatusEngine
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -23,6 +24,15 @@ class TrainingReminderReceiver : BroadcastReceiver() {
         val place = intent.getStringExtra(EXTRA_PLACE).orEmpty()
         val coach = intent.getStringExtra(EXTRA_COACH).orEmpty()
         val startMillis = intent.getLongExtra(EXTRA_START_MILLIS, 0L)
+
+        val trainingStatus = TrainingStatusEngine.evaluate(
+            context = context,
+            trainingStartMillis = startMillis
+        )
+
+        if (!trainingStatus.shouldNotify) {
+            return
+        }
 
         showTrainingReminderNotification(
             context = context,

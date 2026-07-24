@@ -116,6 +116,7 @@ import il.kmi.app.ui.assistant.core.AssistantMatchQuality
 import il.kmi.app.ui.assistant.core.AssistantMemory
 import il.kmi.app.ui.assistant.core.AssistantOrchestrator
 import il.kmi.app.ui.assistant.core.AssistantResult
+import il.kmi.app.ui.assistant.core.AssistantResultItem
 import il.kmi.app.ui.assistant.core.contextResults
 import il.kmi.app.ui.assistant.core.matchQuality
 import il.kmi.app.ui.assistant.core.primaryText
@@ -149,8 +150,248 @@ private data class AiMessage(
     val fromUser: Boolean,
     val text: String,
     val relatedQuestion: String? = null,
-    val feedback: Feedback = Feedback.NONE
+    val feedback: Feedback = Feedback.NONE,
+    val trainingItems:
+    List<AssistantResultItem> = emptyList()
 )
+
+@Composable
+private fun AssistantTrainingCard(
+    item: AssistantResultItem,
+    isEnglish: Boolean
+) {
+    val statusCode =
+        item.trainingStatusCode
+            ?.trim()
+            ?.uppercase()
+            .orEmpty()
+
+    val statusColor =
+        when (statusCode) {
+            "ONGOING" ->
+                Color(0xFF047857)
+
+            "CANCELLED_BY_HOLIDAY" ->
+                Color(0xFFEA580C)
+
+            "COMPLETED" ->
+                Color(0xFF64748B)
+
+            "INVALID" ->
+                Color(0xFFDC2626)
+
+            else ->
+                Color(0xFF2563EB)
+        }
+
+    val statusBackground =
+        when (statusCode) {
+            "ONGOING" ->
+                Color(0xFFECFDF5)
+
+            "CANCELLED_BY_HOLIDAY" ->
+                Color(0xFFFFF7ED)
+
+            "COMPLETED" ->
+                Color(0xFFF1F5F9)
+
+            "INVALID" ->
+                Color(0xFFFEF2F2)
+
+            else ->
+                Color(0xFFEFF6FF)
+        }
+
+    val statusText =
+        item.trainingStatusText(
+            isEnglish
+        ).orEmpty()
+
+    val timeText =
+        buildString {
+            item.startTime
+                ?.takeIf { it.isNotBlank() }
+                ?.let {
+                    append(it)
+                }
+
+            item.endTime
+                ?.takeIf { it.isNotBlank() }
+                ?.let {
+                    if (isNotBlank()) {
+                        append("–")
+                    }
+
+                    append(it)
+                }
+        }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = statusColor.copy(
+                    alpha = 0.28f
+                ),
+                shape = RoundedCornerShape(18.dp)
+            ),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White,
+        tonalElevation = 0.dp,
+        shadowElevation = 3.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = 10.dp
+                ),
+            verticalArrangement =
+                Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                text = item.title,
+                color = Color(0xFF172033),
+                fontWeight = FontWeight.Black,
+                fontSize = 15.sp,
+                lineHeight = 19.sp,
+                textAlign = if (isEnglish) {
+                    TextAlign.Left
+                } else {
+                    TextAlign.Right
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (timeText.isNotBlank()) {
+                Text(
+                    text = if (isEnglish) {
+                        "Time: $timeText"
+                    } else {
+                        "שעה: $timeText"
+                    },
+                    color = Color(0xFF334155),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    textAlign = if (isEnglish) {
+                        TextAlign.Left
+                    } else {
+                        TextAlign.Right
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            item.branchName
+                ?.takeIf { it.isNotBlank() }
+                ?.let { branch ->
+                    Text(
+                        text = if (isEnglish) {
+                            "Branch: $branch"
+                        } else {
+                            "סניף: $branch"
+                        },
+                        color = Color(0xFF475569),
+                        fontSize = 12.5.sp,
+                        textAlign = if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    )
+                }
+
+            item.groupName
+                ?.takeIf { it.isNotBlank() }
+                ?.let { group ->
+                    Text(
+                        text = if (isEnglish) {
+                            "Group: $group"
+                        } else {
+                            "קבוצה: $group"
+                        },
+                        color = Color(0xFF475569),
+                        fontSize = 12.5.sp,
+                        textAlign = if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    )
+                }
+
+            item.location
+                ?.takeIf { it.isNotBlank() }
+                ?.let { location ->
+                    Text(
+                        text = if (isEnglish) {
+                            "Location: $location"
+                        } else {
+                            "מיקום: $location"
+                        },
+                        color = Color(0xFF475569),
+                        fontSize = 12.5.sp,
+                        textAlign = if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    )
+                }
+
+            item.coachName
+                ?.takeIf { it.isNotBlank() }
+                ?.let { coach ->
+                    Text(
+                        text = if (isEnglish) {
+                            "Coach: $coach"
+                        } else {
+                            "מאמן: $coach"
+                        },
+                        color = Color(0xFF475569),
+                        fontSize = 12.5.sp,
+                        textAlign = if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    )
+                }
+
+            if (statusText.isNotBlank()) {
+                Surface(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    shape =
+                        RoundedCornerShape(999.dp),
+                    color = statusBackground
+                ) {
+                    Text(
+                        text = statusText,
+                        color = statusColor,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Black,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(
+                            horizontal = 10.dp,
+                            vertical = 6.dp
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
 
 private data class SpeechAlternative(
     val text: String,
@@ -1139,11 +1380,23 @@ fun AiAssistantDialog(
         AssistantOrchestrator()
     }
 
-    LaunchedEffect(assistantMemoryLocal, spAssistantMemory, spUser) {
+    LaunchedEffect(
+        assistantMemoryLocal,
+        spAssistantMemory,
+        spUser,
+        ctx
+    ) {
         assistantMemory = assistantMemoryLocal
 
-        // ✅ חשוב: מנוע האימונים צריך לקבל את פרטי המשתמש, לא את זיכרון העוזר.
-        TrainingsAssistantEngine.init(spUser)
+        /*
+         * מנוע האימונים מקבל:
+         * - applicationContext עבור TrainingStatusEngine.
+         * - SharedPreferences של המשתמש עבור הסניף והקבוצה.
+         */
+        TrainingsAssistantEngine.init(
+            context = ctx.applicationContext,
+            sp = spUser
+        )
     }
 
     // ✅ מצב עוזר נבחר + שמירה לבחירה האחרונה
@@ -2383,10 +2636,23 @@ fun AiAssistantDialog(
                 }
                 .take(5)
 
+        val trainingItems =
+            if (
+                assistantResult is
+                        AssistantResult.ResultList &&
+                assistantResult.source ==
+                AssistantKnowledgeSource.TRAININGS
+            ) {
+                assistantResult.items
+            } else {
+                emptyList()
+            }
+
         val aiMessage = AiMessage(
             fromUser = false,
             text = finalAnswer,
-            relatedQuestion = question
+            relatedQuestion = question,
+            trainingItems = trainingItems
         )
 
         messages = if (
@@ -3735,16 +4001,53 @@ fun AiAssistantDialog(
                                         shadowElevation = 2.dp
                                     ) {
                                         Column {
-                                            Text(
-                                                text = msg.text,
-                                                color = textColor,
-                                                modifier = Modifier.padding(
-                                                    horizontal = 14.dp,
-                                                    vertical = 12.dp
-                                                ),
-                                                textAlign = textAlignPrimary,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
+                                            if (
+                                                !msg.fromUser &&
+                                                msg.trainingItems.isNotEmpty()
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(
+                                                            horizontal = 10.dp,
+                                                            vertical = 10.dp
+                                                        ),
+                                                    verticalArrangement =
+                                                        Arrangement.spacedBy(9.dp)
+                                                ) {
+                                                    Text(
+                                                        text = tr(
+                                                            "האימונים שמצאתי",
+                                                            "Trainings I found"
+                                                        ),
+                                                        color = Color(0xFF312E81),
+                                                        fontWeight = FontWeight.Black,
+                                                        fontSize = 16.sp,
+                                                        textAlign = textAlignPrimary,
+                                                        modifier =
+                                                            Modifier.fillMaxWidth()
+                                                    )
+
+                                                    msg.trainingItems.forEach { item ->
+                                                        AssistantTrainingCard(
+                                                            item = item,
+                                                            isEnglish = isEnglish
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                Text(
+                                                    text = msg.text,
+                                                    color = textColor,
+                                                    modifier = Modifier.padding(
+                                                        horizontal = 14.dp,
+                                                        vertical = 12.dp
+                                                    ),
+                                                    textAlign = textAlignPrimary,
+                                                    style =
+                                                        MaterialTheme.typography.bodyMedium
+                                                )
+                                            }
 
                                             if (!msg.fromUser) {
                                                 Row(
@@ -3857,7 +4160,26 @@ fun AiAssistantDialog(
                             }
 
                             LaunchedEffect(messages.size) {
-                                scrollToBottom()
+                                val latestMessage =
+                                    messages.lastOrNull()
+
+                                val receivedTrainingCards =
+                                    latestMessage != null &&
+                                            !latestMessage.fromUser &&
+                                            latestMessage.trainingItems.isNotEmpty()
+
+                                if (receivedTrainingCards) {
+                                    /*
+                                     * תשובת אימונים מכילה מספר כרטיסים.
+                                     * מציגים את תחילת התשובה ולא את הכרטיס האחרון.
+                                     */
+                                    scrollToTop()
+                                } else {
+                                    /*
+                                     * בשיחה רגילה נשמרת ההתנהגות הקיימת.
+                                     */
+                                    scrollToBottom()
+                                }
                             }
                         }
                     }
@@ -4659,9 +4981,3 @@ private fun detectBeltEnum(text: String): Belt? = when {
     "שחור" in text || "שחורה" in text -> Belt.BLACK
     else -> null
 }
-
-
-// ───────────────────────────────
-// מנוע לוגיקה — אימונים / לוח אימונים + תרגילים
-// ───────────────────────────────
-

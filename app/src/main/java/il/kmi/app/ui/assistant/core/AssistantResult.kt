@@ -60,6 +60,18 @@ data class AssistantResultItem(
     val endTime: String? = null,
     val branchName: String? = null,
     val groupName: String? = null,
+    val location: String? = null,
+    val coachName: String? = null,
+
+    /*
+     * ערך טכני יציב לצורך צבע ועיצוב הכרטיס:
+     * SCHEDULED, ONGOING, COMPLETED,
+     * CANCELLED_BY_HOLIDAY או INVALID.
+     */
+    val trainingStatusCode: String? = null,
+
+    val trainingStatusHe: String? = null,
+    val trainingStatusEn: String? = null,
 
     val matchQuality: AssistantMatchQuality =
         AssistantMatchQuality.NONE,
@@ -70,6 +82,21 @@ data class AssistantResultItem(
      */
     val internalScore: Float = 0f
 ) {
+
+    fun trainingStatusText(
+        isEnglish: Boolean
+    ): String? {
+        return if (isEnglish) {
+            trainingStatusEn
+                ?.takeIf { it.isNotBlank() }
+                ?: trainingStatusHe
+        } else {
+            trainingStatusHe
+                ?.takeIf { it.isNotBlank() }
+                ?: trainingStatusEn
+        }
+    }
+
     fun toContextResult(): AssistantContextResult {
         return AssistantContextResult(
             id = id,

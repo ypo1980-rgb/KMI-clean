@@ -179,24 +179,92 @@ object AssistantKnowledgeRepository {
         request: AssistantKnowledgeRequest,
         resolvedQuestion: String
     ): AssistantResult {
-        val rawAnswer = TrainingsAssistantEngine.answer(
-            question = resolvedQuestion,
-            isEnglish = request.isEnglish
-        ).trim()
+        val response =
+            TrainingsAssistantEngine.answerDetailed(
+                question = resolvedQuestion,
+                isEnglish = request.isEnglish
+            )
+
+        val rawAnswer =
+            response.text.trim()
+
+        if (response.cards.isNotEmpty()) {
+            return AssistantResult.ResultList(
+                originalQuestion =
+                    request.originalQuestion,
+                resolvedQuestion =
+                    request.resolvedQuestion,
+                intent = request.intent,
+                source =
+                    AssistantKnowledgeSource.TRAININGS,
+                title = text(
+                    isEnglish = request.isEnglish,
+                    he = "האימונים שמצאתי",
+                    en = "Trainings I found"
+                ),
+                introduction = text(
+                    isEnglish = request.isEnglish,
+                    he = "להלן פרטי האימונים המתאימים:",
+                    en = "Here are the matching trainings:"
+                ),
+                items = response.cards.map { card ->
+                    AssistantResultItem(
+                        id = card.id,
+                        title = card.title,
+                        subtitle = buildString {
+                            append(card.startTime)
+
+                            card.endTime?.let {
+                                append("–")
+                                append(it)
+                            }
+                        },
+                        description = rawAnswer,
+                        source =
+                            AssistantKnowledgeSource.TRAININGS,
+                        date = card.date,
+                        startTime = card.startTime,
+                        endTime = card.endTime,
+                        branchName =
+                            card.branchName,
+                        groupName =
+                            card.groupName,
+                        location = card.location,
+                        coachName = card.coachName,
+                        trainingStatusCode =
+                            card.statusCode,
+                        trainingStatusHe =
+                            card.statusHe,
+                        trainingStatusEn =
+                            card.statusEn,
+                        matchQuality =
+                            AssistantMatchQuality.HIGH
+                    )
+                },
+                matchQuality =
+                    AssistantMatchQuality.HIGH,
+                suggestedActions =
+                    trainingActions(
+                        isEnglish = request.isEnglish
+                    )
+            )
+        }
 
         return resultFromText(
             request = request,
             answer = rawAnswer,
             intent = request.intent,
-            source = AssistantKnowledgeSource.TRAININGS,
+            source =
+                AssistantKnowledgeSource.TRAININGS,
             successTitle = text(
                 isEnglish = request.isEnglish,
                 he = "פרטי האימונים",
                 en = "Training information"
             ),
-            suggestedActions = trainingActions(
-                isEnglish = request.isEnglish
-            )
+            suggestedActions =
+                trainingActions(
+                    isEnglish = request.isEnglish
+                )
         )
     }
 
