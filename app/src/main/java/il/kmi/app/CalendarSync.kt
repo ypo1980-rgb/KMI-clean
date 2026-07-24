@@ -458,7 +458,8 @@ object KmiCalendarSync {
         context: Context,
         firstStartMillis: Long,
         hour: Int,
-        minute: Int
+        minute: Int,
+        durationMinutes: Int
     ): String? {
         val israelZone = ZoneId.of(TIME_ZONE_ID)
 
@@ -488,17 +489,31 @@ object KmiCalendarSync {
                 .toInstant()
                 .toEpochMilli()
 
-            val status = TrainingStatusEngine.evaluate(
-                context = context,
-                trainingStartMillis = occurrenceMillis
-            )
+            val occurrenceEndMillis =
+                occurrenceMillis +
+                        durationMinutes.toLong() *
+                        60_000L
 
-            if (status.isCancelled) {
-                excludedOccurrences += utcFormatter.format(
-                    Instant.ofEpochMilli(
-                        occurrenceMillis
-                    )
+            val status =
+                TrainingStatusEngine.evaluate(
+                    context = context,
+                    trainingStartMillis =
+                        occurrenceMillis,
+                    trainingEndMillis =
+                        occurrenceEndMillis
                 )
+
+            /*
+             * ההחלטה אם המופע רשאי להופיע ביומן מתקבלת
+             * רק ממנוע הסטטוס הגלובלי.
+             */
+            if (!status.shouldAddToCalendar) {
+                excludedOccurrences +=
+                    utcFormatter.format(
+                        Instant.ofEpochMilli(
+                            occurrenceMillis
+                        )
+                    )
             }
 
             date = date.plusWeeks(1)
@@ -539,12 +554,14 @@ object KmiCalendarSync {
         val duration = "PT${durationMin}M"
         val timeZoneId = TIME_ZONE_ID
 
-        val holidayExDates = buildHolidayExDates(
-            context = context,
-            firstStartMillis = start,
-            hour = hour,
-            minute = minute
-        )
+        val holidayExDates =
+            buildHolidayExDates(
+                context = context,
+                firstStartMillis = start,
+                hour = hour,
+                minute = minute,
+                durationMinutes = durationMin
+            )
 
         // 🔐 מפתח יציב לכל אירוע – ימנע התנגשות בין שני סניפים זהים.
         val eventKey = "$eventKeyPrefix:${byday(dayOfWeek)}_${String.format("%02d%02d", hour, minute)}:${title}"
@@ -675,7 +692,37 @@ object KmiCalendarSync {
         val sp = context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
         val leadMin = sp.getInt("lead_minutes", 60).coerceIn(0, 180)
 
-        val candidates = calendarTrainingCandidatesForSync(context)
+        val selectedBranches =
+            selectedBranchesForCalendarSync(context)
+
+        val selectedGroups =
+            selectedGroupsForCalendarSync(context)
+
+        /*
+         * אם המשתמש הסיר במפורש את כל הסניפים או הקבוצות,
+         * אין להשאיר ביומן אירועים מהפרופיל הקודם.
+         */
+        if (
+            selectedBranches.isEmpty() ||
+            selectedGroups.isEmpty()
+        ) {
+            replaceManagedCalendarEvents(context)
+
+            Toast.makeText(
+                context,
+                tr(
+                    context,
+                    "לא הוגדרו אימונים לסנכרון. אירועי ק.מ.י הישנים הוסרו מהיומן",
+                    "No trainings are selected for synchronization. Old KAMI events were removed"
+                ),
+                Toast.LENGTH_LONG
+            ).show()
+
+            return true
+        }
+
+        val candidates =
+            calendarTrainingCandidatesForSync(context)
 
         if (candidates.isEmpty()) {
             Toast.makeText(
@@ -689,8 +736,9 @@ object KmiCalendarSync {
             ).show()
 
             /*
-             * לא מוחקים את האירועים הקיימים אם לא נמצאו נתונים חדשים.
-             * כך תקלה זמנית במסד הנתונים לא מוחקת למשתמש את היומן.
+             * קיימת בחירה בפרופיל אך לא התקבלו נתונים.
+             * ייתכן שמדובר בתקלה זמנית ולכן לא מוחקים
+             * את האירועים הקיימים.
              */
             return false
         }
@@ -701,23 +749,34 @@ object KmiCalendarSync {
          */
         replaceManagedCalendarEvents(context)
 
-        candidates.forEach { candidate ->
-            upsertWeeklyEvent(
-                context = context,
-                calendarId = calendarId,
-                title = candidate.title,
-                location = candidate.location,
-                descriptionTag = descriptionTag,
-                eventKeyPrefix = eventKeyPrefix,
-                dayOfWeek = candidate.dayOfWeek,
-                hour = candidate.hour,
-                minute = candidate.minute,
-                durationMin = candidate.durationMinutes,
-                leadMinutes = leadMin
-            )
-        }
+        val results =
+            candidates.map { candidate ->
+                upsertWeeklyEvent(
+                    context = context,
+                    calendarId = calendarId,
+                    title = candidate.title,
+                    location = candidate.location,
+                    descriptionTag =
+                        descriptionTag,
+                    eventKeyPrefix =
+                        eventKeyPrefix,
+                    dayOfWeek =
+                        candidate.dayOfWeek,
+                    hour = candidate.hour,
+                    minute = candidate.minute,
+                    durationMin =
+                        candidate.durationMinutes,
+                    leadMinutes = leadMin
+                )
+            }
 
-        return true
+        /*
+         * הסנכרון נחשב מוצלח רק אם כל המועמדים נוצרו
+         * או עודכנו בהצלחה.
+         */
+        return results.all { result ->
+            result != null
+        }
     }
 
     /** יוצר/מעדכן את כל האימונים לפי הסניפים והקבוצות הרשומים בפרופיל. */
@@ -784,26 +843,29 @@ object KmiCalendarSync {
         if (!hasCalendarPermission(context)) {
             Toast.makeText(
                 context,
-                tr(context, "אין הרשאה למחיקה מהיומן", "No permission to delete calendar events"),
+                tr(
+                    context,
+                    "אין הרשאה למחיקה מהיומן",
+                    "No permission to delete calendar events"
+                ),
                 Toast.LENGTH_LONG
             ).show()
             return
         }
-        val cr = context.contentResolver
-        val proj = arrayOf(Events._ID)
-        val sel  = "${Events.CUSTOM_APP_PACKAGE}=? AND ${Events.CUSTOM_APP_URI} LIKE ?"
-        val args = arrayOf(context.packageName, "KMI_WEEKLY:%")
 
-        cr.query(Events.CONTENT_URI, proj, sel, args, null)?.use { cur ->
-            while (cur.moveToNext()) {
-                val id = cur.getLong(0)
-                val uri = ContentUris.withAppendedId(Events.CONTENT_URI, id)
-                cr.delete(uri, null, null)
-            }
-        }
+        /*
+         * מסיר גם אירועים שנוצרו ביומן ברירת המחדל
+         * וגם אירועים שנוצרו ביומן שנבחר ידנית.
+         */
+        replaceManagedCalendarEvents(context)
+
         Toast.makeText(
             context,
-            tr(context, "האימונים הוסרו מהיומן", "Training events were removed from the calendar"),
+            tr(
+                context,
+                "האימונים הוסרו מהיומן",
+                "Training events were removed from the calendar"
+            ),
             Toast.LENGTH_SHORT
         ).show()
     }

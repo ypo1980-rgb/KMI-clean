@@ -52,7 +52,7 @@ import il.kmi.shared.prefs.KmiPrefs
 import il.kmi.app.FcmTokenManager
 import il.kmi.app.KmiCalendarSync
 import il.kmi.app.hasCalendarPermission
-import il.kmi.app.reminders.TrainingReminderScheduler
+import il.kmi.app.training.TrainingAlarmReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -1211,8 +1211,8 @@ fun RegistrationFormScreen(
                                 settingsSp.getInt("lead_minutes", 60)
                             ).takeIf { it > 0 } ?: 60
 
-                            TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
-                                context = ctx.applicationContext,
+                            TrainingAlarmReceiver.scheduleWeeklyAlarms(
+                                ctx = ctx.applicationContext,
                                 leadMinutes = leadMinutes
                             )
                         }

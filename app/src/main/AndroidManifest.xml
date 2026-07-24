@@ -69,17 +69,10 @@
              חייב להיות exported=true כדי לקבל שידורי מערכת (BOOT_COMPLETED וכו'). -->
         <receiver
             android:name=".training.TrainingAlarmReceiver"
+            android:enabled="true"
             android:exported="true">
             <intent-filter>
-                <!-- שידור פנימי של האפליקציה להפעלת התזכורת -->
-                <action android:name="il.kmi.app.TRAINING_ALARM" />
-
-                <!-- שידורי האפליקציה בהם אתה משתמש בקוד -->
-                <action android:name="il.kmi.app.training.FIRE" />
-                <action android:name="il.kmi.app.training.SNOOZE" />
-                <action android:name="il.kmi.app.training.BOOT" />
-
-                <!-- תיזמון מחדש אחרי אתחול/שינוי שעה/אזור זמן/עדכון חבילה -->
+                <!-- שידורי מערכת בלבד -->
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_CHANGED" />
@@ -96,7 +89,7 @@
         <!-- ===== Receiver לתזכורות אימונים חופשיים =====
              לא מקבל שידורי מערכת, מופעל רק ע"י PendingIntent שלנו -->
         <receiver
-            android:name=".free_sessions.reminders.FreeSessionReminderReceiver"
+            android:name=".free_sessions.ui.reminders.FreeSessionReminderReceiver"
             android:exported="false" />
 
         <receiver

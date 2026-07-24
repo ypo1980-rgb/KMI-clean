@@ -62,6 +62,7 @@ import il.kmi.app.R
 import il.kmi.app.KmiCalendarSync
 import il.kmi.app.hasCalendarPermission
 import il.kmi.app.reminders.TrainingReminderScheduler
+import il.kmi.app.training.TrainingAlarmReceiver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -557,34 +558,41 @@ fun MyProfileScreen(
                     return emptyList()
                 }
 
+                /*
+    * תחילה מחפשים את השדות הרשימתיים שמכילים את כל
+    * הסניפים והקבוצות. השדות היחידים משמשים רק כ־fallback.
+    */
                 val branchesFromFirestore = preferredFirestoreList(
-                    "branch",
-                    "activeBranch",
-                    "active_branch",
-                    "branchesCsv",
                     "branches",
                     "branches_json",
-                    "selected_branches"
+                    "selected_branches",
+                    "branchesCsv",
+                    "branch",
+                    "activeBranch",
+                    "active_branch"
                 )
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
 
                 val groupsFromFirestore = preferredFirestoreList(
                     "age_groups",
+                    "groups",
+                    "groups_json",
+                    "selected_groups",
+                    "groupsCsv",
                     "group",
                     "age_group",
                     "primaryGroup",
                     "activeGroup",
                     "active_group",
                     "groupKey",
-                    "group_key",
-                    "groupsCsv",
-                    "groups",
-                    "groups_json",
-                    "selected_groups"
+                    "group_key"
                 )
                     .map {
                         TrainingCatalog
                             .normalizeGroupName(it)
-                            .ifBlank { it }
+                            .ifBlank { it.trim() }
                     }
                     .filter { it.isNotBlank() }
                     .distinct()
@@ -659,9 +667,25 @@ fun MyProfileScreen(
                                 sp.getInt("lead_minutes", 60)
                             ).takeIf { it > 0 } ?: 60
 
-                            TrainingReminderScheduler.scheduleWeeklyTrainingAlarms(
-                                context = ctx.applicationContext,
+                            /*
+                             * הגשר מבטל תחילה תזכורות מהמנגנון הישן
+                             * ולאחר מכן בונה את התזכורות החדשות.
+                             */
+                            TrainingAlarmReceiver.scheduleWeeklyAlarms(
+                                ctx = ctx.applicationContext,
                                 leadMinutes = leadMinutes
+                            )
+                        } else {
+                            /*
+                             * כאשר התזכורות כבויות, מנקים גם את המנגנון
+                             * הישן וגם את המנגנון החדש.
+                             */
+                            TrainingAlarmReceiver.cancelWeeklyAlarms(
+                                ctx.applicationContext
+                            )
+
+                            TrainingReminderScheduler.cancelWeeklyTrainingAlarms(
+                                context = ctx.applicationContext
                             )
                         }
                     }

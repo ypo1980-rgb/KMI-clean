@@ -275,8 +275,154 @@ class TrainingStatusEngineInstrumentedTest {
 
         assertTrue(status.isScheduled)
         assertFalse(status.isCancelled)
+        assertFalse(status.isOngoing)
+        assertFalse(status.isCompleted)
+        assertFalse(status.isInvalid)
         assertTrue(status.shouldNotify)
         assertTrue(status.shouldAddToCalendar)
+    }
+
+    @Test
+    fun activeRegularTraining_returnsOngoingStatus() {
+        val yearMonth =
+            YearMonth.of(2026, 1)
+
+        val holidays =
+            HolidayCalendarRepository.holidaysForMonth(
+                context = context,
+                yearMonth = yearMonth
+            )
+
+        val regularDate =
+            (1..yearMonth.lengthOfMonth())
+                .map { day ->
+                    yearMonth.atDay(day)
+                }
+                .first { date ->
+                    date !in holidays
+                }
+
+        val startMillis =
+            millisAtNoon(regularDate)
+
+        val endMillis =
+            startMillis +
+                    90L * 60L * 1000L
+
+        val status =
+            TrainingStatusEngine.evaluate(
+                context = context,
+                trainingStartMillis =
+                    startMillis,
+                trainingEndMillis =
+                    endMillis,
+                nowMillis =
+                    startMillis +
+                            30L * 60L * 1000L
+            )
+
+        assertEquals(
+            TrainingStatusEngine.State.ONGOING,
+            status.state
+        )
+
+        assertTrue(status.isOngoing)
+        assertFalse(status.isScheduled)
+        assertFalse(status.isCancelled)
+        assertFalse(status.isCompleted)
+        assertFalse(status.isInvalid)
+        assertFalse(status.shouldNotify)
+        assertTrue(status.shouldAddToCalendar)
+
+        assertEquals(
+            "האימון מתקיים כעת",
+            status.displayText(false)
+        )
+
+        assertEquals(
+            "Training in progress",
+            status.displayText(true)
+        )
+    }
+
+    @Test
+    fun missingStartTime_returnsInvalidStatus() {
+        val status =
+            TrainingStatusEngine.evaluate(
+                context = context,
+                trainingStartMillis = 0L,
+                trainingEndMillis = null,
+                nowMillis = 1L
+            )
+
+        assertEquals(
+            TrainingStatusEngine.State.INVALID,
+            status.state
+        )
+
+        assertTrue(status.isInvalid)
+        assertFalse(status.isScheduled)
+        assertFalse(status.isOngoing)
+        assertFalse(status.isCancelled)
+        assertFalse(status.isCompleted)
+        assertFalse(status.shouldNotify)
+        assertFalse(status.shouldAddToCalendar)
+
+        assertEquals(
+            "מועד האימון אינו תקין",
+            status.reasonHe
+        )
+
+        assertEquals(
+            "The training time is invalid",
+            status.reasonEn
+        )
+    }
+
+    @Test
+    fun endTimeBeforeStart_returnsInvalidStatus() {
+        val startMillis =
+            millisAtNoon(
+                LocalDate.of(
+                    2026,
+                    1,
+                    15
+                )
+            )
+
+        val status =
+            TrainingStatusEngine.evaluate(
+                context = context,
+                trainingStartMillis =
+                    startMillis,
+                trainingEndMillis =
+                    startMillis - 60_000L,
+                nowMillis =
+                    startMillis - 120_000L
+            )
+
+        assertEquals(
+            TrainingStatusEngine.State.INVALID,
+            status.state
+        )
+
+        assertTrue(status.isInvalid)
+        assertFalse(status.isScheduled)
+        assertFalse(status.isOngoing)
+        assertFalse(status.isCancelled)
+        assertFalse(status.isCompleted)
+        assertFalse(status.shouldNotify)
+        assertFalse(status.shouldAddToCalendar)
+
+        assertEquals(
+            "שעת סיום האימון אינה תקינה",
+            status.reasonHe
+        )
+
+        assertEquals(
+            "The training end time is invalid",
+            status.reasonEn
+        )
     }
 
     @Test
@@ -312,11 +458,25 @@ class TrainingStatusEngineInstrumentedTest {
         )
 
         assertTrue(status.isCompleted)
+        assertFalse(status.isScheduled)
+        assertFalse(status.isOngoing)
+        assertFalse(status.isCancelled)
+        assertFalse(status.isInvalid)
         assertFalse(status.shouldNotify)
 
         /*
          * אימון שהתקיים נשאר ביומן ההיסטורי.
          */
         assertTrue(status.shouldAddToCalendar)
+
+        assertEquals(
+            "האימון הסתיים",
+            status.displayText(false)
+        )
+
+        assertEquals(
+            "Training completed",
+            status.displayText(true)
+        )
     }
 }

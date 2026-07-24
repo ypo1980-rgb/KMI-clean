@@ -2067,14 +2067,33 @@ object AssistantTrainingKnowledge {
         }
 
         /*
-         * משמש להצעת חלופות בלבד.
-         * אימון מבוטל לעולם לא יוצע כאימון חלופי.
-         */
-        val activeAllTrainings = allTrainings.filter { training ->
-            !statusFor(training).isCancelled
-        }
+   * משמש להצעת חלופות בלבד.
+   * חלופה יכולה להיות אימון עתידי או אימון שמתקיים כעת.
+   * אין להציע אימון שבוטל, הסתיים או אינו תקין.
+   */
+        val activeAllTrainings =
+            allTrainings.filter { training ->
+                val status =
+                    statusFor(training)
+
+                status.isScheduled ||
+                        status.isOngoing
+            }
 
         var seq = allTrainings.asSequence()
+
+        /*
+    * ברשימת אימונים שבועית מציגים גם אימונים
+    * שבוטלו, כדי שהמשתמש יראה שהם קיימים בלוח
+    * אך אינם מתקיימים.
+    *
+    * בבקשה לאימון הבא ממשיכים לבחור רק אימון
+    * מתוכנן או אימון שמתקיים כעת.
+    */
+        val shouldIncludeCancelledInList =
+            wantsTrainingList ||
+                    wantsThisWeek ||
+                    wantsNextWeek
 
         if (
             isNextOrUpcoming ||
@@ -2087,7 +2106,11 @@ object AssistantTrainingKnowledge {
                     statusFor(training)
 
                 status.isScheduled ||
-                        status.isOngoing
+                        status.isOngoing ||
+                        (
+                                shouldIncludeCancelledInList &&
+                                        status.isCancelled
+                                )
             }
         }
 
@@ -2230,9 +2253,18 @@ object AssistantTrainingKnowledge {
                 statusFor(training).isCancelled
             }
 
+        /*
+         * ברשימת שבוע או רשימת אימונים משאירים גם
+         * אימונים מבוטלים כדי להציג את הסטטוס והסיבה.
+         * בבקשה לאימון יחיד מדלגים עליהם.
+         */
         var results =
-            matchedResults.filter { training ->
-                !statusFor(training).isCancelled
+            if (shouldIncludeCancelledInList) {
+                matchedResults
+            } else {
+                matchedResults.filter { training ->
+                    !statusFor(training).isCancelled
+                }
             }
 
         if (
@@ -2683,7 +2715,10 @@ object AssistantTrainingKnowledge {
                         branch = branch,
                         group = group,
                         limit = requestedTrainingCount,
-                        isEnglish = isEnglish
+                        isEnglish = isEnglish,
+                        statusProvider = { training ->
+                            statusFor(training)
+                        }
                     )
                 } else {
                     AnswerBuilder.buildNextTraining(

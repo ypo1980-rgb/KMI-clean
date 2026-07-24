@@ -1668,14 +1668,32 @@ fun HomeScreen(
                     from: java.time.LocalDate,
                     to: java.time.LocalDate
                 ): Sequence<java.time.LocalDate> =
-                    generateSequence(from) { it.plusDays(1) }.takeWhile { !it.isAfter(to) }
+                    generateSequence(from) { it.plusDays(1) }
+                        .takeWhile { !it.isAfter(to) }
 
-                fun upcomingWindowStartMillis(): Long {
-                    return java.util.Calendar.getInstance().timeInMillis
+                /*
+                 * שעון משותף ליצירת האימונים ולחישוב הסטטוס.
+                 * הרענון מאפשר לאימון לעבור אוטומטית בין
+                 * מתוכנן, מתקיים והסתיים.
+                 */
+                var trainingStatusNowMillis by remember {
+                    mutableLongStateOf(
+                        System.currentTimeMillis()
+                    )
+                }
+
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        delay(30_000L)
+
+                        trainingStatusNowMillis =
+                            System.currentTimeMillis()
+                    }
                 }
 
                 fun upcomingWindowEndMillis(): Long {
                     return java.util.Calendar.getInstance().apply {
+                        timeInMillis = trainingStatusNowMillis
                         add(java.util.Calendar.DAY_OF_YEAR, 6)
                         set(java.util.Calendar.HOUR_OF_DAY, 23)
                         set(java.util.Calendar.MINUTE, 59)
@@ -1684,10 +1702,25 @@ fun HomeScreen(
                     }.timeInMillis
                 }
 
-                fun isWithinUpcomingSevenDays(cal: java.util.Calendar): Boolean {
-                    val start = upcomingWindowStartMillis()
-                    val end = upcomingWindowEndMillis()
-                    return cal.timeInMillis in start..end
+                fun isWithinUpcomingSevenDays(
+                    training: TrainingData
+                ): Boolean {
+                    val windowEndMillis =
+                        upcomingWindowEndMillis()
+
+                    /*
+                     * אם זמן הסיום אינו קיים, משתמשים בזמן ההתחלה.
+                     * ברוב האימונים שנוצרים דרך nextWeekly יהיה
+                     * זמן סיום תקין.
+                     */
+                    val effectiveEndMillis =
+                        training.endMillis
+                            ?: training.startMillis
+
+                    return effectiveEndMillis >=
+                            trainingStatusNowMillis &&
+                            training.startMillis <=
+                            windowEndMillis
                 }
 
                 fun branchScheduleVariants(branch: String): List<String> {
@@ -1817,22 +1850,70 @@ fun HomeScreen(
                     if (matchingDays.isEmpty()) return emptyList()
 
                     return matchingDays.map { day ->
+                        val durationMinutes =
+                            day.durationMinutes.takeIf { it > 0 }
+                                ?: 90
+
+                        /*
+                         * מזיזים את זמן הייחוס לאחור לפי משך האימון.
+                         * כך אימון שכבר התחיל אך טרם הסתיים נשאר
+                         * המופע של השבוע הנוכחי ולא קופץ לשבוע הבא.
+                         */
+                        val occurrenceReference =
+                            java.util.Calendar.getInstance().apply {
+                                timeInMillis =
+                                    trainingStatusNowMillis
+
+                                add(
+                                    java.util.Calendar.MINUTE,
+                                    -durationMinutes
+                                )
+                            }
+
                         TrainingData.nextWeekly(
-                            dayOfWeek = calendarDayFromDatabase(day.dayOfWeek),
-                            startHour = hourFromTimeText(day.startTime, 19),
-                            startMinute = minuteFromTimeText(day.startTime, 0),
-                            durationMinutes = day.durationMinutes.takeIf { it > 0 } ?: 90,
-                            place = dbBranch.displayPlace(isEnglish),
-                            address = dbBranch.displayAddress(isEnglish),
-                            coach = day.displayCoachName(isEnglish)
-                                .ifBlank { coachFallback }
+                            dayOfWeek =
+                                calendarDayFromDatabase(
+                                    day.dayOfWeek
+                                ),
+                            startHour =
+                                hourFromTimeText(
+                                    day.startTime,
+                                    19
+                                ),
+                            startMinute =
+                                minuteFromTimeText(
+                                    day.startTime,
+                                    0
+                                ),
+                            durationMinutes =
+                                durationMinutes,
+                            place =
+                                dbBranch.displayPlace(
+                                    isEnglish
+                                ),
+                            address =
+                                dbBranch.displayAddress(
+                                    isEnglish
+                                ),
+                            coach =
+                                day.displayCoachName(
+                                    isEnglish
+                                ).ifBlank {
+                                    coachFallback
+                                },
+                            now = occurrenceReference
                         )
                     }
                 }
 
                 val currentWeekCandidates: List<TrainingData> =
-                    remember(branchesEffective, groupsEffective, coachFromPrefs, isEnglish) {
-
+                    remember(
+                        branchesEffective,
+                        groupsEffective,
+                        coachFromPrefs,
+                        isEnglish,
+                        trainingStatusNowMillis
+                    ) {
                         val all = mutableListOf<TrainingData>()
 
                         branchesEffective.forEach { branchName ->
@@ -1853,7 +1934,7 @@ fun HomeScreen(
                                     val validDbItems =
                                         dbItems.filter { training ->
                                             isWithinUpcomingSevenDays(
-                                                training.cal
+                                                training
                                             )
                                         }
 
@@ -1922,7 +2003,7 @@ fun HomeScreen(
                                 val validFallbackItems =
                                     fallbackItems.filter { training ->
                                         isWithinUpcomingSevenDays(
-                                            training.cal
+                                            training
                                         )
                                     }
 
@@ -1962,40 +2043,31 @@ fun HomeScreen(
                     }
                 }
 
-                var trainingStatusNowMillis by remember {
-                    mutableLongStateOf(
-                        System.currentTimeMillis()
-                    )
-                }
-
-                LaunchedEffect(Unit) {
-                    while (true) {
-                        delay(30_000L)
-
-                        trainingStatusNowMillis =
-                            System.currentTimeMillis()
-                    }
-                }
-
                 val upcoming: List<HomeTrainingUi> =
                     remember(
                         currentWeekCandidates,
                         trainingStatusNowMillis
                     ) {
                         currentWeekCandidates
-                            .sortedBy { it.cal.timeInMillis }
-                            .take(5)
+                            .sortedBy { it.startMillis }
                             .map { training ->
                                 HomeTrainingUi(
                                     training = training,
-                                    status = TrainingStatusEngine.evaluate(
-                                        context = ctx,
-                                        training = training,
-                                        nowMillis =
-                                            trainingStatusNowMillis
-                                    )
+                                    status =
+                                        TrainingStatusEngine.evaluate(
+                                            context = ctx,
+                                            training = training,
+                                            nowMillis =
+                                                trainingStatusNowMillis
+                                        )
                                 )
                             }
+                            .filter { item ->
+                                item.status.isScheduled ||
+                                        item.status.isOngoing ||
+                                        item.status.isCancelled
+                            }
+                            .take(5)
                     }
 
 
@@ -3560,21 +3632,6 @@ private fun TrainingCardCompact(
         )
     }
 
-    val durationMin: Int = remember(training) {
-        fun readIntField(vararg names: String, fallback: Int): Int {
-            val cls = training::class.java
-            for (n in names) {
-                val v = runCatching {
-                    val f = cls.getDeclaredField(n).apply { isAccessible = true }
-                    (f.get(training) as? Number)?.toInt()
-                }.getOrNull()
-                if (v != null) return v
-            }
-            return fallback
-        }
-        readIntField("durationMinutes", "durationMinuets", "duration", "dur", fallback = 90)
-    }
-
     val locale = if (isEnglish) {
         java.util.Locale.ENGLISH
     } else {
@@ -3587,10 +3644,40 @@ private fun TrainingCardCompact(
     val dateText = remember(training.cal.timeInMillis, isEnglish) {
         java.text.SimpleDateFormat("dd/MM", locale).format(training.cal.time)
     }
-    val timeText = remember(training.cal.timeInMillis, durationMin) {
-        val fmt = java.text.SimpleDateFormat("HH:mm", locale)
-        val start = fmt.format(training.cal.time)
-        val end = fmt.format(java.util.Date(training.cal.timeInMillis + durationMin * 60_000L))
+    val timeText = remember(
+        training.startMillis,
+        training.endMillis,
+        isEnglish
+    ) {
+        val formatter =
+            java.text.SimpleDateFormat(
+                "HH:mm",
+                locale
+            ).apply {
+                timeZone =
+                    java.util.TimeZone.getTimeZone(
+                        "Asia/Jerusalem"
+                    )
+            }
+
+        val effectiveEndMillis =
+            training.endMillis
+                ?: training.startMillis
+
+        val start =
+            formatter.format(
+                java.util.Date(
+                    training.startMillis
+                )
+            )
+
+        val end =
+            formatter.format(
+                java.util.Date(
+                    effectiveEndMillis
+                )
+            )
+
         "$start – $end"
     }
     val dateTimeText = remember(dayText, dateText, timeText, isEnglish) {

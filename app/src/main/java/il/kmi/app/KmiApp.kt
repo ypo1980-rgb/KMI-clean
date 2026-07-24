@@ -7,8 +7,11 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import il.kmi.app.reminders.TrainingReminderScheduler
+import il.kmi.app.training.TrainingAlarmReceiver
 import il.kmi.app.ui.assistant.exercise.AssistantExerciseExplanationKnowledge
 import java.lang.ref.WeakReference
+import kotlin.concurrent.thread
 
 class KmiApp : Application() {
 
@@ -59,15 +62,92 @@ class KmiApp : Application() {
 
         // ✅ Demo fallback ONLY אם ה-bootstrap לא מילא כלום
         runCatching {
-            val hasBelts = il.kmi.shared.catalog.KmiCatalogFacade.listBelts().isNotEmpty()
+            val hasBelts =
+                il.kmi.shared.catalog.KmiCatalogFacade
+                    .listBelts()
+                    .isNotEmpty()
+
             if (!hasBelts) {
                 il.kmi.shared.catalog.InMemoryCatalog.setBelts(
                     listOf(
-                        il.kmi.shared.catalog.BeltDto("yellow", "חגורה צהובה", 1),
-                        il.kmi.shared.catalog.BeltDto("orange", "חגורה כתומה", 2),
-                        il.kmi.shared.catalog.BeltDto("green", "חגורה ירוקה", 3)
+                        il.kmi.shared.catalog.BeltDto(
+                            "yellow",
+                            "חגורה צהובה",
+                            1
+                        ),
+                        il.kmi.shared.catalog.BeltDto(
+                            "orange",
+                            "חגורה כתומה",
+                            2
+                        ),
+                        il.kmi.shared.catalog.BeltDto(
+                            "green",
+                            "חגורה ירוקה",
+                            3
+                        )
                     )
                 )
+            }
+        }
+
+        /*
+         * אתחול תזכורות האימון בעליית תהליך האפליקציה.
+         *
+         * הפעולה מתבצעת לאחר טעינת מקורות התוכן ובתהליך
+         * רקע כדי שלא לעכב את מסך הפתיחה.
+         */
+        thread(
+            start = true,
+            isDaemon = true,
+            name = "kmi-training-reminders-init"
+        ) {
+            runCatching {
+                val appContext =
+                    applicationContext
+
+                val settings =
+                    appContext.getSharedPreferences(
+                        "kmi_settings",
+                        MODE_PRIVATE
+                    )
+
+                val remindersEnabled =
+                    settings.getBoolean(
+                        "training_reminders_enabled",
+                        false
+                    )
+
+                val leadMinutes =
+                    settings.getInt(
+                        "lead_minutes",
+                        60
+                    ).coerceIn(0, 180)
+
+                if (remindersEnabled) {
+                    /*
+                     * הגשר מנקה קודם את האזעקות הישנות
+                     * ומפעיל את המתזמן הגלובלי החדש.
+                     */
+                    TrainingAlarmReceiver
+                        .scheduleWeeklyAlarms(
+                            ctx = appContext,
+                            leadMinutes = leadMinutes
+                        )
+                } else {
+                    /*
+                     * כשההגדרה כבויה מנקים את שני
+                     * המנגנונים כדי שלא תישאר אזעקת עבר.
+                     */
+                    TrainingAlarmReceiver
+                        .cancelWeeklyAlarms(
+                            appContext
+                        )
+
+                    TrainingReminderScheduler
+                        .cancelWeeklyTrainingAlarms(
+                            appContext
+                        )
+                }
             }
         }
 

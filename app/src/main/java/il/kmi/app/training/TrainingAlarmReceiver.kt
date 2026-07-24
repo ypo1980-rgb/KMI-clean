@@ -17,6 +17,7 @@ import androidx.core.app.TaskStackBuilder
 import androidx.core.content.ContextCompat
 import il.kmi.app.MainActivity
 import il.kmi.app.R
+import il.kmi.app.reminders.TrainingReminderScheduler
 import org.json.JSONArray
 import java.util.Calendar
 
@@ -137,96 +138,29 @@ class TrainingAlarmReceiver : BroadcastReceiver() {
          * ✅ מתזמן תזכורות שבועיות (leadMinutes דקות לפני האימון).
          * תומך Multi-branch + Multi-group.
          */
-        fun scheduleWeeklyAlarms(ctx: Context, leadMinutes: Int = 60) {
-            cancelWeeklyAlarms(ctx)
-            return
+        fun scheduleWeeklyAlarms(
+            ctx: Context,
+            leadMinutes: Int = 60
+        ) {
+            val appContext =
+                ctx.applicationContext
 
-            ensureChannel(ctx)
-            val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val spUser = ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+            /*
+             * מנקים קודם את האזעקות מהמנגנון הישן,
+             * כדי שלא יתקבלו התראות כפולות.
+             */
+            cancelWeeklyAlarms(appContext)
 
-            val branches = readSelectedBranches(spUser)
-            val groups = readSelectedGroups(spUser)
-
-            if (branches.isEmpty() || groups.isEmpty()) return
-
-            // ✅ קודם נבטל מה שהיה מתוזמן (כדי לא להשאיר "רוחות")
-            cancelWeeklyAlarms(ctx)
-
-            val scheduledReqs = mutableListOf<Int>()
-            val scheduledEventKeys = mutableSetOf<String>()
-
-// לכל שילוב סניף×קבוצה
-            for (branch in branches) {
-                for (group in groups) {
-                    val trainings = TrainingCatalog.trainingsFor(branch, group)
-                    if (trainings.isEmpty()) continue
-
-                    val place = TrainingCatalog.placeFor(branch)
-
-                    trainings.forEach { td ->
-                        val cal0 = td.cal
-                        val day = cal0.get(Calendar.DAY_OF_WEEK)
-                        val hour = cal0.get(Calendar.HOUR_OF_DAY)
-                        val minute = cal0.get(Calendar.MINUTE)
-
-                        val timeText = "%02d:%02d".format(hour, minute)
-
-                        val eventKey = "$branch|$day|$hour|$minute|$place"
-                        if (!scheduledEventKeys.add(eventKey)) {
-                            return@forEach
-                        }
-
-                        val title = "${leadText(leadMinutes)} האימון מתחיל בשעה $timeText\n$place • $branch"
-
-                        val req = reqCodeFor(branch, "single", day, hour, minute, leadMinutes)
-
-                        val eventCal = Calendar.getInstance().apply {
-                            set(Calendar.SECOND, 0)
-                            set(Calendar.MILLISECOND, 0)
-                            set(Calendar.DAY_OF_WEEK, day)
-                            set(Calendar.HOUR_OF_DAY, hour)
-                            set(Calendar.MINUTE, minute)
-                        }
-
-                        val fireAt = (eventCal.clone() as Calendar).apply {
-                            add(Calendar.MINUTE, -leadMinutes)
-                        }
-                        if (fireAt.timeInMillis <= System.currentTimeMillis()) {
-                            fireAt.add(Calendar.WEEK_OF_YEAR, 1)
-                        }
-
-                        val intent = Intent(ctx, TrainingAlarmReceiver::class.java).apply {
-                            action = ACTION_FIRE
-                            putExtra("title", title)
-                            putExtra("notif_id", req)
-
-                            // ✅ קריטי: ייחודיות ל-Intent כדי שה-PendingIntent לא יידרס
-                            data = Uri.parse("kmi://train_alarm/$req")
-                        }
-
-                        val pi = PendingIntent.getBroadcast(
-                            ctx,
-                            req,
-                            intent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        )
-
-                        // inexact שבועי מספיק לתזכורות
-                        am.setInexactRepeating(
-                            AlarmManager.RTC_WAKEUP,
-                            fireAt.timeInMillis,
-                            AlarmManager.INTERVAL_DAY * 7,
-                            pi
-                        )
-
-                        scheduledReqs += req
-                    }
-                }
-            }
-
-            // ✅ נשמור את מה שתוזמן כדי שנוכל לבטל בדיוק
-            saveScheduledReqs(spUser, scheduledReqs)
+            /*
+             * כל התזמון החדש מתבצע דרך המתזמן המרכזי,
+             * שמשתמש ב־TrainingStatusEngine.
+             */
+            TrainingReminderScheduler
+                .scheduleWeeklyTrainingAlarms(
+                    context = appContext,
+                    leadMinutes =
+                        leadMinutes.coerceIn(0, 180)
+                )
         }
 
         /** ✅ מבטל את כל התזמונים השבועיים לפי הרשימה ששמרנו. */
@@ -277,14 +211,49 @@ class TrainingAlarmReceiver : BroadcastReceiver() {
 
             // ⬅️ חשוב: אירועים מערכתיים אמיתיים אחרי אתחול/עדכון אפליקציה
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                val sp = context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
-                val enabled = sp.getBoolean("training_reminders_enabled", false)
-                val leadMin = sp.getInt("lead_minutes", 60).coerceIn(0, 180)
-                if (enabled) scheduleWeeklyAlarms(context, leadMin)
-            }
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED,
+            ACTION_BOOT -> {
+                val appContext =
+                    context.applicationContext
 
-            ACTION_BOOT -> cancelWeeklyAlarms(context) // מנגנון ישן מנוטרל כדי למנוע כפילויות
+                val sp =
+                    appContext.getSharedPreferences(
+                        "kmi_settings",
+                        Context.MODE_PRIVATE
+                    )
+
+                val enabled =
+                    sp.getBoolean(
+                        "training_reminders_enabled",
+                        false
+                    )
+
+                val leadMin =
+                    sp.getInt(
+                        "lead_minutes",
+                        60
+                    ).coerceIn(0, 180)
+
+                if (enabled) {
+                    scheduleWeeklyAlarms(
+                        ctx = appContext,
+                        leadMinutes = leadMin
+                    )
+                } else {
+                    /*
+                     * אם התזכורות כבויות, מנקים גם את
+                     * המנגנון הישן וגם את החדש.
+                     */
+                    cancelWeeklyAlarms(appContext)
+
+                    TrainingReminderScheduler
+                        .cancelWeeklyTrainingAlarms(
+                            appContext
+                        )
+                }
+            }
 
             ACTION_SNOOZE -> {
                 // דחייה לפי דקות (ברירת־מחדל 10)
@@ -347,6 +316,17 @@ class TrainingAlarmReceiver : BroadcastReceiver() {
             }
 
             ACTION_FIRE -> {
+                /*
+                 * ACTION_FIRE שייך למנגנון הישן.
+                 * אין להציג ממנו התראה משום שהוא אינו
+                 * עובר דרך TrainingStatusEngine.
+                 */
+                cancelWeeklyAlarms(
+                    context.applicationContext
+                )
+                return
+
+                @Suppress("UNREACHABLE_CODE")
                 ensureChannel(context)
                 val title = intent.getStringExtra("title") ?: "אימון היום"
 

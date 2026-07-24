@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.training.TrainingStatusEngine
 import org.json.JSONArray
 import java.util.Calendar
 import kotlin.math.abs
@@ -31,7 +32,10 @@ object TrainingReminderScheduler {
             return
         }
 
-        val safeLeadMinutes = leadMinutes.takeIf { it > 0 } ?: 60
+        val safeLeadMinutes =
+            leadMinutes.takeIf {
+                it in 0..180
+            } ?: 60
         val scheduledRequestCodes = linkedSetOf<Int>()
         val scheduledTrainingKeys = linkedSetOf<String>()
 
@@ -46,59 +50,185 @@ object TrainingReminderScheduler {
                 )
 
                 trainings.forEach { training ->
-                    val startCal = (training.cal.clone() as Calendar).apply {
-                        while (timeInMillis <= System.currentTimeMillis()) {
-                            add(Calendar.DAY_OF_YEAR, 7)
+                    val nowMillis =
+                        System.currentTimeMillis()
+
+                    val startCal =
+                        (training.cal.clone() as Calendar).apply {
+                            while (timeInMillis <= nowMillis) {
+                                add(Calendar.DAY_OF_YEAR, 7)
+                            }
                         }
+
+                    /*
+                     * משך האימון נשמר גם כאשר מזיזים את
+                     * המופע לשבוע הבא.
+                     */
+                    val durationMillis =
+                        training.endMillis
+                            ?.minus(training.startMillis)
+                            ?.takeIf { duration ->
+                                duration > 0L
+                            }
+
+                    val triggerCal =
+                        (startCal.clone() as Calendar).apply {
+                            add(
+                                Calendar.MINUTE,
+                                -safeLeadMinutes
+                            )
+                        }
+
+                    /*
+                     * מאתרים את המופע החוקי הבא.
+                     * אם השבוע הקרוב מבוטל בחג, ממשיכים
+                     * אוטומטית לשבוע הבא.
+                     */
+                    var resolvedTriggerMillis: Long? = null
+                    var resolvedStartMillis: Long? = null
+                    var resolvedEndMillis: Long? = null
+
+                    for (attempt in 0 until 104) {
+                        while (
+                            triggerCal.timeInMillis <=
+                            nowMillis + 60_000L
+                        ) {
+                            triggerCal.add(
+                                Calendar.DAY_OF_YEAR,
+                                7
+                            )
+                            startCal.add(
+                                Calendar.DAY_OF_YEAR,
+                                7
+                            )
+                        }
+
+                        val candidateStartMillis =
+                            startCal.timeInMillis
+
+                        val candidateEndMillis =
+                            durationMillis?.let { duration ->
+                                candidateStartMillis +
+                                        duration
+                            }
+
+                        val status =
+                            TrainingStatusEngine.evaluate(
+                                context = appContext,
+                                trainingStartMillis =
+                                    candidateStartMillis,
+                                trainingEndMillis =
+                                    candidateEndMillis,
+                                nowMillis = nowMillis
+                            )
+
+                        if (status.shouldNotify) {
+                            resolvedTriggerMillis =
+                                triggerCal.timeInMillis
+                            resolvedStartMillis =
+                                candidateStartMillis
+                            resolvedEndMillis =
+                                candidateEndMillis
+                            break
+                        }
+
+                        /*
+                         * המופע אינו רשאי לשלוח התראה,
+                         * לדוגמה עקב חג. עוברים שבוע קדימה.
+                         */
+                        triggerCal.add(
+                            Calendar.DAY_OF_YEAR,
+                            7
+                        )
+                        startCal.add(
+                            Calendar.DAY_OF_YEAR,
+                            7
+                        )
                     }
 
-                    val triggerAtMillis = (startCal.clone() as Calendar).apply {
-                        add(Calendar.MINUTE, -safeLeadMinutes)
+                    val triggerAtMillis =
+                        resolvedTriggerMillis
+                            ?: return@forEach
 
-                        while (timeInMillis <= System.currentTimeMillis() + 60_000L) {
-                            add(Calendar.DAY_OF_YEAR, 7)
-                            startCal.add(Calendar.DAY_OF_YEAR, 7)
+                    val finalStartMillis =
+                        resolvedStartMillis
+                            ?: return@forEach
+
+                    val realBranch =
+                        training.branch.ifBlank {
+                            branch
                         }
-                    }.timeInMillis
 
-                    val realBranch = training.branch.ifBlank { branch }
-                    val realPlace = training.place.trim()
-                    val realCoach = training.coach.trim()
+                    val realGroup =
+                        group.trim()
+
+                    val realPlace =
+                        training.place.trim()
+
+                    val realCoach =
+                        training.coach.trim()
 
                     val trainingKey = listOf(
                         realBranch,
+                        realGroup,
                         realPlace,
                         realCoach,
-                        startCal.get(Calendar.DAY_OF_WEEK).toString(),
-                        startCal.get(Calendar.HOUR_OF_DAY).toString(),
-                        startCal.get(Calendar.MINUTE).toString()
+                        startCal
+                            .get(Calendar.DAY_OF_WEEK)
+                            .toString(),
+                        startCal
+                            .get(Calendar.HOUR_OF_DAY)
+                            .toString(),
+                        startCal
+                            .get(Calendar.MINUTE)
+                            .toString()
                     ).joinToString("|")
 
-                    if (!scheduledTrainingKeys.add(trainingKey)) {
+                    if (
+                        !scheduledTrainingKeys.add(
+                            trainingKey
+                        )
+                    ) {
                         return@forEach
                     }
 
-                    val requestCode = stableRequestCode(
-                        branch = realBranch,
-                        group = "single",
-                        dayOfWeek = startCal.get(Calendar.DAY_OF_WEEK),
-                        hour = startCal.get(Calendar.HOUR_OF_DAY),
-                        minute = startCal.get(Calendar.MINUTE)
-                    )
+                    val requestCode =
+                        stableRequestCode(
+                            branch = realBranch,
+                            group = realGroup,
+                            dayOfWeek =
+                                startCal.get(
+                                    Calendar.DAY_OF_WEEK
+                                ),
+                            hour =
+                                startCal.get(
+                                    Calendar.HOUR_OF_DAY
+                                ),
+                            minute =
+                                startCal.get(
+                                    Calendar.MINUTE
+                                )
+                        )
 
                     scheduleOneTrainingAlarm(
                         context = appContext,
                         requestCode = requestCode,
-                        triggerAtMillis = triggerAtMillis,
+                        triggerAtMillis =
+                            triggerAtMillis,
                         branch = realBranch,
-                        group = group,
+                        group = realGroup,
                         place = realPlace,
                         coach = realCoach,
-                        startMillis = startCal.timeInMillis,
-                        leadMinutes = safeLeadMinutes
+                        startMillis =
+                            finalStartMillis,
+                        endMillis =
+                            resolvedEndMillis,
+                        leadMinutes =
+                            safeLeadMinutes
                     )
 
-                    scheduledRequestCodes += requestCode
+                    scheduledRequestCodes +=
+                        requestCode
                 }
             }
         }
@@ -120,6 +250,7 @@ object TrainingReminderScheduler {
                 place = "",
                 coach = "",
                 startMillis = 0L,
+                endMillis = null,
                 leadMinutes = 0
             )
 
@@ -142,6 +273,7 @@ object TrainingReminderScheduler {
         place: String,
         coach: String,
         startMillis: Long,
+        endMillis: Long?,
         leadMinutes: Int
     ) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -154,6 +286,7 @@ object TrainingReminderScheduler {
             place = place,
             coach = coach,
             startMillis = startMillis,
+            endMillis = endMillis,
             leadMinutes = leadMinutes
         )
 
@@ -188,6 +321,7 @@ object TrainingReminderScheduler {
         place: String,
         coach: String,
         startMillis: Long,
+        endMillis: Long?,
         leadMinutes: Int
     ): PendingIntent {
         val intent = Intent(context, TrainingReminderReceiver::class.java).apply {
@@ -195,9 +329,22 @@ object TrainingReminderScheduler {
             putExtra(TrainingReminderReceiver.EXTRA_BRANCH, branch)
             putExtra(TrainingReminderReceiver.EXTRA_GROUP, group)
             putExtra(TrainingReminderReceiver.EXTRA_PLACE, place)
-            putExtra(TrainingReminderReceiver.EXTRA_COACH, coach)
-            putExtra(TrainingReminderReceiver.EXTRA_START_MILLIS, startMillis)
-            putExtra(TrainingReminderReceiver.EXTRA_LEAD_MINUTES, leadMinutes)
+            putExtra(
+                TrainingReminderReceiver.EXTRA_COACH,
+                coach
+            )
+            putExtra(
+                TrainingReminderReceiver.EXTRA_START_MILLIS,
+                startMillis
+            )
+            putExtra(
+                TrainingReminderReceiver.EXTRA_END_MILLIS,
+                endMillis ?: 0L
+            )
+            putExtra(
+                TrainingReminderReceiver.EXTRA_LEAD_MINUTES,
+                leadMinutes
+            )
         }
 
         return PendingIntent.getBroadcast(

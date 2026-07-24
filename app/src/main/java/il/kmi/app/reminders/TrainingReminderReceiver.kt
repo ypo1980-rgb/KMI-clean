@@ -12,9 +12,12 @@ import androidx.core.app.NotificationManagerCompat
 import il.kmi.app.MainActivity
 import il.kmi.app.R
 import il.kmi.app.training.TrainingStatusEngine
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 class TrainingReminderReceiver : BroadcastReceiver() {
 
@@ -22,26 +25,95 @@ class TrainingReminderReceiver : BroadcastReceiver() {
         val branch = intent.getStringExtra(EXTRA_BRANCH).orEmpty()
         val group = intent.getStringExtra(EXTRA_GROUP).orEmpty()
         val place = intent.getStringExtra(EXTRA_PLACE).orEmpty()
-        val coach = intent.getStringExtra(EXTRA_COACH).orEmpty()
-        val startMillis = intent.getLongExtra(EXTRA_START_MILLIS, 0L)
+        val coach =
+            intent.getStringExtra(EXTRA_COACH).orEmpty()
 
-        val trainingStatus = TrainingStatusEngine.evaluate(
-            context = context,
-            trainingStartMillis = startMillis
-        )
+        val startMillis =
+            intent.getLongExtra(
+                EXTRA_START_MILLIS,
+                0L
+            )
 
-        if (!trainingStatus.shouldNotify) {
-            return
+        val rawEndMillis =
+            intent.getLongExtra(
+                EXTRA_END_MILLIS,
+                0L
+            )
+
+        /*
+         * באזעקות ישנות ייתכן שהערך אינו קיים.
+         * במקרה כזה משתמשים בברירת המחדל 60 דקות.
+         */
+        val leadMinutes =
+            if (
+                intent.hasExtra(
+                    EXTRA_LEAD_MINUTES
+                )
+            ) {
+                intent.getIntExtra(
+                    EXTRA_LEAD_MINUTES,
+                    60
+                )
+                    .coerceIn(0, 180)
+            } else {
+                60
+            }
+
+        /*
+         * גרסאות קודמות לא שלחו זמן סיום.
+         * במקרה כזה מעבירים null ושומרים תאימות.
+         */
+        val endMillis =
+            rawEndMillis.takeIf { value ->
+                value > startMillis
+            }
+
+        val trainingStatus =
+            TrainingStatusEngine.evaluate(
+                context = context,
+                trainingStartMillis =
+                    startMillis,
+                trainingEndMillis =
+                    endMillis
+            )
+
+        /*
+         * האזעקה היא חד־פעמית. לכן לאחר הפעלתה חייבים
+         * לתזמן מחדש את המופע השבועי הבא, גם כאשר
+         * ההתראה הנוכחית חסומה על ידי המנוע.
+         */
+        try {
+            if (trainingStatus.shouldNotify) {
+                val isEnglish =
+                    AppLanguageManager(context)
+                        .getCurrentLanguage() ==
+                            AppLanguage.ENGLISH
+
+                showTrainingReminderNotification(
+                    context = context,
+                    branch = branch,
+                    group = group,
+                    place = place,
+                    coach = coach,
+                    startMillis = startMillis,
+                    endMillis = endMillis,
+                    isEnglish = isEnglish
+                )
+            }
+        } finally {
+            /*
+             * המתזמן מבטל את תמונת האזעקות הישנה ובונה
+             * תמונה חדשה. הוא גם מדלג על חגים באמצעות
+             * TrainingStatusEngine.
+             */
+            TrainingReminderScheduler
+                .scheduleWeeklyTrainingAlarms(
+                    context =
+                        context.applicationContext,
+                    leadMinutes =
+                        leadMinutes
+                )
         }
-
-        showTrainingReminderNotification(
-            context = context,
-            branch = branch,
-            group = group,
-            place = place,
-            coach = coach,
-            startMillis = startMillis
-        )
     }
 
     private fun showTrainingReminderNotification(
@@ -50,26 +122,67 @@ class TrainingReminderReceiver : BroadcastReceiver() {
         group: String,
         place: String,
         coach: String,
-        startMillis: Long
+        startMillis: Long,
+        endMillis: Long?,
+        isEnglish: Boolean
     ) {
         createChannelIfNeeded(context)
 
-        val timeText = if (startMillis > 0L) {
-            SimpleDateFormat("HH:mm", Locale("he", "IL")).format(Date(startMillis))
-        } else {
-            ""
-        }
-
-        val title = "תזכורת אימון"
-        val body = buildString {
-            if (timeText.isNotBlank()) {
-                append("האימון מתחיל בשעה ")
-                append(timeText)
+        val locale =
+            if (isEnglish) {
+                Locale.US
             } else {
-                append("יש לך אימון בקרוב")
+                Locale("he", "IL")
             }
 
-            val cleanPlace = place.ifBlank { branch }
+        val timeFormatter =
+            SimpleDateFormat(
+                "HH:mm",
+                locale
+            ).apply {
+                timeZone =
+                    TimeZone.getTimeZone(
+                        "Asia/Jerusalem"
+                    )
+            }
+
+        val timeText =
+            if (startMillis > 0L) {
+                timeFormatter.format(
+                    Date(startMillis)
+                )
+            } else {
+                ""
+            }
+
+        val title =
+            if (isEnglish) {
+                "Training reminder"
+            } else {
+                "תזכורת אימון"
+            }
+
+        val body = buildString {
+            if (timeText.isNotBlank()) {
+                if (isEnglish) {
+                    append("Training starts at ")
+                } else {
+                    append("האימון מתחיל בשעה ")
+                }
+
+                append(timeText)
+            } else {
+                append(
+                    if (isEnglish) {
+                        "You have a training soon"
+                    } else {
+                        "יש לך אימון בקרוב"
+                    }
+                )
+            }
+
+            val cleanPlace =
+                place.ifBlank { branch }
 
             if (cleanPlace.isNotBlank()) {
                 append(" · ")
@@ -82,7 +195,13 @@ class TrainingReminderReceiver : BroadcastReceiver() {
             }
 
             if (coach.isNotBlank()) {
-                append(" · מאמן: ")
+                append(
+                    if (isEnglish) {
+                        " · Coach: "
+                    } else {
+                        " · מאמן: "
+                    }
+                )
                 append(coach)
             }
         }
@@ -94,12 +213,35 @@ class TrainingReminderReceiver : BroadcastReceiver() {
                         Intent.FLAG_ACTIVITY_SINGLE_TOP
 
             putExtra("open_from_training_reminder", true)
-            putExtra("training_reminder_branch", branch)
-            putExtra("training_reminder_group", group)
-            putExtra("training_reminder_start_millis", startMillis)
+            putExtra(
+                "training_reminder_branch",
+                branch
+            )
+            putExtra(
+                "training_reminder_group",
+                group
+            )
+            putExtra(
+                "training_reminder_start_millis",
+                startMillis
+            )
+            putExtra(
+                "training_reminder_end_millis",
+                endMillis ?: 0L
+            )
         }
 
-        val requestCode = (System.currentTimeMillis() and 0xFFFFFFF).toInt()
+        /*
+         * מזהה יציב מונע יצירת התראות כפולות לאותו אימון.
+         */
+        val requestCode =
+            listOf(
+                branch,
+                group,
+                startMillis.toString()
+            )
+                .joinToString("|")
+                .hashCode() and Int.MAX_VALUE
 
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -154,10 +296,19 @@ class TrainingReminderReceiver : BroadcastReceiver() {
         const val EXTRA_BRANCH = "training_reminder_branch"
         const val EXTRA_GROUP = "training_reminder_group"
         const val EXTRA_PLACE = "training_reminder_place"
-        const val EXTRA_COACH = "training_reminder_coach"
-        const val EXTRA_START_MILLIS = "training_reminder_start_millis"
-        const val EXTRA_LEAD_MINUTES = "training_reminder_lead_minutes"
+        const val EXTRA_COACH =
+            "training_reminder_coach"
 
-        private const val CHANNEL_ID = "kmi_training_reminders_channel"
+        const val EXTRA_START_MILLIS =
+            "training_reminder_start_millis"
+
+        const val EXTRA_END_MILLIS =
+            "training_reminder_end_millis"
+
+        const val EXTRA_LEAD_MINUTES =
+            "training_reminder_lead_minutes"
+
+        private const val CHANNEL_ID =
+            "kmi_training_reminders_channel"
     }
 }
