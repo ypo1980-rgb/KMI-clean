@@ -10,12 +10,48 @@ data class TrainingData(
     val end: String,
     val place: String,
     val address: String,
-    val coach: String,           // ✅ מאמן
-    val branch: String = ""      // ✅ שם סניף
+    val coach: String,
+    val branch: String = "",
+    val group: String = ""
 ) {
     // ✅ חותמת זמן תחילת האימון
     val startMillis: Long
         get() = cal.timeInMillis
+
+    /*
+ * מזהה פנימי יציב למופע אימון מסוים.
+ *
+ * branch + group + startMillis מבדילים בין קבוצות
+ * וסניפים שמקיימים אימון באותה שעה.
+ *
+ * המפתח מיועד להשוואה ומטמון מקומי. במסמך Firestore
+ * נשמור גם את שלושת השדות בנפרד.
+ */
+    val occurrenceKey: String
+        get() {
+            val resolvedBranch =
+                branch
+                    .ifBlank { place }
+                    .trim()
+                    .replace("–", "-")
+                    .replace("—", "-")
+                    .replace(Regex("\\s+"), " ")
+                    .lowercase(Locale("he", "IL"))
+
+            val resolvedGroup =
+                group
+                    .trim()
+                    .replace("–", "-")
+                    .replace("—", "-")
+                    .replace(Regex("\\s+"), " ")
+                    .lowercase(Locale("he", "IL"))
+
+            return listOf(
+                resolvedBranch,
+                resolvedGroup,
+                startMillis.toString()
+            ).joinToString("|")
+        }
 
     /*
      * חותמת זמן סיום האימון המחושבת מהשדה end בפורמט HH:mm.
@@ -129,7 +165,8 @@ data class TrainingData(
             address: String,
             coach: String,
             branch: String = "",
-            now: Calendar = Calendar.getInstance()
+            now: Calendar = Calendar.getInstance(),
+            group: String = ""
         ): TrainingData {
             val startCal = (now.clone() as Calendar).apply {
                 set(Calendar.SECOND, 0)
@@ -167,7 +204,8 @@ data class TrainingData(
                 place = place,
                 address = address,
                 coach = coach,
-                branch = branch
+                branch = branch,
+                group = group
             )
         }
     }

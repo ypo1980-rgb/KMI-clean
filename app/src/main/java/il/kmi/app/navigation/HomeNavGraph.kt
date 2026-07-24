@@ -38,6 +38,7 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.ui.graphics.Color
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.domain.ExerciseExplanationResolver
+import java.net.URLDecoder
 
 //-----------------------------------------------------------------------------------
 
@@ -181,7 +182,7 @@ fun NavGraphBuilder.homeNavGraph(
                 onOpenExercise = { key: String ->
                     fun dec(s: String): String =
                         try {
-                            java.net.URLDecoder.decode(s, "UTF-8")
+                            URLDecoder.decode(s, "UTF-8")
                         } catch (_: Exception) {
                             s
                         }

@@ -87,17 +87,37 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
+import android.graphics.Path
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.filled.History
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
+import com.google.firebase.firestore.DocumentSnapshot
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.training.TrainingDirectory
+import il.kmi.app.ui.KmiTopBar
+import il.kmi.shared.domain.content.ExerciseTitlesEn
 import kotlinx.coroutines.delay
+import org.json.JSONArray
+import java.text.SimpleDateFormat
+import java.time.DayOfWeek
+import java.time.Duration
+import java.time.LocalDate
+import java.time.LocalTime
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 //=================================================================================
 
@@ -183,17 +203,45 @@ private fun TrainingsWeekHeader(
     isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val heb = java.util.Locale("he", "IL")
-    val dateFmt = java.text.SimpleDateFormat("dd/MM", heb)
-    val dayFmt = java.text.SimpleDateFormat("EEEE", heb)   // שם היום בעברית
-    val start = java.util.Calendar.getInstance()
-    val end = (start.clone() as java.util.Calendar).apply {
-        add(java.util.Calendar.DAY_OF_YEAR, 6)
-    }
+    val locale =
+        if (isEnglish) {
+            Locale.US
+        } else {
+            Locale("he", "IL")
+        }
 
-    // היום + תאריך: "יום חמישי 11/12"
-    val startLabel = "${dayFmt.format(start.time)} ${dateFmt.format(start.time)}"
-    val endLabel = "${dayFmt.format(end.time)} ${dateFmt.format(end.time)}"
+    val dateFormatter =
+        SimpleDateFormat(
+            "dd/MM",
+            locale
+        )
+
+    val dayFormatter =
+        SimpleDateFormat(
+            "EEEE",
+            locale
+        )
+
+    val start =
+        Calendar.getInstance()
+
+    val end =
+        (start.clone() as Calendar).apply {
+            add(
+                Calendar.DAY_OF_YEAR,
+                6
+            )
+        }
+
+    val startLabel =
+        "${dayFormatter.format(start.time)} ${
+            dateFormatter.format(start.time)
+        }"
+
+    val endLabel =
+        "${dayFormatter.format(end.time)} ${
+            dateFormatter.format(end.time)
+        }"
 
     Box(
         modifier = modifier
@@ -201,24 +249,45 @@ private fun TrainingsWeekHeader(
         contentAlignment = Alignment.Center
     ) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(top = 2.dp, bottom = 5.dp)
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.Center,
+            modifier = Modifier.padding(
+                top = 2.dp,
+                bottom = 5.dp
+            )
         ) {
             Text(
-                text = if (isEnglish) "Trainings for the upcoming week" else "אימונים לשבוע הקרוב",
-                style = MaterialTheme.typography.titleSmall,
+                text =
+                    if (isEnglish) {
+                        "Trainings for the upcoming week"
+                    } else {
+                        "אימונים לשבוע הקרוב"
+                    },
+                style =
+                    MaterialTheme.typography.titleSmall,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 maxLines = 1
             )
+
             Spacer(Modifier.height(1.dp))
+
             Text(
-                text = "(תאריכים: $startLabel–$endLabel)",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.92f),
-                textAlign = TextAlign.Center
+                text =
+                    if (isEnglish) {
+                        "Dates: $startLabel–$endLabel"
+                    } else {
+                        "(תאריכים: $startLabel–$endLabel)"
+                    },
+                style =
+                    MaterialTheme.typography.bodySmall,
+                color =
+                    Color.White.copy(alpha = 0.92f),
+                textAlign = TextAlign.Center,
+                maxLines = 1
             )
         }
     }
@@ -250,7 +319,14 @@ fun HomeScreen(
     val clickSound = rememberClickSound()
 
     // 🔵 מצב לדיאלוג העוזר האישי (AI)
-    var showAiDialog by rememberSaveable { mutableStateOf(false) }
+    var showAiDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+// 🗂️ מצב חלון ארכיון האימונים
+    var showTrainingArchive by rememberSaveable {
+        mutableStateOf(false)
+    }
 
     val ctxRole = LocalContext.current
     val contextLang = LocalContext.current
@@ -331,7 +407,7 @@ fun HomeScreen(
             val contextLang = LocalContext.current
             val langManager = remember { AppLanguageManager(contextLang) }
 
-            il.kmi.app.ui.KmiTopBar(
+            KmiTopBar(
                 title = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "Home" else "מסך הבית",
                 onHome = { /* no-op במסך הבית */ },
                 lockHome = true,
@@ -481,7 +557,7 @@ fun HomeScreen(
             data class CoachHomeMessage(
                 val text: String,
                 val coachName: String,
-                val sentAt: java.util.Date?,
+                val sentAt: Date?,
                 val branch: String,
                 val group: String
             )
@@ -509,7 +585,7 @@ fun HomeScreen(
                 val db = FirebaseFirestore.getInstance()
 
                 fun messageFromDoc(
-                    doc: com.google.firebase.firestore.DocumentSnapshot
+                    doc: DocumentSnapshot
                 ): CoachHomeMessage? {
                     val text = (
                             doc.getString("text")
@@ -666,7 +742,7 @@ fun HomeScreen(
                                     emptyList()
                                 } else if (raw.startsWith("[")) {
                                     runCatching {
-                                        val arr = org.json.JSONArray(raw)
+                                        val arr = JSONArray(raw)
                                         (0 until arr.length())
                                             .mapNotNull { index -> arr.optString(index, null) }
                                             .map { it.trim() }
@@ -706,7 +782,7 @@ fun HomeScreen(
                         "group"
                     )
                         .map {
-                            il.kmi.app.training.TrainingCatalog
+                            TrainingCatalog
                                 .normalizeGroupName(it)
                                 .ifBlank { it }
                         }
@@ -783,7 +859,7 @@ fun HomeScreen(
                             .replace('–', '-')
                             .replace('—', '-')
                             .replace(Regex("\\s+"), " ")
-                            .lowercase(java.util.Locale("he", "IL"))
+                            .lowercase(Locale("he", "IL"))
 
                     fun prefsAsList(vararg keys: String): List<String> {
                         val out = mutableListOf<String>()
@@ -863,7 +939,7 @@ fun HomeScreen(
                     )
                         .map {
                             normalizeText(
-                                il.kmi.app.training.TrainingCatalog
+                                TrainingCatalog
                                     .normalizeGroupName(it)
                                     .ifBlank { it }
                             )
@@ -872,7 +948,7 @@ fun HomeScreen(
                         .distinct()
 
                     fun stringListFromDoc(
-                        doc: com.google.firebase.firestore.DocumentSnapshot,
+                        doc: DocumentSnapshot,
                         vararg keys: String
                     ): List<String> {
                         val out = mutableListOf<String>()
@@ -909,7 +985,7 @@ fun HomeScreen(
                     }
 
                     fun mapListFromDoc(
-                        doc: com.google.firebase.firestore.DocumentSnapshot,
+                        doc: DocumentSnapshot,
                         vararg keys: String
                     ): List<Map<String, String>> {
                         val out = mutableListOf<Map<String, String>>()
@@ -943,7 +1019,7 @@ fun HomeScreen(
                     }
 
                     fun firstStringFromDoc(
-                        doc: com.google.firebase.firestore.DocumentSnapshot,
+                        doc: DocumentSnapshot,
                         vararg keys: String
                     ): String {
                         keys.forEach { key ->
@@ -975,7 +1051,7 @@ fun HomeScreen(
                     }
 
                     fun docTargetsCurrentUser(
-                        doc: com.google.firebase.firestore.DocumentSnapshot
+                        doc: DocumentSnapshot
                     ): Boolean {
                         if (
                             uid.isBlank() &&
@@ -1196,7 +1272,7 @@ fun HomeScreen(
                             "selectedGroups"
                         ).map {
                             normalizeText(
-                                il.kmi.app.training.TrainingCatalog
+                                TrainingCatalog
                                     .normalizeGroupName(it)
                                     .ifBlank { it }
                             )
@@ -1324,7 +1400,7 @@ fun HomeScreen(
                                     emptyList()
                                 } else if (raw.startsWith("[")) {
                                     runCatching {
-                                        val arr = org.json.JSONArray(raw)
+                                        val arr = JSONArray(raw)
                                         (0 until arr.length())
                                             .mapNotNull { index -> arr.optString(index, null) }
                                             .map { it.trim() }
@@ -1435,8 +1511,8 @@ fun HomeScreen(
 
                             val branchesCsv = remoteBranches.joinToString(", ")
                             val groupsCsv = remoteGroups.joinToString(", ")
-                            val branchesJson = org.json.JSONArray(remoteBranches).toString()
-                            val groupsJson = org.json.JSONArray(remoteGroups).toString()
+                            val branchesJson = JSONArray(remoteBranches).toString()
+                            val groupsJson = JSONArray(remoteGroups).toString()
 
                             if (remoteBranches.isNotEmpty() || remoteGroups.isNotEmpty()) {
                                 userSp.edit()
@@ -1532,7 +1608,7 @@ fun HomeScreen(
                     val durationMinutes: Int
                 )
 
-                fun <T : java.lang.reflect.AccessibleObject> T.makeAccessibleSafe(): T {
+                fun <T : AccessibleObject> T.makeAccessibleSafe(): T {
                     try {
                         isAccessible = true
                     } catch (_: SecurityException) {
@@ -1555,25 +1631,25 @@ fun HomeScreen(
 
                     if (dayField != null && startField != null && endField != null) {
                         val dayEnum =
-                            runCatching { dayField.get(slot) as? java.time.DayOfWeek }.getOrNull()
+                            runCatching { dayField.get(slot) as? DayOfWeek }.getOrNull()
                         val startLt =
-                            runCatching { startField.get(slot) as? java.time.LocalTime }.getOrNull()
+                            runCatching { startField.get(slot) as? LocalTime }.getOrNull()
                         val endLt =
-                            runCatching { endField.get(slot) as? java.time.LocalTime }.getOrNull()
+                            runCatching { endField.get(slot) as? LocalTime }.getOrNull()
 
                         val calDay = when (dayEnum) {
-                            java.time.DayOfWeek.SUNDAY -> java.util.Calendar.SUNDAY
-                            java.time.DayOfWeek.MONDAY -> java.util.Calendar.MONDAY
-                            java.time.DayOfWeek.TUESDAY -> java.util.Calendar.TUESDAY
-                            java.time.DayOfWeek.WEDNESDAY -> java.util.Calendar.WEDNESDAY
-                            java.time.DayOfWeek.THURSDAY -> java.util.Calendar.THURSDAY
-                            java.time.DayOfWeek.FRIDAY -> java.util.Calendar.FRIDAY
-                            java.time.DayOfWeek.SATURDAY -> java.util.Calendar.SATURDAY
-                            else -> java.util.Calendar.MONDAY
+                            DayOfWeek.SUNDAY -> Calendar.SUNDAY
+                            DayOfWeek.MONDAY -> Calendar.MONDAY
+                            DayOfWeek.TUESDAY -> Calendar.TUESDAY
+                            DayOfWeek.WEDNESDAY -> Calendar.WEDNESDAY
+                            DayOfWeek.THURSDAY -> Calendar.THURSDAY
+                            DayOfWeek.FRIDAY -> Calendar.FRIDAY
+                            DayOfWeek.SATURDAY -> Calendar.SATURDAY
+                            else -> Calendar.MONDAY
                         }
 
                         val durMin = if (startLt != null && endLt != null)
-                            java.time.Duration.between(startLt, endLt).toMinutes().toInt()
+                            Duration.between(startLt, endLt).toMinutes().toInt()
                         else 90
 
                         return SlotLike(
@@ -1600,7 +1676,7 @@ fun HomeScreen(
                             "dayOfWeek",
                             "day",
                             "dow",
-                            fallback = java.util.Calendar.MONDAY
+                            fallback = Calendar.MONDAY
                         ),
                         startHour = intField("startHour", "hour", "h", fallback = 19),
                         startMinute = intField(
@@ -1665,9 +1741,9 @@ fun HomeScreen(
                 Spacer(Modifier.height(10.dp))
 
                 fun datesRange(
-                    from: java.time.LocalDate,
-                    to: java.time.LocalDate
-                ): Sequence<java.time.LocalDate> =
+                    from: LocalDate,
+                    to: LocalDate
+                ): Sequence<LocalDate> =
                     generateSequence(from) { it.plusDays(1) }
                         .takeWhile { !it.isAfter(to) }
 
@@ -1692,13 +1768,13 @@ fun HomeScreen(
                 }
 
                 fun upcomingWindowEndMillis(): Long {
-                    return java.util.Calendar.getInstance().apply {
+                    return Calendar.getInstance().apply {
                         timeInMillis = trainingStatusNowMillis
-                        add(java.util.Calendar.DAY_OF_YEAR, 6)
-                        set(java.util.Calendar.HOUR_OF_DAY, 23)
-                        set(java.util.Calendar.MINUTE, 59)
-                        set(java.util.Calendar.SECOND, 59)
-                        set(java.util.Calendar.MILLISECOND, 999)
+                        add(Calendar.DAY_OF_YEAR, 6)
+                        set(Calendar.HOUR_OF_DAY, 23)
+                        set(Calendar.MINUTE, 59)
+                        set(Calendar.SECOND, 59)
+                        set(Calendar.MILLISECOND, 999)
                     }.timeInMillis
                 }
 
@@ -1763,7 +1839,7 @@ fun HomeScreen(
                         clean,
                         clean.replace("+", " + "),
                         clean.replace(" + ", "+"),
-                        il.kmi.app.training.TrainingCatalog.normalizeGroupName(group)
+                        TrainingCatalog.normalizeGroupName(group)
                             .ifBlank { group }
                     )
                         .map { it.trim() }
@@ -1772,15 +1848,15 @@ fun HomeScreen(
                 }
 
                 fun calendarDayFromDatabase(dayOfWeek: String): Int {
-                    return when (dayOfWeek.trim().uppercase(java.util.Locale.US)) {
-                        "SUNDAY" -> java.util.Calendar.SUNDAY
-                        "MONDAY" -> java.util.Calendar.MONDAY
-                        "TUESDAY" -> java.util.Calendar.TUESDAY
-                        "WEDNESDAY" -> java.util.Calendar.WEDNESDAY
-                        "THURSDAY" -> java.util.Calendar.THURSDAY
-                        "FRIDAY" -> java.util.Calendar.FRIDAY
-                        "SATURDAY" -> java.util.Calendar.SATURDAY
-                        else -> java.util.Calendar.MONDAY
+                    return when (dayOfWeek.trim().uppercase(Locale.US)) {
+                        "SUNDAY" -> Calendar.SUNDAY
+                        "MONDAY" -> Calendar.MONDAY
+                        "TUESDAY" -> Calendar.TUESDAY
+                        "WEDNESDAY" -> Calendar.WEDNESDAY
+                        "THURSDAY" -> Calendar.THURSDAY
+                        "FRIDAY" -> Calendar.FRIDAY
+                        "SATURDAY" -> Calendar.SATURDAY
+                        else -> Calendar.MONDAY
                     }
                 }
 
@@ -1805,12 +1881,12 @@ fun HomeScreen(
                     databaseGroupHe: String,
                     databaseGroupEn: String
                 ): Boolean {
-                    val wanted = il.kmi.app.training.TrainingCatalog
+                    val wanted = TrainingCatalog
                         .normalizeGroupName(selectedGroup)
                         .ifBlank { selectedGroup }
                         .trim()
 
-                    val dbHe = il.kmi.app.training.TrainingCatalog
+                    val dbHe = TrainingCatalog
                         .normalizeGroupName(databaseGroupHe)
                         .ifBlank { databaseGroupHe }
                         .trim()
@@ -1860,12 +1936,12 @@ fun HomeScreen(
                          * המופע של השבוע הנוכחי ולא קופץ לשבוע הבא.
                          */
                         val occurrenceReference =
-                            java.util.Calendar.getInstance().apply {
+                            Calendar.getInstance().apply {
                                 timeInMillis =
                                     trainingStatusNowMillis
 
                                 add(
-                                    java.util.Calendar.MINUTE,
+                                    Calendar.MINUTE,
                                     -durationMinutes
                                 )
                             }
@@ -1944,12 +2020,12 @@ fun HomeScreen(
 
                                 // ✅ 2) Fallback זמני: TrainingDirectory הישן
                                 val addr =
-                                    il.kmi.app.training.TrainingCatalog.addressFor(branchName)
+                                    TrainingCatalog.addressFor(branchName)
                                         .ifBlank {
                                             if (city.isNotBlank() && venue.isNotBlank()) "$venue, $city" else branchName
                                         }
 
-                                val place = il.kmi.app.training.TrainingCatalog.placeFor(branchName)
+                                val place = TrainingCatalog.placeFor(branchName)
 
                                 val branchVariants = branchScheduleVariants(branchName)
                                 val groupVariants = groupScheduleVariants(grp)
@@ -1966,7 +2042,7 @@ fun HomeScreen(
                                     }
                                     .mapNotNull { pair ->
                                         val found =
-                                            il.kmi.app.training.TrainingDirectory.getSchedule(
+                                            TrainingDirectory.getSchedule(
                                                 pair.first,
                                                 pair.second
                                             )
@@ -2073,14 +2149,14 @@ fun HomeScreen(
 
                 LaunchedEffect(upcoming, isEnglish) {
                     val locale = if (isEnglish) {
-                        java.util.Locale.ENGLISH
+                        Locale.ENGLISH
                     } else {
-                        java.util.Locale("he", "IL")
+                        Locale("he", "IL")
                     }
 
-                    val dayFmt = java.text.SimpleDateFormat("EEEE", locale)
-                    val dateFmt = java.text.SimpleDateFormat("dd/MM", locale)
-                    val timeFmt = java.text.SimpleDateFormat("HH:mm", locale)
+                    val dayFmt = SimpleDateFormat("EEEE", locale)
+                    val dateFmt = SimpleDateFormat("dd/MM", locale)
+                    val timeFmt = SimpleDateFormat("HH:mm", locale)
 
                     homePdfTrainings = upcoming.map { item ->
                         val training = item.training
@@ -2099,7 +2175,10 @@ fun HomeScreen(
                 }
 
                 val weekBlockedByHoliday = remember(upcoming) {
-                    upcoming.isNotEmpty() && upcoming.all { it.isCancelledByHoliday }
+                    upcoming.isNotEmpty() &&
+                            upcoming.all {
+                                it.isCancelledByHoliday
+                            }
                 }
 
                 LazyColumn(
@@ -2213,7 +2292,7 @@ fun HomeScreen(
                             shape = RoundedCornerShape(20.dp),
                             color = Color.White.copy(alpha = 0.95f),
                             shadowElevation = 6.dp,
-                            border = androidx.compose.foundation.BorderStroke(
+                            border = BorderStroke(
                                 1.dp,
                                 Color(0xFF7DD3FC)
                             )
@@ -2260,7 +2339,7 @@ fun HomeScreen(
                                                 },
                                                 shape = RoundedCornerShape(999.dp),
                                                 color = Color(0xFFE0F2FE),
-                                                border = androidx.compose.foundation.BorderStroke(
+                                                border = BorderStroke(
                                                     1.dp,
                                                     Color(0xFF7DD3FC)
                                                 )
@@ -2353,9 +2432,9 @@ fun HomeScreen(
                                     Spacer(Modifier.height(6.dp))
 
                                     val timeText = latestMessage?.sentAt?.let {
-                                        java.text.SimpleDateFormat(
+                                        SimpleDateFormat(
                                             "dd/MM/yyyy · HH:mm",
-                                            java.util.Locale("he", "IL")
+                                            Locale("he", "IL")
                                         ).format(it)
                                     }.orEmpty()
 
@@ -2535,6 +2614,33 @@ fun HomeScreen(
                 }
 
                 Spacer(Modifier.height(2.dp))
+
+                if (showTrainingArchive) {
+                    TrainingArchiveDialog(
+                        baseTrainings =
+                            currentWeekCandidates,
+                        isEnglish = isEnglish,
+                        onDismiss = {
+                            showTrainingArchive = false
+                        },
+                        onOpenDrawer = {
+                            showTrainingArchive = false
+                            onOpenDrawer()
+                        },
+                        onSettings = {
+                            showTrainingArchive = false
+                            onSettings()
+                        },
+                        onOpenExercise = { key ->
+                            showTrainingArchive = false
+                            onOpenExercise(key)
+                        },
+                        onOpenAi = {
+                            showTrainingArchive = false
+                            showAiDialog = true
+                        }
+                    )
+                }
             }
 
             val lockSuffix = if (hasFullAccess) "" else " 🔒"
@@ -2574,12 +2680,32 @@ fun HomeScreen(
                     clickSound()
                     haptic(true)
                     fabExpanded = false
+
                     if (hasFullAccess) {
                         onOpenTrainingSummary()
                     } else {
                         onOpenSubscription()
                     }
                 },
+
+                /*
+                 * ארכיון האימונים זמין לכל משתמש ואינו
+                 * תופס מקום קבוע במסך הבית.
+                 */
+                Triple(
+                    if (isEnglish) {
+                        "Training Archive"
+                    } else {
+                        "ארכיון אימונים"
+                    },
+                    Icons.Filled.History
+                ) {
+                    clickSound()
+                    haptic(true)
+                    fabExpanded = false
+                    showTrainingArchive = true
+                },
+
                 Triple(
                     (if (isEnglish) "Free Trainings" else "אימונים חופשיים") + lockSuffix,
                     Icons.Filled.Add
@@ -2694,7 +2820,7 @@ fun HomeScreen(
                                         shape = RoundedCornerShape(20.dp),
                                         color = Color.White.copy(alpha = 0.94f),
                                         shadowElevation = 6.dp,
-                                        border = androidx.compose.foundation.BorderStroke(
+                                        border = BorderStroke(
                                             1.dp,
                                             Color(0xFFE2E8F0)
                                         )
@@ -2737,7 +2863,7 @@ fun HomeScreen(
                                             ),
                                         shape = RoundedCornerShape(22.dp),
                                         color = Color.Transparent,
-                                        border = androidx.compose.foundation.BorderStroke(
+                                        border = BorderStroke(
                                             1.dp,
                                             Color(0xFFD6E4F0)
                                         )
@@ -2797,7 +2923,7 @@ fun HomeScreen(
                                                             Surface(
                                                                 shape = CircleShape,
                                                                 color = Color(0xFFE0F2FE),
-                                                                border = androidx.compose.foundation.BorderStroke(
+                                                                border = BorderStroke(
                                                                     1.dp,
                                                                     Color(0xFFBAE6FD)
                                                                 )
@@ -2835,7 +2961,7 @@ fun HomeScreen(
                                                             Surface(
                                                                 shape = CircleShape,
                                                                 color = Color(0xFFE0F2FE),
-                                                                border = androidx.compose.foundation.BorderStroke(
+                                                                border = BorderStroke(
                                                                     1.dp,
                                                                     Color(0xFFBAE6FD)
                                                                 )
@@ -2886,7 +3012,7 @@ fun HomeScreen(
                                                         Surface(
                                                             shape = RoundedCornerShape(999.dp),
                                                             color = Color(0xFFEFF6FF),
-                                                            border = androidx.compose.foundation.BorderStroke(
+                                                            border = BorderStroke(
                                                                 1.dp,
                                                                 Color(0xFFBFDBFE)
                                                             )
@@ -2911,9 +3037,9 @@ fun HomeScreen(
                                                     }
 
                                                     val timeText = message.sentAt?.let {
-                                                        java.text.SimpleDateFormat(
+                                                        SimpleDateFormat(
                                                             "dd/MM/yyyy · HH:mm",
-                                                            java.util.Locale("he", "IL")
+                                                            Locale("he", "IL")
                                                         ).format(it)
                                                     }.orEmpty()
 
@@ -3026,7 +3152,7 @@ fun HomeScreen(
 
                 ExerciseExplanationDialog(
                     title = if (isEnglish) {
-                        il.kmi.shared.domain.content.ExerciseTitlesEn.getOrSame(displayName)
+                        ExerciseTitlesEn.getOrSame(displayName)
                     } else {
                         displayName
                     },
@@ -3039,8 +3165,8 @@ fun HomeScreen(
                     backgroundBrush = Brush.verticalGradient(
                         colors = listOf(
                             Color.White,
-                            androidx.compose.ui.graphics.lerp(Color.White, belt.color, 0.12f),
-                            androidx.compose.ui.graphics.lerp(Color.White, belt.color, 0.06f),
+                            lerp(Color.White, belt.color, 0.12f),
+                            lerp(Color.White, belt.color, 0.06f),
                             Color.White
                         )
                     ),
@@ -3173,7 +3299,7 @@ private fun ModernHomeQuickFab(
 private fun HomePremiumQuickMenuPanel(
     title: String,
     isEnglish: Boolean,
-    items: List<Triple<String, androidx.compose.ui.graphics.vector.ImageVector, () -> Unit>>,
+    items: List<Triple<String, ImageVector, () -> Unit>>,
     onClose: () -> Unit
 ) {
     val panelHeight = 214.dp
@@ -3184,7 +3310,7 @@ private fun HomePremiumQuickMenuPanel(
         color = Color.White.copy(alpha = 0.98f),
         tonalElevation = 0.dp,
         shadowElevation = 14.dp,
-        border = androidx.compose.foundation.BorderStroke(
+        border = BorderStroke(
             width = 1.dp,
             color = Color(0xFF16A34A).copy(alpha = 0.58f)
         ),
@@ -3299,7 +3425,7 @@ private fun HomePremiumQuickMenuPanel(
 @Composable
 private fun HomePremiumQuickMenuRow(
     text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     isEnglish: Boolean,
     onClick: () -> Unit
 ) {
@@ -3400,7 +3526,7 @@ private fun HomePremiumQuickMenuRow(
 
 @Composable
 private fun HomePremiumQuickMenuIcon(
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    icon: ImageVector
 ) {
     Box(
         modifier = Modifier
@@ -3633,16 +3759,16 @@ private fun TrainingCardCompact(
     }
 
     val locale = if (isEnglish) {
-        java.util.Locale.ENGLISH
+        Locale.ENGLISH
     } else {
-        java.util.Locale("he", "IL")
+        Locale("he", "IL")
     }
 
     val dayText = remember(training.cal.timeInMillis, isEnglish) {
-        java.text.SimpleDateFormat("EEEE", locale).format(training.cal.time)
+        SimpleDateFormat("EEEE", locale).format(training.cal.time)
     }
     val dateText = remember(training.cal.timeInMillis, isEnglish) {
-        java.text.SimpleDateFormat("dd/MM", locale).format(training.cal.time)
+        SimpleDateFormat("dd/MM", locale).format(training.cal.time)
     }
     val timeText = remember(
         training.startMillis,
@@ -3650,12 +3776,12 @@ private fun TrainingCardCompact(
         isEnglish
     ) {
         val formatter =
-            java.text.SimpleDateFormat(
+            SimpleDateFormat(
                 "HH:mm",
                 locale
             ).apply {
                 timeZone =
-                    java.util.TimeZone.getTimeZone(
+                    TimeZone.getTimeZone(
                         "Asia/Jerusalem"
                     )
             }
@@ -3666,14 +3792,14 @@ private fun TrainingCardCompact(
 
         val start =
             formatter.format(
-                java.util.Date(
+                Date(
                     training.startMillis
                 )
             )
 
         val end =
             formatter.format(
-                java.util.Date(
+                Date(
                     effectiveEndMillis
                 )
             )
@@ -3741,7 +3867,7 @@ private fun TrainingCardCompact(
                     ?.takeIf { it.isNotBlank() }
                     ?: training.address.orEmpty()
 
-                il.kmi.app.training.TrainingCatalog.placeDisplayName(
+                TrainingCatalog.placeDisplayName(
                     displaySource,
                     isEnglish
                 )
@@ -3854,7 +3980,7 @@ private fun TrainingCardCompact(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 NavigationChip(
-                    address = il.kmi.app.training.TrainingCatalog.addressDisplayName(
+                    address = TrainingCatalog.addressDisplayName(
                         training.address.orEmpty(),
                         isEnglish
                     ),
@@ -3906,7 +4032,7 @@ private fun NavigationChip(
         color = Color.White.copy(alpha = 0.92f),
         tonalElevation = 2.dp,
         shadowElevation = 3.dp,
-        border = androidx.compose.foundation.BorderStroke(
+        border = BorderStroke(
             1.dp,
             Color.Black.copy(alpha = 0.06f)
         ),
@@ -4046,7 +4172,7 @@ private fun NavPickerDialog(
                             modifier = Modifier.weight(1f),
                             textAlign = TextAlign.Right
                         )
-                        androidx.compose.material3.Switch(
+                        Switch(
                             checked = rememberChoice,
                             onCheckedChange = onRememberChoiceChange
                         )
@@ -4067,7 +4193,7 @@ private fun NavPickerDialog(
                         color = Color.White.copy(alpha = 0.95f),
                         tonalElevation = 2.dp,
                         shadowElevation = 2.dp,
-                        border = androidx.compose.foundation.BorderStroke(
+                        border = BorderStroke(
                             1.dp,
                             Color.Black.copy(alpha = 0.06f)
                         ),
@@ -4104,7 +4230,7 @@ private fun NavPickerDialog(
                         color = Color.White.copy(alpha = 0.95f),
                         tonalElevation = 2.dp,
                         shadowElevation = 2.dp,
-                        border = androidx.compose.foundation.BorderStroke(
+                        border = BorderStroke(
                             1.dp,
                             Color.Black.copy(alpha = 0.06f)
                         ),
@@ -4321,7 +4447,7 @@ private fun createHomePdf(
             color = android.graphics.Color.rgb(128, 183, 220)
         }
 
-        val path = android.graphics.Path().apply {
+        val path = Path().apply {
             moveTo(pageWidth.toFloat(), 0f)
             lineTo(pageWidth.toFloat(), 122f)
             lineTo(178f, 122f)
@@ -4330,7 +4456,7 @@ private fun createHomePdf(
         }
         canvas.drawPath(path, diagonal)
 
-        canvas.drawPath(android.graphics.Path().apply {
+        canvas.drawPath(Path().apply {
             moveTo(208f, 122f)
             lineTo(224f, 122f)
             lineTo(284f, 0f)
@@ -4338,7 +4464,7 @@ private fun createHomePdf(
             close()
         }, accent1)
 
-        canvas.drawPath(android.graphics.Path().apply {
+        canvas.drawPath(Path().apply {
             moveTo(230f, 122f)
             lineTo(238f, 122f)
             lineTo(298f, 0f)
@@ -4362,10 +4488,10 @@ private fun createHomePdf(
         smallPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText(
             tr("תאריך הפקה:", "Generated:") + " " +
-                    java.text.SimpleDateFormat(
+                    SimpleDateFormat(
                         "dd/MM/yyyy",
-                        java.util.Locale.getDefault()
-                    ).format(java.util.Date()),
+                        Locale.getDefault()
+                    ).format(Date()),
             pageWidth - 34f,
             142f,
             smallPaint
