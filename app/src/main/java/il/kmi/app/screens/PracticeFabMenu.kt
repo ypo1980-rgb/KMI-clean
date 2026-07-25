@@ -14,12 +14,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -57,8 +60,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.ext.color
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.ContentRepo
@@ -104,9 +109,9 @@ fun PracticeMenuDialog(
 
     val premiumHeaderBrush = Brush.linearGradient(
         colors = listOf(
-            defaultBelt.color.copy(alpha = 0.92f),
-            defaultBelt.color.copy(alpha = 0.72f),
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.82f)
+            defaultBelt.color,
+            defaultBelt.color.copy(alpha = 0.96f),
+            MaterialTheme.colorScheme.primary
         )
     )
 
@@ -174,9 +179,14 @@ fun PracticeMenuDialog(
 
             val bg by animateColorAsState(
                 targetValue = when {
-                    !enabled -> Color.White.copy(alpha = 0.60f)
-                    pressed -> beltAccent.copy(alpha = 0.10f)
-                    else -> Color.White.copy(alpha = 0.84f)
+                    !enabled ->
+                        Color(0xFFF3F4F6)
+
+                    pressed ->
+                        beltAccent.copy(alpha = 0.14f)
+
+                    else ->
+                        Color(0xFFF8FAFC)
                 },
                 label = "row_bg"
             )
@@ -184,7 +194,7 @@ fun PracticeMenuDialog(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 56.dp)
+                    .height(68.dp)
                     .clip(shape)
                     .clickable(
                         enabled = enabled,
@@ -195,30 +205,49 @@ fun PracticeMenuDialog(
                 shape = shape,
                 color = bg,
                 tonalElevation = 0.dp,
-                shadowElevation = if (enabled) 12.dp else 0.dp,
-                border = BorderStroke(1.dp, border)
+                shadowElevation = 0.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color =
+                        beltAccent.copy(
+                            alpha = if (enabled) {
+                                0.18f
+                            } else {
+                                0.08f
+                            }
+                        )
+                )
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Start
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = beltAccent.copy(alpha = if (enabled) 0.10f else 0.06f),
-                        border = BorderStroke(1.dp, beltAccent.copy(alpha = 0.18f))
+                        shape = CircleShape,
+                        color = beltAccent.copy(
+                            alpha = if (enabled) 0.10f else 0.06f
+                        ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = beltAccent.copy(alpha = 0.18f)
+                        )
                     ) {
                         Box(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            modifier = Modifier.size(38.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = icon,
                                 contentDescription = null,
-                                tint = if (enabled) beltAccent
-                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                                tint = if (enabled) {
+                                    beltAccent
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                                },
+                                modifier = Modifier.size(19.dp)
                             )
                         }
                     }
@@ -228,21 +257,36 @@ fun PracticeMenuDialog(
                     Text(
                         text = title,
                         modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 15.sp,
+                        lineHeight = 18.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (enabled) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+                        color = if (enabled) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                        },
+                        textAlign = if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.Right
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     Icon(
-                        imageVector = if (isEnglish) Icons.Filled.ChevronLeft else Icons.Filled.ChevronLeft,
+                        imageVector = Icons.Filled.ChevronLeft,
                         contentDescription = null,
-                        tint = if (enabled) beltAccent.copy(alpha = 0.55f)
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f),
-                        modifier = Modifier.graphicsLayer {
-                            scaleX = if (isEnglish) -1f else 1f
-                        }
+                        tint = if (enabled) {
+                            beltAccent.copy(alpha = 0.55f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+                        },
+                        modifier = Modifier
+                            .size(18.dp)
+                            .graphicsLayer {
+                                scaleX = if (isEnglish) -1f else 1f
+                            }
                     )
                 }
             }
@@ -254,130 +298,235 @@ fun PracticeMenuDialog(
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(30.dp),
 
-            title = {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    color = Color.Transparent,
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(premiumHeaderBrush, RoundedCornerShape(24.dp))
-                            .padding(horizontal = 16.dp, vertical = 14.dp)
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Start
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = Color.White.copy(alpha = 0.16f),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
-                                ) {
-                                    Box(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Topic,
-                                            contentDescription = null,
-                                            tint = Color.White
-                                        )
-                                    }
-                                }
-
-                                Spacer(Modifier.width(12.dp))
-
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                ) {
-                                    Text(
-                                        text = tr("תרגול", "Practice"),
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White,
-                                        textAlign = textAlignPrimary,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Spacer(Modifier.height(2.dp))
-
-                                    Text(
-                                        text = tr("בחר פעולה כדי להתחיל", "Choose an action to begin"),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White.copy(alpha = 0.88f),
-                                        textAlign = textAlignPrimary,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
-
-                            Spacer(Modifier.height(12.dp))
-                            GradientDivider()
-                        }
-                    }
-                }
-            },
+            title = null,
 
             text = {
-                Surface(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(28.dp),
-                    color = Color.Transparent,
-                    shadowElevation = 0.dp
+                    verticalArrangement =
+                        Arrangement.spacedBy(6.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(graniteBrush, RoundedCornerShape(28.dp))
-                            .padding(horizontal = 2.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    /*
+                     * כרטיס הכותרת הצמוד לרשימת הפעולות.
+                     */
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(22.dp),
+                        color = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 6.dp
                     ) {
-                        ModernActionRow(
-                            title = tr("תרגול אקראי - $beltName", "Random Practice - $beltName"),
-                            icon = Icons.Filled.Casino,
-                            enabled = canUseExtras,
-                            onClick = { onRandomPractice(defaultBelt) }
-                        )
-
-                        ModernActionRow(
-                            title = tr("מבחן מסכם - $beltName", "Final Exam - $beltName"),
-                            icon = Icons.Filled.AssignmentTurnedIn,
-                            enabled = canUseExtras,
-                            onClick = { onFinalExam(defaultBelt) }
-                        )
-
-                        ModernActionRow(
-                            title = tr("תרגול לפי נושא", "Practice by Topic"),
-                            icon = Icons.Filled.Topic,
-                            enabled = canUseExtras,
-                            onClick = { showTopicsPicker = true }
-                        )
-
-                        if (!canUseExtras) {
-                            Spacer(Modifier.height(2.dp))
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.18f))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    brush = premiumHeaderBrush,
+                                    shape = RoundedCornerShape(22.dp)
+                                )
+                                .padding(
+                                    horizontal = 14.dp,
+                                    vertical = 9.dp
+                                ),
+                            verticalAlignment =
+                                Alignment.CenterVertically,
+                            horizontalArrangement =
+                                Arrangement.spacedBy(10.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment =
+                                    if (isEnglish) {
+                                        Alignment.Start
+                                    } else {
+                                        Alignment.End
+                                    },
+                                verticalArrangement =
+                                    Arrangement.spacedBy(1.dp)
                             ) {
                                 Text(
                                     text = tr(
-                                        "אפשרויות התרגול זמינות רק בהרשאות Extras/מנוי.",
-                                        "Practice options are available only with Extras / subscription access."
+                                        "תרגול",
+                                        "Practice"
                                     ),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    textAlign = textAlignPrimary
+                                    color = Color.White,
+                                    fontSize = 20.sp,
+                                    lineHeight = 22.sp,
+                                    fontWeight =
+                                        FontWeight.ExtraBold,
+                                    textAlign =
+                                        textAlignPrimary,
+                                    maxLines = 1,
+                                    modifier =
+                                        Modifier.fillMaxWidth()
                                 )
+
+                                Text(
+                                    text = tr(
+                                        "בחר פעולה כדי להתחיל",
+                                        "Choose an action to begin"
+                                    ),
+                                    color =
+                                        Color.White.copy(
+                                            alpha = 0.94f
+                                        ),
+                                    fontSize = 13.sp,
+                                    lineHeight = 15.sp,
+                                    fontWeight =
+                                        FontWeight.SemiBold,
+                                    textAlign =
+                                        textAlignPrimary,
+                                    maxLines = 1,
+                                    modifier =
+                                        Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Surface(
+                                modifier = Modifier.size(42.dp),
+                                shape =
+                                    RoundedCornerShape(14.dp),
+                                color =
+                                    Color.White.copy(
+                                        alpha = 0.18f
+                                    ),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        Color.White.copy(
+                                            alpha = 0.34f
+                                        )
+                                ),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 4.dp
+                            ) {
+                                Box(
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector =
+                                            Icons.Filled.Topic,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier =
+                                            Modifier.size(21.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    /*
+                     * שלושת כרטיסי הפעולה.
+                     */
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.Transparent,
+                        shadowElevation = 0.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color = Color.Transparent,
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                                .padding(
+                                    horizontal = 0.dp,
+                                    vertical = 0.dp
+                                ),
+                            verticalArrangement =
+                                Arrangement.spacedBy(8.dp)
+                        ) {
+                            ModernActionRow(
+                                title = tr(
+                                    "תרגול אקראי - $beltName",
+                                    "Random Practice - $beltName"
+                                ),
+                                icon = Icons.Filled.Casino,
+                                enabled = canUseExtras,
+                                onClick = {
+                                    onRandomPractice(
+                                        defaultBelt
+                                    )
+                                }
+                            )
+
+                            ModernActionRow(
+                                title = tr(
+                                    "מבחן מסכם - $beltName",
+                                    "Final Exam - $beltName"
+                                ),
+                                icon =
+                                    Icons.Filled.AssignmentTurnedIn,
+                                enabled = canUseExtras,
+                                onClick = {
+                                    onFinalExam(
+                                        defaultBelt
+                                    )
+                                }
+                            )
+
+                            ModernActionRow(
+                                title = tr(
+                                    "תרגול לפי נושא",
+                                    "Practice by Topic"
+                                ),
+                                icon = Icons.Filled.Topic,
+                                enabled = canUseExtras,
+                                onClick = {
+                                    showTopicsPicker = true
+                                }
+                            )
+
+                            if (!canUseExtras) {
+                                Surface(
+                                    shape =
+                                        RoundedCornerShape(
+                                            16.dp
+                                        ),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .error
+                                            .copy(
+                                                alpha = 0.08f
+                                            ),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .error
+                                                .copy(
+                                                    alpha = 0.18f
+                                                )
+                                    )
+                                ) {
+                                    Text(
+                                        text = tr(
+                                            "אפשרויות התרגול זמינות רק בהרשאות Extras/מנוי.",
+                                            "Practice options are available only with Extras / subscription access."
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                horizontal = 12.dp,
+                                                vertical = 8.dp
+                                            ),
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .error,
+                                        style =
+                                            MaterialTheme
+                                                .typography
+                                                .bodySmall,
+                                        textAlign =
+                                            textAlignPrimary
+                                    )
+                                }
                             }
                         }
                     }
@@ -385,10 +534,16 @@ fun PracticeMenuDialog(
             },
 
             confirmButton = {
-                TextButton(onClick = onDismiss) {
+                TextButton(
+                    onClick = onDismiss
+                ) {
                     Text(
-                        tr("סגור", "Close"),
-                        fontWeight = FontWeight.SemiBold,
+                        text = tr(
+                            "סגור",
+                            "Close"
+                        ),
+                        fontWeight =
+                            FontWeight.SemiBold,
                         color = beltAccent
                     )
                 }
@@ -482,10 +637,16 @@ private fun PracticeByTopicsPickerDialog(
         var selectedBelt by rememberSaveable { mutableStateOf<Belt?>(null) }
         var selectedTopic by rememberSaveable { mutableStateOf<String?>(null) }
 
-        var beltMenuExpanded by rememberSaveable { mutableStateOf(false) }
-        var topicMenuExpanded by rememberSaveable { mutableStateOf(false) }
+        var beltMenuExpanded by rememberSaveable {
+            mutableStateOf(false)
+        }
 
-        val topics = selectedBelt?.let { topicTitlesForBelt(it) }.orEmpty()
+        val topics =
+            selectedBelt
+                ?.let {
+                    topicTitlesForBelt(it)
+                }
+                .orEmpty()
 
         val selectedBeltAccent = selectedBelt?.color ?: MaterialTheme.colorScheme.primary
         val selectedBeltFieldBg = selectedBeltAccent.copy(alpha = 0.08f)
@@ -523,19 +684,26 @@ private fun PracticeByTopicsPickerDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                Brush.linearGradient(
+                                brush = Brush.linearGradient(
                                     colors = listOf(
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.92f),
-                                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.82f)
+                                        MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.tertiary
                                     )
                                 ),
-                                RoundedCornerShape(24.dp)
+                                shape = RoundedCornerShape(24.dp)
                             )
-                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                            .padding(
+                                horizontal = 16.dp,
+                                vertical = 12.dp
+                            )
                     ) {
                         Text(
-                            text = tr("תרגול לפי נושא", "Practice by Topic"),
-                            style = MaterialTheme.typography.titleLarge,
+                            text = tr(
+                                "תרגול לפי נושא",
+                                "Practice by Topic"
+                            ),
+                            fontSize = 21.sp,
+                            lineHeight = 24.sp,
                             fontWeight = FontWeight.Black,
                             textAlign = TextAlign.Center,
                             color = Color.White,
@@ -556,89 +724,191 @@ private fun PracticeByTopicsPickerDialog(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(graniteBrush, RoundedCornerShape(26.dp))
+                            .background(
+                                brush = graniteBrush,
+                                shape = RoundedCornerShape(26.dp)
+                            )
                             .verticalScroll(scrollState)
-                            .padding(horizontal = 6.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .padding(
+                                horizontal = 7.dp,
+                                vertical = 8.dp
+                            ),
+                        verticalArrangement =
+                            Arrangement.spacedBy(10.dp)
                     ) {
+                        /*
+                         * בחירת חגורה נשארת Dropdown.
+                         */
                         ExposedDropdownMenuBox(
                             expanded = beltMenuExpanded,
-                            onExpandedChange = { beltMenuExpanded = !beltMenuExpanded }
+                            onExpandedChange = {
+                                beltMenuExpanded =
+                                    !beltMenuExpanded
+                            }
                         ) {
                             Surface(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .fillMaxWidth(),
-                                shape = RoundedCornerShape(18.dp),
-                                color = selectedBeltFieldBg,
-                                shadowElevation = 8.dp,
-                                border = BorderStroke(1.dp, selectedBeltFieldBorder)
+                                shape = RoundedCornerShape(20.dp),
+                                color = Color.White,
+                                tonalElevation = 0.dp,
+                                shadowElevation = 3.dp,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        selectedBeltAccent.copy(
+                                            alpha = 0.30f
+                                        )
+                                )
                             ) {
-                                TextField(
-                                    value = selectedBelt?.let { if (isEnglish) it.en else it.heb }
-                                        ?: tr("בחר חגורה", "Choose Belt"),
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textStyle = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.SemiBold,
-                                        textAlign = textAlignPrimary
-                                    ),
-                                    colors = ExposedDropdownMenuDefaults.textFieldColors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        disabledIndicatorColor = Color.Transparent
-                                    ),
-                                    leadingIcon = {
-                                        Surface(
-                                            shape = RoundedCornerShape(999.dp),
-                                            color = selectedBeltAccent.copy(alpha = 0.14f),
-                                            border = BorderStroke(1.dp, selectedBeltAccent.copy(alpha = 0.20f))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 12.dp,
+                                            vertical = 10.dp
+                                        ),
+                                    verticalAlignment =
+                                        Alignment.CenterVertically,
+                                    horizontalArrangement =
+                                        Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Surface(
+                                        modifier = Modifier.size(36.dp),
+                                        shape = CircleShape,
+                                        color =
+                                            selectedBeltAccent.copy(
+                                                alpha = 0.11f
+                                            ),
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color =
+                                                selectedBeltAccent.copy(
+                                                    alpha = 0.22f
+                                                )
+                                        )
+                                    ) {
+                                        Box(
+                                            modifier =
+                                                Modifier.fillMaxSize(),
+                                            contentAlignment =
+                                                Alignment.Center
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .padding(horizontal = 10.dp, vertical = 8.dp)
-                                                    .width(10.dp)
-                                                    .height(10.dp)
+                                                    .size(12.dp)
                                                     .background(
-                                                        selectedBeltAccent,
-                                                        RoundedCornerShape(999.dp)
+                                                        color =
+                                                            selectedBeltAccent,
+                                                        shape =
+                                                            CircleShape
                                                     )
                                             )
                                         }
-                                    },
-                                    trailingIcon = {
-                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = beltMenuExpanded)
                                     }
-                                )
+
+                                    Text(
+                                        text =
+                                            selectedBelt?.let { belt ->
+                                                if (isEnglish) {
+                                                    belt.en
+                                                } else {
+                                                    belt.heb
+                                                }
+                                            } ?: tr(
+                                                "בחר חגורה",
+                                                "Choose Belt"
+                                            ),
+                                        modifier =
+                                            Modifier.weight(1f),
+                                        color =
+                                            if (selectedBelt != null) {
+                                                Color(0xFF172033)
+                                            } else {
+                                                Color(0xFF64748B)
+                                            },
+                                        fontSize = 15.sp,
+                                        lineHeight = 18.sp,
+                                        fontWeight =
+                                            if (selectedBelt != null) {
+                                                FontWeight.Bold
+                                            } else {
+                                                FontWeight.Medium
+                                            },
+                                        textAlign =
+                                            textAlignPrimary,
+                                        maxLines = 1
+                                    )
+
+                                    Surface(
+                                        modifier = Modifier.size(30.dp),
+                                        shape = CircleShape,
+                                        color =
+                                            selectedBeltAccent.copy(
+                                                alpha = 0.09f
+                                            )
+                                    ) {
+                                        Box(
+                                            modifier =
+                                                Modifier.fillMaxSize(),
+                                            contentAlignment =
+                                                Alignment.Center
+                                        ) {
+                                            ExposedDropdownMenuDefaults
+                                                .TrailingIcon(
+                                                    expanded =
+                                                        beltMenuExpanded
+                                                )
+                                        }
+                                    }
+                                }
                             }
 
                             ExposedDropdownMenu(
                                 expanded = beltMenuExpanded,
-                                onDismissRequest = { beltMenuExpanded = false }
+                                onDismissRequest = {
+                                    beltMenuExpanded = false
+                                }
                             ) {
                                 allBelts.forEach { belt ->
                                     DropdownMenuItem(
                                         text = {
                                             Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                                verticalAlignment =
+                                                    Alignment.CenterVertically,
+                                                horizontalArrangement =
+                                                    Arrangement.spacedBy(
+                                                        10.dp
+                                                    )
                                             ) {
                                                 Box(
                                                     modifier = Modifier
-                                                        .width(10.dp)
-                                                        .height(10.dp)
+                                                        .size(10.dp)
                                                         .background(
-                                                            belt.color,
-                                                            RoundedCornerShape(999.dp)
+                                                            color =
+                                                                belt.color,
+                                                            shape =
+                                                                CircleShape
                                                         )
                                                 )
+
                                                 Text(
-                                                    text = if (isEnglish) belt.en else belt.heb,
-                                                    fontWeight = if (selectedBelt == belt) FontWeight.Bold else FontWeight.Medium
+                                                    text =
+                                                        if (isEnglish) {
+                                                            belt.en
+                                                        } else {
+                                                            belt.heb
+                                                        },
+                                                    fontWeight =
+                                                        if (
+                                                            selectedBelt ==
+                                                            belt
+                                                        ) {
+                                                            FontWeight.Bold
+                                                        } else {
+                                                            FontWeight.Medium
+                                                        }
                                                 )
                                             }
                                         },
@@ -652,90 +922,285 @@ private fun PracticeByTopicsPickerDialog(
                             }
                         }
 
-                        ExposedDropdownMenuBox(
-                            expanded = topicMenuExpanded,
-                            onExpandedChange = {
-                                if (selectedBelt != null) topicMenuExpanded = !topicMenuExpanded
-                            }
+                        AnimatedVisibility(
+                            visible = selectedBelt == null
                         ) {
                             Surface(
-                                modifier = Modifier
-                                    .menuAnchor()
-                                    .fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(18.dp),
-                                color = selectedBeltFieldBg,
-                                shadowElevation = 8.dp,
-                                border = BorderStroke(1.dp, selectedBeltFieldBorder)
+                                color =
+                                    Color.White.copy(
+                                        alpha = 0.72f
+                                    ),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        Color(0xFFCBD5E1).copy(
+                                            alpha = 0.65f
+                                        )
+                                )
                             ) {
-                                TextField(
-                                    value = selectedTopic?.let { topicDisplayName(it) }
-                                        ?: tr("בחר נושא", "Choose Topic"),
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    enabled = selectedBelt != null,
-                                    textStyle = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.SemiBold,
-                                        textAlign = textAlignPrimary
+                                Text(
+                                    text = tr(
+                                        "בחר חגורה כדי להציג את הנושאים",
+                                        "Choose a belt to display the topics"
                                     ),
-                                    colors = ExposedDropdownMenuDefaults.textFieldColors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        disabledIndicatorColor = Color.Transparent
-                                    ),
-                                    leadingIcon = {
-                                        Surface(
-                                            shape = RoundedCornerShape(999.dp),
-                                            color = selectedBeltAccent.copy(alpha = 0.14f),
-                                            border = BorderStroke(1.dp, selectedBeltAccent.copy(alpha = 0.20f))
-                                        ) {
-                                            Box(
-                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Topic,
-                                                    contentDescription = null,
-                                                    tint = selectedBeltAccent
-                                                )
-                                            }
-                                        }
-                                    },
-                                    trailingIcon = {
-                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = topicMenuExpanded)
-                                    }
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 14.dp,
+                                            vertical = 12.dp
+                                        ),
+                                    color = Color(0xFF64748B),
+                                    fontSize = 13.sp,
+                                    lineHeight = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.Center
                                 )
                             }
+                        }
 
-                            ExposedDropdownMenu(
-                                expanded = topicMenuExpanded,
-                                onDismissRequest = { topicMenuExpanded = false }
+                        /*
+                         * לאחר בחירת חגורה מוצגים הנושאים
+                         * ככרטיסי פרימיום ולא כ־Dropdown.
+                         */
+                        AnimatedVisibility(
+                            visible = selectedBelt != null
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(8.dp)
                             ) {
+                                Text(
+                                    text = tr(
+                                        "בחר נושא",
+                                        "Choose a topic"
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 5.dp,
+                                            vertical = 2.dp
+                                        ),
+                                    color = Color(0xFF334155),
+                                    fontSize = 14.sp,
+                                    lineHeight = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = textAlignPrimary
+                                )
+
                                 topics.forEach { topic ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = topicDisplayName(topic),
-                                                fontWeight = if (selectedTopic == topic) FontWeight.Bold else FontWeight.Medium
-                                            )
-                                        },
-                                        onClick = {
-                                            val belt = selectedBelt ?: return@DropdownMenuItem
+                                    val isSelected =
+                                        selectedTopic == topic
 
-                                            selectedTopic = topic
-                                            topicMenuExpanded = false
+                                    val topicShape =
+                                        RoundedCornerShape(20.dp)
 
-                                            onConfirm(
-                                                PracticeByTopicsSelection(
-                                                    belts = setOf(belt),
-                                                    topicsByBelt = mapOf(belt to setOf(topic))
+                                    val topicInteraction =
+                                        remember(topic) {
+                                            MutableInteractionSource()
+                                        }
+
+                                    val topicPressed by
+                                    topicInteraction
+                                        .collectIsPressedAsState()
+
+                                    val topicBackground by
+                                    animateColorAsState(
+                                        targetValue =
+                                            when {
+                                                isSelected ->
+                                                    selectedBeltAccent
+                                                        .copy(
+                                                            alpha =
+                                                                0.16f
+                                                        )
+
+                                                topicPressed ->
+                                                    selectedBeltAccent
+                                                        .copy(
+                                                            alpha =
+                                                                0.10f
+                                                        )
+
+                                                else ->
+                                                    Color.White
+                                            },
+                                        label =
+                                            "topic_card_background"
+                                    )
+
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(62.dp)
+                                            .clip(topicShape)
+                                            .clickable(
+                                                interactionSource =
+                                                    topicInteraction,
+                                                indication =
+                                                    LocalIndication.current
+                                            ) {
+                                                val belt =
+                                                    selectedBelt
+                                                        ?: return@clickable
+
+                                                selectedTopic = topic
+
+                                                onConfirm(
+                                                    PracticeByTopicsSelection(
+                                                        belts =
+                                                            setOf(belt),
+                                                        topicsByBelt =
+                                                            mapOf(
+                                                                belt to
+                                                                        setOf(
+                                                                            topic
+                                                                        )
+                                                            )
+                                                    )
                                                 )
+                                            },
+                                        shape = topicShape,
+                                        color = topicBackground,
+                                        tonalElevation = 0.dp,
+                                        shadowElevation =
+                                            if (isSelected) {
+                                                5.dp
+                                            } else {
+                                                2.dp
+                                            },
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color =
+                                                if (isSelected) {
+                                                    selectedBeltAccent
+                                                        .copy(
+                                                            alpha =
+                                                                0.48f
+                                                        )
+                                                } else {
+                                                    selectedBeltAccent
+                                                        .copy(
+                                                            alpha =
+                                                                0.17f
+                                                        )
+                                                }
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    horizontal = 12.dp,
+                                                    vertical = 9.dp
+                                                ),
+                                            verticalAlignment =
+                                                Alignment.CenterVertically,
+                                            horizontalArrangement =
+                                                Arrangement.spacedBy(
+                                                    10.dp
+                                                )
+                                        ) {
+                                            Surface(
+                                                modifier =
+                                                    Modifier.size(40.dp),
+                                                shape = CircleShape,
+                                                color =
+                                                    selectedBeltAccent
+                                                        .copy(
+                                                            alpha =
+                                                                if (
+                                                                    isSelected
+                                                                ) {
+                                                                    0.20f
+                                                                } else {
+                                                                    0.11f
+                                                                }
+                                                        ),
+                                                border = BorderStroke(
+                                                    width = 1.dp,
+                                                    color =
+                                                        selectedBeltAccent
+                                                            .copy(
+                                                                alpha =
+                                                                    0.25f
+                                                            )
+                                                )
+                                            ) {
+                                                Box(
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxSize(),
+                                                    contentAlignment =
+                                                        Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector =
+                                                            Icons.Filled.Topic,
+                                                        contentDescription =
+                                                            null,
+                                                        tint =
+                                                            selectedBeltAccent,
+                                                        modifier =
+                                                            Modifier.size(
+                                                                20.dp
+                                                            )
+                                                    )
+                                                }
+                                            }
+
+                                            Text(
+                                                text =
+                                                    topicDisplayName(
+                                                        topic
+                                                    ),
+                                                modifier =
+                                                    Modifier.weight(1f),
+                                                color =
+                                                    Color(0xFF172033),
+                                                fontSize = 15.sp,
+                                                lineHeight = 18.sp,
+                                                fontWeight =
+                                                    if (isSelected) {
+                                                        FontWeight.Black
+                                                    } else {
+                                                        FontWeight.SemiBold
+                                                    },
+                                                textAlign =
+                                                    textAlignPrimary,
+                                                maxLines = 1,
+                                                overflow =
+                                                    TextOverflow.Ellipsis
+                                            )
+
+                                            Icon(
+                                                imageVector =
+                                                    Icons.Filled.ChevronLeft,
+                                                contentDescription = null,
+                                                tint =
+                                                    selectedBeltAccent
+                                                        .copy(
+                                                            alpha = 0.72f
+                                                        ),
+                                                modifier = Modifier
+                                                    .size(19.dp)
+                                                    .graphicsLayer {
+                                                        scaleX =
+                                                            if (
+                                                                isEnglish
+                                                            ) {
+                                                                -1f
+                                                            } else {
+                                                                1f
+                                                            }
+                                                    }
                                             )
                                         }
-                                    )
+                                    }
                                 }
                             }
                         }
@@ -748,13 +1213,28 @@ private fun PracticeByTopicsPickerDialog(
             dismissButton = {
                 Surface(
                     shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.60f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                    color =
+                        MaterialTheme.colorScheme.surface.copy(
+                            alpha = 0.82f
+                        ),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color =
+                            MaterialTheme.colorScheme.outline
+                                .copy(alpha = 0.14f)
+                    )
                 ) {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(
+                        onClick = onDismiss
+                    ) {
                         Text(
-                            tr("סגור", "Close"),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                            text = tr(
+                                "סגור",
+                                "Close"
+                            ),
+                            color =
+                                MaterialTheme.colorScheme.onSurface
+                                    .copy(alpha = 0.80f),
                             fontWeight = FontWeight.SemiBold
                         )
                     }

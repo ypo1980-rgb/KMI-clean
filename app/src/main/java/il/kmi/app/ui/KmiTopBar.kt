@@ -1007,6 +1007,31 @@ fun KmiTopBar(
 
         if (showQuickActions && quickActionsExpanded) {
             Popup(
+                alignment = Alignment.TopStart,
+                properties = PopupProperties(
+                    focusable = false,
+                    dismissOnBackPress = false,
+                    dismissOnClickOutside = false,
+                    clippingEnabled = false
+                )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember {
+                                MutableInteractionSource()
+                            }
+                        ) {
+                            quickActionsExpanded = false
+                        }
+                )
+            }
+        }
+
+        if (showQuickActions && quickActionsExpanded) {
+            Popup(
                 alignment = AbsoluteAlignment.TopRight,
                 offset = IntOffset(
                     x = with(density) { (-2).dp.roundToPx() },

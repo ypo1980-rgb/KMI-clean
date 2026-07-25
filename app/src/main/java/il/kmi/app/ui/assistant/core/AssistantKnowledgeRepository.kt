@@ -1044,32 +1044,7 @@ object AssistantKnowledgeRepository {
         question: String,
         isEnglish: Boolean
     ): List<AssistantSuggestedAction> {
-        return listOf(
-            AssistantSuggestedAction(
-                id = "exercise_more_detail",
-                labelHe = "הסבר מפורט יותר",
-                labelEn = "Explain in more detail",
-                queryHe = "תן הסבר מפורט יותר על $question",
-                queryEn = "Explain $question in more detail",
-                targetMode = AssistantIntent.EXPLAIN_EXERCISE
-            ),
-            AssistantSuggestedAction(
-                id = "exercise_starting_position",
-                labelHe = "עמידת מוצא",
-                labelEn = "Starting position",
-                queryHe = "מה עמידת המוצא של $question",
-                queryEn = "What is the starting position for $question",
-                targetMode = AssistantIntent.EXPLAIN_EXERCISE
-            ),
-            AssistantSuggestedAction(
-                id = "exercise_similar",
-                labelHe = "תרגילים דומים",
-                labelEn = "Similar exercises",
-                queryHe = "הצג תרגילים דומים ל-$question",
-                queryEn = "Show exercises similar to $question",
-                targetMode = AssistantIntent.SEARCH_MATERIAL
-            )
-        )
+        return emptyList()
     }
 
     private fun materialActions(

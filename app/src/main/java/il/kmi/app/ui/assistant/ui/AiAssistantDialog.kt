@@ -704,61 +704,110 @@ private fun findExplanationForHit(
     topic: String,
     isEnglish: Boolean = false
 ): String {
-    val display = ExerciseTitleFormatter
-        .displayName(rawItem)
-        .ifBlank { rawItem }
-        .trim()
+    val cleanRawItem =
+        rawItem
+            .trim()
+            .replace(
+                Regex("\\s+"),
+                " "
+            )
 
-    val normalizedRaw = normalizeExerciseQuery(rawItem)
-    val normalizedDisplay = normalizeExerciseQuery(display)
+    val displayItem =
+        ExerciseTitleFormatter
+            .displayName(cleanRawItem)
+            .ifBlank {
+                cleanRawItem
+            }
+            .trim()
 
-    val candidates = buildList {
-        add(rawItem)
-        add(display)
-        add(normalizedRaw)
-        add(normalizedDisplay)
-        add(normalizedRaw.substringBefore("(").trim())
-        add(normalizedDisplay.substringBefore("(").trim())
+    val canonicalAlias =
+        resolveExerciseAlias(
+            displayItem
+        )
+            .trim()
 
-        if (" " in normalizedRaw) {
-            add(normalizedRaw.substringAfterLast(" ").trim())
+    /*
+     * משתמשים רק בשמות מלאים ובטוחים.
+     *
+     * אסור לשלוח ל־Resolver מילה אחרונה בלבד כמו:
+     * "מלפנים", "חיצונית", "בסיבוב" או "ימין",
+     * משום שהיא עלולה להתאים לתרגיל אחר.
+     */
+    val candidates =
+        linkedSetOf<String>().apply {
+            add(cleanRawItem)
+            add(displayItem)
+            add(canonicalAlias)
+
+            add(
+                cleanRawItem
+                    .substringBefore("(")
+                    .trim()
+            )
+
+            add(
+                displayItem
+                    .substringBefore("(")
+                    .trim()
+            )
         }
+            .map { candidate ->
+                candidate
+                    .trim()
+                    .replace(
+                        Regex("\\s+"),
+                        " "
+                    )
+            }
+            .filter { candidate ->
+                candidate.isNotBlank()
+            }
+            .distinct()
 
-        if (" " in normalizedDisplay) {
-            add(normalizedDisplay.substringAfterLast(" ").trim())
-        }
-    }
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
+    candidates.forEach { candidate ->
+        val resolved =
+            ExerciseExplanationResolver.get(
+                belt = belt,
+                topic = topic,
+                item = candidate,
+                isEnglish = isEnglish
+            )
+                .trim()
 
-    for (candidate in candidates) {
-        val resolved = ExerciseExplanationResolver.get(
-            belt = belt,
-            topic = topic,
-            item = candidate,
-            isEnglish = isEnglish
-        ).trim()
+        val cleaned =
+            if ("::" in resolved) {
+                resolved
+                    .split("::")
+                    .map { part ->
+                        part.trim()
+                    }
+                    .lastOrNull { part ->
+                        part.isNotBlank()
+                    }
+                    ?: resolved
+            } else {
+                resolved
+            }
+                .trim()
 
-        val cleaned = if ("::" in resolved) {
-            resolved
-                .split("::")
-                .map { it.trim() }
-                .lastOrNull { it.isNotBlank() }
-                ?: resolved
-        } else {
-            resolved
-        }.trim()
-
-        val isFallback = if (isEnglish) {
-            cleaned.isBlank() ||
-                    cleaned.startsWith("Detailed explanation for:") ||
-                    cleaned.startsWith("There is currently no explanation")
-        } else {
-            cleaned.isBlank() ||
-                    cleaned.startsWith("הסבר מפורט על") ||
-                    cleaned.startsWith("אין כרגע")
-        }
+        val isFallback =
+            if (isEnglish) {
+                cleaned.isBlank() ||
+                        cleaned.startsWith(
+                            "Detailed explanation for:"
+                        ) ||
+                        cleaned.startsWith(
+                            "There is currently no explanation"
+                        )
+            } else {
+                cleaned.isBlank() ||
+                        cleaned.startsWith(
+                            "הסבר מפורט על"
+                        ) ||
+                        cleaned.startsWith(
+                            "אין כרגע"
+                        )
+            }
 
         if (!isFallback) {
             return cleaned
@@ -766,9 +815,9 @@ private fun findExplanationForHit(
     }
 
     return if (isEnglish) {
-        "There is currently no detailed explanation for this exercise in the database."
+        "There is currently no detailed explanation for this exact exercise in the database."
     } else {
-        "אין כרגע הסבר מפורט לתרגיל הזה במאגר."
+        "אין כרגע הסבר מפורט לתרגיל המדויק הזה במאגר."
     }
 }
 
@@ -952,29 +1001,36 @@ private fun getExerciseAnswerWithFallback(
         }.trim()
     }
 
-    val beltsToTry = listOfNotNull(
-        preferredBelt,
-        Belt.YELLOW,
-        Belt.ORANGE,
-        Belt.GREEN,
-        Belt.BLUE,
-        Belt.BROWN,
-        Belt.BLACK
-    ).distinct()
+    preferredBelt?.let { belt ->
+        val local =
+            findExplanationForHit(
+                belt = belt,
+                rawItem = rawExercise,
+                topic = "",
+                isEnglish = isEnglish
+            )
+                .trim()
 
-    for (belt in beltsToTry) {
-        val local = findExplanationForHit(
-            belt = belt,
-            rawItem = rawExercise,
-            topic = "",
-            isEnglish = isEnglish
-        ).trim()
+        val isFallback =
+            if (isEnglish) {
+                local.isBlank() ||
+                        local.startsWith(
+                            "There is currently no"
+                        ) ||
+                        local.startsWith(
+                            "Detailed explanation for:"
+                        )
+            } else {
+                local.isBlank() ||
+                        local.startsWith(
+                            "אין כרגע"
+                        ) ||
+                        local.startsWith(
+                            "הסבר מפורט על"
+                        )
+            }
 
-        if (
-            local.isNotBlank() &&
-            !local.startsWith("אין כרגע") &&
-            !local.startsWith("הסבר מפורט על")
-        ) {
+        if (!isFallback) {
             return local
         }
     }
@@ -3051,88 +3107,132 @@ fun AiAssistantDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Surface(
-                                    modifier = Modifier.size(50.dp),
-                                    shape = RoundedCornerShape(17.dp),
-                                    color = Color.White.copy(alpha = 0.20f),
-                                    tonalElevation = 0.dp,
-                                    shadowElevation = 8.dp,
-                                    border = androidx.compose.foundation.BorderStroke(
-                                        width = 1.dp,
-                                        color = Color.White.copy(alpha = 0.34f)
-                                    )
-                                ) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = when (assistantMode) {
-                                                AssistantMode.EXERCISE -> Icons.Filled.FitnessCenter
-                                                AssistantMode.TRAININGS -> Icons.Filled.RecordVoiceOver
-                                                AssistantMode.KMI_MATERIAL -> Icons.Filled.MenuBook
-                                                null -> Icons.Filled.AutoAwesome
-                                            },
-                                            contentDescription = when (assistantMode) {
-                                                AssistantMode.EXERCISE -> tr(
-                                                    "מצב מידע על תרגיל",
-                                                    "Exercise information mode"
-                                                )
+                                /*
+                                 * אייקון המצב הוא מידע חזותי בלבד,
+                                 * ולכן אינו מוצג עוד בתוך כפתור.
+                                 */
+                                Icon(
+                                    imageVector = when (assistantMode) {
+                                        AssistantMode.EXERCISE ->
+                                            Icons.Filled.FitnessCenter
 
-                                                AssistantMode.TRAININGS -> tr(
-                                                    "מצב מידע על אימונים",
-                                                    "Training information mode"
-                                                )
+                                        AssistantMode.TRAININGS ->
+                                            Icons.Filled.RecordVoiceOver
 
-                                                AssistantMode.KMI_MATERIAL -> tr(
-                                                    "מצב חומר ק.מ.י",
-                                                    "KAMI material mode"
-                                                )
+                                        AssistantMode.KMI_MATERIAL ->
+                                            Icons.Filled.MenuBook
 
-                                                null -> tr(
-                                                    "בחירת מצב עוזר",
-                                                    "Assistant mode selection"
-                                                )
-                                            },
-                                            tint = Color.White,
-                                            modifier = Modifier.size(26.dp)
-                                        )
-                                    }
-                                }
-
-                                Spacer(Modifier.width(12.dp))
-
-                                Text(
-                                    text = when (assistantMode) {
-                                        null -> tr("בחר מצב כדי להתחיל", "Choose a mode to begin")
+                                        null ->
+                                            Icons.Filled.AutoAwesome
+                                    },
+                                    contentDescription = when (assistantMode) {
                                         AssistantMode.EXERCISE -> tr(
-                                            "מצב: מידע / הסבר על תרגיל",
-                                            "Mode: Exercise info / explanation"
+                                            "מצב מידע על תרגיל",
+                                            "Exercise information mode"
                                         )
 
                                         AssistantMode.TRAININGS -> tr(
-                                            "מצב: מידע על אימונים",
-                                            "Mode: Training information"
+                                            "מצב מידע על אימונים",
+                                            "Training information mode"
                                         )
 
                                         AssistantMode.KMI_MATERIAL -> tr(
-                                            "מצב: חומר ק.מ.י",
-                                            "Mode: KAMI material"
+                                            "מצב חומר ק.מ.י",
+                                            "KAMI material mode"
+                                        )
+
+                                        null -> tr(
+                                            "בחירת מצב עוזר",
+                                            "Assistant mode selection"
                                         )
                                     },
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.titleSmall,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(25.dp)
+                                )
+
+                                Spacer(Modifier.width(10.dp))
+
+                                Text(
+                                    text = when (assistantMode) {
+                                        null ->
+                                            tr(
+                                                "בחר מצב כדי להתחיל",
+                                                "Choose a mode to begin"
+                                            )
+
+                                        AssistantMode.EXERCISE ->
+                                            tr(
+                                                "מצב: מידע / הסבר על תרגיל",
+                                                "Mode: Exercise info / explanation"
+                                            )
+
+                                        AssistantMode.TRAININGS ->
+                                            tr(
+                                                "מצב: מידע על אימונים",
+                                                "Mode: Training information"
+                                            )
+
+                                        AssistantMode.KMI_MATERIAL ->
+                                            tr(
+                                                "מצב: חומר ק.מ.י",
+                                                "Mode: KAMI material"
+                                            )
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(
+                                            horizontal = 6.dp
+                                        ),
+                                    style =
+                                        MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = textAlignPrimary,
                                     color = Color.White
                                 )
 
-                                IconButton(onClick = { backToModePicker() }) {
-                                    Icon(
-                                        imageVector = Icons.Filled.SwapHoriz,
-                                        contentDescription = tr("החלף נושא", "Switch topic"),
-                                        tint = Color.White
-                                    )
+                                /*
+                                 * זהו הכפתור הפעיל שמחזיר למסך בחירת המצבים.
+                                 * המסגרת והרקע מדגישים כעת שהוא לחיץ.
+                                 */
+                                Surface(
+                                    onClick = {
+                                        backToModePicker()
+                                    },
+                                    modifier = Modifier.size(48.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color =
+                                        Color.White.copy(
+                                            alpha = 0.20f
+                                        ),
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 8.dp,
+                                    border =
+                                        androidx.compose.foundation.BorderStroke(
+                                            width = 1.dp,
+                                            color =
+                                                Color.White.copy(
+                                                    alpha = 0.36f
+                                                )
+                                        )
+                                ) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment =
+                                            Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector =
+                                                Icons.Filled.SwapHoriz,
+                                            contentDescription =
+                                                tr(
+                                                    "חזרה לבחירת מצב",
+                                                    "Back to mode selection"
+                                                ),
+                                            tint = Color.White,
+                                            modifier =
+                                                Modifier.size(25.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

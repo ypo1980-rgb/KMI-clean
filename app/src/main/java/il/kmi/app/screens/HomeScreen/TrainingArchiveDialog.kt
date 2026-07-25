@@ -648,10 +648,10 @@ fun TrainingArchiveDialog(
                                     .fillMaxWidth(),
                                 contentPadding =
                                     PaddingValues(
-                                        start = 22.dp,
-                                        end = 22.dp,
-                                        top = 12.dp,
-                                        bottom = 26.dp
+                                        start = 14.dp,
+                                        end = 14.dp,
+                                        top = 10.dp,
+                                        bottom = 24.dp
                                     ),
                                 verticalArrangement =
                                     Arrangement.spacedBy(
@@ -1347,7 +1347,7 @@ private fun TrainingArchiveCard(
                     Arrangement.spacedBy(7.dp)
             ) {
                 Surface(
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(26.dp),
                     shape = CircleShape,
                     color =
                         statusColor.copy(
@@ -1368,7 +1368,7 @@ private fun TrainingArchiveCard(
                             contentDescription = null,
                             tint = statusColor,
                             modifier =
-                                Modifier.size(17.dp)
+                                Modifier.size(14.dp)
                         )
                     }
                 }
@@ -1399,12 +1399,12 @@ private fun TrainingArchiveCard(
                     Text(
                         text = "$dateText · $timeText",
                         color = Color(0xFF334155),
-                        fontSize = 14.sp,
-                        lineHeight = 16.sp,
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
