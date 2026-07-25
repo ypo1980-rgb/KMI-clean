@@ -1914,7 +1914,7 @@ fun HomeScreen(
                         )
                 )
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(4.dp))
 
                 fun datesRange(
                     from: LocalDate,
@@ -3182,23 +3182,37 @@ fun HomeScreen(
                         tonalElevation = 12.dp,
 
                         title = {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment =
-                                    Alignment.CenterHorizontally
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        top = 0.dp,
+                                        bottom = 2.dp
+                                    ),
+                                horizontalArrangement =
+                                    Arrangement.Center,
+                                verticalAlignment =
+                                    Alignment.CenterVertically
                             ) {
                                 Surface(
-                                    modifier = Modifier.size(54.dp),
+                                    modifier = Modifier.size(42.dp),
                                     shape = CircleShape,
                                     color =
-                                        dialogAccent.copy(alpha = 0.12f),
+                                        dialogAccent.copy(
+                                            alpha = 0.10f
+                                        ),
                                     border = BorderStroke(
                                         width = 1.dp,
                                         color =
-                                            dialogAccent.copy(alpha = 0.28f)
-                                    )
+                                            dialogAccent.copy(
+                                                alpha = 0.22f
+                                            )
+                                    ),
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 0.dp
                                 ) {
                                     Box(
+                                        modifier = Modifier.fillMaxSize(),
                                         contentAlignment =
                                             Alignment.Center
                                     ) {
@@ -3218,16 +3232,19 @@ fun HomeScreen(
                                                 },
                                             contentDescription = null,
                                             tint = dialogAccent,
-                                            modifier = Modifier.size(28.dp)
+                                            modifier =
+                                                Modifier.size(22.dp)
                                         )
                                     }
                                 }
 
-                                Spacer(Modifier.height(10.dp))
+                                Spacer(Modifier.width(10.dp))
 
                                 Text(
                                     text =
-                                        when (trainingManagementMode) {
+                                        when (
+                                            trainingManagementMode
+                                        ) {
                                             TrainingManagementMode.MENU ->
                                                 if (isEnglish) {
                                                     "Manage training"
@@ -3250,9 +3267,11 @@ fun HomeScreen(
                                                 }
                                         },
                                     fontWeight = FontWeight.Black,
-                                    fontSize = 23.sp,
+                                    fontSize = 22.sp,
+                                    lineHeight = 24.sp,
                                     color = Color(0xFF172033),
-                                    textAlign = TextAlign.Center
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1
                                 )
                             }
                         },
@@ -3897,331 +3916,436 @@ fun HomeScreen(
 
                                 TrainingManagementMode.CANCEL,
                                 TrainingManagementMode.CHANGE_TIME -> {
-                                    Button(
-                                        onClick = {
-                                            clickSound()
-                                            haptic(true)
-
-                                            if (isSavingTrainingChange) {
-                                                return@Button
-                                            }
-
-                                            val cleanReason =
-                                                trainingChangeReason.trim()
-
-                                            if (cleanReason.length < 3) {
-                                                trainingManagementError =
-                                                    if (isEnglish) {
-                                                        "Please enter a reason of at least 3 characters."
-                                                    } else {
-                                                        "יש להזין סיבה באורך של 3 תווים לפחות."
-                                                    }
-
-                                                return@Button
-                                            }
-
-                                            val changedByName =
-                                                coachFromPrefs
-                                                    .trim()
-                                                    .ifBlank {
-                                                        freeNameUi.trim()
-                                                    }
-                                                    .ifBlank {
-                                                        FirebaseAuth.getInstance()
-                                                            .currentUser
-                                                            ?.displayName
-                                                            ?.trim()
-                                                            .orEmpty()
-                                                    }
-                                                    .ifBlank {
-                                                        if (isEnglish) {
-                                                            "Coach"
-                                                        } else {
-                                                            "מאמן"
-                                                        }
-                                                    }
-
-                                            isSavingTrainingChange = true
-                                            trainingManagementError = null
-
-                                            when (trainingManagementMode) {
-
-                                                TrainingManagementMode.CANCEL -> {
-                                                    TrainingOverrideRepository.cancelTraining(
-                                                        training =
-                                                            selectedItem.training,
-                                                        branch =
-                                                            selectedItem.branch,
-                                                        group =
-                                                            selectedItem.group,
-                                                        reason =
-                                                            cleanReason,
-                                                        changedByName =
-                                                            changedByName,
-                                                        onResult = { success, error ->
-                                                            isSavingTrainingChange = false
-
-                                                            if (success) {
-                                                                closeTrainingManagementDialog()
-                                                            } else {
-                                                                trainingManagementError =
-                                                                    if (isEnglish) {
-                                                                        error?.localizedMessage
-                                                                            ?.takeIf {
-                                                                                it.isNotBlank()
-                                                                            }
-                                                                            ?: "The training could not be cancelled."
-                                                                    } else {
-                                                                        error?.localizedMessage
-                                                                            ?.takeIf {
-                                                                                it.isNotBlank()
-                                                                            }
-                                                                            ?: "לא ניתן היה לבטל את האימון."
-                                                                    }
-                                                            }
-                                                        }
-                                                    )
-                                                }
-
-                                                TrainingManagementMode.CHANGE_TIME -> {
-                                                    fun parseTime(
-                                                        rawValue: String
-                                                    ): Pair<Int, Int>? {
-                                                        val parts =
-                                                            rawValue
-                                                                .trim()
-                                                                .split(":")
-
-                                                        if (parts.size != 2) {
-                                                            return null
-                                                        }
-
-                                                        val hour =
-                                                            parts[0].toIntOrNull()
-                                                                ?: return null
-
-                                                        val minute =
-                                                            parts[1].toIntOrNull()
-                                                                ?: return null
-
-                                                        if (
-                                                            hour !in 0..23 ||
-                                                            minute !in 0..59
-                                                        ) {
-                                                            return null
-                                                        }
-
-                                                        return hour to minute
-                                                    }
-
-                                                    val parsedStart =
-                                                        parseTime(changedStartTime)
-
-                                                    val parsedEnd =
-                                                        parseTime(changedEndTime)
-
-                                                    if (
-                                                        parsedStart == null ||
-                                                        parsedEnd == null
-                                                    ) {
-                                                        isSavingTrainingChange = false
-
-                                                        trainingManagementError =
-                                                            if (isEnglish) {
-                                                                "Enter valid times in HH:mm format."
-                                                            } else {
-                                                                "יש להזין שעות תקינות בפורמט HH:mm."
-                                                            }
-
-                                                        return@Button
-                                                    }
-
-                                                    /*
-                                                     * שומרים את התאריך המקורי של האימון
-                                                     * ומשנים רק את השעה.
-                                                     */
-                                                    val newStartCalendar =
-                                                        (
-                                                                selectedItem.training.cal
-                                                                    .clone() as Calendar
-                                                                ).apply {
-                                                                set(
-                                                                    Calendar.HOUR_OF_DAY,
-                                                                    parsedStart.first
-                                                                )
-                                                                set(
-                                                                    Calendar.MINUTE,
-                                                                    parsedStart.second
-                                                                )
-                                                                set(Calendar.SECOND, 0)
-                                                                set(Calendar.MILLISECOND, 0)
-                                                            }
-
-                                                    val newEndCalendar =
-                                                        (
-                                                                selectedItem.training.cal
-                                                                    .clone() as Calendar
-                                                                ).apply {
-                                                                set(
-                                                                    Calendar.HOUR_OF_DAY,
-                                                                    parsedEnd.first
-                                                                )
-                                                                set(
-                                                                    Calendar.MINUTE,
-                                                                    parsedEnd.second
-                                                                )
-                                                                set(Calendar.SECOND, 0)
-                                                                set(Calendar.MILLISECOND, 0)
-                                                            }
-
-                                                    /*
-                                                     * אם שעת הסיום מוקדמת משעת ההתחלה,
-                                                     * האימון מסתיים ביום הבא.
-                                                     */
-                                                    if (
-                                                        newEndCalendar.timeInMillis <=
-                                                        newStartCalendar.timeInMillis
-                                                    ) {
-                                                        newEndCalendar.add(
-                                                            Calendar.DAY_OF_YEAR,
-                                                            1
-                                                        )
-                                                    }
-
-                                                    TrainingOverrideRepository.changeTrainingTime(
-                                                        training =
-                                                            selectedItem.training,
-                                                        branch =
-                                                            selectedItem.branch,
-                                                        group =
-                                                            selectedItem.group,
-                                                        newStartMillis =
-                                                            newStartCalendar.timeInMillis,
-                                                        newEndMillis =
-                                                            newEndCalendar.timeInMillis,
-                                                        reason =
-                                                            cleanReason,
-                                                        changedByName =
-                                                            changedByName,
-                                                        onResult = { success, error ->
-                                                            isSavingTrainingChange = false
-
-                                                            if (success) {
-                                                                closeTrainingManagementDialog()
-                                                            } else {
-                                                                trainingManagementError =
-                                                                    if (isEnglish) {
-                                                                        error?.localizedMessage
-                                                                            ?.takeIf {
-                                                                                it.isNotBlank()
-                                                                            }
-                                                                            ?: "The new training time could not be saved."
-                                                                    } else {
-                                                                        error?.localizedMessage
-                                                                            ?.takeIf {
-                                                                                it.isNotBlank()
-                                                                            }
-                                                                            ?: "לא ניתן היה לשמור את שעת האימון החדשה."
-                                                                    }
-                                                            }
-                                                        }
-                                                    )
-                                                }
-
-                                                TrainingManagementMode.MENU -> {
-                                                    isSavingTrainingChange = false
-                                                }
-                                            }
-                                        },
-                                        enabled =
-                                            canSubmit &&
-                                                    !isSavingTrainingChange,
-                                        shape = RoundedCornerShape(14.dp),
-                                        colors =
-                                            ButtonDefaults.buttonColors(
-                                                containerColor =
-                                                    dialogAccent,
-                                                disabledContainerColor =
-                                                    dialogAccent.copy(
-                                                        alpha = 0.35f
-                                                    )
-                                            )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 2.dp),
+                                        horizontalArrangement =
+                                            Arrangement.spacedBy(8.dp),
+                                        verticalAlignment =
+                                            Alignment.CenterVertically
                                     ) {
-                                        if (isSavingTrainingChange) {
-                                            CircularProgressIndicator(
-                                                modifier =
-                                                    Modifier.size(18.dp),
-                                                strokeWidth = 2.dp,
-                                                color = Color.White
-                                            )
+                                        Surface(
+                                            modifier = Modifier
+                                                .weight(0.34f)
+                                                .height(40.dp),
+                                            shape = RoundedCornerShape(13.dp),
+                                            color =
+                                                dialogAccent.copy(
+                                                    alpha = 0.08f
+                                                ),
+                                            border = BorderStroke(
+                                                width = 1.dp,
+                                                color =
+                                                    dialogAccent.copy(
+                                                        alpha = 0.24f
+                                                    )
+                                            ),
+                                            tonalElevation = 0.dp,
+                                            shadowElevation = 0.dp
+                                        ) {
+                                            TextButton(
+                                                enabled =
+                                                    !isSavingTrainingChange,
+                                                onClick = {
+                                                    clickSound()
+                                                    haptic(true)
 
-                                            Spacer(Modifier.width(8.dp))
+                                                    trainingManagementMode =
+                                                        TrainingManagementMode.MENU
+
+                                                    trainingManagementError =
+                                                        null
+                                                },
+                                                modifier =
+                                                    Modifier.fillMaxSize(),
+                                                contentPadding =
+                                                    PaddingValues(
+                                                        horizontal = 6.dp,
+                                                        vertical = 0.dp
+                                                    ),
+                                                colors =
+                                                    ButtonDefaults.textButtonColors(
+                                                        contentColor =
+                                                            dialogAccent,
+                                                        disabledContentColor =
+                                                            dialogAccent.copy(
+                                                                alpha = 0.35f
+                                                            )
+                                                    )
+                                            ) {
+                                                Icon(
+                                                    imageVector =
+                                                        Icons.Filled.ArrowBack,
+                                                    contentDescription = null,
+                                                    modifier =
+                                                        Modifier.size(14.dp)
+                                                )
+
+                                                Spacer(
+                                                    Modifier.width(3.dp)
+                                                )
+
+                                                Text(
+                                                    text =
+                                                        if (isEnglish) {
+                                                            "Back"
+                                                        } else {
+                                                            "חזרה"
+                                                        },
+                                                    fontWeight =
+                                                        FontWeight.ExtraBold,
+                                                    fontSize = 13.sp,
+                                                    lineHeight = 15.sp,
+                                                    maxLines = 1
+                                                )
+                                            }
                                         }
 
-                                        Text(
-                                            text =
-                                                when (
-                                                    trainingManagementMode
-                                                ) {
-                                                    TrainingManagementMode.CANCEL ->
+                                        Button(
+                                            onClick = {
+                                                clickSound()
+                                                haptic(true)
+
+                                                if (isSavingTrainingChange) {
+                                                    return@Button
+                                                }
+
+                                                val cleanReason =
+                                                    trainingChangeReason.trim()
+
+                                                if (cleanReason.length < 3) {
+                                                    trainingManagementError =
                                                         if (isEnglish) {
-                                                            "Confirm cancellation"
+                                                            "Please enter a reason of at least 3 characters."
                                                         } else {
-                                                            "אישור ביטול האימון"
+                                                            "יש להזין סיבה באורך של 3 תווים לפחות."
                                                         }
 
-                                                    TrainingManagementMode.CHANGE_TIME ->
-                                                        if (isEnglish) {
-                                                            "Save new time"
-                                                        } else {
-                                                            "שמירת השעה החדשה"
+                                                    return@Button
+                                                }
+
+                                                val changedByName =
+                                                    coachFromPrefs
+                                                        .trim()
+                                                        .ifBlank {
+                                                            freeNameUi.trim()
+                                                        }
+                                                        .ifBlank {
+                                                            FirebaseAuth.getInstance()
+                                                                .currentUser
+                                                                ?.displayName
+                                                                ?.trim()
+                                                                .orEmpty()
+                                                        }
+                                                        .ifBlank {
+                                                            if (isEnglish) {
+                                                                "Coach"
+                                                            } else {
+                                                                "מאמן"
+                                                            }
                                                         }
 
-                                                    else -> ""
-                                                },
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                                isSavingTrainingChange = true
+                                                trainingManagementError = null
+
+                                                when (trainingManagementMode) {
+                                                    TrainingManagementMode.CANCEL -> {
+                                                        TrainingOverrideRepository
+                                                            .cancelTraining(
+                                                                training =
+                                                                    selectedItem.training,
+                                                                branch =
+                                                                    selectedItem.branch,
+                                                                group =
+                                                                    selectedItem.group,
+                                                                reason =
+                                                                    cleanReason,
+                                                                changedByName =
+                                                                    changedByName,
+                                                                onResult = {
+                                                                        success,
+                                                                        error ->
+
+                                                                    isSavingTrainingChange =
+                                                                        false
+
+                                                                    if (success) {
+                                                                        closeTrainingManagementDialog()
+                                                                    } else {
+                                                                        trainingManagementError =
+                                                                            if (
+                                                                                isEnglish
+                                                                            ) {
+                                                                                error
+                                                                                    ?.localizedMessage
+                                                                                    ?.takeIf {
+                                                                                        it.isNotBlank()
+                                                                                    }
+                                                                                    ?: "The training could not be cancelled."
+                                                                            } else {
+                                                                                error
+                                                                                    ?.localizedMessage
+                                                                                    ?.takeIf {
+                                                                                        it.isNotBlank()
+                                                                                    }
+                                                                                    ?: "לא ניתן היה לבטל את האימון."
+                                                                            }
+                                                                    }
+                                                                }
+                                                            )
+                                                    }
+
+                                                    TrainingManagementMode.CHANGE_TIME -> {
+                                                        fun parseTime(
+                                                            rawValue: String
+                                                        ): Pair<Int, Int>? {
+                                                            val parts =
+                                                                rawValue
+                                                                    .trim()
+                                                                    .split(":")
+
+                                                            if (parts.size != 2) {
+                                                                return null
+                                                            }
+
+                                                            val hour =
+                                                                parts[0]
+                                                                    .toIntOrNull()
+                                                                    ?: return null
+
+                                                            val minute =
+                                                                parts[1]
+                                                                    .toIntOrNull()
+                                                                    ?: return null
+
+                                                            if (
+                                                                hour !in 0..23 ||
+                                                                minute !in 0..59
+                                                            ) {
+                                                                return null
+                                                            }
+
+                                                            return hour to minute
+                                                        }
+
+                                                        val parsedStart =
+                                                            parseTime(
+                                                                changedStartTime
+                                                            )
+
+                                                        val parsedEnd =
+                                                            parseTime(
+                                                                changedEndTime
+                                                            )
+
+                                                        if (
+                                                            parsedStart == null ||
+                                                            parsedEnd == null
+                                                        ) {
+                                                            isSavingTrainingChange =
+                                                                false
+
+                                                            trainingManagementError =
+                                                                if (isEnglish) {
+                                                                    "Enter valid times in HH:mm format."
+                                                                } else {
+                                                                    "יש להזין שעות תקינות בפורמט HH:mm."
+                                                                }
+
+                                                            return@Button
+                                                        }
+
+                                                        val newStartCalendar =
+                                                            (
+                                                                    selectedItem
+                                                                        .training
+                                                                        .cal
+                                                                        .clone()
+                                                                            as Calendar
+                                                                    ).apply {
+                                                                    set(
+                                                                        Calendar.HOUR_OF_DAY,
+                                                                        parsedStart.first
+                                                                    )
+                                                                    set(
+                                                                        Calendar.MINUTE,
+                                                                        parsedStart.second
+                                                                    )
+                                                                    set(
+                                                                        Calendar.SECOND,
+                                                                        0
+                                                                    )
+                                                                    set(
+                                                                        Calendar.MILLISECOND,
+                                                                        0
+                                                                    )
+                                                                }
+
+                                                        val newEndCalendar =
+                                                            (
+                                                                    selectedItem
+                                                                        .training
+                                                                        .cal
+                                                                        .clone()
+                                                                            as Calendar
+                                                                    ).apply {
+                                                                    set(
+                                                                        Calendar.HOUR_OF_DAY,
+                                                                        parsedEnd.first
+                                                                    )
+                                                                    set(
+                                                                        Calendar.MINUTE,
+                                                                        parsedEnd.second
+                                                                    )
+                                                                    set(
+                                                                        Calendar.SECOND,
+                                                                        0
+                                                                    )
+                                                                    set(
+                                                                        Calendar.MILLISECOND,
+                                                                        0
+                                                                    )
+                                                                }
+
+                                                        if (
+                                                            newEndCalendar
+                                                                .timeInMillis <=
+                                                            newStartCalendar
+                                                                .timeInMillis
+                                                        ) {
+                                                            newEndCalendar.add(
+                                                                Calendar.DAY_OF_YEAR,
+                                                                1
+                                                            )
+                                                        }
+
+                                                        TrainingOverrideRepository
+                                                            .changeTrainingTime(
+                                                                training =
+                                                                    selectedItem.training,
+                                                                branch =
+                                                                    selectedItem.branch,
+                                                                group =
+                                                                    selectedItem.group,
+                                                                newStartMillis =
+                                                                    newStartCalendar
+                                                                        .timeInMillis,
+                                                                newEndMillis =
+                                                                    newEndCalendar
+                                                                        .timeInMillis,
+                                                                reason =
+                                                                    cleanReason,
+                                                                changedByName =
+                                                                    changedByName,
+                                                                onResult = {
+                                                                        success,
+                                                                        error ->
+
+                                                                    isSavingTrainingChange =
+                                                                        false
+
+                                                                    if (success) {
+                                                                        closeTrainingManagementDialog()
+                                                                    } else {
+                                                                        trainingManagementError =
+                                                                            if (
+                                                                                isEnglish
+                                                                            ) {
+                                                                                error
+                                                                                    ?.localizedMessage
+                                                                                    ?.takeIf {
+                                                                                        it.isNotBlank()
+                                                                                    }
+                                                                                    ?: "The new training time could not be saved."
+                                                                            } else {
+                                                                                error
+                                                                                    ?.localizedMessage
+                                                                                    ?.takeIf {
+                                                                                        it.isNotBlank()
+                                                                                    }
+                                                                                    ?: "לא ניתן היה לשמור את שעת האימון החדשה."
+                                                                            }
+                                                                    }
+                                                                }
+                                                            )
+                                                    }
+
+                                                    TrainingManagementMode.MENU -> {
+                                                        isSavingTrainingChange =
+                                                            false
+                                                    }
+                                                }
+                                            },
+                                            enabled =
+                                                canSubmit &&
+                                                        !isSavingTrainingChange,
+                                            modifier = Modifier
+                                                .weight(0.66f)
+                                                .height(40.dp),
+                                            shape = RoundedCornerShape(13.dp),
+                                            contentPadding =
+                                                PaddingValues(
+                                                    horizontal = 8.dp,
+                                                    vertical = 0.dp
+                                                ),
+                                            colors =
+                                                ButtonDefaults.buttonColors(
+                                                    containerColor =
+                                                        dialogAccent,
+                                                    disabledContainerColor =
+                                                        dialogAccent.copy(
+                                                            alpha = 0.35f
+                                                        )
+                                                )
+                                        ) {
+                                            if (isSavingTrainingChange) {
+                                                CircularProgressIndicator(
+                                                    modifier =
+                                                        Modifier.size(15.dp),
+                                                    strokeWidth = 2.dp,
+                                                    color = Color.White
+                                                )
+
+                                                Spacer(
+                                                    Modifier.width(5.dp)
+                                                )
+                                            }
+
+                                            Text(
+                                                text =
+                                                    when (
+                                                        trainingManagementMode
+                                                    ) {
+                                                        TrainingManagementMode.CANCEL ->
+                                                            if (isEnglish) {
+                                                                "Confirm cancellation"
+                                                            } else {
+                                                                "אישור ביטול"
+                                                            }
+
+                                                        TrainingManagementMode.CHANGE_TIME ->
+                                                            if (isEnglish) {
+                                                                "Save new time"
+                                                            } else {
+                                                                "שמירת שעה"
+                                                            }
+
+                                                        else -> ""
+                                                    },
+                                                fontWeight =
+                                                    FontWeight.ExtraBold,
+                                                fontSize = 13.sp,
+                                                lineHeight = 15.sp,
+                                                maxLines = 1
+                                            )
+                                        }
                                     }
                                 }
                             }
                         },
 
-                        dismissButton = {
-                            if (
-                                trainingManagementMode !=
-                                TrainingManagementMode.MENU
-                            ) {
-                                TextButton(
-                                    enabled = !isSavingTrainingChange,
-                                    onClick = {
-                                        clickSound()
-                                        haptic(true)
-                                        trainingManagementMode =
-                                            TrainingManagementMode.MENU
-                                        trainingManagementError = null
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector =
-                                            Icons.Filled.ArrowBack,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(17.dp)
-                                    )
-
-                                    Spacer(Modifier.width(5.dp))
-
-                                    Text(
-                                        text =
-                                            if (isEnglish) {
-                                                "Back"
-                                            } else {
-                                                "חזרה"
-                                            },
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
+                        dismissButton = {}
                     )
                 }
 
